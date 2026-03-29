@@ -41,23 +41,5 @@
   * **Host:** 개인 홈 서버 (또는 로컬 PC)
   * **Remote Access:** Tailscale (외부 네트워크에서 모바일로 홈 서버에 안전하게 접속하기 위한 VPN)
 
-## 4\. 향후 진행 업무 (Next Action Items)
 
-프로젝트의 성공적인 시작을 위해 다음 단계들을 순차적으로 진행합니다.
-
-* \[ ] **Phase 1: 데이터베이스 설계 (DB Schema Design)**
-
-  * 기존 구글 시트 데이터(자산현황, 계좌별 내역, 현금계좌 거래내역 등)를 분석하여 PostgreSQL 테이블 구조(Accounts, Transactions, Assets 등) 설계.
-* \[ ] **Phase 2: Dash 프로토타이핑 (UI \& Callback Test)**
-
-  * Dash를 이용해 간단한 웹 화면을 띄우고, '환율 업데이트' 등 버튼 클릭 시 파이썬 함수가 동작하는 기본 구조 테스트.
-* \[ ] **Phase 3: 과거 데이터 마이그레이션 (Data Migration)**
-
-  * 구글 시트의 과거 기록들을 CSV로 추출하여 설계된 PostgreSQL DB에 모두 이관.
-* \[ ] **Phase 4: 대시보드 화면 구현 (Dashboard Development)**
-
-  * DB에 적재된 데이터를 바탕으로 Dash/Plotly를 이용해 메인 자산 현황 차트와 표 구현.
-* \[ ] **Phase 5: 모바일 최적화 및 원격 접속 설정 (Deployment)**
-
-  * UI 모바일 반응형 작업 및 Tailscale을 통한 외부 접속 환경 구축.
 
