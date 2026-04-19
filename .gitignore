@@ -3,3 +3,14 @@ work
 
 # 비밀 정보 (계좌번호, 앱키, 시크릿키 등)
 secrets.json
+
+# Python 및 DB 연관 캐시/가상환경 무시 설정
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+assets.db

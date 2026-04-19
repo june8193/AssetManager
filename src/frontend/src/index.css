@@ -9,3 +9,18 @@
     font-family: 'Manrope', sans-serif;
   }
 }
+
+@layer utilities {
+  .animate-highlight {
+    animation: highlight 1s ease-out;
+  }
+}
+
+@keyframes highlight {
+  0% {
+    background-color: var(--color-blue-100, #dbeafe);
+  }
+  100% {
+    background-color: transparent;
+  }
+}
