@@ -1,8 +1,8 @@
-# AssetDash Product Requirements Document (PRD)
+# AssetManager Product Requirements Document (PRD)
 
 ## 1\. 프로젝트 개요 (Project Overview)
 
-**AssetDash**는 기존 구글 스프레드시트 기반의 수동적인 자산 관리 방식에서 벗어나, 데이터 수집 및 시각화를 자동화하기 위해 구축하는 홈 서버 기반의 개인/가족 통합 자산 관리 웹 애플리케이션입니다.
+**AssetManager**는 기존 구글 스프레드시트 기반의 수동적인 자산 관리 방식에서 벗어나, 데이터 수집 및 시각화를 자동화하기 위해 구축하는 홈 서버 기반의 개인/가족 통합 자산 관리 웹 애플리케이션입니다.
 
 ### 1.1. 주요 목표 (Goals)
 
