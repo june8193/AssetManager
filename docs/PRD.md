@@ -32,10 +32,16 @@
 * **데이터베이스 (Database): PostgreSQL**
 
   * 무료 오픈소스 RDBMS. 금융 데이터의 무결성을 보장하고 복잡한 시계열/수익률 계산 쿼리에 최적화됨.
-* **프론트엔드 \& 백엔드 (UI \& Logic): Python Dash (Plotly)**
+* **프론트엔드 (Frontend): React / Next.js 등 모던 웹 프레임워크**
 
-  * 파이썬 기반의 웹 프레임워크. 단일 언어로 복잡한 데이터 분석, 시각화, 백엔드 스크립트 실행(Callback)을 모두 처리 가능.
-  * `dash-bootstrap-components`를 활용하여 모바일 반응형 UI 구현.
+  * 상태 관리 및 재사용 가능한 컴포넌트 기반 UI 개발.
+  * PWA(Progressive Web App) 지원 및 향후 React Native 등을 활용한 네이티브 모바일 앱으로의 전환/확장성 고려.
+  * 반응형 레이아웃 및 모던 UI 라이브러리(Tailwind CSS, MUI 등)를 활용한 쾌적한 모바일 접근성 제공.
+
+* **백엔드 (Backend): Python FastAPI 등 API 서버**
+
+  * RESTful API를 구축하여 프론트엔드와 통신하며 책임을 명확히 분리.
+  * 파이썬의 강력한 데이터 분석/수집 기능(Pandas, 외부 거래소 API 연동 등)을 백엔드 비즈니스 로직으로 활용.
 * **인프라 및 네트워크 (Infrastructure \& Network)**
 
   * **Host:** 개인 홈 서버 (또는 로컬 PC)
