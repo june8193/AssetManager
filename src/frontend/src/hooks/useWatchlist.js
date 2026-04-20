@@ -8,6 +8,7 @@ export function useWatchlist(country = 'kr') {
   const [error, setError] = useState(null);
 
   const fetchWatchlist = useCallback(async () => {
+    if (!country) return;
     setLoading(true);
     try {
       const response = await fetch(`${API_BASE_URL}?country=${country.toUpperCase()}`);

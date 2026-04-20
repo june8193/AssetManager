@@ -9,6 +9,7 @@ from .routers import watchlist, stocks
 from .ws.manager import manager
 from src.kiwoom.ws_client import kiwoom_ws_client
 from .services.kiwoom_service import KiwoomStockService
+from .services.us_stock_service import us_stock_service
 import datetime
 
 # DB 테이블 생성 (처음 실행 시 SQLite 파일(assets.db)과 테이블이 생성됨)
@@ -34,15 +35,22 @@ async def lifespan(app: FastAPI):
                 print(f"⚠️ 초기 종목 동기화 중 오류 발생 (무시하고 서버 기동): {e}")
             
         items = db.query(Watchlist).all()
-        stock_codes = [item.stock_code for item in items]
-        await kiwoom_ws_client.start(initial_codes=stock_codes)
+        
+        # 국내 주식 구독 시작
+        kr_codes = [item.stock_code for item in items if item.country == "KR"]
+        await kiwoom_ws_client.start(initial_codes=kr_codes)
+        
+        # 미국 주식 구독 시작
+        us_codes = [item.stock_code for item in items if item.country == "US"]
+        await us_stock_service.start(initial_symbols=us_codes)
     finally:
         db.close()
     
     yield
     
-    # Shutdown: 웹소켓 클라이언트 안전 정지
+    # Shutdown: 웹소켓 및 폴링 서비스 안전 정지
     await kiwoom_ws_client.stop()
+    await us_stock_service.stop()
 
 app = FastAPI(title="AssetManager Backend API", lifespan=lifespan)
 

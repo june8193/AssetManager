@@ -31,7 +31,11 @@ function WatchlistRow({ item, realtimeData, onRemove }) {
         {item.stock_code}
       </td>
       <td className="px-6 py-4 whitespace-nowrap text-sm text-right font-medium">
-        {displayPrice ? displayPrice.toLocaleString() + '원' : '-'}
+        {displayPrice 
+          ? (item.country?.toUpperCase() === 'US' 
+              ? '$' + displayPrice.toLocaleString() 
+              : displayPrice.toLocaleString() + '원') 
+          : '-'}
       </td>
       <td className={`px-6 py-4 whitespace-nowrap text-sm text-right font-medium ${
         displayChangeRate > 0 ? 'text-red-500' : (displayChangeRate < 0 ? 'text-blue-500' : 'text-gray-500')

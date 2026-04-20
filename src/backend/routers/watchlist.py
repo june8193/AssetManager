@@ -6,6 +6,7 @@ from typing import List
 from ..database import get_db
 from ..models import Watchlist
 from src.kiwoom.ws_client import kiwoom_ws_client
+from ..services.us_stock_service import us_stock_service
 
 router = APIRouter(
     prefix="/api/watchlist",
@@ -52,8 +53,11 @@ async def add_to_watchlist(item: WatchlistCreate, db: Session = Depends(get_db))
     db.commit()
     db.refresh(new_item)
     
-    # 키움 웹소켓 구독 추가
-    await kiwoom_ws_client.subscribe([item.stock_code])
+    # 국가별 시세 구독 서비스 호출
+    if item.country == "US":
+        us_stock_service.subscribe([item.stock_code])
+    else:
+        await kiwoom_ws_client.subscribe([item.stock_code])
     
     return new_item
 
@@ -67,8 +71,11 @@ async def remove_from_watchlist(stock_code: str, db: Session = Depends(get_db)):
             detail="해당 종목을 찾을 수 없습니다."
         )
     
-    # 키움 웹소켓 구독 해지
-    await kiwoom_ws_client.unsubscribe([stock_code])
+    # 국가별 시세 구독 해지
+    if db_item.country == "US":
+        us_stock_service.unsubscribe([stock_code])
+    else:
+        await kiwoom_ws_client.unsubscribe([stock_code])
     
     db.delete(db_item)
     db.commit()

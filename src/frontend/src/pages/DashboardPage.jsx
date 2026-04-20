@@ -19,7 +19,7 @@ const DashboardPage = () => {
         </h1>
         <p className="text-indigo-200 max-w-2xl text-sm relative z-10">
           실시간 주가 데이터를 반영하여 {country === 'us' ? '미국' : '국내'} 관심종목의 현재 가격과 등락률을 모니터링합니다. 
-          {country === 'us' ? ' 미국 주식은 현재 Mock 데이터를 사용합니다.' : ' 키움 API를 통해 실시간 데이터를 직접 수신합니다.'}
+          {country === 'us' ? ' 미국 주식은 yfinance를 통해 5초 주기로 실시간 데이터를 수신합니다.' : ' 국내 주식은 키움 API를 통해 실시간 데이터를 직접 수신합니다.'}
         </p>
       </div>
 

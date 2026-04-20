@@ -22,26 +22,28 @@ def search_stocks(
     미국 주식(US)의 경우 현재는 Mock 데이터를 반환합니다.
     """
     if country == "US":
-        # 미국 주식 Mock 데이터
-        us_stocks = [
-            {"stock_code": "AAPL", "stock_name": "Apple Inc.", "market": "NASDAQ"},
-            {"stock_code": "MSFT", "stock_name": "Microsoft Corp.", "market": "NASDAQ"},
-            {"stock_code": "GOOGL", "stock_name": "Alphabet Inc.", "market": "NASDAQ"},
-            {"stock_code": "TSLA", "stock_name": "Tesla Inc.", "market": "NASDAQ"},
-            {"stock_code": "AMZN", "stock_name": "Amazon.com Inc.", "market": "NASDAQ"},
-            {"stock_code": "NVDA", "stock_name": "NVIDIA Corp.", "market": "NASDAQ"},
-            {"stock_code": "META", "stock_name": "Meta Platforms Inc.", "market": "NASDAQ"},
-            {"stock_code": "NFLX", "stock_name": "Netflix Inc.", "market": "NASDAQ"},
-            {"stock_code": "BRK.B", "stock_name": "Berkshire Hathaway Inc.", "market": "NYSE"},
-            {"stock_code": "V", "stock_name": "Visa Inc.", "market": "NYSE"},
-        ]
-        # 검색어 필터링
-        query = q.upper()
-        results = [
-            s for s in us_stocks 
-            if query in s["stock_code"].upper() or query in s["stock_name"].upper()
-        ]
-        return results
+        # yfinance를 이용한 미국 주식 검색
+        try:
+            import yfinance as yf
+            search = yf.Search(q, max_results=20)
+            
+            # 허용할 시장 코드 (Yahoo Finance 기준)
+            # NYQ: NYSE, NMS/NGM/NCM: NASDAQ
+            allowed_exchanges = ["NYQ", "NMS", "NGM", "NCM"]
+            
+            results = []
+            for quote in search.quotes:
+                exchange = quote.get("exchange")
+                if exchange in allowed_exchanges:
+                    results.append({
+                        "stock_code": quote.get("symbol"),
+                        "stock_name": quote.get("shortname") or quote.get("longname") or quote.get("symbol"),
+                        "market": "NYSE" if exchange == "NYQ" else "NASDAQ"
+                    })
+            return results
+        except Exception as e:
+            print(f"yfinance search error: {e}")
+            return []
 
     # 국내 주식 검색 (기존 로직)
     query = f"%{q}%"
