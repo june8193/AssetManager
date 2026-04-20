@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
 from .database import Base
 import datetime
 
@@ -74,6 +74,7 @@ class Account(Base):
         provider (str): 금융 기관 (예: 'KB증권', '신한은행')
         alias (str): 계좌 별칭 (예: '(일반 주식)')
         created_at (datetime): 생성 일시
+        is_active (bool): 계좌 활성화 여부
     """
     __tablename__ = "accounts"
 
@@ -83,6 +84,7 @@ class Account(Base):
     provider = Column(String, nullable=False)
     alias = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
+    is_active = Column(Boolean, default=True, nullable=False)
 
     user = relationship("User", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
