@@ -137,7 +137,7 @@ class KiwoomWebSocketClient:
             return {
                 "stock_code": item_data.get("item") or item_data.get("code"),
                 "current_price": int(current_price_str or 0),
-                "change_rate": values.get("12", "0.00")
+                "change_rate": float(values.get("12", "0.00") or 0.0)
             }
         except (TypeError, ValueError, IndexError) as e:
             self.logger.error(f"데이터 파싱 중 예외 발생: {str(e)}")

@@ -1,44 +1,56 @@
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Depends, HTTPException
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
 from typing import List, Dict
-import FinanceDataReader as fdr
+from ..database import get_db
+from ..models import Stock
+from ..services.kiwoom_service import KiwoomStockService
 
 router = APIRouter(
     prefix="/api/stocks",
     tags=["stocks"]
 )
 
-# 메모리 캐시 목적으로 전역 변수로 관리
-_stock_list_cache = []
-
-def get_cached_stocks():
-    global _stock_list_cache
-    if not _stock_list_cache:
-        # 코스피, 코스닥 종목을 불러옴 (DataFrame)
-        df_krx = fdr.StockListing('KRX')
-        # 필요한 필드만 추출하여 딕셔너리 리스트로 변환
-        for _, row in df_krx.iterrows():
-            _stock_list_cache.append({
-                "stock_code": str(row['Code']),
-                "stock_name": str(row['Name'])
-            })
-    return _stock_list_cache
-
 @router.get("/search", response_model=List[Dict[str, str]])
-def search_stocks(q: str = Query(..., min_length=1, description="검색할 종목명 또는 종목코드")):
+def search_stocks(
+    q: str = Query(..., min_length=1, description="검색할 종목명 또는 종목코드"),
+    db: Session = Depends(get_db)
+):
     """
-    주어진 검색어가 포함된 주식 종목 리스트를 반환합니다.
+    데이터베이스에서 이름 또는 코드가 검색어와 일치하는 종목 리스트를 반환합니다.
     """
-    stocks = get_cached_stocks()
-    # 대소문자 무시를 위해 소문자로 변환
-    query = q.lower()
+    # 대소문자 무시 검색 (LIKE %query%)
+    query = f"%{q}%"
     
-    results = []
-    for stock in stocks:
-        # 종목코드 또는 종목명에 쿼리가 포함되는지 검사
-        if query in stock["stock_code"].lower() or query in stock["stock_name"].lower():
-            results.append(stock)
-            # 최대 20개의 결과만 반환하도록 제한
-            if len(results) >= 20:
-                break
-                
-    return results
+    # SQLAlchemy의 case-insensitive ilike 사용 (SQLite는 기본적으로 case-insensitive)
+    results = db.query(Stock).filter(
+        or_(
+            Stock.stock_code.ilike(query),
+            Stock.stock_name.ilike(query)
+        )
+    ).limit(20).all()
+    
+    # 응답 형식에 맞춰 변환
+    return [
+        {
+            "stock_code": s.stock_code,
+            "stock_name": s.stock_name,
+            "market": s.market
+        } for s in results
+    ]
+
+@router.post("/sync")
+async def sync_stocks(db: Session = Depends(get_db)):
+    """
+    키움 REST API를 통해 주식 종목 리스트를 수동으로 동기화합니다.
+    """
+    service = KiwoomStockService()
+    try:
+        count = await service.sync_all_stocks(db)
+        return {
+            "status": "success",
+            "message": f"성공적으로 {count}개의 종목을 동기화했습니다.",
+            "count": count
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
