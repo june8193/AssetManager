@@ -70,8 +70,9 @@ class Account(Base):
     Attributes:
         id (int): 고유 식별자 (PK)
         user_id (int): 사용자 식별자 (FK)
-        name (str): 계좌 이름 (예: '5526-9093 일반주식')
-        type (str): 계좌 유형 (주식, 현금, 연금, 암호화폐 등)
+        name (str): 계좌 이름 (예: '5526-9093')
+        provider (str): 금융 기관 (예: 'KB증권', '신한은행')
+        alias (str): 계좌 별칭 (예: '(일반 주식)')
         created_at (datetime): 생성 일시
     """
     __tablename__ = "accounts"
@@ -79,7 +80,8 @@ class Account(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     name = Column(String, nullable=False)
-    type = Column(String, nullable=False)
+    provider = Column(String, nullable=False)
+    alias = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now)
 
     user = relationship("User", back_populates="accounts")
