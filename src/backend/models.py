@@ -162,3 +162,21 @@ class AccountSnapshot(Base):
     total_profit = Column(Float, default=0.0)
 
     account = relationship("Account", back_populates="snapshots")
+
+class ExchangeRate(Base):
+    """특정 날짜의 환율 정보를 저장하는 모델입니다.
+    
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        date (date): 환율 기준 일자 (Unique)
+        currency (str): 통화 (기본값 'USD')
+        rate (float): 환율
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "exchange_rates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(Date, unique=True, index=True, nullable=False)
+    currency = Column(String, default="USD", nullable=False)
+    rate = Column(Float, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)

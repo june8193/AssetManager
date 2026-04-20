@@ -2,6 +2,7 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import DashboardPage from './pages/DashboardPage';
 import ConnectionPage from './pages/ConnectionPage';
+import DataInputPage from './pages/DataInputPage';
 import { useWebSocket } from './hooks/useWebSocket';
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/watchlist/:country" element={<DashboardPage />} />
           <Route path="/connection" element={<ConnectionPage />} />
+          <Route path="/input" element={<DataInputPage />} />
         </Routes>
       </div>
     </Router>

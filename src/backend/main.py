@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 
 from .database import engine, Base, SessionLocal
 from .models import Watchlist
-from .routers import watchlist, stocks
+from .routers import watchlist, stocks, exchange
 from .ws.manager import manager
 from src.kiwoom.ws_client import kiwoom_ws_client
 from .services.kiwoom_service import KiwoomStockService
@@ -69,6 +69,7 @@ app.add_middleware(
 # 모듈화된 라우터 연결
 app.include_router(watchlist.router)
 app.include_router(stocks.router)
+app.include_router(exchange.router)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):

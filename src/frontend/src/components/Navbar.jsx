@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, PlusCircle } from 'lucide-react';
 
 const Navbar = ({ isConnected }) => {
   const location = useLocation();
@@ -51,6 +51,17 @@ const Navbar = ({ isConnected }) => {
             >
               <Database size={18} />
               API 연결 관리
+            </Link>
+            <Link 
+              to="/input" 
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                isActive('/input') 
+                  ? 'bg-blue-50 text-blue-700' 
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <PlusCircle size={18} />
+              정보 입력
             </Link>
           </div>
         </div>
