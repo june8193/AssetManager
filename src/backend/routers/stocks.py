@@ -14,15 +14,37 @@ router = APIRouter(
 @router.get("/search", response_model=List[Dict[str, str]])
 def search_stocks(
     q: str = Query(..., min_length=1, description="검색할 종목명 또는 종목코드"),
+    country: str = Query("KR", description="국가 구분 (KR, US)"),
     db: Session = Depends(get_db)
 ):
     """
     데이터베이스에서 이름 또는 코드가 검색어와 일치하는 종목 리스트를 반환합니다.
+    미국 주식(US)의 경우 현재는 Mock 데이터를 반환합니다.
     """
-    # 대소문자 무시 검색 (LIKE %query%)
+    if country == "US":
+        # 미국 주식 Mock 데이터
+        us_stocks = [
+            {"stock_code": "AAPL", "stock_name": "Apple Inc.", "market": "NASDAQ"},
+            {"stock_code": "MSFT", "stock_name": "Microsoft Corp.", "market": "NASDAQ"},
+            {"stock_code": "GOOGL", "stock_name": "Alphabet Inc.", "market": "NASDAQ"},
+            {"stock_code": "TSLA", "stock_name": "Tesla Inc.", "market": "NASDAQ"},
+            {"stock_code": "AMZN", "stock_name": "Amazon.com Inc.", "market": "NASDAQ"},
+            {"stock_code": "NVDA", "stock_name": "NVIDIA Corp.", "market": "NASDAQ"},
+            {"stock_code": "META", "stock_name": "Meta Platforms Inc.", "market": "NASDAQ"},
+            {"stock_code": "NFLX", "stock_name": "Netflix Inc.", "market": "NASDAQ"},
+            {"stock_code": "BRK.B", "stock_name": "Berkshire Hathaway Inc.", "market": "NYSE"},
+            {"stock_code": "V", "stock_name": "Visa Inc.", "market": "NYSE"},
+        ]
+        # 검색어 필터링
+        query = q.upper()
+        results = [
+            s for s in us_stocks 
+            if query in s["stock_code"].upper() or query in s["stock_name"].upper()
+        ]
+        return results
+
+    # 국내 주식 검색 (기존 로직)
     query = f"%{q}%"
-    
-    # SQLAlchemy의 case-insensitive ilike 사용 (SQLite는 기본적으로 case-insensitive)
     results = db.query(Stock).filter(
         or_(
             Stock.stock_code.ilike(query),
@@ -30,7 +52,6 @@ def search_stocks(
         )
     ).limit(20).all()
     
-    # 응답 형식에 맞춰 변환
     return [
         {
             "stock_code": s.stock_code,

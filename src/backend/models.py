@@ -15,6 +15,7 @@ class Watchlist(Base):
     id = Column(Integer, primary_key=True, index=True)
     stock_code = Column(String, unique=True, index=True, nullable=False)
     stock_name = Column(String, nullable=False)
+    country = Column(String, default="KR", nullable=False) # 'KR' (국내), 'US' (미국)
 
 class Stock(Base):
     """주식 종목 정보를 저장하는 모델입니다.

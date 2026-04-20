@@ -20,15 +20,26 @@ const Navbar = ({ isConnected }) => {
           
           <div className="hidden md:flex items-center gap-1">
             <Link 
-              to="/" 
+              to="/watchlist/kr" 
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                isActive('/') 
+                isActive('/watchlist/kr') || isActive('/')
                   ? 'bg-blue-50 text-blue-700' 
                   : 'text-slate-600 hover:bg-slate-50'
               }`}
             >
               <LayoutDashboard size={18} />
-              관심종목
+              관심종목(국내)
+            </Link>
+            <Link 
+              to="/watchlist/us" 
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                isActive('/watchlist/us') 
+                  ? 'bg-blue-50 text-blue-700' 
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <LayoutDashboard size={18} />
+              관심종목(미국)
             </Link>
             <Link 
               to="/connection" 

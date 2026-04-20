@@ -16,20 +16,22 @@ router = APIRouter(
 class WatchlistCreate(BaseModel):
     stock_code: str
     stock_name: str
+    country: str = "KR"
 
 class WatchlistResponse(BaseModel):
     id: int
     stock_code: str
     stock_name: str
+    country: str
 
     class Config:
         from_attributes = True
 
 # --- API Endpoints --- #
 @router.get("", response_model=List[WatchlistResponse])
-def get_watchlist(db: Session = Depends(get_db)):
-    """저장된 전체 관심종목 목록을 반환합니다."""
-    return db.query(Watchlist).all()
+def get_watchlist(country: str = "KR", db: Session = Depends(get_db)):
+    """저장된 국가별 관심종목 목록을 반환합니다."""
+    return db.query(Watchlist).filter(Watchlist.country == country).all()
 
 @router.post("", response_model=WatchlistResponse, status_code=status.HTTP_201_CREATED)
 async def add_to_watchlist(item: WatchlistCreate, db: Session = Depends(get_db)):
@@ -41,7 +43,11 @@ async def add_to_watchlist(item: WatchlistCreate, db: Session = Depends(get_db))
             detail="이미 관심종목에 등록된 종목코드입니다."
         )
     
-    new_item = Watchlist(stock_code=item.stock_code, stock_name=item.stock_name)
+    new_item = Watchlist(
+        stock_code=item.stock_code, 
+        stock_name=item.stock_name,
+        country=item.country
+    )
     db.add(new_item)
     db.commit()
     db.refresh(new_item)

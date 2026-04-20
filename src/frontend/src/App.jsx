@@ -13,6 +13,7 @@ function App() {
         <Navbar isConnected={isConnected} />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/watchlist/:country" element={<DashboardPage />} />
           <Route path="/connection" element={<ConnectionPage />} />
         </Routes>
       </div>

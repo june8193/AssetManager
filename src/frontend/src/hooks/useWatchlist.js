@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 
 const API_BASE_URL = 'http://localhost:8000/api/watchlist';
 
-export function useWatchlist() {
+export function useWatchlist(country = 'kr') {
   const [watchlist, setWatchlist] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -10,7 +10,7 @@ export function useWatchlist() {
   const fetchWatchlist = useCallback(async () => {
     setLoading(true);
     try {
-      const response = await fetch(API_BASE_URL);
+      const response = await fetch(`${API_BASE_URL}?country=${country.toUpperCase()}`);
       if (!response.ok) throw new Error('데이터를 불러오는데 실패했습니다.');
       const data = await response.json();
       setWatchlist(data);
@@ -20,16 +20,20 @@ export function useWatchlist() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [country]);
 
-  const addToWatchlist = async (stockCode, stockName) => {
+  const addToWatchlist = async (stockCode, stockName, countryCode) => {
     try {
       const response = await fetch(API_BASE_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ stock_code: stockCode, stock_name: stockName }),
+        body: JSON.stringify({ 
+          stock_code: stockCode, 
+          stock_name: stockName,
+          country: countryCode.toUpperCase()
+        }),
       });
       
       if (!response.ok) {
