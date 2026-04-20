@@ -80,40 +80,74 @@ class KiwoomAPI:
         data = {} # 파라미터 없음
         
         try:
-            response = requests.post(url, headers=headers, data=json.dumps(data))
+            response = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
             if response.status_code == 200:
                 return response.json()
         except Exception as e:
             print(f"API 호출 에러: {e}")
         return None
 
-    def ping(self):
-        """등록된 모든 계정에 대해 순차적으로 연결 테스트를 진행합니다."""
-        accounts = self.secrets.get("accounts", [])
-        if not accounts:
-            print("[WARN] 등록된 계정 정보가 없습니다.")
-            return
+    def check_all_connections(self):
+        """모든 계정의 연결 상태를 확인하고 결과를 반환합니다.
 
-        print(f"[INFO] 총 {len(accounts)}개의 계정에 대해 테스트를 시작합니다...\n")
-        
-        for i, acc in enumerate(accounts, 1):
+        Returns:
+            list: 각 계정의 연결 테스트 결과가 담긴 딕셔너리 리스트.
+        """
+        accounts = self.secrets.get("accounts", [])
+        results = []
+
+        for acc in accounts:
             broker = acc.get("broker")
             acc_name = acc.get("account")
             app_key = acc.get("app_key")
             secret_key = acc.get("secret_key")
-            
-            print(f"[{i}] {broker} 계좌 ({acc_name}) 테스트 중...")
-            
+
+            result = {
+                "broker": broker,
+                "account": acc_name,
+                "token_success": False,
+                "api_success": False,
+                "message": "",
+                "acct_no": ""
+            }
+
             token = self.get_access_token(app_key, secret_key)
             if token:
-                print("  [OK] 1단계: 토큰 발급 성공")
-                result = self.get_account_list(token)
-                if result and result.get("return_code") == 0:
-                    print(f"  [OK] 2단계: API 연결 성공 (계좌: {result.get('acctNo')})")
+                result["token_success"] = True
+                api_res = self.get_account_list(token)
+                if api_res and api_res.get("return_code") == 0:
+                    result["api_success"] = True
+                    result["acct_no"] = api_res.get("acctNo")
+                    result["message"] = "연결 성공"
                 else:
-                    print(f"  [FAIL] 2단계: API 호출 실패 -> {result.get('return_msg') if result else '응답 없음'}")
+                    msg = api_res.get("return_msg") if api_res else "응답 없음"
+                    result["message"] = f"API 호출 실패: {msg}"
             else:
-                print("  [FAIL] 1단계: 토큰 발급 실패")
+                result["message"] = "토큰 발급 실패"
+            
+            results.append(result)
+        
+        return results
+
+    def ping(self):
+        """등록된 모든 계정에 대해 순차적으로 연결 테스트를 진행하고 결과를 출력합니다."""
+        results = self.check_all_connections()
+        if not results:
+            print("[WARN] 등록된 계정 정보가 없습니다.")
+            return
+
+        print(f"[INFO] 총 {len(results)}개의 계정에 대해 테스트를 시작합니다...\n")
+        
+        for i, res in enumerate(results, 1):
+            print(f"[{i}] {res['broker']} 계좌 ({res['account']}) 테스트 중...")
+            if res["token_success"]:
+                print("  [OK] 1단계: 토큰 발급 성공")
+                if res["api_success"]:
+                    print(f"  [OK] 2단계: API 연결 성공 (계좌: {res['acct_no']})")
+                else:
+                    print(f"  [FAIL] 2단계: {res['message']}")
+            else:
+                print(f"  [FAIL] 1단계: {res['message']}")
             print("-" * 40)
 
 if __name__ == "__main__":
