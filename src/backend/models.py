@@ -42,3 +42,117 @@ class SyncHistory(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     last_sync_at = Column(DateTime, default=datetime.datetime.now)
+
+# --- 원장 기반 자산 관리 신규 모델 (Phase 1) ---
+
+from sqlalchemy import ForeignKey, Float, Date, Enum
+from sqlalchemy.orm import relationship
+
+class User(Base):
+    """자산의 실제 소유자 정보를 저장하는 모델입니다.
+    
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        name (str): 사용자 이름
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    accounts = relationship("Account", back_populates="user")
+
+class Account(Base):
+    """증권사, 은행, 연금 등의 개별 계좌 정보를 저장하는 모델입니다.
+    
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        user_id (int): 사용자 식별자 (FK)
+        name (str): 계좌 이름 (예: '5526-9093 일반주식')
+        type (str): 계좌 유형 (주식, 현금, 연금, 암호화폐 등)
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    type = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    user = relationship("User", back_populates="accounts")
+    transactions = relationship("Transaction", back_populates="account")
+    snapshots = relationship("AccountSnapshot", back_populates="account")
+
+class Asset(Base):
+    """거래 대상 종목, 통화, 상품 정보를 저장하는 마스터 모델입니다.
+    
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        ticker (str): 티커 또는 심볼 (예: 'AAPL', 'KRW', '005930')
+        name (str): 자산 이름 (예: '애플', '원화예수금', '삼성전자')
+        category (str): 자산 카테고리 (주식, 채권, 현금 등)
+    """
+    __tablename__ = "assets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    category = Column(String, nullable=False)
+
+    transactions = relationship("Transaction", back_populates="asset")
+
+class Transaction(Base):
+    """거래 원장 데이터를 기록하는 핵심 모델입니다.
+    
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        account_id (int): 계좌 식별자 (FK)
+        asset_id (int): 자산 식별자 (FK)
+        transaction_date (date): 거래 일자
+        type (str): 거래 유형 (DEPOSIT, WITHDRAW, BUY, SELL, DIVIDEND, INTEREST)
+        quantity (float): 수량
+        price (float): 거래 단가
+        total_amount (float): 총 거래 금액 (quantity * price)
+        currency (str): 통화 (KRW, USD 등)
+        exchange_rate (float): 거래 당시 적용 환율
+    """
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
+    transaction_date = Column(Date, nullable=False)
+    type = Column(String, nullable=False)  # DEPOSIT, WITHDRAW, BUY, SELL, DIVIDEND, INTEREST
+    quantity = Column(Float, default=0.0)
+    price = Column(Float, default=0.0)
+    total_amount = Column(Float, nullable=False)
+    currency = Column(String, nullable=False)
+    exchange_rate = Column(Float, nullable=True)
+
+    account = relationship("Account", back_populates="transactions")
+    asset = relationship("Asset", back_populates="transactions")
+
+class AccountSnapshot(Base):
+    """주기적으로 계산된 계좌의 상태를 캐싱하는 모델입니다.
+    
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        account_id (int): 계좌 식별자 (FK)
+        snapshot_date (date): 기준 일자
+        total_deposit (float): 누적 투자 원금
+        total_valuation (float): 현재 총 평가액
+        total_profit (float): 총 수익
+    """
+    __tablename__ = "account_snapshots"
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    snapshot_date = Column(Date, nullable=False)
+    total_deposit = Column(Float, default=0.0)
+    total_valuation = Column(Float, default=0.0)
+    total_profit = Column(Float, default=0.0)
+
+    account = relationship("Account", back_populates="snapshots")
