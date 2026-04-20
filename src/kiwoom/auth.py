@@ -34,9 +34,9 @@ class KiwoomAuthManager:
         instance._access_token: Optional[str] = None
         instance._expired_at: Optional[datetime] = None
         
-        # 기본값 설정
-        instance.base_url = "https://api.kiwoom.com"
-        instance.ws_url = "wss://api.kiwoom.com:10000"
+        # URL 초기화 (secrets.json에서 로드 필수)
+        instance.base_url = None
+        instance.ws_url = None
         
         # secrets.json 로드
         instance._load_credentials()
@@ -54,8 +54,15 @@ class KiwoomAuthManager:
             with open(secrets_path, "r", encoding="utf-8") as f:
                 secrets = json.load(f)
                 
-            self.base_url = secrets.get("base_url", self.base_url)
-            self.ws_url = secrets.get("ws_url", self.ws_url)
+            self.base_url = secrets.get("base_url")
+            self.ws_url = secrets.get("ws_url")
+            
+            if not self.base_url or not self.ws_url:
+                missing = []
+                if not self.base_url: missing.append("base_url")
+                if not self.ws_url: missing.append("ws_url")
+                raise ValueError(f"secrets.json에 필수 설정 정보({', '.join(missing)})가 누락되었습니다.")
+
             accounts = secrets.get("accounts", [])
             
             if not accounts:

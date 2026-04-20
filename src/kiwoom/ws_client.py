@@ -2,6 +2,7 @@ import json
 import asyncio
 import logging
 import websockets
+from websockets import State
 from typing import List, Optional, Dict
 from .auth import KiwoomAuthManager
 from src.backend.ws.manager import manager as broadcast_manager
@@ -13,6 +14,13 @@ class KiwoomWebSocketClient:
         self.auth_manager = KiwoomAuthManager()
         self.ws_url = self.auth_manager.ws_url
         self.logger = logging.getLogger("KiwoomWebSocketClient")
+        if not self.logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            self.logger.addHandler(handler)
+            self.logger.setLevel(logging.INFO)
+            
         self.subscribed_codes: List[str] = []
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._stop_event = asyncio.Event()
@@ -41,7 +49,14 @@ class KiwoomWebSocketClient:
                     "authorization": f"Bearer {token}"
                 }
                 
-                async with websockets.connect(self.ws_url, extra_headers=headers) as ws:
+                self.logger.info(f"키움 웹소켓 접속 시도 중... (URL: {self.ws_url})")
+                async with websockets.connect(
+                    self.ws_url, 
+                    additional_headers=headers,
+                    open_timeout=30,  # 핸드쉐이크 타임아웃 연장 (기본 10초 -> 30초)
+                    ping_interval=20, # 20초마다 핑 전송
+                    ping_timeout=20   # 핑 응답 대기 20초
+                ) as ws:
                     self._ws = ws
                     self.logger.info("키움 웹소켓 서버 연결 성공")
                     self._reconnect_delay = 1.0  # 연결 성공 시 지연 시간 초기화
@@ -120,7 +135,7 @@ class KiwoomWebSocketClient:
         # 이미 모두 구독 중이면 중단 (하지만 새로 연결되었을 때를 위해 실제 전송은 수행)
         
         msg = self._create_reg_message(codes)
-        if self._ws and self._ws.open:
+        if self._ws and self._ws.state == State.OPEN:
             await self._ws.send(json.dumps(msg))
             self.subscribed_codes = list(set(self.subscribed_codes + codes))
             self.logger.info(f"구독 요청 전송: {codes}")
@@ -141,7 +156,7 @@ class KiwoomWebSocketClient:
             }
         }
         
-        if self._ws and self._ws.open:
+        if self._ws and self._ws.state == State.OPEN:
             await self._ws.send(json.dumps(msg))
             self.subscribed_codes = [c for c in self.subscribed_codes if c not in codes]
             self.logger.info(f"구독 해지 요청 전송: {codes}")

@@ -5,7 +5,7 @@ from typing import List
 
 from ..database import get_db
 from ..models import Watchlist
-from ..kiwoom.ws_client import kiwoom_ws_client
+from src.kiwoom.ws_client import kiwoom_ws_client
 
 router = APIRouter(
     prefix="/api/watchlist",

@@ -16,7 +16,9 @@ class KiwoomAPI:
             secrets_path (str): 계정 정보가 담긴 secrets.json 파일 경로.
         """
         self.secrets = self._load_secrets(secrets_path)
-        self.base_url = self.secrets.get("base_url", "https://api.kiwoom.com")
+        self.base_url = self.secrets.get("base_url")
+        if not self.base_url:
+            raise ValueError(f"'{secrets_path}'에 'base_url' 설정이 누락되었습니다.")
 
     def _load_secrets(self, path):
         """secrets.json 파일을 로드합니다.
