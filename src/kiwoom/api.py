@@ -115,6 +115,43 @@ class KiwoomAPI:
             print(f"종목 정보 조회 에러: {e}")
         return None
 
+    def get_bulk_stock_info(self, token, stock_codes):
+        """여러 종목의 정보를 한 번에 조회합니다 (ka10095).
+
+        Args:
+            token (str): 발급된 접근 토큰.
+            stock_codes (list or str): 종목 코드 리스트 또는 파이프(|)로 구분된 문자열.
+
+        Returns:
+            dict: API 응답 결과 (실패 시 None).
+        """
+        if isinstance(stock_codes, list):
+            stock_codes_str = "|".join(stock_codes)
+        else:
+            stock_codes_str = stock_codes
+
+        url = f"{self.base_url}/api/dostk/stkinfo"
+        headers = {
+            "Content-Type": "application/json;charset=UTF-8",
+            "api-id": "ka10095",
+            "authorization": f"Bearer {token}",
+            "cont-yn": "N",
+            "next-key": ""
+        }
+        data = {"stk_cd": stock_codes_str}
+        
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=15)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"Bulk 종목 정보 조회 실패 (Status: {response.status_code}): {response.text}")
+
+        except Exception as e:
+            print(f"Bulk 종목 정보 조회 에러: {e}")
+        return None
+
+
     def check_all_connections(self):
         """모든 계정의 연결 상태를 확인하고 결과를 반환합니다.
 

@@ -4,12 +4,17 @@ from ..models import Account, Asset, Transaction, ExchangeRate
 import yfinance as yf
 from typing import Dict, List, Any
 import datetime
+import asyncio
+from ...kiwoom.api import KiwoomAPI
+from ...kiwoom.auth import KiwoomAuthManager
 
 class DashboardService:
     """자산 현황 및 대시보드 데이터를 계산하는 서비스 클래스입니다."""
 
     def __init__(self, db: Session):
         self.db = db
+        self.kiwoom_api = KiwoomAPI()
+        self.kiwoom_auth = KiwoomAuthManager()
 
     def get_holdings(self) -> List[Dict[str, Any]]:
         """모든 계좌의 자산별 보유량을 계산합니다."""
@@ -82,50 +87,88 @@ class DashboardService:
         if not query_tickers:
             return prices
 
-        # yfinance를 위해 티커 변환 (국내 주식은 .KS 또는 .KQ 필요)
-        # 여기서는 단순화를 위해 국내 6자리 숫자는 .KS로 가정 (실제로는 시장 구분 필요하나 마스터 정보에 포함됨)
-        formatted_tickers = []
-        ticker_map = {} # formatted -> original
+        # 1. 국내 주식(KR)과 해외 주식 분류
+        kr_tickers = []
+        other_tickers = []
         
         for t in query_tickers:
-            if t.isdigit() and len(t) == 6:
-                # 국내 주식 (코스피/코스닥 구분이 필요하지만 여기서는 .KS / .KQ 정보를 Asset 모델에서 가져올 수 있음)
-                # 일단 Asset 마스터를 다시 조회하여 국가가 KR이면 .KS를 붙여 시도
-                asset = self.db.query(Asset).filter(Asset.ticker == t).first()
-                ft = t
-                if asset and asset.country == 'KR':
-                    # TODO: 마켓 구분이 있으면 더 정확함. 일단 .KS로 시도
-                    ft = f"{t}.KS"
-                formatted_tickers.append(ft)
-                ticker_map[ft] = t
+            asset = self.db.query(Asset).filter(Asset.ticker == t).first()
+            if asset and asset.country == 'KR':
+                kr_tickers.append(t)
             else:
-                formatted_tickers.append(t)
-                ticker_map[t] = t
+                other_tickers.append(t)
+                
+        # 2. 국내 주식 가격 조회 (키움 API Bulk 요청)
+        if kr_tickers:
+            try:
+                token = await self.kiwoom_auth.get_valid_token()
+                # 한 번에 최대 몇개까지 가능한지 테스트가 필요하지만 일단 50개 단위로 끊어서 요청 (보수적 접근)
+                batch_size = 50 
+                for i in range(0, len(kr_tickers), batch_size):
+                    batch = kr_tickers[i:i + batch_size]
+                    res = self.kiwoom_api.get_bulk_stock_info(token, batch)
+                    
+                    if res and res.get("return_code") == 0:
+                        outputs = res.get("atn_stk_infr", [])
+                        for out in outputs:
+                            t = out.get("stk_cd")
+                            # 현재가 필드명: cur_prc (부호 포함 문자열로 옴)
+                            price_val = out.get("cur_prc", "0")
+                            if isinstance(price_val, str):
+                                # 부호(+, -) 제거 후 숫자로 변환
+                                price_val = price_val.strip("+-")
+                            prices[t] = float(price_val)
+                    else:
+                        print(f"키움 API Bulk 조회 실패 (batch {i}): {res.get('return_msg') if res else '응답 없음'}")
 
-        try:
-            # yfinance는 동기 함수이므로 루프 내에서 처리하거나 thread pool 사용 권장
-            # 일단 소량의 종목이므로 직접 호출
-            data = yf.download(formatted_tickers, period="1d", interval="1m", progress=False)
+            except Exception as e:
+                print(f"국내 주식 주가 조회 중 오류 발생: {e}")
+
+        # 3. 해외 주식 가격 조회 (yfinance)
+        if other_tickers:
+            formatted_other = []
+            ticker_map = {} # formatted -> original
             
-            if not data.empty:
-                if len(formatted_tickers) == 1:
-                    # 단일 종목인 경우 DataFrame 구조가 다름
-                    last_price = data['Close'].iloc[-1]
-                    prices[ticker_map[formatted_tickers[0]]] = float(last_price)
+            for t in other_tickers:
+                # yfinance 용 포맷 변환 (국내 주식이 여기에 포함될 수 있으므로 다시 체크)
+                if t.isdigit() and len(t) == 6:
+                    ft = f"{t}.KS" # yfinance 보조용
+                    formatted_other.append(ft)
+                    ticker_map[ft] = t
                 else:
-                    for ft in formatted_tickers:
-                        try:
-                            last_price = data['Close'][ft].dropna().iloc[-1]
-                            prices[ticker_map[ft]] = float(last_price)
-                        except Exception:
-                            prices[ticker_map[ft]] = 0.0
-        except Exception as e:
-            print(f"가격 조회 중 오류 발생: {e}")
-            for t in query_tickers:
-                if t not in prices:
-                    prices[t] = 0.0
+                    formatted_other.append(t)
+                    ticker_map[t] = t
+
+            try:
+                # 비동기 환경에서 yfinance download는 블로킹이 발생할 수 있으므로 thread pool 사용 권장
+                # 여기서는 일단 직접 호출
+                data = yf.download(formatted_other, period="1d", interval="1m", progress=False)
+                
+                if not data.empty:
+                    if len(formatted_other) == 1:
+                        last_price = data['Close'].iloc[-1]
+                        prices[ticker_map[formatted_other[0]]] = float(last_price)
+                    else:
+                        for ft in formatted_other:
+                            try:
+                                last_price = data['Close'][ft].dropna().iloc[-1]
+                                prices[ticker_map[ft]] = float(last_price)
+                            except Exception:
+                                if ticker_map[ft] not in prices:
+                                    prices[ticker_map[ft]] = 0.0
+            except Exception as e:
+                print(f"yfinance 가격 조회 중 오류 발생: {e}")
+                for t in other_tickers:
+                    if t not in prices:
+                        prices[t] = 0.0
+        
+        # 모든 쿼리 티커에 대해 가격 보장 (조회 실패 시 0.0)
+        for t in query_tickers:
+            if t not in prices:
+                prices[t] = 0.0
                     
         return prices
+
 
     async def get_dashboard_summary(self) -> Dict[str, Any]:
         """대시보드 요약 데이터를 생성합니다."""
