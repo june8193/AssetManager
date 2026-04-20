@@ -102,7 +102,9 @@ class Asset(Base):
     id = Column(Integer, primary_key=True, index=True)
     ticker = Column(String, unique=True, index=True, nullable=False)
     name = Column(String, nullable=False)
-    category = Column(String, nullable=False)
+    major_category = Column(String, nullable=False) # 대분류 (예: 일반주식, 배당주, 현금)
+    sub_category = Column(String, nullable=False)   # 중분류 (예: 해외주식, 국내주식, 원화예수금)
+    country = Column(String, nullable=False, default="KR") # 국가 (KR, US 등)
 
     transactions = relationship("Transaction", back_populates="asset")
 

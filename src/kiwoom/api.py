@@ -89,6 +89,32 @@ class KiwoomAPI:
             print(f"API 호출 에러: {e}")
         return None
 
+    def get_stock_info(self, token, stock_code):
+        """주식 기본 정보를 조회합니다 (ka10001).
+
+        Args:
+            token (str): 발급된 접근 토큰.
+            stock_code (str): 종목 코드 (예: '005930').
+
+        Returns:
+            dict: API 응답 결과 (실패 시 None).
+        """
+        url = f"{self.base_url}/api/dostk/stkinfo"
+        headers = {
+            "Content-Type": "application/json;charset=UTF-8",
+            "api-id": "ka10001",
+            "authorization": f"Bearer {token}"
+        }
+        data = {"stk_cd": stock_code}
+        
+        try:
+            response = requests.post(url, headers=headers, data=json.dumps(data), timeout=10)
+            if response.status_code == 200:
+                return response.json()
+        except Exception as e:
+            print(f"종목 정보 조회 에러: {e}")
+        return None
+
     def check_all_connections(self):
         """모든 계정의 연결 상태를 확인하고 결과를 반환합니다.
 

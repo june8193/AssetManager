@@ -29,22 +29,22 @@ def seed_data():
         if not db.query(Account).filter_by(user_id=user.id).first():
             print("기본 계좌 생성 중...")
             accounts = [
-                Account(user_id=user.id, name="KB증권 (일반주식)", type="주식"),
-                Account(user_id=user.id, name="미래에셋 (연금저축)", type="연금"),
-                Account(user_id=user.id, name="신한은행 (종합예상)", type="현금")
+                Account(user_id=user.id, name="KB증권 (일반주식)", provider="KB증권", alias="(일반주식)"),
+                Account(user_id=user.id, name="미래에셋 (연금저축)", provider="미래에셋증권", alias="(연금저축)"),
+                Account(user_id=user.id, name="신한은행 (주택청약)", provider="신한은행", alias="(주택청약)")
             ]
             db.add_all(accounts)
             db.commit()
         
         # 3. 기본 자산 마스터 생성
         assets_to_seed = [
-            {"ticker": "KRW", "name": "원화예수금", "category": "현금"},
-            {"ticker": "USD", "name": "달러예수금", "category": "현금"},
-            {"ticker": "005930", "name": "삼성전자", "category": "주식"},
-            {"ticker": "000660", "name": "SK하이닉스", "category": "주식"},
-            {"ticker": "AAPL", "name": "애플", "category": "주식"},
-            {"ticker": "TSLA", "name": "테슬라", "category": "주식"},
-            {"ticker": "NVDA", "name": "엔비디아", "category": "주식"}
+            {"ticker": "KRW", "name": "원화예수금", "major_category": "현금", "sub_category": "원화예수금", "country": "KR"},
+            {"ticker": "USD", "name": "달러예수금", "major_category": "현금", "sub_category": "달러예수금", "country": "US"},
+            {"ticker": "005930", "name": "삼성전자", "major_category": "일반주식", "sub_category": "국내주식", "country": "KR"},
+            {"ticker": "000660", "name": "SK하이닉스", "major_category": "일반주식", "sub_category": "국내주식", "country": "KR"},
+            {"ticker": "AAPL", "name": "애플", "major_category": "일반주식", "sub_category": "해외주식", "country": "US"},
+            {"ticker": "TSLA", "name": "테슬라", "major_category": "일반주식", "sub_category": "해외주식", "country": "US"},
+            {"ticker": "NVDA", "name": "엔비디아", "major_category": "일반주식", "sub_category": "해외주식", "country": "US"}
         ]
         
         for asset_data in assets_to_seed:
