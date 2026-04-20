@@ -24,6 +24,7 @@ class KiwoomWebSocketClient:
         self.subscribed_codes: List[str] = []
         self._ws: Optional[websockets.WebSocketClientProtocol] = None
         self._stop_event = asyncio.Event()
+        self._login_event = asyncio.Event()
         self._reconnect_delay = 1.0  # 초기 재연결 지연 시간 (초)
 
     async def start(self, initial_codes: List[str] = None):
@@ -52,30 +53,39 @@ class KiwoomWebSocketClient:
                 self.logger.info(f"키움 웹소켓 접속 시도 중... (URL: {self.ws_url})")
                 async with websockets.connect(
                     self.ws_url, 
-                    additional_headers=headers,
-                    open_timeout=30,  # 핸드쉐이크 타임아웃 연장 (기본 10초 -> 30초)
-                    ping_interval=20, # 20초마다 핑 전송
-                    ping_timeout=20   # 핑 응답 대기 20초
+                    open_timeout=30,
+                    ping_interval=20,
+                    ping_timeout=20
                 ) as ws:
                     self._ws = ws
-                    self.logger.info("키움 웹소켓 서버 연결 성공")
-                    self._reconnect_delay = 1.0  # 연결 성공 시 지연 시간 초기화
+                    self.logger.info("키움 웹소켓 서버 연결 성공. 로그인 요청 중...")
+                    self._reconnect_delay = 1.0
                     
-                    # 기존 구독 종목 재구독
-                    if self.subscribed_codes:
-                        await self.subscribe(self.subscribed_codes)
+                    # 로그인 패킷 전송 (응답은 _handle_message에서 처리)
+                    login_msg = {
+                        "trnm": "LOGIN",
+                        "token": token
+                    }
+                    await ws.send(json.dumps(login_msg))
                     
                     async for message in ws:
                         if self._stop_event.is_set():
                             break
                         await self._handle_message(message)
                         
-            except (websockets.exceptions.ConnectionClosed, Exception) as e:
+            except websockets.exceptions.ConnectionClosed as e:
                 self._ws = None
                 if not self._stop_event.is_set():
-                    self.logger.error(f"웹소켓 연결 오류: {str(e)}. {self._reconnect_delay}초 후 재연결 시도...")
+                    self.logger.error(f"웹소켓 연결 종료 (Code: {e.code}, Reason: {e.reason}). {self._reconnect_delay}초 후 재연결 시도...")
                     await asyncio.sleep(self._reconnect_delay)
-                    # 지수 백오프 적용 (최대 60초)
+                    self._reconnect_delay = min(self._reconnect_delay * 2, 60.0)
+                else:
+                    self.logger.info("웹소켓 연결 중지됨")
+            except Exception as e:
+                self._ws = None
+                if not self._stop_event.is_set():
+                    self.logger.error(f"웹소켓 일반 오류: {str(e)}. {self._reconnect_delay}초 후 재연결 시도...")
+                    await asyncio.sleep(self._reconnect_delay)
                     self._reconnect_delay = min(self._reconnect_delay * 2, 60.0)
                 else:
                     self.logger.info("웹소켓 연결 중지됨")
@@ -83,47 +93,68 @@ class KiwoomWebSocketClient:
     async def _handle_message(self, message: str):
         """수신된 메시지를 처리하고 브로드캐스트합니다."""
         try:
+            self.logger.debug(f"수신 메시지: {message}")
             data = json.loads(message)
             trnm = data.get("trnm")
             
             if trnm == "REAL":
                 parsed = self._parse_real_data(data)
                 if parsed:
-                    # ConnectionManager를 통해 모든 프론트엔드 클라이언트에 전송
                     await broadcast_manager.broadcast(json.dumps({
                         "type": "price_update",
                         "data": [parsed]
                     }))
+            elif trnm == "LOGIN":
+                if data.get("return_code") == 0:
+                    self.logger.info("키움 웹소켓 로그인 성공")
+                    # 로그인 성공 후 기존에 보관된 구독 종목이 있다면 재구독 진행
+                    if self.subscribed_codes:
+                        await self.subscribe(self.subscribed_codes)
+                else:
+                    self.logger.error(f"키움 웹소켓 로그인 실패: {data.get('return_msg')}")
             elif trnm == "PING":
-                # PING 응답 (필요 시)
-                await self._ws.send(json.dumps({"trnm": "PONG"}))
+                # PING 수신 시 받은 메시지 그대로 응답 (Echo)
+                await self._ws.send(message)
+                self.logger.debug("PING 수신 및 응답 전송")
                 
         except Exception as e:
             self.logger.error(f"메시지 처리 중 오류: {str(e)}")
 
     def _parse_real_data(self, raw_data: Dict) -> Optional[Dict]:
         """키움 REAL 데이터를 앱 규격으로 파싱합니다."""
-        data_body = raw_data.get("data")
-        if not data_body:
+        data_list = raw_data.get("data")
+        if not data_list or not isinstance(data_list, list) or len(data_list) == 0:
             return None
             
         try:
+            # data는 리스트 형태이며 첫 번째 요소에 실제 데이터가 담겨 있음
+            item_data = data_list[0]
+            values = item_data.get("values", item_data)
+            
+            # 가격 정보 등 (+/-) 기호가 포함되어 올 수 있으므로 처리
+            current_price_str = values.get("10", "0").replace("+", "").replace("-", "")
+            
             return {
-                "stock_code": data_body.get("item"),
-                "current_price": int(data_body.get("10", 0)),
-                "change_rate": data_body.get("12", "0.00")
+                "stock_code": item_data.get("item") or item_data.get("code"),
+                "current_price": int(current_price_str or 0),
+                "change_rate": values.get("12", "0.00")
             }
-        except (TypeError, ValueError):
+        except (TypeError, ValueError, IndexError) as e:
+            self.logger.error(f"데이터 파싱 중 예외 발생: {str(e)}")
             return None
 
-    def _create_reg_message(self, codes: List[str]) -> Dict:
-        """구독(REG) 전문을 생성합니다."""
+    def _create_reg_message(self, codes: List[str], is_reg: bool = True) -> Dict:
+        """구독(REG) 또는 해지(REMOVE) 전문을 생성합니다."""
         return {
-            "trnm": "REG",
-            "data": {
-                "bcode": "0B",  # 주식체결
-                "codes": codes
-            }
+            "trnm": "REG" if is_reg else "REMOVE",
+            "grp_no": "1",
+            "refresh": "1" if is_reg else "0",
+            "data": [
+                {
+                    "item": codes,
+                    "type": ["0B"]  # 0B: 주식체결
+                }
+            ]
         }
 
     async def subscribe(self, codes: List[str]):
@@ -131,14 +162,12 @@ class KiwoomWebSocketClient:
         if not codes:
             return
             
-        new_codes = [c for c in codes if c not in self.subscribed_codes]
-        # 이미 모두 구독 중이면 중단 (하지만 새로 연결되었을 때를 위해 실제 전송은 수행)
-        
-        msg = self._create_reg_message(codes)
+        msg = self._create_reg_message(codes, is_reg=True)
         if self._ws and self._ws.state == State.OPEN:
-            await self._ws.send(json.dumps(msg))
+            msg_str = json.dumps(msg)
+            await self._ws.send(msg_str)
             self.subscribed_codes = list(set(self.subscribed_codes + codes))
-            self.logger.info(f"구독 요청 전송: {codes}")
+            self.logger.info(f"구독 요청 전송: {msg_str}")
         else:
             self.subscribed_codes = list(set(self.subscribed_codes + codes))
             self.logger.warning("웹소켓이 연결되지 않아 구독 목록만 갱신합니다.")
@@ -148,18 +177,13 @@ class KiwoomWebSocketClient:
         if not codes:
             return
             
-        msg = {
-            "trnm": "REMOVE",
-            "data": {
-                "bcode": "0B",
-                "codes": codes
-            }
-        }
+        msg = self._create_reg_message(codes, is_reg=False)
         
         if self._ws and self._ws.state == State.OPEN:
-            await self._ws.send(json.dumps(msg))
+            msg_str = json.dumps(msg)
+            await self._ws.send(msg_str)
             self.subscribed_codes = [c for c in self.subscribed_codes if c not in codes]
-            self.logger.info(f"구독 해지 요청 전송: {codes}")
+            self.logger.info(f"구독 해지 요청 전송: {msg_str}")
         else:
             self.subscribed_codes = [c for c in self.subscribed_codes if c not in codes]
             self.logger.warning("웹소켓이 연결되지 않아 구독 목록에서만 제거합니다.")
