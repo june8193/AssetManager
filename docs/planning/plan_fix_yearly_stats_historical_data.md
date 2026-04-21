@@ -1,33 +1,27 @@
-# 작업 계획서: 연도별 현황 과거 데이터 복구 (PLAN_FIX_YEARLY_STATS_HISTORICAL_DATA)
+# 작업 계획: 연도별 자산 통계 계산 로직 개선 (2024년 데이터 오류 수정)
 
 ## 1. 개요
-비활성 계좌의 역사적 데이터를 연도별 현황 통계에 다시 포함시켜, 포트폴리오의 정확한 시계열 성과를 복구함.
+과거 통합 계좌와 현재 개별 계좌 데이터가 2024년에 공존하면서 발생하는 중복 합산 문제를 해결하기 위해, 연도별 자산 계산 시 '해당 연도의 가장 마지막 스냅샷 날짜' 데이터만 합산하도록 로직을 개선합니다.
 
-## 2. 작업 절차
+## 2. 작업 내용 (TDD 통합 태스크)
 
-### 테스크 1: 테스트 케이스 수정 및 실패 확인 (RED)
-- `tests/test_dashboard_filter.py` 내의 `test_get_yearly_stats_filters_inactive_accounts` 수정.
-- 비활성 계좌의 데이터가 연도별 통계(contribution, assets)에 합산되어야 함을 기대값으로 설정 (예: 100,000 + 50,000 = 150,000).
-- `pytest tests/test_dashboard_filter.py`를 실행하여 테스트 실패 확인.
+### 태스크 1: [TDD] 연도별 자산 통계 로직 개선 및 검증
+- **목표**: 실패하는 테스트 작성, 기능 구현, 테스트 통과 및 회귀 테스트를 하나의 완결된 과정으로 수행합니다.
+- **상세 절차**:
+    1. **실패하는 테스트 작성**: 
+       - `tests/test_dashboard_stats.py`를 생성하고, **격리된 테스트용 DB(in-memory)**를 사용합니다.
+       - 시나리오: 계좌 A(10월 중단, 100만), 계좌 B(12월 말, 50만), 계좌 C(12월 말, 30만) 데이터를 생성.
+       - `get_yearly_stats()` 호출 시 2024년 자산이 **80만**(B+C)이 아닌 **180만**(A+B+C)으로 계산되어 실패함을 확인합니다.
+    2. **로직 수정 (GREEN)**:
+       - `src/backend/services/dashboard_service.py`의 `get_yearly_stats` 메서드를 수정합니다.
+       - 각 연도별로 `max(snapshot_date)`를 추출하고, 해당 날짜의 스냅샷 데이터만 합계에 포함하도록 변경합니다.
+    3. **검증 및 리팩토링 (VALIDATE)**:
+       - 새로 작성한 테스트가 통과하는지 확인합니다.
+       - 기존 `tests/test_dashboard_filter.py` 등 연관 테스트를 실행하여 부작용이 없는지 확인합니다.
+       - 실제 데이터(`src/assets.db`)에 대해 읽기 전용 쿼리 또는 스크립트를 실행하여 2024년 결과값이 **279,007,076원**인지 최종 확인합니다.
+- **수행자**: `generalist` (또는 메인 에이전트)
 
-### 테스크 2: 백엔드 로직 수정 (GREEN)
-- `src/backend/services/dashboard_service.py` 수정.
-- `get_yearly_stats` 메서드 내:
-    - `Transaction` 조회 시 `Account.is_active == True` 필터 제거.
-    - `AccountSnapshot` 조회 시 `Account.is_active == True` 필터 제거.
-    - **기말 자산 계산 방식 개선**: 연도 내 마지막 날짜의 모든 계좌 합산 방식에서, **연도 내 각 계좌의 마지막 스냅샷 합산** 방식으로 변경.
-- 수정 후 테스트 실행하여 통과 확인.
-
-### 테스크 3: 코드 리팩토링 및 주석 보강 (REFACTOR)
-- `get_holdings`와 `get_yearly_stats`의 필터링 정책 차이를 한글 주석으로 상세히 설명.
-- `DashboardService`의 관련 메서드 가독성 개선.
-- 전체 테스트(`tests/test_dashboard_filter.py`) 재실행 및 검증.
-
-### 테스크 4: E2E 검증
-- `dev.py`를 통해 서버 구동.
-- 대시보드 페이지에 접속하여 2021~2024년 데이터가 정상적으로 표시되는지 확인.
-
-## 3. 검증 지표
-- `test_get_yearly_stats_filters_inactive_accounts` 통과.
-- `test_get_holdings_filters_inactive_accounts` 통과 (계좌별 현황은 계속 필터링되어야 함).
-- 대시보드 화면상 연도별 현황 데이터 복구 확인.
+## 3. 완료 기준
+- `tests/test_dashboard_stats.py`를 포함한 모든 백엔드 테스트 통과.
+- 실제 데이터 기반 조회 결과가 사용자 기대값(279,007,076원)과 일치.
+- 코드 변경 사항에 한글 주석 및 Google Style Docstring 적용.

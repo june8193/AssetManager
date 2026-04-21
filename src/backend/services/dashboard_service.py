@@ -44,21 +44,25 @@ class DashboardService:
             .all()
         )
         
-        # 연도별 각 계좌의 마지막 스냅샷 평가액 추적
-        # year -> account_id -> last_valuation
-        yearly_acc_last_valuation = {} 
+        # 연도별 각 날짜의 스냅샷 합계 추적
+        # year -> snapshot_date -> total_valuation_sum
+        yearly_date_totals = {} 
         for s in snapshots:
             y = s.snapshot_date.year
-            if y not in yearly_acc_last_valuation:
-                yearly_acc_last_valuation[y] = {}
+            d = s.snapshot_date
+            if y not in yearly_date_totals:
+                yearly_date_totals[y] = {}
+            if d not in yearly_date_totals[y]:
+                yearly_date_totals[y][d] = 0.0
             
-            # snapshot_date.asc() 정렬이므로 마지막으로 덮어써진 값이 해당 연도의 기말 가액이 됨
-            yearly_acc_last_valuation[y][s.account_id] = s.total_valuation
+            yearly_date_totals[y][d] += s.total_valuation
 
-        # 연도별 기말 자산 합산 (해당 연도에 기록이 있는 모든 계좌의 마지막 가액 합계)
+        # 연도별 기말 자산 결정 (해당 연도의 가장 마지막 스냅샷 날짜의 합계)
         yearly_assets = {} # year -> total_valuation
-        for y, acc_valuations in yearly_acc_last_valuation.items():
-            yearly_assets[y] = sum(acc_valuations.values())
+        for y, date_totals in yearly_date_totals.items():
+            if date_totals:
+                latest_date = max(date_totals.keys())
+                yearly_assets[y] = date_totals[latest_date]
 
         # 4. 종합 통계 계산
         years = sorted(list(set(list(yearly_contribution.keys()) + list(yearly_assets.keys()))))
