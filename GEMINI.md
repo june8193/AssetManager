@@ -42,11 +42,16 @@
 - **절차**:
   1. `dev.py`를 실행하여 백엔드와 프론트엔드 서버를 구동합니다.
   2. 브라우저로 웹 페이지에 접속하여 시나리오별로 기능을 테스트합니다.
-## 5. 데이터베이스 조사 규칙
+## 5. 데이터베이스 조사 및 환경 규칙
 - **원칙**: 데이터베이스 테이블 구조나 데이터를 확인하기 위해 매번 일회성 파이썬 스크립트를 작성하지 않습니다.
+- **데이터베이스 위치**: `src/assets.db` (SQLite)
 - **도구**: 프로젝트 루트에 있는 `scripts/db_query.py`를 사용하여 쿼리를 실행합니다.
 - **사용 방법**:
-  - 테이블 목록 조회: `python scripts/db_query.py --list-tables`
-  - 특정 쿼리 실행: `python scripts/db_query.py "SELECT * FROM assets LIMIT 5"`
+  - 테이블 목록 조회: `uv run scripts/db_query.py --list-tables`
+  - 특정 쿼리 실행: `uv run scripts/db_query.py "SELECT * FROM assets LIMIT 5"`
 - **주의 사항**: AI 에이전트는 데이터 조사를 목적으로 **SELECT** 쿼리만 수행하는 것을 권장하며, 데이터 변경(INSERT, UPDATE, DELETE)이 필요한 경우 반드시 관련 서비스 코드나 마이그레이션 스크립트를 통해 진행해야 합니다.
+
+## 6. Python 실행 규칙
+- **원칙**: 모든 파이썬 스크립트 및 도구 실행 시 반드시 `uv`를 사용합니다.
+- **실행 방법**: `uv run <script_path>` 형식을 사용하여 일관된 가상환경 내에서 실행되도록 합니다. (예: `uv run pytest`, `uv run scripts/dev.py`)
 
