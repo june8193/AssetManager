@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import List, Dict, Any
 from ..database import get_db
 from ..services.dashboard_service import DashboardService
 
@@ -18,4 +18,15 @@ async def get_dashboard_summary(db: Session = Depends(get_db)):
         return summary
     except Exception as e:
         print(f"대시보드 요약 조회 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/yearly", response_model=List[Dict[str, Any]])
+async def get_yearly_stats(db: Session = Depends(get_db)):
+    """연도별 자산 현황 통계를 조회합니다."""
+    try:
+        service = DashboardService(db)
+        stats = service.get_yearly_stats()
+        return stats
+    except Exception as e:
+        print(f"연도별 통계 조회 중 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))
