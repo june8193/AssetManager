@@ -10,6 +10,7 @@ from .ws.manager import manager
 from src.kiwoom.ws_client import kiwoom_ws_client
 from .services.kiwoom_service import KiwoomStockService
 from .services.us_stock_service import us_stock_service
+from .services.backup_service import BackupService
 import datetime
 
 # DB 테이블 생성 (처음 실행 시 SQLite 파일(assets.db)과 테이블이 생성됨)
@@ -18,7 +19,13 @@ Base.metadata.create_all(bind=engine)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """서버 생명주기 관리: 시작 시 DB 로드 및 WS 시작, 종료 시 WS 중지"""
-    # Startup: DB에서 초기 관심종목 목록 가져오기 및 키움 웹소켓 시작
+    # Startup: DB 백업 체크 및 수행
+    try:
+        BackupService().check_and_backup()
+    except Exception as e:
+        print(f"⚠️ DB 백업 중 오류 발생 (무시하고 서버 기동): {e}")
+
+    # DB에서 초기 관심종목 목록 가져오기 및 키움 웹소켓 시작
     db = SessionLocal()
     try:
         # 주식 종목 리스트 동기화 체크 (오늘 수행한 기록이 없거나 데이터가 없으면 실행)

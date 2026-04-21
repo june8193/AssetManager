@@ -9,7 +9,7 @@ from pathlib import Path
 class KiwoomAuthManager:
     """키움증권 API 인증 및 모든 설정을 관리하는 싱글톤 클래스입니다.
     
-    인증 정보 및 접속 URL 등 모든 설정은 프로젝트 루트의 secrets.json 파일에서 로드합니다.
+    인증 정보 및 접속 URL 등 모든 설정은 프로젝트 루트의 settings.json 파일에서 로드합니다.
     """
     
     _instance: Optional['KiwoomAuthManager'] = None
@@ -38,35 +38,35 @@ class KiwoomAuthManager:
         instance.base_url = None
         instance.ws_url = None
         
-        # secrets.json 로드
+        # settings.json 로드
         instance._load_credentials()
 
     def _load_credentials(self):
-        """secrets.json 파일로부터 모든 인증 및 설정 정보를 로드합니다."""
+        """settings.json 파일로부터 모든 인증 및 설정 정보를 로드합니다."""
         project_root = Path(__file__).parent.parent.parent
-        secrets_path = project_root / "secrets.json"
+        settings_path = project_root / "settings.json"
         
-        if not secrets_path.exists():
-            self.logger.error(f"설정 파일({secrets_path})을 찾을 수 없습니다.")
-            raise FileNotFoundError("secrets.json 파일이 필요합니다.")
+        if not settings_path.exists():
+            self.logger.error(f"설정 파일({settings_path})을 찾을 수 없습니다.")
+            raise FileNotFoundError("settings.json 파일이 필요합니다.")
             
         try:
-            with open(secrets_path, "r", encoding="utf-8") as f:
-                secrets = json.load(f)
+            with open(settings_path, "r", encoding="utf-8") as f:
+                settings = json.load(f)
                 
-            self.base_url = secrets.get("base_url")
-            self.ws_url = secrets.get("ws_url")
+            self.base_url = settings.get("base_url")
+            self.ws_url = settings.get("ws_url")
             
             if not self.base_url or not self.ws_url:
                 missing = []
                 if not self.base_url: missing.append("base_url")
                 if not self.ws_url: missing.append("ws_url")
-                raise ValueError(f"secrets.json에 필수 설정 정보({', '.join(missing)})가 누락되었습니다.")
+                raise ValueError(f"settings.json에 필수 설정 정보({', '.join(missing)})가 누락되었습니다.")
 
-            accounts = secrets.get("accounts", [])
+            accounts = settings.get("accounts", [])
             
             if not accounts:
-                raise ValueError("secrets.json에 계정 정보(accounts)가 없습니다.")
+                raise ValueError("settings.json에 계정 정보(accounts)가 없습니다.")
                 
             # 첫 번째 계정 정보 사용
             primary_account = accounts[0]
@@ -76,7 +76,7 @@ class KiwoomAuthManager:
             if not self.app_key or not self.app_secret:
                 raise ValueError("계정 정보에 app_key 또는 secret_key가 누락되었습니다.")
                 
-            self.logger.info("모든 설정을 secrets.json에서 성공적으로 로드했습니다.")
+            self.logger.info("모든 설정을 settings.json에서 성공적으로 로드했습니다.")
             
         except Exception as e:
             self.logger.error(f"설정 로드 중 오류 발생: {str(e)}")

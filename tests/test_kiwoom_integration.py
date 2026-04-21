@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock, patch, Mock, mock_open
 from src.kiwoom.auth import KiwoomAuthManager
 
 @pytest.fixture(autouse=True)
-def mock_secrets_json():
-    """테스트 중에 secrets.json 파일을 읽지 않도록 Mocking합니다."""
+def mock_settings_json():
+    """테스트 중에 settings.json 파일을 읽지 않도록 Mocking합니다."""
     # KiwoomAuthManager는 싱글톤이므로 테스트마다 인스턴스를 초기화해야 할 수 있습니다.
     KiwoomAuthManager._instance = None
     

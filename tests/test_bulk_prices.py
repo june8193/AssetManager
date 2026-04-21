@@ -4,8 +4,8 @@ from src.kiwoom.api import KiwoomAPI
 
 @pytest.fixture
 def kiwoom_api():
-    # Mock secrets.json 로딩을 위해 patch 사용
-    with patch("src.kiwoom.api.KiwoomAPI._load_secrets") as mock_load:
+    # Mock settings.json 로딩을 위해 patch 사용
+    with patch("src.kiwoom.api.KiwoomAPI._load_settings") as mock_load:
         mock_load.return_value = {
             "base_url": "https://api.kiwoom.com",
             "accounts": [
@@ -17,7 +17,7 @@ def kiwoom_api():
                 }
             ]
         }
-        return KiwoomAPI(secrets_path="dummy.json")
+        return KiwoomAPI(settings_path="dummy.json")
 
 def test_get_bulk_stock_info_success(kiwoom_api):
     """여러 종목의 정보를 성공적으로 조회하는지 테스트합니다."""

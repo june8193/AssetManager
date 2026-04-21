@@ -40,11 +40,11 @@ class LegacyDataMigrator:
         if self._kiwoom_token:
             return self._kiwoom_token
         
-        accounts = self.kiwoom.secrets.get("accounts", [])
-        if not accounts:
-            raise RuntimeError("키움 API 계정 정보가 secrets.json에 없습니다.")
+        accounts_list = self.kiwoom.settings.get("accounts", [])
+        if not accounts_list:
+            raise RuntimeError("키움 API 계정 정보가 settings.json에 없습니다.")
         
-        acc = accounts[0] # 첫 번째 계정 사용
+        acc = accounts_list[0] # 첫 번째 계정 사용
         token = self.kiwoom.get_access_token(acc["app_key"], acc["secret_key"])
         if not token:
             raise RuntimeError("키움 API 토큰 발급에 실패했습니다.")

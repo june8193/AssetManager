@@ -9,19 +9,19 @@ class KiwoomAPI:
     기본적인 API 연동 기능을 제공합니다.
     """
 
-    def __init__(self, secrets_path="secrets.json"):
+    def __init__(self, settings_path="settings.json"):
         """KiwoomAPI 초기화
 
         Args:
-            secrets_path (str): 계정 정보가 담긴 secrets.json 파일 경로.
+            settings_path (str): 계정 정보가 담긴 settings.json 파일 경로.
         """
-        self.secrets = self._load_secrets(secrets_path)
-        self.base_url = self.secrets.get("base_url")
+        self.settings = self._load_settings(settings_path)
+        self.base_url = self.settings.get("base_url")
         if not self.base_url:
-            raise ValueError(f"'{secrets_path}'에 'base_url' 설정이 누락되었습니다.")
+            raise ValueError(f"'{settings_path}'에 'base_url' 설정이 누락되었습니다.")
 
-    def _load_secrets(self, path):
-        """secrets.json 파일을 로드합니다.
+    def _load_settings(self, path):
+        """settings.json 파일을 로드합니다.
 
         Args:
             path (str): 파일 경로.
@@ -158,7 +158,7 @@ class KiwoomAPI:
         Returns:
             list: 각 계정의 연결 테스트 결과가 담긴 딕셔너리 리스트.
         """
-        accounts = self.secrets.get("accounts", [])
+        accounts = self.settings.get("accounts", [])
         results = []
 
         for acc in accounts:
