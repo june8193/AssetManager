@@ -17,14 +17,12 @@ class DashboardService:
         self.kiwoom_auth = KiwoomAuthManager()
 
     def get_yearly_stats(self) -> List[Dict[str, Any]]:
-        """연도별 활성 계좌의 자산 현황 통계를 계산합니다."""
-        # 1. 활성 계좌의 거래 내역만 가져오기
-        transactions = (
-            self.db.query(Transaction)
-            .join(Account, Transaction.account_id == Account.id)
-            .filter(Account.is_active == True)
-            .all()
-        )
+        """연도별 자산 현황 통계를 계산합니다.
+        
+        역사적 통계 데이터이므로 현재 계좌의 활성 여부와 관계없이 모든 데이터를 포함합니다.
+        """
+        # 1. 모든 거래 내역 가져오기 (비활성 계좌 포함)
+        transactions = self.db.query(Transaction).all()
         
         # 2. 연도별 추가액(Net Contribution) 계산
         # 추가액 = (DEPOSIT + INITIAL_BALANCE) - WITHDRAW
@@ -39,33 +37,28 @@ class DashboardService:
             elif tx.type == 'WITHDRAW':
                 yearly_contribution[year] -= tx.total_amount
 
-        # 3. 활성 계좌의 스냅샷만 가져오기 및 연도별 기말 자산 계산
+        # 3. 모든 스냅샷 가져오기 및 연도별 기말 자산 계산
         snapshots = (
             self.db.query(AccountSnapshot)
-            .join(Account, AccountSnapshot.account_id == Account.id)
-            .filter(Account.is_active == True)
             .order_by(AccountSnapshot.snapshot_date.asc())
             .all()
         )
         
-        # 연도별로 스냅샷 그룹화: year -> date -> account_id -> valuation
-        yearly_snapshots = {} 
+        # 연도별 각 계좌의 마지막 스냅샷 평가액 추적
+        # year -> account_id -> last_valuation
+        yearly_acc_last_valuation = {} 
         for s in snapshots:
             y = s.snapshot_date.year
-            if y not in yearly_snapshots:
-                yearly_snapshots[y] = {}
+            if y not in yearly_acc_last_valuation:
+                yearly_acc_last_valuation[y] = {}
             
-            d = s.snapshot_date
-            if d not in yearly_snapshots[y]:
-                yearly_snapshots[y][d] = {}
-            
-            yearly_snapshots[y][d][s.account_id] = s.total_valuation
+            # snapshot_date.asc() 정렬이므로 마지막으로 덮어써진 값이 해당 연도의 기말 가액이 됨
+            yearly_acc_last_valuation[y][s.account_id] = s.total_valuation
 
-        # 연도별 기말 자산 (그 연도의 마지막 날짜의 모든 활성 계좌 합계)
+        # 연도별 기말 자산 합산 (해당 연도에 기록이 있는 모든 계좌의 마지막 가액 합계)
         yearly_assets = {} # year -> total_valuation
-        for y, dates in yearly_snapshots.items():
-            last_date = max(dates.keys())
-            yearly_assets[y] = sum(dates[last_date].values())
+        for y, acc_valuations in yearly_acc_last_valuation.items():
+            yearly_assets[y] = sum(acc_valuations.values())
 
         # 4. 종합 통계 계산
         years = sorted(list(set(list(yearly_contribution.keys()) + list(yearly_assets.keys()))))
@@ -98,10 +91,12 @@ class DashboardService:
         return results
 
     def get_holdings(self) -> List[Dict[str, Any]]:
-        """모든 활성 계좌의 자산별 보유량을 계산합니다."""
-        # 활성 계좌의 트랜잭션만 가져와서 (계좌, 자산) 별로 합산
-        # INITIAL_BALANCE, BUY, DEPOSIT 는 +, SELL, WITHDRAW 는 -
+        """모든 활성 계좌의 자산별 보유량을 계산합니다.
         
+        대시보드의 '계좌별 현황' 등 현재 보유 자산을 보여주는 기능에서 사용되며,
+        사용자 요청에 따라 비활성(is_active=False) 계좌는 제외됩니다.
+        """
+        # 활성 계좌의 트랜잭션만 가져와서 (계좌, 자산) 별로 합산
         transactions = (
             self.db.query(Transaction)
             .join(Account, Transaction.account_id == Account.id)

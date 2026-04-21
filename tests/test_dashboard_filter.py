@@ -110,21 +110,18 @@ def test_get_holdings_filters_inactive_accounts(db):
     assert holdings[0]["account"].name == "활성계좌"
     assert holdings[0]["quantity"] == 100000.0
 
-def test_get_yearly_stats_filters_inactive_accounts(db):
-    """get_yearly_stats 호출 시 비활성 계좌의 데이터가 제외되는지 테스트합니다."""
+def test_get_yearly_stats_includes_inactive_accounts(db):
+    """get_yearly_stats 호출 시 비활성 계좌의 데이터가 포함되는지 테스트합니다."""
     service = DashboardService(db)
     stats = service.get_yearly_stats()
 
-    # 검증: 활성 계좌의 데이터(100,000)만 반영되어야 함
-    # 현재 로직은 모든 Transaction과 Snapshot을 가져오므로 150,000이 나올 것으로 예상됨 (실패해야 함)
-    
+    # 검증: 활성 계좌(100,000)와 비활성 계좌(50,000)의 데이터가 모두 반영되어야 함 (총 150,000)
     assert len(stats) > 0
     current_year_stat = stats[0]
     
-    # 비활성 계좌가 필터링된다면 기여도(contribution)는 100,000이어야 함
-    # 필터링이 안 된다면 150,000이 되어 테스트가 실패할 것임
-    assert current_year_stat["contribution"] == 100000.0
-    assert current_year_stat["assets"] == 100000.0
+    # 비활성 계좌의 데이터가 포함되어야 하므로 기여도(contribution)와 자산(assets)은 150,000이어야 함
+    assert current_year_stat["contribution"] == 150000.0
+    assert current_year_stat["assets"] == 150000.0
 
 @pytest.mark.asyncio
 async def test_get_dashboard_summary_filters_inactive_accounts(db):
