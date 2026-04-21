@@ -110,7 +110,7 @@ class DashboardService:
             if qty == 0:
                 continue
             
-            account = self.db.query(Account).filter(Account.id == acc_id).first()
+            account = self.db.query(Account).filter(Account.id == acc_id, Account.is_active == True).first()
             asset = self.db.query(Asset).filter(Asset.id == asset_id).first()
             
             if not account or not asset:
