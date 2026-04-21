@@ -8,12 +8,19 @@ export const useDashboard = () => {
   const fetchDashboard = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/dashboard/summary');
-      if (!response.ok) {
-        throw new Error('대시보드 데이터를 가져오는데 실패했습니다.');
+      const [summaryRes, yearlyRes] = await Promise.all([
+        fetch('/api/dashboard/summary'),
+        fetch('/api/dashboard/yearly')
+      ]);
+
+      if (!summaryRes.ok || !yearlyRes.ok) {
+        throw new Error('데이터를 가져오는데 실패했습니다.');
       }
-      const result = await response.json();
-      setData(result);
+
+      const summary = await summaryRes.json();
+      const yearly = await yearlyRes.json();
+
+      setData({ ...summary, yearly });
       setError(null);
     } catch (err) {
       setError(err.message);

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useDashboard';
 import { Wallet, PieChart, TrendingUp, RefreshCw, AlertCircle, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import YearlyStatusTable from '../components/YearlyStatusTable';
 
 const DashboardPage = () => {
   const { data, loading, error, refresh } = useDashboard();
@@ -43,7 +44,7 @@ const DashboardPage = () => {
     );
   }
 
-  const { accounts, categories, total_valuation_krw, exchange_rate } = data;
+  const { accounts, categories, total_valuation_krw, exchange_rate, yearly } = data;
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -253,6 +254,9 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Yearly Performance Table */}
+      <YearlyStatusTable data={yearly} />
     </main>
   );
 };

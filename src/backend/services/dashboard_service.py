@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from ..models import Account, Asset, Transaction, ExchangeRate
+from ..models import Account, Asset, Transaction, ExchangeRate, AccountSnapshot
 import yfinance as yf
 from typing import Dict, List, Any
 import datetime
@@ -15,6 +15,76 @@ class DashboardService:
         self.db = db
         self.kiwoom_api = KiwoomAPI()
         self.kiwoom_auth = KiwoomAuthManager()
+
+    def get_yearly_stats(self) -> List[Dict[str, Any]]:
+        """연도별 자산 현황 통계를 계산합니다."""
+        # 1. 모든 거래 내역 가져오기
+        transactions = self.db.query(Transaction).all()
+        
+        # 2. 연도별 추가액(Net Contribution) 계산
+        # 추가액 = (DEPOSIT + INITIAL_BALANCE) - WITHDRAW
+        yearly_contribution = {} # year -> amount
+        for tx in transactions:
+            year = tx.transaction_date.year
+            if year not in yearly_contribution:
+                yearly_contribution[year] = 0.0
+            
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+                yearly_contribution[year] += tx.total_amount
+            elif tx.type == 'WITHDRAW':
+                yearly_contribution[year] -= tx.total_amount
+
+        # 3. 모든 스냅샷 가져오기 및 연도별 기말 자산 계산
+        snapshots = self.db.query(AccountSnapshot).order_by(AccountSnapshot.snapshot_date.asc()).all()
+        
+        # 연도별로 스냅샷 그룹화: year -> date -> account_id -> valuation
+        yearly_snapshots = {} 
+        for s in snapshots:
+            y = s.snapshot_date.year
+            if y not in yearly_snapshots:
+                yearly_snapshots[y] = {}
+            
+            d = s.snapshot_date
+            if d not in yearly_snapshots[y]:
+                yearly_snapshots[y][d] = {}
+            
+            yearly_snapshots[y][d][s.account_id] = s.total_valuation
+
+        # 연도별 기말 자산 (그 연도의 마지막 날짜의 모든 계좌 합계)
+        yearly_assets = {} # year -> total_valuation
+        for y, dates in yearly_snapshots.items():
+            last_date = max(dates.keys())
+            yearly_assets[y] = sum(dates[last_date].values())
+
+        # 4. 종합 통계 계산
+        years = sorted(list(set(list(yearly_contribution.keys()) + list(yearly_assets.keys()))))
+        results = []
+        
+        prev_assets = 0.0
+        for y in years:
+            assets = yearly_assets.get(y, prev_assets)
+            contribution = yearly_contribution.get(y, 0.0)
+            
+            increase = assets - prev_assets
+            profit = increase - contribution
+            
+            # ROI = 수익 / (기초 자산 + 추가액)
+            # 기초 자산 + 추가액이 0이면 ROI는 0
+            base = prev_assets + contribution
+            roi = (profit / base * 100) if base != 0 else 0.0
+            
+            results.append({
+                "year": y,
+                "contribution": contribution,
+                "profit": profit,
+                "roi": round(roi, 2),
+                "assets": assets,
+                "increase": increase
+            })
+            
+            prev_assets = assets
+            
+        return results
 
     def get_holdings(self) -> List[Dict[str, Any]]:
         """모든 계좌의 자산별 보유량을 계산합니다."""
