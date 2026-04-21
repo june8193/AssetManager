@@ -17,9 +17,14 @@ class DashboardService:
         self.kiwoom_auth = KiwoomAuthManager()
 
     def get_yearly_stats(self) -> List[Dict[str, Any]]:
-        """연도별 자산 현황 통계를 계산합니다."""
-        # 1. 모든 거래 내역 가져오기
-        transactions = self.db.query(Transaction).all()
+        """연도별 활성 계좌의 자산 현황 통계를 계산합니다."""
+        # 1. 활성 계좌의 거래 내역만 가져오기
+        transactions = (
+            self.db.query(Transaction)
+            .join(Account, Transaction.account_id == Account.id)
+            .filter(Account.is_active == True)
+            .all()
+        )
         
         # 2. 연도별 추가액(Net Contribution) 계산
         # 추가액 = (DEPOSIT + INITIAL_BALANCE) - WITHDRAW
@@ -34,8 +39,14 @@ class DashboardService:
             elif tx.type == 'WITHDRAW':
                 yearly_contribution[year] -= tx.total_amount
 
-        # 3. 모든 스냅샷 가져오기 및 연도별 기말 자산 계산
-        snapshots = self.db.query(AccountSnapshot).order_by(AccountSnapshot.snapshot_date.asc()).all()
+        # 3. 활성 계좌의 스냅샷만 가져오기 및 연도별 기말 자산 계산
+        snapshots = (
+            self.db.query(AccountSnapshot)
+            .join(Account, AccountSnapshot.account_id == Account.id)
+            .filter(Account.is_active == True)
+            .order_by(AccountSnapshot.snapshot_date.asc())
+            .all()
+        )
         
         # 연도별로 스냅샷 그룹화: year -> date -> account_id -> valuation
         yearly_snapshots = {} 
@@ -50,7 +61,7 @@ class DashboardService:
             
             yearly_snapshots[y][d][s.account_id] = s.total_valuation
 
-        # 연도별 기말 자산 (그 연도의 마지막 날짜의 모든 계좌 합계)
+        # 연도별 기말 자산 (그 연도의 마지막 날짜의 모든 활성 계좌 합계)
         yearly_assets = {} # year -> total_valuation
         for y, dates in yearly_snapshots.items():
             last_date = max(dates.keys())
@@ -87,11 +98,16 @@ class DashboardService:
         return results
 
     def get_holdings(self) -> List[Dict[str, Any]]:
-        """모든 계좌의 자산별 보유량을 계산합니다."""
-        # 모든 트랜잭션을 가져와서 (계좌, 자산) 별로 합산
+        """모든 활성 계좌의 자산별 보유량을 계산합니다."""
+        # 활성 계좌의 트랜잭션만 가져와서 (계좌, 자산) 별로 합산
         # INITIAL_BALANCE, BUY, DEPOSIT 는 +, SELL, WITHDRAW 는 -
         
-        transactions = self.db.query(Transaction).all()
+        transactions = (
+            self.db.query(Transaction)
+            .join(Account, Transaction.account_id == Account.id)
+            .filter(Account.is_active == True)
+            .all()
+        )
         holdings = {} # (account_id, asset_id) -> quantity
 
         for tx in transactions:
@@ -110,7 +126,9 @@ class DashboardService:
             if qty == 0:
                 continue
             
-            account = self.db.query(Account).filter(Account.id == acc_id, Account.is_active == True).first()
+            # 이미 활성 계좌만 필터링했으므로 Account 조회 시 is_active 필터는 유지하되 
+            # 트랜잭션에서 이미 필터링되었으므로 성능이 향상됨
+            account = self.db.query(Account).filter(Account.id == acc_id).first()
             asset = self.db.query(Asset).filter(Asset.id == asset_id).first()
             
             if not account or not asset:
