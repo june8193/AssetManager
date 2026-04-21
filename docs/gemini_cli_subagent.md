@@ -1,68 +1,47 @@
-# Subagents
+# 서브에이전트 (Subagents)
 
-Subagents are specialized agents that operate within your main Gemini CLI
-session. They are designed to handle specific, complex tasks—like deep codebase
-analysis, documentation lookup, or domain-specific reasoning—without cluttering
-the main agent's context or toolset.
+서브에이전트는 메인 Gemini CLI 세션 내에서 작동하는 전문 에이전트입니다. 이들은 메인 에이전트의 컨텍스트나 도구 모음을 어지럽히지 않고도 심층적인 코드베이스 분석, 문서 조회 또는 특정 도메인에 특화된 추론과 같은 복잡한 작업을 처리하도록 설계되었습니다.
 
-## What are subagents?
+## 서브에이전트란 무엇인가요?
 
-Subagents are "specialists" that the main Gemini agent can hire for a specific
-job.
+서브에이전트는 메인 Gemini 에이전트가 특정 작업을 위해 "고용"할 수 있는 "전문가"입니다.
 
-- **Focused context:** Each subagent has its own system prompt and persona.
-- **Specialized tools:** Subagents can have a restricted or specialized set of
-  tools.
-- **Independent context window:** Interactions with a subagent happen in a
-  separate context loop, which saves tokens in your main conversation history.
+- **집중된 컨텍스트**: 각 서브에이전트는 자신만의 시스템 프롬프트와 페르소나를 가집니다.
+- **전문화된 도구**: 서브에이전트는 제한되거나 전문화된 도구 세트를 가질 수 있습니다.
+- **독립적인 컨텍스트 창**: 서브에이전트와의 상호작용은 별도의 컨텍스트 루프에서 발생하므로 메인 대화 기록의 토큰을 절약할 수 있습니다.
 
-Subagents are exposed to the main agent as a tool of the same name. When the
-main agent calls the tool, it delegates the task to the subagent. Once the
-subagent completes its task, it reports back to the main agent with its
-findings.
+서브에이전트는 메인 에이전트에게 동일한 이름의 도구로 노출됩니다. 메인 에이전트가 이 도구를 호출하면 해당 작업을 서브에이전트에게 위임합니다. 서브에이전트가 작업을 완료하면 그 결과를 메인 에이전트에게 보고합니다.
 
-## How to use subagents
+## 서브에이전트 사용 방법
 
-You can use subagents through automatic delegation or by explicitly forcing them
-in your prompt.
+자동 위임 기능을 통하거나 프롬프트에서 명시적으로 호출하여 서브에이전트를 사용할 수 있습니다.
 
-### Automatic delegation
+### 자동 위임 (Automatic delegation)
 
-Gemini CLI's main agent is instructed to use specialized subagents when a task
-matches their expertise. For example, if you ask "How does the auth system
-work?", the main agent may decide to call the `codebase_investigator` subagent
-to perform the research.
+Gemini CLI의 메인 에이전트는 작업이 서브에이전트의 전문 분야와 일치할 때 전문 서브에이전트를 사용하도록 지시받습니다. 예를 들어, "인증 시스템은 어떻게 작동하나요?"라고 물으면 메인 에이전트는 조사를 수행하기 위해 `codebase_investigator` 서브에이전트를 호출하기로 결정할 수 있습니다.
 
-### Forcing a subagent (@ syntax)
+### 서브에이전트 강제 호출 (@ 구문)
 
-You can explicitly direct a task to a specific subagent by using the `@` symbol
-followed by the subagent's name at the beginning of your prompt. This is useful
-when you want to bypass the main agent's decision-making and go straight to a
-specialist.
+프롬프트 시작 부분에 `@` 기호와 서브에이전트 이름을 사용하여 특정 서브에이전트에게 작업을 명시적으로 지시할 수 있습니다. 이는 메인 에이전트의 의사 결정을 거치지 않고 바로 전문가에게 요청하고 싶을 때 유용합니다.
 
-**Example:**
+**예시:**
 
 ```bash
-@codebase_investigator Map out the relationship between the AgentRegistry and the LocalAgentExecutor.
+@codebase_investigator AgentRegistry와 LocalAgentExecutor 간의 관계를 파악해줘.
 ```
 
-When you use the `@` syntax, the CLI injects a system note that nudges the
-primary model to use that specific subagent tool immediately.
+`@` 구문을 사용하면 CLI는 기본 모델이 즉시 해당 서브에이전트 도구를 사용하도록 유도하는 시스템 노트를 주입합니다.
 
-## Built-in subagents
+## 내장 서브에이전트
 
-Gemini CLI comes with the following built-in subagents:
+Gemini CLI에는 다음과 같은 내장 서브에이전트가 포함되어 있습니다.
 
-### Codebase Investigator
+### 코드베이스 조사관 (Codebase Investigator)
 
-- **Name:** `codebase_investigator`
-- **Purpose:** Analyze the codebase, reverse engineer, and understand complex
-  dependencies.
-- **When to use:** "How does the authentication system work?", "Map out the
-  dependencies of the `AgentRegistry` class."
-- **Configuration:** Enabled by default. You can override its settings in
-  `settings.json` under `agents.overrides`. Example (forcing a specific model
-  and increasing turns):
+- **이름:** `codebase_investigator`
+- **용도:** 코드베이스 분석, 역공학 및 복잡한 의존성 이해.
+- **사용 시기:** "인증 시스템이 어떻게 작동하나요?", "`AgentRegistry` 클래스의 의존성을 파악해줘."
+- **설정:** 기본적으로 활성화되어 있습니다. `settings.json`의 `agents.overrides`에서 설정을 덮어쓸 수 있습니다. 예시(특정 모델 강제 및 턴 수 증가):
   ```json
   {
     "agents": {
@@ -76,63 +55,44 @@ Gemini CLI comes with the following built-in subagents:
   }
   ```
 
-### CLI Help Agent
+### CLI 도움말 에이전트 (CLI Help Agent)
 
-- **Name:** `cli_help`
-- **Purpose:** Get expert knowledge about Gemini CLI itself, its commands,
-  configuration, and documentation.
-- **When to use:** "How do I configure a proxy?", "What does the `/rewind`
-  command do?"
-- **Configuration:** Enabled by default.
+- **이름:** `cli_help`
+- **용도:** Gemini CLI 자체, 명령어, 설정 및 문서에 대한 전문 지식 제공.
+- **사용 시기:** "프록시는 어떻게 설정하나요?", "`/rewind` 명령어는 무엇을 하나요?"
+- **설정:** 기본적으로 활성화되어 있습니다.
 
-### Generalist Agent
+### 제너럴리스트 에이전트 (Generalist Agent)
 
-- **Name:** `generalist`
-- **Purpose:** A general, all-purpose subagent that uses the inherited tool
-  access and configurations from the main agent. Useful for executing broad,
-  resource-heavy subtasks in an isolated conversation, optimizing your main
-  agent's context by returning only the final result of that given task.
-- **When to use:** Use this agent when a task requires many steps, handles large
-  volumes of information, or requires the same full capabilities as the main
-  agent. It is ideal for:
-  - **Multi-file modifications:** Applying refactors or fixing errors across
-    several files at once.
-  - **High-volume execution:** Running commands or tests that produce extensive
-    terminal output.
-  - **Action-oriented research:** Investigations where the agent needs to both
-    search code and run commands or make edits to find a solution. By delegating
-    these tasks, you prevent your main conversation from becoming cluttered or
-    slow. You can invoke it explicitly using `@generalist`.
-- **Configuration:** Enabled by default.
+- **이름:** `generalist`
+- **용도:** 메인 에이전트로부터 상속받은 도구 액세스 및 설정을 사용하는 다목적 서브에이전트입니다. 격리된 대화에서 리소스 소모가 큰 광범위한 하위 작업을 실행하고 최종 결과만 반환함으로써 메인 에이전트의 컨텍스트를 최적화하는 데 유용합니다.
+- **사용 시기:** 작업에 많은 단계가 필요하거나, 대량의 정보를 처리하거나, 메인 에이전트와 동일한 전체 기능이 필요할 때 사용합니다. 다음 작업에 이상적입니다:
+  - **다중 파일 수정:** 여러 파일에 걸쳐 리팩토링을 적용하거나 오류를 한꺼번에 수정할 때.
+  - **대량 실행:** 광범위한 터미널 출력을 생성하는 명령어 또는 테스트를 실행할 때.
+  - **행동 중심 조사:** 에이전트가 코드를 검색하고 명령어를 실행하거나 편집하여 해결책을 찾아야 하는 조사. 이러한 작업을 위임함으로써 메인 대화가 복잡해지거나 느려지는 것을 방지할 수 있습니다. `@generalist`를 사용하여 명시적으로 호출할 수 있습니다.
+- **설정:** 기본적으로 활성화되어 있습니다.
 
-### Browser Agent (experimental)
+### 브라우저 에이전트 (Browser Agent - 실험적)
 
-- **Name:** `browser_agent`
-- **Purpose:** Automate web browser tasks — navigating websites, filling forms,
-  clicking buttons, and extracting information from web pages — using the
-  accessibility tree.
-- **When to use:** "Go to example.com and fill out the contact form," "Extract
-  the pricing table from this page," "Click the login button and enter my
-  credentials."
+- **이름:** `browser_agent`
+- **용도:** 접근성 트리(accessibility tree)를 사용하여 웹사이트 탐색, 양식 작성, 버튼 클릭, 웹 페이지 정보 추출 등 웹 브라우저 작업을 자동화합니다.
+- **사용 시기:** "example.com에 접속해서 문의 양식을 작성해줘", "이 페이지에서 가격표를 추출해줘", "로그인 버튼을 클릭하고 내 자격 증명을 입력해줘."
 
 <!-- prettier-ignore -->
 > [!NOTE]
-> This is a preview feature currently under active development.
+> 이는 현재 활발히 개발 중인 프리뷰 기능입니다.
 
-#### Prerequisites
+#### 필수 조건
 
-The browser agent requires:
+브라우저 에이전트 사용을 위해서는 다음이 필요합니다:
 
-- **Chrome** version 144 or later (any recent stable release works).
+- **Chrome** 버전 144 이상 (최신 안정 버전 권장).
 
-The underlying
-[`chrome-devtools-mcp`](https://www.npmjs.com/package/chrome-devtools-mcp)
-server is bundled with Gemini CLI and launched automatically — no separate
-installation is needed.
+기반이 되는 [`chrome-devtools-mcp`](https://www.npmjs.com/package/chrome-devtools-mcp) 서버는 Gemini CLI에 번들로 포함되어 자동으로 실행되므로 별도의 설치가 필요하지 않습니다.
 
-#### Enabling the browser agent
+#### 브라우저 에이전트 활성화
 
-The browser agent is disabled by default. Enable it in your `settings.json`:
+브라우저 에이전트는 기본적으로 비활성화되어 있습니다. `settings.json`에서 활성화하세요:
 
 ```json
 {
@@ -146,10 +106,9 @@ The browser agent is disabled by default. Enable it in your `settings.json`:
 }
 ```
 
-#### Session modes
+#### 세션 모드
 
-The `sessionMode` setting controls how Chrome is launched and managed. Set it
-under `agents.browser`:
+`sessionMode` 설정은 Chrome이 실행되고 관리되는 방식을 제어합니다. `agents.browser` 아래에 설정하세요:
 
 ```json
 {
@@ -166,73 +125,51 @@ under `agents.browser`:
 }
 ```
 
-The available modes are:
+사용 가능한 모드는 다음과 같습니다:
 
-| Mode         | Description                                                                                                                                                                                 |
+| 모드         | 설명                                                                                                                                                                                        |
 | :----------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `persistent` | **(Default)** Launches Chrome with a persistent profile stored at `~/.gemini/cli-browser-profile/`. Cookies, history, and settings are preserved between sessions.                          |
-| `isolated`   | Launches Chrome with a temporary profile that is deleted after each session. Use this for clean-state automation.                                                                           |
-| `existing`   | Attaches to an already-running Chrome instance. You must enable remote debugging first by navigating to `chrome://inspect/#remote-debugging` in Chrome. No new browser process is launched. |
+| `persistent` | **(기본값)** `~/.gemini/cli-browser-profile/`에 저장된 영구 프로필로 Chrome을 실행합니다. 쿠키, 기록 및 설정이 세션 간에 유지됩니다.                                                         |
+| `isolated`   | 각 세션 후 삭제되는 임시 프로필로 Chrome을 실행합니다. 깨끗한 상태의 자동화가 필요할 때 사용합니다.                                                                                         |
+| `existing`   | 이미 실행 중인 Chrome 인스턴스에 연결합니다. 먼저 Chrome에서 `chrome://inspect/#remote-debugging`으로 이동하여 원격 디버깅을 활성화해야 합니다. 새로운 브라우저 프로세스가 시작되지 않습니다. |
 
-#### First-run consent
+#### 첫 실행 동의
 
-The first time the browser agent is invoked, Gemini CLI displays a consent
-dialog. You must accept before the browser session starts. This dialog only
-appears once.
+브라우저 에이전트가 처음 호출되면 Gemini CLI에 동의 대화 상자가 표시됩니다. 브라우저 세션이 시작되기 전에 승인해야 합니다. 이 대화 상자는 한 번만 나타납니다.
 
-#### Configuration reference
+#### 설정 참조
 
-All browser-specific settings go under `agents.browser` in your `settings.json`.
-For full details, see the
-[`agents.browser` configuration reference](/docs/reference/configuration#agents).
+모든 브라우저 관련 설정은 `settings.json`의 `agents.browser` 아래에 위치합니다. 자세한 내용은 [`agents.browser` 설정 참조](/docs/reference/configuration#agents)를 확인하세요.
 
-| Setting                   | Type       | Default        | Description                                                                     |
-| :------------------------ | :--------- | :------------- | :------------------------------------------------------------------------------ |
-| `sessionMode`             | `string`   | `"persistent"` | How Chrome is managed: `"persistent"`, `"isolated"`, or `"existing"`.           |
-| `headless`                | `boolean`  | `false`        | Run Chrome in headless mode (no visible window).                                |
-| `profilePath`             | `string`   | —              | Custom path to a browser profile directory.                                     |
-| `visualModel`             | `string`   | —              | Model override for the visual agent.                                            |
-| `allowedDomains`          | `string[]` | —              | Restrict navigation to specific domains (for example, `["github.com"]`).        |
-| `disableUserInput`        | `boolean`  | `true`         | Disable user input on the browser window during automation (non-headless only). |
-| `maxActionsPerTask`       | `number`   | `100`          | Maximum tool calls per task. The agent is terminated when the limit is reached. |
-| `confirmSensitiveActions` | `boolean`  | `false`        | Require manual confirmation for `upload_file` and `evaluate_script`.            |
-| `blockFileUploads`        | `boolean`  | `false`        | Hard-block all file upload requests from the agent.                             |
+| 설정                      | 타입       | 기본값         | 설명                                                                          |
+| :------------------------ | :--------- | :------------- | :---------------------------------------------------------------------------- |
+| `sessionMode`             | `string`   | `"persistent"` | Chrome 관리 방식: `"persistent"`, `"isolated"`, 또는 `"existing"`.            |
+| `headless`                | `boolean`  | `false`        | 헤드리스 모드로 Chrome 실행 (창이 보이지 않음).                                |
+| `profilePath`             | `string`   | —              | 브라우저 프로필 디렉토리에 대한 사용자 정의 경로.                             |
+| `visualModel`             | `string`   | —              | 비주얼 에이전트를 위한 모델 오버라이드.                                       |
+| `allowedDomains`          | `string[]` | —              | 특정 도메인으로 탐색 제한 (예: `["github.com"]`).                              |
+| `disableUserInput`        | `boolean`  | `true`         | 자동화 중 브라우저 창에 대한 사용자 입력 비활성화 (비헤드리스 모드 전용).      |
+| `maxActionsPerTask`       | `number`   | `100`          | 작업당 최대 도구 호출 수. 한도에 도달하면 에이전트가 종료됩니다.              |
+| `confirmSensitiveActions` | `boolean`  | `false`        | `upload_file` 및 `evaluate_script`에 대해 수동 확인 요구.                      |
+| `blockFileUploads`        | `boolean`  | `false`        | 에이전트의 모든 파일 업로드 요청을 강제로 차단.                               |
 
-#### Automation overlay and input blocking
+#### 자동화 오버레이 및 입력 차단
 
-In non-headless mode, the browser agent injects a visual overlay into the
-browser window to indicate that automation is in progress. By default, user
-input (keyboard and mouse) is also blocked to prevent accidental interference.
-You can disable this by setting `disableUserInput` to `false`.
+비헤드리스 모드에서 브라우저 에이전트는 자동화가 진행 중임을 나타내기 위해 브라우저 창에 시각적 오버레이를 주입합니다. 기본적으로 우발적인 간섭을 방지하기 위해 사용자 입력(키보드 및 마우스)도 차단됩니다. `disableUserInput`을 `false`로 설정하여 이를 비활성화할 수 있습니다.
 
-#### Security
+#### 보안
 
-The browser agent enforces several layers of security:
+브라우저 에이전트는 여러 계층의 보안을 적용합니다:
 
-- **Domain restrictions:** When `allowedDomains` is set, the agent can only
-  navigate to the listed domains (and their subdomains when using `*.` prefix).
-  Attempting to visit a disallowed domain throws a fatal error that immediately
-  terminates the agent. The agent also attempts to detect and block the use of
-  allowed domains as proxies (e.g., via query parameters or fragments) to access
-  restricted content.
-- **Blocked URL patterns:** The underlying MCP server blocks dangerous URL
-  schemes including `file://`, `javascript:`, `data:text/html`,
-  `chrome://extensions`, and `chrome://settings/passwords`.
-- **Sensitive action confirmation:** Form filling (`fill`, `fill_form`) always
-  requires user confirmation through the policy engine, regardless of approval
-  mode. When `confirmSensitiveActions` is `true`, `upload_file` and
-  `evaluate_script` also require confirmation.
-- **File upload blocking:** Set `blockFileUploads` to `true` to hard-block all
-  file upload requests, preventing the agent from uploading any files.
-- **Action rate limiting:** The `maxActionsPerTask` setting (default: 100)
-  limits the total number of tool calls per task to prevent runaway execution.
+- **도메인 제한:** `allowedDomains`가 설정되면 에이전트는 나열된 도메인(및 `*.` 접두사를 사용하는 경우 해당 하위 도메인)으로만 탐색할 수 있습니다. 허용되지 않은 도메인에 접속을 시도하면 즉시 에이전트를 종료하는 치명적 오류가 발생합니다. 또한 에이전트는 제한된 콘텐츠에 접근하기 위해 허용된 도메인을 프록시(예: 쿼리 매개변수 또는 프래그먼트 사용)로 사용하는 시도를 감지하고 차단합니다.
+- **차단된 URL 패턴:** 기반이 되는 MCP 서버는 `file://`, `javascript:`, `data:text/html`, `chrome://extensions`, `chrome://settings/passwords`를 포함한 위험한 URL 스킴을 차단합니다.
+- **민감한 작업 확인:** 양식 작성(`fill`, `fill_form`)은 승인 모드에 관계없이 항상 정책 엔진을 통한 사용자 확인이 필요합니다. `confirmSensitiveActions`가 `true`인 경우 `upload_file` 및 `evaluate_script`도 확인이 필요합니다.
+- **파일 업로드 차단:** `blockFileUploads`를 `true`로 설정하면 모든 파일 업로드 요청이 강제로 차단되어 에이전트가 파일을 업로드하는 것을 방지합니다.
+- **작업 속도 제한:** `maxActionsPerTask` 설정(기본값: 100)은 무분별한 실행을 방지하기 위해 작업당 총 도구 호출 수를 제한합니다.
 
-#### Visual agent
+#### 비주얼 에이전트 (Visual agent)
 
-By default, the browser agent interacts with pages through the accessibility
-tree using element `uid` values. For tasks that require visual identification
-(for example, "click the yellow button" or "find the red error message"), you
-can enable the visual agent by setting a `visualModel`:
+기본적으로 브라우저 에이전트는 요소의 `uid` 값을 사용하여 접근성 트리를 통해 페이지와 상호작용합니다. 시각적 식별이 필요한 작업(예: "노란색 버튼 클릭" 또는 "빨간색 오류 메시지 찾기")의 경우 `visualModel`을 설정하여 비주얼 에이전트를 활성화할 수 있습니다.
 
 ```json
 {
@@ -249,50 +186,37 @@ can enable the visual agent by setting a `visualModel`:
 }
 ```
 
-When enabled, the agent gains access to the `analyze_screenshot` tool, which
-captures a screenshot and sends it to the vision model for analysis. The model
-returns coordinates and element descriptions that the browser agent uses with
-the `click_at` tool for precise, coordinate-based interactions.
+활성화되면 에이전트는 스크린샷을 캡처하고 분석을 위해 비전 모델로 보내는 `analyze_screenshot` 도구에 대한 액세스 권한을 얻습니다. 모델은 브라우저 에이전트가 `click_at` 도구와 함께 정밀한 좌표 기반 상호작용을 위해 사용하는 좌표와 요소 설명을 반환합니다.
 
 <!-- prettier-ignore -->
 > [!NOTE]
-> The visual agent requires API key or Vertex AI authentication. It is
-> not available when using "Sign in with Google".
+> 비주얼 에이전트는 API 키 또는 Vertex AI 인증이 필요합니다. "Google 계정으로 로그인"을 사용하는 경우에는 사용할 수 없습니다.
 
-#### Sandbox support
+#### 샌드박스 지원
 
-The browser agent adjusts its behavior automatically when running inside a
-sandbox.
+브라우저 에이전트는 샌드박스 내부에서 실행될 때 동작을 자동으로 조정합니다.
 
 ##### macOS seatbelt (`sandbox-exec`)
 
-When the CLI runs under the macOS seatbelt sandbox, `persistent` and `isolated`
-session modes are forced to `isolated` with `headless` enabled. This avoids
-permission errors caused by seatbelt file-system restrictions on persistent
-browser profiles. If `sessionMode` is set to `existing`, no override is applied.
+CLI가 macOS seatbelt 샌드박스에서 실행될 때 `persistent` 및 `isolated` 세션 모드는 `headless`가 활성화된 `isolated` 모드로 강제 전환됩니다. 이는 영구 브라우저 프로필에 대한 seatbelt 파일 시스템 제한으로 인한 권한 오류를 방지하기 위함입니다. `sessionMode`가 `existing`으로 설정된 경우 오버라이드는 적용되지 않습니다.
 
-##### Container sandboxes (Docker / Podman)
+##### 컨테이너 샌드박스 (Docker / Podman)
 
-Chrome is not available inside the container, so the browser agent is
-**disabled** unless `sessionMode` is set to `"existing"`. When enabled with
-`existing` mode, the agent automatically connects to Chrome on the host via the
-resolved IP of `host.docker.internal:9222` instead of using local pipe
-discovery. Port `9222` is currently hardcoded and cannot be customized.
+컨테이너 내부에서는 Chrome을 사용할 수 없으므로 `sessionMode`가 `"existing"`으로 설정되지 않는 한 브라우저 에이전트는 **비활성화**됩니다. `existing` 모드로 활성화된 경우 에이전트는 로컬 파이프 검색 대신 `host.docker.internal:9222`를 통해 호스트의 Chrome에 자동으로 연결됩니다. 포트 `9222`는 현재 하드코딩되어 있으며 변경할 수 없습니다.
 
-To use the browser agent in a Docker sandbox:
+Docker 샌드박스에서 브라우저 에이전트를 사용하는 방법:
 
-1. Start Chrome on the host with remote debugging enabled:
+1. 호스트에서 원격 디버깅이 활성화된 상태로 Chrome을 시작합니다:
 
    ```bash
-   # Option A: Launch Chrome from the command line
+   # 옵션 A: 커맨드 라인에서 Chrome 실행
    google-chrome --remote-debugging-port=9222
 
-   # Option B: Enable in Chrome settings
-   # Navigate to chrome://inspect/#remote-debugging and enable
+   # 옵션 B: Chrome 설정에서 활성화
+   # chrome://inspect/#remote-debugging 으로 이동하여 활성화
    ```
 
-2. Configure `sessionMode` and allowed domains in your project's
-   `.gemini/settings.json`:
+2. 프로젝트의 `.gemini/settings.json`에서 `sessionMode`와 허용 도메인을 설정합니다:
 
    ```json
    {
@@ -308,36 +232,33 @@ To use the browser agent in a Docker sandbox:
    }
    ```
 
-3. Launch the CLI with port forwarding:
+3. 포트 포워딩과 함께 CLI를 실행합니다:
 
    ```bash
    GEMINI_SANDBOX=docker SANDBOX_PORTS=9222 gemini
    ```
 
-## Creating custom subagents
+## 맞춤형 서브에이전트 만들기
 
-You can create your own subagents to automate specific workflows or enforce
-specific personas.
+특정 워크플로우를 자동화하거나 특정 페르소나를 강제하기 위해 직접 서브에이전트를 만들 수 있습니다.
 
-### Agent definition files
+### 에이전트 정의 파일
 
-Custom agents are defined as Markdown files (`.md`) with YAML frontmatter. You
-can place them in:
+맞춤형 에이전트는 YAML 프론트매터가 포함된 마크다운 파일(`.md`)로 정의됩니다. 다음 위치에 저장할 수 있습니다:
 
-1.  **Project-level:** `.gemini/agents/*.md` (Shared with your team)
-2.  **User-level:** `~/.gemini/agents/*.md` (Personal agents)
+1.  **프로젝트 레벨:** `.gemini/agents/*.md` (팀원과 공유)
+2.  **사용자 레벨:** `~/.gemini/agents/*.md` (개인용 에이전트)
 
-### File format
+### 파일 형식
 
-The file **MUST** start with YAML frontmatter enclosed in triple-dashes `---`.
-The body of the markdown file becomes the agent's **System Prompt**.
+파일은 **반드시** 세 개의 대시 `---`로 둘러싸인 YAML 프론트매터로 시작해야 합니다. 마크다운 파일의 본문은 에이전트의 **시스템 프롬프트**가 됩니다.
 
-**Example: `.gemini/agents/security-auditor.md`**
+**예시: `.gemini/agents/security-auditor.md`**
 
 ```markdown
 ---
 name: security-auditor
-description: Specialized in finding security vulnerabilities in code.
+description: 코드의 보안 취약점을 찾는 전문 에이전트입니다.
 kind: local
 tools:
   - read_file
@@ -347,88 +268,66 @@ temperature: 0.2
 max_turns: 10
 ---
 
-You are a ruthless Security Auditor. Your job is to analyze code for potential
-vulnerabilities.
+당신은 냉철한 보안 감사관(Security Auditor)입니다. 당신의 임무는 잠재적인 취약점에 대해 코드를 분석하는 것입니다.
 
-Focus on:
+다음에 집중하세요:
 
-1.  SQL Injection
-2.  XSS (Cross-Site Scripting)
-3.  Hardcoded credentials
-4.  Unsafe file operations
+1. SQL 인젝션
+2. XSS (Cross-Site Scripting)
+3. 하드코딩된 자격 증명
+4. 안전하지 않은 파일 작업
 
-When you find a vulnerability, explain it clearly and suggest a fix. Do not fix
-it yourself; just report it.
+취약점을 발견하면 명확하게 설명하고 수정 사항을 제안하세요. 직접 수정하지 말고 보고만 하세요.
 ```
 
-### Configuration schema
+### 설정 스키마
 
-| Field          | Type   | Required | Description                                                                                                                                                                                                   |
-| :------------- | :----- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `name`         | string | Yes      | Unique identifier (slug) used as the tool name for the agent. Only lowercase letters, numbers, hyphens, and underscores.                                                                                      |
-| `description`  | string | Yes      | Short description of what the agent does. This is visible to the main agent to help it decide when to call this subagent.                                                                                     |
-| `kind`         | string | No       | `local` (default) or `remote`.                                                                                                                                                                                |
-| `tools`        | array  | No       | List of tool names this agent can use. Supports wildcards: `*` (all tools), `mcp_*` (all MCP tools), `mcp_server_*` (all tools from a server). **If omitted, it inherits all tools from the parent session.** |
-| `mcpServers`   | object | No       | Configuration for inline Model Context Protocol (MCP) servers isolated to this specific agent.                                                                                                                |
-| `model`        | string | No       | Specific model to use (for example, `gemini-3-preview`). Defaults to `inherit` (uses the main session model).                                                                                                 |
-| `temperature`  | number | No       | Model temperature (0.0 - 2.0). Defaults to `1`.                                                                                                                                                               |
-| `max_turns`    | number | No       | Maximum number of conversation turns allowed for this agent before it must return. Defaults to `30`.                                                                                                          |
-| `timeout_mins` | number | No       | Maximum execution time in minutes. Defaults to `10`.                                                                                                                                                          |
+| 필드           | 타입   | 필수 여부 | 설명                                                                                                                                                                                                                 |
+| :------------- | :----- | :-------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`         | string | 예        | 에이전트의 도구 이름으로 사용되는 고유 식별자(slug). 소문자, 숫자, 하이픈, 언더바만 가능합니다.                                                                                                                      |
+| `description`  | string | 예        | 에이전트가 하는 일에 대한 짧은 설명. 메인 에이전트가 이 서브에이전트를 호출할지 결정하는 데 도움이 됩니다.                                                                                                           |
+| `kind`         | string | 아니요    | `local` (기본값) 또는 `remote`.                                                                                                                                                                                       |
+| `tools`        | array  | 아니요    | 이 에이전트가 사용할 수 있는 도구 이름 목록. 와일드카드 지원: `*` (모든 도구), `mcp_*` (모든 MCP 도구), `mcp_server_*` (특정 서버의 모든 도구). **생략할 경우 상위 세션의 모든 도구를 상속받습니다.**                 |
+| `mcpServers`   | object | 아니요    | 이 특정 에이전트에 격리된 인라인 모델 컨텍스트 프로토콜(MCP) 서버 설정.                                                                                                                                              |
+| `model`        | string | 아니요    | 사용할 특정 모델 (예: `gemini-3-preview`). 기본값은 `inherit` (메인 세션 모델 사용)입니다.                                                                                                                           |
+| `temperature`  | number | 아니요    | 모델 온도 (0.0 - 2.0). 기본값은 `1`입니다.                                                                                                                                                                           |
+| `max_turns`    | number | 아니요    | 결과물을 반환하기 전에 이 에이전트에게 허용되는 최대 대화 턴 수. 기본값은 `30`입니다.                                                                                                                                |
+| `timeout_mins` | number | 아니요    | 최대 실행 시간(분). 기본값은 `10`입니다.                                                                                                                                                                             |
 
-### Tool wildcards
+### 도구 와일드카드
 
-When defining `tools` for a subagent, you can use wildcards to quickly grant
-access to groups of tools:
+서브에이전트의 `tools`를 정의할 때 와일드카드를 사용하여 도구 그룹에 대한 액세스 권한을 빠르게 부여할 수 있습니다.
 
-- `*`: Grant access to all available built-in and discovered tools.
-- `mcp_*`: Grant access to all tools from all connected MCP servers.
-- `mcp_my-server_*`: Grant access to all tools from a specific MCP server named
-  `my-server`.
+- `*`: 사용 가능한 모든 내장 및 검색된 도구에 대한 액세스 권한을 부여합니다.
+- `mcp_*`: 연결된 모든 MCP 서버의 모든 도구에 대한 액세스 권한을 부여합니다.
+- `mcp_my-server_*`: `my-server`라는 이름의 특정 MCP 서버의 모든 도구에 대한 액세스 권한을 부여합니다.
 
-### Isolation and recursion protection
+### 격리 및 재귀 방지
 
-Each subagent runs in its own isolated context loop. This means:
+각 서브에이전트는 자체적으로 격리된 컨텍스트 루프에서 실행됩니다. 이는 다음을 의미합니다:
 
-- **Independent history:** The subagent's conversation history does not bloat
-  the main agent's context.
-- **Isolated tools:** The subagent only has access to the tools you explicitly
-  grant it.
-- **Recursion protection:** To prevent infinite loops and excessive token usage,
-  subagents **cannot** call other subagents. If a subagent is granted the `*`
-  tool wildcard, it will still be unable to see or invoke other agents.
+- **독립적인 기록:** 서브에이전트의 대화 기록은 메인 에이전트의 컨텍스트를 비대하게 만들지 않습니다.
+- **격리된 도구:** 서브에이전트는 명시적으로 부여한 도구에만 액세스할 수 있습니다.
+- **재귀 방지:** 무한 루프와 과도한 토큰 사용을 방지하기 위해 서브에이전트는 다른 서브에이전트를 **호출할 수 없습니다**. 서브에이전트에게 `*` 도구 와일드카드가 부여되어도 다른 에이전트를 보거나 호출할 수 없습니다.
 
-## Subagent tool isolation
+## 서브에이전트 도구 격리
 
-Subagent tool isolation moves Gemini CLI away from a single global tool
-registry. By providing isolated execution environments, you can ensure that
-subagents only interact with the parts of the system they are designed for. This
-prevents unintended side effects, improves reliability by avoiding state
-contamination, and enables fine-grained permission control.
+서브에이전트 도구 격리를 통해 Gemini CLI는 단일 전역 도구 레지스트리에서 벗어납니다. 격리된 실행 환경을 제공함으로써 서브에이전트가 설계된 대로 시스템의 특정 부분과만 상호작용하도록 보장할 수 있습니다. 이는 의도하지 않은 부작용을 방지하고, 상태 오염을 피함으로써 신뢰성을 향상시키며, 미세한 권한 제어를 가능하게 합니다.
 
-With this feature, you can:
+이 기능을 통해 다음을 할 수 있습니다:
 
-- **Specify tool access:** Define exactly which tools an agent can access using
-  a `tools` list in the agent definition.
-- **Define inline MCP servers:** Configure Model Context Protocol (MCP) servers
-  (which provide a standardized way to connect AI models to external tools and
-  data sources) directly in the subagent's markdown frontmatter, isolating them
-  to that specific agent.
-- **Maintain state isolation:** Ensure that subagents only interact with their
-  own set of tools and servers, preventing side effects and state contamination.
-- **Apply subagent-specific policies:** Enforce granular rules in your
-  [Policy Engine](/docs/reference/policy-engine) TOML configuration based on the
-  executing subagent's name.
+- **도구 액세스 지정:** 에이전트 정의의 `tools` 목록을 사용하여 에이전트가 액세스할 수 있는 도구를 정확하게 정의합니다.
+- **인라인 MCP 서버 정의:** 서브에이전트의 마크다운 프론트매터에 모델 컨텍스트 프로토콜(MCP) 서버를 직접 구성하여 해당 에이전트에만 격리합니다.
+- **상태 격리 유지:** 서브에이전트가 자체 도구 및 서버 세트와만 상호작용하도록 하여 부작용과 상태 오염을 방지합니다.
+- **서브에이전트별 정책 적용:** 실행 중인 서브에이전트의 이름을 기반으로 [정책 엔진(Policy Engine)](/docs/reference/policy-engine) TOML 설정에서 세부 규칙을 적용합니다.
 
-### Configuring isolated tools and servers
+### 격리된 도구 및 서버 구성
 
-You can configure tool isolation for a subagent by updating its markdown
-frontmatter. This lets you explicitly state which tools the subagent can use,
-rather than relying on the global registry.
+서브에이전트의 마크다운 프론트매터를 업데이트하여 도구 격리를 구성할 수 있습니다. 이를 통해 전역 레지스트리에 의존하지 않고 서브에이전트가 사용할 수 있는 도구를 명시적으로 지정할 수 있습니다.
 
-Add an `mcpServers` object to define inline MCP servers that are unique to the
-agent.
+에이전트에게 고유한 인라인 MCP 서버를 정의하려면 `mcpServers` 객체를 추가하세요.
 
-**Example:**
+**예시:**
 
 ```yaml
 ---
@@ -443,56 +342,43 @@ mcpServers:
 ---
 ```
 
-### Subagent-specific policies
+### 서브에이전트별 정책
 
-You can enforce fine-grained control over subagents using the
-[Policy Engine's](/docs/reference/policy-engine) TOML configuration. This allows
-you to grant or restrict permissions specifically for an agent, without
-affecting the rest of your CLI session.
+[정책 엔진](/docs/reference/policy-engine)의 TOML 설정을 사용하여 서브에이전트에 대한 미세한 제어를 적용할 수 있습니다. 이를 통해 나머지 CLI 세션에 영향을 주지 않고 특정 에이전트에 대해 권한을 부여하거나 제한할 수 있습니다.
 
-To restrict a policy rule to a specific subagent, add the `subagent` property to
-the `[[rules]]` block in your `policy.toml` file.
+특정 서브에이전트로 정책 규칙을 제한하려면 `policy.toml` 파일의 `[[rules]]` 블록에 `subagent` 속성을 추가하세요.
 
-**Example:**
+**예시:**
 
 ```toml
 [[rules]]
 name = "Allow pr-creator to push code"
 subagent = "pr-creator"
-description = "Permit pr-creator to push branches automatically."
+description = "pr-creator가 자동으로 브랜치를 푸시하는 것을 허용합니다."
 action = "allow"
 toolName = "run_shell_command"
 commandPrefix = "git push"
 ```
 
-In this configuration, the policy rule only triggers if the executing subagent's
-name matches `pr-creator`. Rules without the `subagent` property apply
-universally to all agents.
+이 설정에서 정책 규칙은 실행 중인 서브에이전트의 이름이 `pr-creator`와 일치하는 경우에만 트리거됩니다. `subagent` 속성이 없는 규칙은 모든 에이전트에게 보편적으로 적용됩니다.
 
-## Managing subagents
+## 서브에이전트 관리
 
-You can manage subagents interactively using the `/agents` command or
-persistently via `settings.json`.
+`/agents` 명령어를 사용하여 대화식으로 서브에이전트를 관리하거나 `settings.json`을 통해 영구적으로 관리할 수 있습니다.
 
-### Interactive management (/agents)
+### 대화식 관리 (/agents)
 
-If you are in an interactive CLI session, you can use the `/agents` command to
-manage subagents without editing configuration files manually. This is the
-recommended way to quickly enable, disable, or re-configure agents on the fly.
+대화식 CLI 세션 중인 경우 설정 파일을 수동으로 편집하지 않고 `/agents` 명령어를 사용하여 서브에이전트를 관리할 수 있습니다. 이는 실시간으로 에이전트를 신속하게 활성화, 비활성화 또는 재구성하는 권장 방법입니다.
 
-For a full list of sub-commands and usage, see the
-[`/agents` command reference](/docs/reference/commands#agents).
+하위 명령어 및 사용법에 대한 전체 목록은 [`/agents` 명령어 참조](/docs/reference/commands#agents)를 확인하세요.
 
-### Persistent configuration (settings.json)
+### 영구 설정 (settings.json)
 
-While the `/agents` command and agent definition files provide a starting point,
-you can use `settings.json` for global, persistent overrides. This is useful for
-enforcing specific models or execution limits across all sessions.
+`/agents` 명령어와 에이전트 정의 파일이 시작점이라면, `settings.json`은 전역적이고 영구적인 오버라이드를 위해 사용할 수 있습니다. 이는 모든 세션에 걸쳐 특정 모델이나 실행 제한을 강제할 때 유용합니다.
 
 #### `agents.overrides`
 
-Use this to enable or disable specific agents or override their run
-configurations.
+특정 에이전트를 활성화/비활성화하거나 실행 설정을 오버라이드할 때 사용합니다.
 
 ```json
 {
@@ -512,9 +398,7 @@ configurations.
 
 #### `modelConfigs.overrides`
 
-You can target specific subagents with custom model settings (like system
-instruction prefixes or specific safety settings) using the `overrideScope`
-field.
+`overrideScope` 필드를 사용하여 맞춤형 모델 설정(시스템 지침 접두사 또는 특정 안전 설정 등)으로 특정 서브에이전트를 타겟팅할 수 있습니다.
 
 ```json
 {
@@ -533,67 +417,53 @@ field.
 }
 ```
 
-#### Safety policies (TOML)
+#### 안전 정책 (TOML)
 
-You can restrict access to specific subagents using the CLI's **Policy Engine**.
-Subagents are treated as virtual tool names for policy matching purposes.
+CLI의 **정책 엔진**을 사용하여 특정 서브에이전트에 대한 액세스를 제한할 수 있습니다. 서브에이전트는 정책 매칭 목적의 가상 도구 이름으로 취급됩니다.
 
-To govern access to a subagent, create a `.toml` file in your policy directory
-(e.g., `~/.gemini/policies/`):
+서브에이전트에 대한 액세스를 제어하려면 정책 디렉토리(예: `~/.gemini/policies/`)에 `.toml` 파일을 만드세요:
 
 ```toml
 [[rule]]
 toolName = "codebase_investigator"
 decision = "deny"
-deny_message = "Deep codebase analysis is restricted for this session."
+deny_message = "이 세션에서는 심층 코드베이스 분석이 제한됩니다."
 ```
 
-For more information on setting up fine-grained safety guardrails, see the
-[Policy Engine reference](/docs/reference/policy-engine#special-syntax-for-subagents).
+세분화된 안전 가드레일 설정에 대한 자세한 내용은 [정책 엔진 참조](/docs/reference/policy-engine#special-syntax-for-subagents)를 확인하세요.
 
-### Optimizing your subagent
+### 서브에이전트 최적화
 
-The main agent's system prompt encourages it to use an expert subagent when one
-is available. It decides whether an agent is a relevant expert based on the
-agent's description. You can improve the reliability with which an agent is used
-by updating the description to more clearly indicate:
+메인 에이전트의 시스템 프롬프트는 전문가 서브에이전트가 있는 경우 이를 사용하도록 유도합니다. 메인 에이전트는 서브에이전트의 설명을 기반으로 에이전트가 관련 전문가인지 결정합니다. 다음 사항을 명확하게 나타내도록 설명을 업데이트하여 에이전트가 사용되는 신뢰성을 높일 수 있습니다:
 
-- Its area of expertise.
-- When it should be used.
-- Some example scenarios.
+- 전문 분야
+- 사용해야 하는 시기
+- 몇 가지 예시 시나리오
 
-For example, the following subagent description should be called fairly
-consistently for Git operations.
+예를 들어, 다음과 같은 서브에이전트 설명은 Git 작업 시 상당히 일관되게 호출될 것입니다.
 
-> Git expert agent which should be used for all local and remote git operations.
-> For example:
+> 로컬 및 원격의 모든 Git 작업에 사용해야 하는 Git 전문 에이전트입니다.
+> 예:
 >
-> - Making commits
-> - Searching for regressions with bisect
-> - Interacting with source control and issues providers such as GitHub.
+> - 커밋 생성
+> - bisect를 사용한 회귀 테스트(regression) 검색
+> - GitHub와 같은 소스 제어 및 이슈 제공자와의 상호작용
 
-If you need to further tune your subagent, you can do so by selecting the model
-to optimize for with `/model` and then asking the model why it does not think
-that your subagent was called with a specific prompt and the given description.
+서브에이전트를 더 세밀하게 조정해야 하는 경우, `/model`로 최적화할 모델을 선택한 다음 특정 프롬프트와 설명에서 왜 서브에이전트가 호출되지 않았는지 모델에게 물어볼 수 있습니다.
 
-## Remote subagents (Agent2Agent)
+## 원격 서브에이전트 (Agent2Agent)
 
-Gemini CLI can also delegate tasks to remote subagents using the Agent-to-Agent
-(A2A) protocol.
+Gemini CLI는 Agent-to-Agent (A2A) 프로토콜을 사용하여 원격 서브에이전트에게 작업을 위임할 수도 있습니다.
 
-See the [Remote Subagents documentation](/docs/core/remote-agents) for detailed
-configuration, authentication, and usage instructions.
+자세한 설정, 인증 및 사용 방법은 [원격 에이전트 문서](/docs/core/remote-agents)를 확인하세요.
 
-## Extension subagents
+## 확장 프로그램 서브에이전트
 
-Extensions can bundle and distribute subagents. See the
-[Extensions documentation](/docs/extensions#subagents) for details on how
-to package agents within an extension.
+확장 프로그램은 서브에이전트를 번들로 포함하고 배포할 수 있습니다. 확장 프로그램 내에서 에이전트를 패키징하는 방법에 대한 자세한 내용은 [확장 프로그램 문서](/docs/extensions#subagents)를 확인하세요.
 
-## Disabling subagents
+## 서브에이전트 비활성화
 
-Subagents are enabled by default. To disable them, set `enableAgents` to `false`
-in your `settings.json`:
+서브에이전트는 기본적으로 활성화되어 있습니다. 비활성화하려면 `settings.json`에서 `enableAgents`를 `false`로 설정하세요:
 
 ```json
 {
