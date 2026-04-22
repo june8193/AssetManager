@@ -64,6 +64,17 @@ const Navbar = ({ isConnected }) => {
               API 연결 관리
             </Link>
             <Link 
+              to="/db" 
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
+                isActive('/db') 
+                  ? 'bg-blue-50 text-blue-700' 
+                  : 'text-slate-600 hover:bg-slate-50'
+              }`}
+            >
+              <Database size={18} />
+              DB 관리
+            </Link>
+            <Link 
               to="/input" 
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
                 isActive('/input') 
