@@ -4,6 +4,15 @@ import { Wallet, PieChart, TrendingUp, RefreshCw, AlertCircle, Calendar, Clock, 
 import YearlyStatusTable from '../components/YearlyStatusTable';
 import AssetChart from '../components/Dashboard/AssetChart';
 
+/**
+ * 대시보드 페이지 컴포넌트.
+ *
+ * 전체 평가 자산, 적용 환율, 계좌별 현황, 자산 비중 및 트렌드 차트를 보여줍니다.
+ * useDashboard 훅을 통해 데이터를 가져오며, 실시간 가격 갱신을 위한 새로고침 기능을 제공합니다.
+ *
+ * Returns:
+ *     JSX.Element: 대시보드 화면 렌더링 결과
+ */
 const DashboardPage = () => {
   const { data, loading, error, refresh } = useDashboard();
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
@@ -104,10 +113,11 @@ const DashboardPage = () => {
             </h2>
             <button 
               onClick={refresh}
-              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"
+              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:shadow-sm rounded-xl font-bold transition-all group/refresh"
               title="새로고침"
             >
-              <RefreshCw size={20} />
+              <RefreshCw size={18} className="group-hover/refresh:rotate-180 transition-transform duration-500" />
+              <span className="text-sm">새로고침</span>
             </button>
           </div>
 
