@@ -11,12 +11,12 @@ const ConnectionPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://localhost:8000/api/test-connection');
+      const response = await fetch('/api/connection/test');
       const data = await response.json();
-      if (data.status === 'success') {
+      if (response.ok) {
         setResults(data.data);
       } else {
-        setError(data.message);
+        setError(data.detail || 'API 연결 테스트 중 알 수 없는 오류가 발생했습니다.');
       }
     } catch (err) {
       setError('백엔드 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해 주세요. (기본 포트: 8000)');
