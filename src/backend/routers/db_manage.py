@@ -6,6 +6,7 @@ from datetime import date, datetime
 
 from ..database import get_db
 from ..models import Account, Asset, Transaction, AccountSnapshot, User
+from ..services.dashboard_service import DashboardService
 
 router = APIRouter(
     prefix="/api/db",
@@ -13,6 +14,18 @@ router = APIRouter(
 )
 
 # --- Pydantic Schemas ---
+
+class SaveSnapshotRequest(BaseModel):
+    snapshot_date: date
+    exchange_rate: float
+
+class SnapshotPreviewSchema(BaseModel):
+    account_id: int
+    account_name: str
+    snapshot_date: date
+    period_deposit: float
+    total_valuation: float
+    total_profit: float
 
 class AccountSchema(BaseModel):
     """계좌 정보를 담는 스키마입니다.
@@ -242,5 +255,143 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
 # Snapshots
 @router.get("/snapshots", response_model=List[SnapshotSchema])
 def get_snapshots(db: Session = Depends(get_db)):
-    """전체 자산 상태 스냅샷 목록을 조회합니다."""
+    """전체 자산 상태 스냅샷 목록을 조회합니다.
+
+    Returns:
+        List[SnapshotSchema]: 자산 상태 스냅샷 객체 리스트 (최신순)
+    """
     return db.query(AccountSnapshot).order_by(AccountSnapshot.snapshot_date.desc()).all()
+
+@router.post("/snapshots/preview", response_model=List[SnapshotPreviewSchema])
+async def preview_snapshots(req: SaveSnapshotRequest, db: Session = Depends(get_db)):
+    """입력받은 환율을 적용하여 저장될 스냅샷 데이터를 미리 계산합니다.
+
+    Args:
+        req (SaveSnapshotRequest): 기준 일자와 환율 정보를 포함한 요청 객체
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        List[SnapshotPreviewSchema]: 각 계좌별 계산된 스냅샷 미리보기 데이터 리스트
+    """
+    dashboard_service = DashboardService(db)
+    
+    accounts = db.query(Account).filter(Account.is_active == True).all()
+    if not accounts:
+        return []
+
+    # 1. 현재 보유 자산 및 주가 조회
+    holdings = dashboard_service.get_holdings()
+    query_tickers = list(set([h['asset'].ticker for h in holdings]))
+    prices = await dashboard_service.get_current_prices(query_tickers)
+    
+    # 2. 계좌별 평가액 합산 (입력된 환율 적용)
+    account_valuations = {acc.id: 0.0 for acc in accounts}
+    for h in holdings:
+        acc_id = h['account'].id
+        asset = h['asset']
+        qty = h['quantity']
+        price = prices.get(asset.ticker, 0.0)
+        
+        valuation = qty * price
+        valuation_krw = valuation
+        if asset.country == 'US' or asset.ticker == 'USD':
+            valuation_krw = valuation * req.exchange_rate
+        
+        if acc_id in account_valuations:
+            account_valuations[acc_id] += valuation_krw
+            
+    # 3. 각 계좌별 스냅샷 데이터 산출
+    # 최적화: 모든 계좌의 트랜잭션을 한 번에 조회
+    account_ids = [acc.id for acc in accounts]
+    all_transactions = db.query(Transaction).filter(
+        Transaction.account_id.in_(account_ids),
+        Transaction.transaction_date <= req.snapshot_date
+    ).all()
+    
+    # 계좌별 트랜잭션 그룹화
+    tx_by_account = {acc_id: [] for acc_id in account_ids}
+    for tx in all_transactions:
+        tx_by_account[tx.account_id].append(tx)
+
+    previews = []
+    for acc in accounts:
+        val_krw = account_valuations[acc.id]
+        
+        # 이전 마지막 스냅샷 조회 (기간 입금액 계산용)
+        last_snapshot = db.query(AccountSnapshot).filter(
+            AccountSnapshot.account_id == acc.id,
+            AccountSnapshot.snapshot_date < req.snapshot_date
+        ).order_by(AccountSnapshot.snapshot_date.desc()).first()
+        
+        last_date = last_snapshot.snapshot_date if last_snapshot else date(1970, 1, 1)
+        
+        period_deposit_krw = 0.0
+        total_net_deposit_krw = 0.0
+        
+        for tx in tx_by_account[acc.id]:
+            # 트랜잭션 당시 환율이 있으면 그것을 쓰고, 없으면 입력받은 환율(또는 1.0)을 적용하여 원화 환산
+            tx_rate = tx.exchange_rate if tx.exchange_rate else (req.exchange_rate if tx.currency == 'USD' else 1.0)
+            amount_krw = tx.total_amount
+            if tx.currency == 'USD':
+                amount_krw = tx.total_amount * tx_rate
+                
+            # 전체 누적 순 입금액 (수익 계산용)
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+                total_net_deposit_krw += amount_krw
+            elif tx.type == 'WITHDRAW':
+                total_net_deposit_krw -= amount_krw
+            
+            # 특정 기간 순 입금액 (스냅샷 기록용)
+            if tx.transaction_date > last_date:
+                if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+                    period_deposit_krw += amount_krw
+                elif tx.type == 'WITHDRAW':
+                    period_deposit_krw -= amount_krw
+                
+        total_profit = val_krw - total_net_deposit_krw
+        
+        previews.append(SnapshotPreviewSchema(
+            account_id=acc.id,
+            account_name=acc.name,
+            snapshot_date=req.snapshot_date,
+            period_deposit=period_deposit_krw,
+            total_valuation=val_krw,
+            total_profit=total_profit
+        ))
+        
+    return previews
+
+@router.post("/snapshots/save", response_model=List[SnapshotSchema])
+async def save_snapshots(previews: List[SnapshotPreviewSchema], db: Session = Depends(get_db)):
+    """확인된 미리보기 데이터를 바탕으로 스냅샷을 실제 DB에 저장합니다.
+
+    Args:
+        previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 데이터 리스트
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        List[SnapshotSchema]: DB에 저장된 최종 스냅샷 객체 리스트
+    """
+    saved_snapshots = []
+    # 중복 제거 및 일괄 저장을 위한 계좌 ID 및 날짜 추출
+    for p in previews:
+        # 기존 동일 날짜 데이터 삭제
+        db.query(AccountSnapshot).filter(
+            AccountSnapshot.account_id == p.account_id,
+            AccountSnapshot.snapshot_date == p.snapshot_date
+        ).delete()
+        
+        new_snap = AccountSnapshot(
+            account_id=p.account_id,
+            snapshot_date=p.snapshot_date,
+            period_deposit=p.period_deposit,
+            total_valuation=p.total_valuation,
+            total_profit=p.total_profit
+        )
+        db.add(new_snap)
+        saved_snapshots.append(new_snap)
+        
+    db.commit()
+    for snap in saved_snapshots:
+        db.refresh(snap)
+    return saved_snapshots
