@@ -54,7 +54,6 @@ dependencies = [
     { name = "requests" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
-    { name = "websockets" },
     { name = "yfinance" },
 ]
 
@@ -68,7 +67,6 @@ requires-dist = [
     { name = "requests", specifier = ">=2.33.1" },
     { name = "sqlalchemy" },
     { name = "uvicorn" },
-    { name = "websockets" },
     { name = "yfinance", specifier = ">=1.3.0" },
 ]
 

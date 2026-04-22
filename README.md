@@ -24,7 +24,7 @@
 ## 3. 기술 스택 (Tech Stack)
 
 ### Backend (Python)
-* **Framework:** FastAPI, Uvicorn (REST API 및 WebSocket 서버)
+* **Framework:** FastAPI, Uvicorn (REST API 서버)
 * **Database & ORM:** SQLite (초기 개발용), SQLAlchemy
 * **Package Management:** `uv`
 * **External API:** 키움증권 Open API (실시간 주가 및 계좌 연동)

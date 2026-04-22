@@ -3,15 +3,13 @@ import { useParams, useNavigate } from 'react-router-dom';
 import WatchlistForm from '../components/WatchlistForm';
 import WatchlistTable from '../components/WatchlistTable';
 import { useWatchlist } from '../hooks/useWatchlist';
-import { useWebSocket } from '../hooks/useWebSocket';
 
 const WatchlistPage = () => {
   const { country: urlCountry } = useParams();
   const navigate = useNavigate();
   const country = urlCountry || 'kr';
 
-  const { watchlist, loading, error, addToWatchlist, removeFromWatchlist } = useWatchlist(country);
-  const { realtimeData } = useWebSocket();
+  const { watchlist, loading, error, addToWatchlist, removeFromWatchlist, realtimeData } = useWatchlist(country);
 
   const handleCountryChange = (newCountry) => {
     if (newCountry !== country) {
@@ -27,8 +25,8 @@ const WatchlistPage = () => {
           관심종목 현황 ({country === 'us' ? '미국' : '국내'})
         </h1>
         <p className="text-indigo-200 max-w-2xl text-sm relative z-10">
-          실시간 주가 데이터를 반영하여 {country === 'us' ? '미국' : '국내'} 관심종목의 현재 가격과 등락률을 모니터링합니다. 
-          {country === 'us' ? ' 미국 주식은 yfinance를 통해 5초 주기로 실시간 데이터를 수신합니다.' : ' 국내 주식은 키움 API를 통해 실시간 데이터를 직접 수신합니다.'}
+          {country === 'us' ? '미국' : '국내'} 관심종목의 현재 가격과 등락률을 5초 주기로 모니터링합니다. 
+          {country === 'us' ? ' 미국 주식은 yfinance 데이터를 통해 실시간 시세를 조회합니다.' : ' 국내 주식은 키움 API를 통해 실시간 시세를 조회합니다.'}
         </p>
       </div>
 

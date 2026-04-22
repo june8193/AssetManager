@@ -36,7 +36,6 @@ class KiwoomAuthManager:
         
         # URL 초기화 (secrets.json에서 로드 필수)
         instance.base_url = None
-        instance.ws_url = None
         
         # settings.json 로드
         instance._load_credentials()
@@ -55,13 +54,9 @@ class KiwoomAuthManager:
                 settings = json.load(f)
                 
             self.base_url = settings.get("base_url")
-            self.ws_url = settings.get("ws_url")
             
-            if not self.base_url or not self.ws_url:
-                missing = []
-                if not self.base_url: missing.append("base_url")
-                if not self.ws_url: missing.append("ws_url")
-                raise ValueError(f"settings.json에 필수 설정 정보({', '.join(missing)})가 누락되었습니다.")
+            if not self.base_url:
+                raise ValueError("settings.json에 필수 설정 정보(base_url)가 누락되었습니다.")
 
             accounts = settings.get("accounts", [])
             

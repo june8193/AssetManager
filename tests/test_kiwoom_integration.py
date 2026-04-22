@@ -13,7 +13,6 @@ def mock_settings_json():
     
     mock_data = {
         "base_url": "https://api.kiwoom.com",
-        "ws_url": "wss://api.kiwoom.com:10000",
         "accounts": [
             {
                 "app_key": "mock_app_key",
@@ -78,38 +77,3 @@ async def test_masking_logging(caplog):
     
     assert "very_secret_token_12345" not in caplog.text
     assert "ve***45" in caplog.text  # 예시 마스킹 형태
-
-from src.kiwoom.ws_client import KiwoomWebSocketClient
-
-@pytest.mark.asyncio
-async def test_ws_subscription_format():
-    """웹소켓 구독 요청 JSON 포맷이 규격에 맞는지 확인합니다."""
-    # KiwoomWebSocketClient 초기화 시 AuthManager를 생성하므로 Mocking이 필요함
-    client = KiwoomWebSocketClient()
-    codes = ["005930", "000660"]
-    
-    reg_msg = client._create_reg_message(codes)
-    
-    assert reg_msg["trnm"] == "REG"
-    assert reg_msg["data"]["bcode"] == "0B"
-    assert "005930" in reg_msg["data"]["codes"]
-
-@pytest.mark.asyncio
-async def test_ws_data_parsing():
-    """수신된 REAL 데이터를 정상적으로 파싱하는지 확인합니다."""
-    client = KiwoomWebSocketClient()
-    
-    mock_raw_data = {
-        "trnm": "REAL",
-        "data": {
-            "item": "005930",
-            "10": "70000",   # 현재가
-            "12": "1.50"     # 등락율
-        }
-    }
-    
-    parsed = client._parse_real_data(mock_raw_data)
-    
-    assert parsed["stock_code"] == "005930"
-    assert parsed["current_price"] == 70000
-    assert parsed["change_rate"] == "1.50"

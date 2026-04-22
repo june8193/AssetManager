@@ -28,7 +28,7 @@ def test_auth_manager_raises_value_error_if_urls_missing(mock_invalid_settings):
         with pytest.raises(ValueError) as excinfo:
             KiwoomAuthManager()
         
-        assert "base_url" in str(excinfo.value) or "ws_url" in str(excinfo.value)
+        assert "base_url" in str(excinfo.value)
 
 def test_api_raises_value_error_if_urls_missing(mock_invalid_settings, tmp_path):
     """KiwoomAPI가 settings.json에 base_url이 없을 때 ValueError를 발생하는지 확인합니다."""
