@@ -7,10 +7,9 @@ import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Globe, Link as 
  */
 const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
-  { path: '/watchlist/kr', label: '관심종목(국내)', icon: Activity },
-  { path: '/watchlist/us', label: '관심종목(미국)', icon: Globe },
-  { path: '/connection', label: 'API 연결 관리', icon: LinkIcon },
+  { path: '/watchlist', label: '관심종목', icon: Activity },
   { path: '/db', label: 'DB 관리', icon: Database },
+  { path: '/connection', label: 'API 연결 관리', icon: LinkIcon },
 ];
 
 /**
@@ -22,7 +21,15 @@ const Sidebar = ({ isConnected }) => {
   const [isOpen, setIsOpen] = useState(true);
   const location = useLocation();
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) => {
+    if (path === '/') {
+      return location.pathname === '/' || location.pathname === '/dashboard';
+    }
+    if (path === '/watchlist') {
+      return location.pathname.startsWith('/watchlist');
+    }
+    return location.pathname === path;
+  };
 
   const toggleSidebar = () => setIsOpen(!isOpen);
 
@@ -53,9 +60,7 @@ const Sidebar = ({ isConnected }) => {
       <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-2">
         {MENU_ITEMS.map((item) => {
           const Icon = item.icon;
-          const active = item.path === '/' 
-            ? (isActive('/') || isActive('/dashboard')) 
-            : isActive(item.path);
+          const active = isActive(item.path);
           
           return (
             <Link

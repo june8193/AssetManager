@@ -17,6 +17,7 @@ function App() {
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/watchlist" element={<WatchlistPage />} />
             <Route path="/watchlist/:country" element={<WatchlistPage />} />
             <Route path="/connection" element={<ConnectionPage />} />
             <Route path="/db" element={<DbManagementPage />} />

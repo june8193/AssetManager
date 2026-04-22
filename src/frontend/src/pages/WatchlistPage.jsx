@@ -1,14 +1,23 @@
 import React from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import WatchlistForm from '../components/WatchlistForm';
 import WatchlistTable from '../components/WatchlistTable';
 import { useWatchlist } from '../hooks/useWatchlist';
 import { useWebSocket } from '../hooks/useWebSocket';
 
 const WatchlistPage = () => {
-  const { country = 'kr' } = useParams();
+  const { country: urlCountry } = useParams();
+  const navigate = useNavigate();
+  const country = urlCountry || 'kr';
+
   const { watchlist, loading, error, addToWatchlist, removeFromWatchlist } = useWatchlist(country);
   const { realtimeData } = useWebSocket();
+
+  const handleCountryChange = (newCountry) => {
+    if (newCountry !== country) {
+      navigate(`/watchlist/${newCountry}`);
+    }
+  };
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -21,6 +30,21 @@ const WatchlistPage = () => {
           실시간 주가 데이터를 반영하여 {country === 'us' ? '미국' : '국내'} 관심종목의 현재 가격과 등락률을 모니터링합니다. 
           {country === 'us' ? ' 미국 주식은 yfinance를 통해 5초 주기로 실시간 데이터를 수신합니다.' : ' 국내 주식은 키움 API를 통해 실시간 데이터를 직접 수신합니다.'}
         </p>
+      </div>
+
+      <div className="flex gap-2 mb-6">
+        <button 
+          onClick={() => handleCountryChange('kr')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${country === 'kr' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+        >
+          국내 주식 (KR)
+        </button>
+        <button 
+          onClick={() => handleCountryChange('us')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors ${country === 'us' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}
+        >
+          미국 주식 (US)
+        </button>
       </div>
 
       <WatchlistForm onAdd={(code, name) => addToWatchlist(code, name, country)} error={error} country={country} />
