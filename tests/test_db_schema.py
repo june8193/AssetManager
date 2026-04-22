@@ -45,7 +45,7 @@ def test_create_account(db_session):
     db_session.add(user)
     db_session.commit()
     
-    account = Account(user_id=user.id, name="테스트계좌", type="주식")
+    account = Account(user_id=user.id, name="테스트계좌", provider="KB증권")
     db_session.add(account)
     db_session.commit()
     
@@ -55,7 +55,7 @@ def test_create_account(db_session):
 
 def test_create_asset(db_session):
     """자산 마스터 생성을 테스트합니다."""
-    asset = Asset(ticker="AAPL", name="애플", category="주식")
+    asset = Asset(ticker="AAPL", name="애플", major_category="일반주식", sub_category="해외주식")
     db_session.add(asset)
     db_session.commit()
     
@@ -69,8 +69,8 @@ def test_create_transaction(db_session):
     db_session.add(user)
     db_session.commit()
     
-    account = Account(user_id=user.id, name="테스트계좌", type="주식")
-    asset = Asset(ticker="KRW", name="원화예수금", category="현금")
+    account = Account(user_id=user.id, name="테스트계좌", provider="KB증권")
+    asset = Asset(ticker="KRW", name="원화예수금", major_category="현금", sub_category="원화예수금")
     db_session.add(account)
     db_session.add(asset)
     db_session.commit()
@@ -100,14 +100,14 @@ def test_create_snapshot(db_session):
     db_session.add(user)
     db_session.commit()
     
-    account = Account(user_id=user.id, name="테스트계좌", type="주식")
+    account = Account(user_id=user.id, name="테스트계좌", provider="KB증권")
     db_session.add(account)
     db_session.commit()
     
     snapshot = AccountSnapshot(
         account_id=account.id,
         snapshot_date=datetime.date.today(),
-        total_deposit=1000000.0,
+        period_deposit=1000000.0,
         total_valuation=1100000.0,
         total_profit=100000.0
     )
@@ -116,4 +116,5 @@ def test_create_snapshot(db_session):
     
     saved_snapshot = db_session.query(AccountSnapshot).first()
     assert saved_snapshot is not None
+    assert saved_snapshot.period_deposit == 1000000.0
     assert saved_snapshot.total_profit == 100000.0

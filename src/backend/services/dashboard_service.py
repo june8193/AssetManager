@@ -20,64 +20,56 @@ class DashboardService:
         """연도별 자산 현황 통계를 계산합니다.
         
         역사적 통계 데이터이므로 현재 계좌의 활성 여부와 관계없이 모든 데이터를 포함합니다.
+        순 추가액(Contribution)은 해당 연도의 모든 스냅샷에 기록된 period_deposit의 합계로 계산합니다.
         """
-        # 1. 모든 거래 내역 가져오기 (비활성 계좌 포함)
-        transactions = self.db.query(Transaction).all()
-        
-        # 2. 연도별 추가액(Net Contribution) 계산
-        # 추가액 = (DEPOSIT + INITIAL_BALANCE) - WITHDRAW
-        yearly_contribution = {} # year -> amount
-        for tx in transactions:
-            year = tx.transaction_date.year
-            if year not in yearly_contribution:
-                yearly_contribution[year] = 0.0
-            
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
-                yearly_contribution[year] += tx.total_amount
-            elif tx.type == 'WITHDRAW':
-                yearly_contribution[year] -= tx.total_amount
-
-        # 3. 모든 스냅샷 가져오기 및 연도별 기말 자산 계산
+        # 1. 모든 스냅샷 가져오기 및 연도별 합계 계산
         snapshots = (
             self.db.query(AccountSnapshot)
             .order_by(AccountSnapshot.snapshot_date.asc())
             .all()
         )
         
-        # 연도별 각 날짜의 스냅샷 합계 추적
-        # year -> snapshot_date -> total_valuation_sum
-        yearly_date_totals = {} 
+        # 연도별 기말 자산(valuation) 및 연간 총 추가액(contribution) 추적
+        yearly_date_valuations = {} # year -> snapshot_date -> total_valuation
+        yearly_contributions = {} # year -> total_period_deposit
+        
         for s in snapshots:
             y = s.snapshot_date.year
             d = s.snapshot_date
-            if y not in yearly_date_totals:
-                yearly_date_totals[y] = {}
-            if d not in yearly_date_totals[y]:
-                yearly_date_totals[y][d] = 0.0
             
-            yearly_date_totals[y][d] += s.total_valuation
+            # 연도별 날짜별 평가액 합산 (기말 자산 파악용)
+            if y not in yearly_date_valuations:
+                yearly_date_valuations[y] = {}
+            if d not in yearly_date_valuations[y]:
+                yearly_date_valuations[y][d] = 0.0
+            yearly_date_valuations[y][d] += s.total_valuation
+            
+            # 연도별 총 추가액 합산
+            if y not in yearly_contributions:
+                yearly_contributions[y] = 0.0
+            yearly_contributions[y] += s.period_deposit
 
-        # 연도별 기말 자산 결정 (해당 연도의 가장 마지막 스냅샷 날짜의 합계)
+        # 연도별 기말 데이터 결정 (해당 연도의 가장 마지막 스냅샷 날짜의 합계)
         yearly_assets = {} # year -> total_valuation
-        for y, date_totals in yearly_date_totals.items():
-            if date_totals:
-                latest_date = max(date_totals.keys())
-                yearly_assets[y] = date_totals[latest_date]
+        for y, date_vals in yearly_date_valuations.items():
+            if date_vals:
+                latest_date = max(date_vals.keys())
+                yearly_assets[y] = date_vals[latest_date]
 
-        # 4. 종합 통계 계산
-        years = sorted(list(set(list(yearly_contribution.keys()) + list(yearly_assets.keys()))))
+        # 2. 종합 통계 계산
+        years = sorted(list(yearly_assets.keys()))
         results = []
         
         prev_assets = 0.0
+        
         for y in years:
             assets = yearly_assets.get(y, prev_assets)
-            contribution = yearly_contribution.get(y, 0.0)
+            contribution = yearly_contributions.get(y, 0.0)
             
             increase = assets - prev_assets
             profit = increase - contribution
             
             # ROI = 수익 / (기초 자산 + 추가액)
-            # 기초 자산 + 추가액이 0이면 ROI는 0
             base = prev_assets + contribution
             roi = (profit / base * 100) if base != 0 else 0.0
             

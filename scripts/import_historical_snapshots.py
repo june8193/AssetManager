@@ -79,11 +79,11 @@ def migrate():
 
             for col_idx, account_id in ACCOUNT_MAPPING.items():
                 total_valuation = parse_currency(row[col_idx])
-                total_deposit = parse_currency(row[col_idx + 1])
+                period_deposit = parse_currency(row[col_idx + 1])
                 total_profit = parse_currency(row[col_idx + 2])
 
                 # 데이터가 모두 0이면 의미 없는 행으로 간주하고 건너뜀 (단, 총 자산 계좌는 제외)
-                if account_id != 1 and total_valuation == 0 and total_deposit == 0 and total_profit == 0:
+                if account_id != 1 and total_valuation == 0 and period_deposit == 0 and total_profit == 0:
                     continue
 
                 # 중복 확인 및 삽입 
@@ -91,10 +91,10 @@ def migrate():
                 cursor.execute(
                     """
                     INSERT OR REPLACE INTO account_snapshots 
-                    (account_id, snapshot_date, total_deposit, total_valuation, total_profit)
+                    (account_id, snapshot_date, period_deposit, total_valuation, total_profit)
                     VALUES (?, ?, ?, ?, ?)
                     """,
-                    (account_id, formatted_date, total_deposit, total_valuation, total_profit)
+                    (account_id, formatted_date, period_deposit, total_valuation, total_profit)
                 )
                 total_inserted += 1
 

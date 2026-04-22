@@ -312,6 +312,7 @@ class LegacyDataMigrator:
                     snp = AccountSnapshot(
                         account_id=legacy_acc.id,
                         snapshot_date=dt,
+                        period_deposit=item['additional_amount'],
                         total_valuation=item['total_valuation'],
                         total_profit=item['total_profit']
                     )
@@ -355,6 +356,7 @@ class LegacyDataMigrator:
                 snp = AccountSnapshot(
                     account_id=acc_id,
                     snapshot_date=dt,
+                    period_deposit=item['additional_amount'],
                     total_valuation=item['total_valuation'],
                     total_profit=item['total_profit']
                 )

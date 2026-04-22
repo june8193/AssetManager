@@ -77,14 +77,14 @@ def db():
         s1 = AccountSnapshot(
             account_id=active_acc.id,
             snapshot_date=today,
-            total_deposit=100000.0,
+            period_deposit=100000.0,
             total_valuation=100000.0,
             total_profit=0.0
         )
         s2 = AccountSnapshot(
             account_id=inactive_acc.id,
             snapshot_date=today,
-            total_deposit=50000.0,
+            period_deposit=50000.0,
             total_valuation=50000.0,
             total_profit=0.0
         )

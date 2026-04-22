@@ -148,7 +148,7 @@ class AccountSnapshot(Base):
         id (int): 고유 식별자 (PK)
         account_id (int): 계좌 식별자 (FK)
         snapshot_date (date): 기준 일자
-        total_deposit (float): 누적 투자 원금
+        period_deposit (float): 해당 기간 추가 입금액
         total_valuation (float): 현재 총 평가액
         total_profit (float): 총 수익
     """
@@ -157,7 +157,7 @@ class AccountSnapshot(Base):
     id = Column(Integer, primary_key=True, index=True)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     snapshot_date = Column(Date, nullable=False)
-    total_deposit = Column(Float, default=0.0)
+    period_deposit = Column(Float, default=0.0) # 해당 기간 추가 입금액 (또는 자본 변동)
     total_valuation = Column(Float, default=0.0)
     total_profit = Column(Float, default=0.0)
 
