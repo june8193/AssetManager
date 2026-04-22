@@ -3,7 +3,6 @@ import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import WatchlistPage from './pages/WatchlistPage';
 import ConnectionPage from './pages/ConnectionPage';
-import DataInputPage from './pages/DataInputPage';
 import DbManagementPage from './pages/DbManagementPage';
 import { useWebSocket } from './hooks/useWebSocket';
 
@@ -21,7 +20,6 @@ function App() {
             <Route path="/watchlist/:country" element={<WatchlistPage />} />
             <Route path="/connection" element={<ConnectionPage />} />
             <Route path="/db" element={<DbManagementPage />} />
-            <Route path="/input" element={<DataInputPage />} />
           </Routes>
         </div>
       </div>

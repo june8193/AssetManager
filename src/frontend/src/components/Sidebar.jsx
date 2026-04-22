@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, PlusCircle, Menu, ChevronLeft, Globe } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Globe, Link as LinkIcon } from 'lucide-react';
 
 /**
  * 메뉴 항목 정의
@@ -9,9 +9,8 @@ const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
   { path: '/watchlist/kr', label: '관심종목(국내)', icon: Activity },
   { path: '/watchlist/us', label: '관심종목(미국)', icon: Globe },
-  { path: '/connection', label: 'API 연결 관리', icon: Database },
+  { path: '/connection', label: 'API 연결 관리', icon: LinkIcon },
   { path: '/db', label: 'DB 관리', icon: Database },
-  { path: '/input', label: '정보 입력', icon: PlusCircle },
 ];
 
 /**

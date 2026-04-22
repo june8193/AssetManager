@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import { Save, AlertCircle, Loader2 } from 'lucide-react';
 
+/**
+ * 환율 입력 및 최근 내역 조회 폼 컴포넌트입니다.
+ * 
+ * 일자별 USD/KRW 환율을 입력하고 서버에 저장하며, 최근 10건의 입력 내역을 테이블 형태로 표시합니다.
+ * 동일 날짜에 데이터가 존재할 경우 사용자 확인 후 덮어쓰기 기능을 지원합니다.
+ *
+ * @returns {JSX.Element} 환율 입력 폼 및 내역 테이블
+ */
 export default function ExchangeRateForm() {
   const today = new Date().toISOString().split('T')[0];
   const [formData, setFormData] = useState({

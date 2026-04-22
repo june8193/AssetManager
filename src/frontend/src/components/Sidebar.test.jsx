@@ -60,8 +60,7 @@ describe('Sidebar Component', () => {
       '관심종목(국내)',
       '관심종목(미국)',
       'API 연결 관리',
-      'DB 관리',
-      '정보 입력'
+      'DB 관리'
     ];
     
     expectedMenus.forEach(menu => {

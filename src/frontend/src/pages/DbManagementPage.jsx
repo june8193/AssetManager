@@ -3,7 +3,8 @@ import AccountsTab from '../components/db/AccountsTab';
 import AssetsTab from '../components/db/AssetsTab';
 import TransactionsTab from '../components/db/TransactionsTab';
 import SnapshotsTab from '../components/db/SnapshotsTab';
-import { Database, Wallet, BarChart3, Receipt, Camera } from 'lucide-react';
+import ExchangeRatesTab from '../components/db/ExchangeRatesTab';
+import { Database, Wallet, BarChart3, Receipt, Camera, Coins } from 'lucide-react';
 
 /**
  * 데이터베이스 관리 통합 페이지 컴포넌트입니다.
@@ -18,6 +19,7 @@ const DbManagementPage = () => {
     { id: 'assets', label: '자산 마스터', icon: <BarChart3 size={18} /> },
     { id: 'transactions', label: '거래 내역', icon: <Receipt size={18} /> },
     { id: 'snapshots', label: '스냅샷', icon: <Camera size={18} /> },
+    { id: 'exchange-rates', label: '환율 관리', icon: <Coins size={18} /> },
   ];
 
   return (
@@ -57,6 +59,7 @@ const DbManagementPage = () => {
         {activeTab === 'assets' && <AssetsTab />}
         {activeTab === 'transactions' && <TransactionsTab />}
         {activeTab === 'snapshots' && <SnapshotsTab />}
+        {activeTab === 'exchange-rates' && <ExchangeRatesTab />}
       </div>
     </div>
   );
