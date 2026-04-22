@@ -332,3 +332,39 @@ class DashboardService:
             "total_valuation_krw": total_valuation_krw,
             "exchange_rate": exchange_info
         }
+
+    def get_snapshots(self) -> Dict[str, Any]:
+        """시계열 자산 추이 데이터를 가져옵니다.
+        
+        Returns:
+            Dict[str, Any]: {
+                "history": [
+                    {"date": "2024-01-01", "total": 1000.0, "acc_1": 500.0, ...},
+                    ...
+                ],
+                "accounts": [{"id": 1, "name": "계좌1"}, ...]
+            }
+        """
+        snapshots = (
+            self.db.query(AccountSnapshot)
+            .order_by(AccountSnapshot.snapshot_date.asc())
+            .all()
+        )
+        
+        accounts = self.db.query(Account).all()
+        
+        # 날짜별로 그룹화
+        history_map = {} # date_str -> { "date": date_str, "total": 0, "acc_1": val, ... }
+        
+        for s in snapshots:
+            date_str = s.snapshot_date.isoformat()
+            if date_str not in history_map:
+                history_map[date_str] = {"date": date_str, "total": 0.0}
+            
+            history_map[date_str]["total"] += s.total_valuation
+            history_map[date_str][f"acc_{s.account_id}"] = s.total_valuation
+            
+        return {
+            "history": sorted(list(history_map.values()), key=lambda x: x["date"]),
+            "accounts": [{"id": acc.id, "name": acc.name} for acc in accounts]
+        }

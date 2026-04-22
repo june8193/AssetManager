@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useDashboard';
 import { Wallet, PieChart, TrendingUp, RefreshCw, AlertCircle, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import YearlyStatusTable from '../components/YearlyStatusTable';
+import AssetChart from '../components/Dashboard/AssetChart';
 
 const DashboardPage = () => {
   const { data, loading, error, refresh } = useDashboard();
@@ -254,6 +255,9 @@ const DashboardPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Asset Trend Chart */}
+      <AssetChart data={data.snapshots} />
 
       {/* Yearly Performance Table */}
       <YearlyStatusTable data={yearly} />
