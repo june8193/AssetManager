@@ -29,42 +29,61 @@ class DashboardService:
             .all()
         )
         
-        # 연도별 기말 자산(valuation) 및 연간 총 추가액(contribution) 추적
+        if not snapshots:
+            return []
+
+        # 연도별 날짜별 평가액 및 추가액 합산
         yearly_date_valuations = {} # year -> snapshot_date -> total_valuation
-        yearly_contributions = {} # year -> total_period_deposit
+        yearly_date_deposits = {} # year -> snapshot_date -> total_period_deposit
         
         for s in snapshots:
             y = s.snapshot_date.year
             d = s.snapshot_date
             
-            # 연도별 날짜별 평가액 합산 (기말 자산 파악용)
             if y not in yearly_date_valuations:
                 yearly_date_valuations[y] = {}
+                yearly_date_deposits[y] = {}
             if d not in yearly_date_valuations[y]:
                 yearly_date_valuations[y][d] = 0.0
-            yearly_date_valuations[y][d] += s.total_valuation
+                yearly_date_deposits[y][d] = 0.0
             
-            # 연도별 총 추가액 합산
-            if y not in yearly_contributions:
-                yearly_contributions[y] = 0.0
-            yearly_contributions[y] += s.period_deposit
+            yearly_date_valuations[y][d] += s.total_valuation
+            yearly_date_deposits[y][d] += s.period_deposit
 
-        # 연도별 기말 데이터 결정 (해당 연도의 가장 마지막 스냅샷 날짜의 합계)
+        # 연도별 기말 자산 및 연간 총 추가액 결정
         yearly_assets = {} # year -> total_valuation
+        yearly_contributions = {} # year -> total_period_deposit
         for y, date_vals in yearly_date_valuations.items():
             if date_vals:
                 latest_date = max(date_vals.keys())
                 yearly_assets[y] = date_vals[latest_date]
+                yearly_contributions[y] = sum(yearly_date_deposits[y].values())
 
         # 2. 종합 통계 계산
         years = sorted(list(yearly_assets.keys()))
         results = []
         
-        prev_assets = 0.0
+        prev_year_end_assets = 0.0
         
-        for y in years:
-            assets = yearly_assets.get(y, prev_assets)
+        for i, y in enumerate(years):
+            assets = yearly_assets[y]
             contribution = yearly_contributions.get(y, 0.0)
+            
+            # 기초 자산(prev_assets) 결정
+            if i == 0:
+                # 최초 기록 연도인 경우
+                sorted_dates = sorted(yearly_date_valuations[y].keys())
+                if len(sorted_dates) > 1:
+                    # 기록이 여러 날짜에 걸쳐 있으면, 첫 날의 (평가액 - 입금액)을 기초 자산으로 간주
+                    # 이는 기록 시작 시점 이전에 이미 보유하고 있던 자산을 의미함
+                    first_date = sorted_dates[0]
+                    prev_assets = yearly_date_valuations[y][first_date] - yearly_date_deposits[y][first_date]
+                else:
+                    # 기록이 해당 연도에 하루뿐이면, 0원에서 시작하여 해당 금액을 모두 성과/입금으로 간주
+                    prev_assets = 0.0
+            else:
+                # 이후 연도는 전년도 기말 자산을 기초 자산으로 사용
+                prev_assets = prev_year_end_assets
             
             increase = assets - prev_assets
             profit = increase - contribution
@@ -82,7 +101,7 @@ class DashboardService:
                 "increase": increase
             })
             
-            prev_assets = assets
+            prev_year_end_assets = assets
             
         return results
 
