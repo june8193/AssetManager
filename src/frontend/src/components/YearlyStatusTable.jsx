@@ -63,7 +63,7 @@ const YearlyStatusTable = ({ data }) => {
                       ₩ {Math.round(item.assets).toLocaleString()}
                     </td>
                     <td className={`px-6 py-5 text-right font-bold ${isPositiveIncrease ? 'text-blue-600' : 'text-slate-400'}`}>
-                      {index === 0 ? '-' : (
+                      {index === data.length - 1 ? '-' : (
                         <div className="flex items-center justify-end gap-1 text-sm">
                           {isPositiveIncrease ? '+' : ''}{Math.round(item.increase).toLocaleString()}
                         </div>

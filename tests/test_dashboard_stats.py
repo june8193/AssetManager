@@ -153,3 +153,30 @@ def test_get_yearly_stats_contribution_logic(db_session):
     # 만약 트랜잭션 기반이었다면 2024년이 포함되었을 것임
     assert not any(s["year"] == 2024 for s in stats)
 
+def test_get_yearly_stats_order(db_session):
+    """연도별 통계가 내림차순(최신 연도부터)으로 정렬되는지 확인합니다."""
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+    acc = Account(user_id=user.id, name="Test Account", provider="Test Bank")
+    db_session.add(acc)
+    db_session.commit()
+
+    # 2021, 2022, 2023 데이터 추가
+    for year in [2021, 2022, 2023]:
+        db_session.add(AccountSnapshot(
+            account_id=acc.id,
+            snapshot_date=datetime.date(year, 12, 31),
+            period_deposit=1000.0,
+            total_valuation=1100.0
+        ))
+    db_session.commit()
+
+    service = DashboardService(db_session)
+    stats = service.get_yearly_stats()
+
+    assert len(stats) == 3
+    assert stats[0]["year"] == 2023
+    assert stats[1]["year"] == 2022
+    assert stats[2]["year"] == 2021
+

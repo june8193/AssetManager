@@ -17,9 +17,10 @@ class DashboardService:
         self.kiwoom_auth = KiwoomAuthManager()
 
     def get_yearly_stats(self) -> List[Dict[str, Any]]:
-        """연도별 자산 현황 통계를 계산합니다.
+        """연도별 자산 현황 통계를 계산하여 최신순으로 반환합니다.
         
         역사적 통계 데이터이므로 현재 계좌의 활성 여부와 관계없이 모든 데이터를 포함합니다.
+        결과는 최신 연도가 가장 앞에 오도록(내림차순) 정렬되어 반환됩니다.
         순 추가액(Contribution)은 해당 연도의 모든 스냅샷에 기록된 period_deposit의 합계로 계산합니다.
         """
         # 1. 모든 스냅샷 가져오기 및 연도별 합계 계산
@@ -103,6 +104,7 @@ class DashboardService:
             
             prev_year_end_assets = assets
             
+        results.reverse()
         return results
 
     def get_holdings(self) -> List[Dict[str, Any]]:
