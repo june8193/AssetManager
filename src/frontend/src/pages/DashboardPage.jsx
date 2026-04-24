@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useDashboard } from '../hooks/useDashboard';
 import { Wallet, PieChart, TrendingUp, RefreshCw, AlertCircle, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import YearlyStatusTable from '../components/YearlyStatusTable';
@@ -17,6 +17,11 @@ const DashboardPage = () => {
   const { data, loading, error, refresh } = useDashboard();
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
   const [expandedCategories, setExpandedCategories] = useState(new Set());
+  const [assetSortOptions, setAssetSortOptions] = useState({});
+
+  const handleSortChange = (accountId, sortType) => {
+    setAssetSortOptions(prev => ({ ...prev, [accountId]: sortType }));
+  };
 
   const toggleAccount = (id) => {
     const newExpanded = new Set(expandedAccounts);
@@ -37,6 +42,25 @@ const DashboardPage = () => {
     }
     setExpandedCategories(newExpanded);
   };
+  // 계좌별로 정렬된 자산 목록을 메모이제이션하여 계산
+  const sortedAccounts = useMemo(() => {
+    if (!data?.accounts) return [];
+    
+    return data.accounts.map(acc => {
+      const sortType = assetSortOptions[acc.id] || 'valuation';
+      const sortedAssets = [...(acc.assets || [])].sort((a, b) => {
+        if (sortType === 'category') {
+          const catA = a.category || '미분류';
+          const catB = b.category || '미분류';
+          if (catA !== catB) return catA.localeCompare(catB);
+          return b.valuation_krw - a.valuation_krw;
+        }
+        // 기본값: 평가액 내림차순
+        return b.valuation_krw - a.valuation_krw;
+      });
+      return { ...acc, sortedAssets };
+    });
+  }, [data, assetSortOptions]);
 
   if (loading) {
     return (
@@ -65,7 +89,7 @@ const DashboardPage = () => {
     );
   }
 
-  const { accounts, categories, total_valuation_krw, exchange_rate, yearly } = data;
+  const { categories, total_valuation_krw, exchange_rate, yearly } = data;
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -133,7 +157,7 @@ const DashboardPage = () => {
           </div>
 
           <div className="grid gap-4">
-            {accounts.map((acc) => {
+            {sortedAccounts.map((acc) => {
               const isExpanded = expandedAccounts.has(acc.id);
               return (
                 <div 
@@ -185,22 +209,38 @@ const DashboardPage = () => {
                   {/* Account Details (Expanded) */}
                   {isExpanded && (
                     <div className="px-6 pb-6 bg-slate-50/50 border-t border-blue-50">
-                      <div className="mt-4 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-inner">
+                      <div className="flex justify-end mt-4 px-2">
+                        <select
+                          className="text-sm border-slate-200 rounded-md text-slate-600 bg-white px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                          value={assetSortOptions[acc.id] || 'valuation'}
+                          onChange={(e) => handleSortChange(acc.id, e.target.value)}
+                        >
+                          <option value="valuation">평가액 순 정렬</option>
+                          <option value="category">카테고리별 정렬</option>
+                        </select>
+                      </div>
+                      <div className="mt-2 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-inner">
                         <table className="w-full text-sm text-left">
                           <thead className="bg-slate-50/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
                             <tr>
                               <th className="px-4 py-3">종목명 (티커)</th>
+                              <th className="px-4 py-3">카테고리</th>
                               <th className="px-4 py-3 text-right">수량</th>
                               <th className="px-4 py-3 text-right">현재가</th>
                               <th className="px-4 py-3 text-right text-blue-600">평가액 (KRW)</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-50">
-                            {acc.assets?.map((asset, idx) => (
+                            {acc.sortedAssets.map((asset, idx) => (
                               <tr key={`${acc.id}-${asset.ticker}-${idx}`} className="hover:bg-blue-50/30 transition-colors">
                                 <td className="px-4 py-3">
                                   <div className="font-bold text-slate-900">{asset.name}</div>
                                   <div className="text-[10px] font-mono text-slate-400">{asset.ticker}</div>
+                                </td>
+                                <td className="px-4 py-3">
+                                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-bold">
+                                    {asset.category || '미분류'}
+                                  </span>
                                 </td>
                                 <td className="px-4 py-3 text-right font-medium text-slate-600">
                                   {asset.quantity.toLocaleString()}
@@ -213,9 +253,9 @@ const DashboardPage = () => {
                                 </td>
                               </tr>
                             ))}
-                            {(!acc.assets || acc.assets.length === 0) && (
+                            {(!acc.sortedAssets || acc.sortedAssets.length === 0) && (
                               <tr>
-                                <td colSpan="4" className="px-4 py-8 text-center text-slate-400 font-medium bg-white">
+                                <td colSpan="5" className="px-4 py-8 text-center text-slate-400 font-medium bg-white">
                                   보유 종목이 없습니다.
                                 </td>
                               </tr>

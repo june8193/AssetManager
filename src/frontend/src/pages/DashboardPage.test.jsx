@@ -98,4 +98,52 @@ describe('DashboardPage', () => {
     expect(screen.getByText('해외주식')).toBeDefined();
     expect(screen.getByText('60.0%')).toBeDefined(); // (600,000 / 1,000,000)
   });
+
+  it('계좌 확장 후 자산 목록을 정렬할 수 있다', () => {
+    const mockDataWithAssets = {
+      ...mockData,
+      accounts: [
+        {
+          id: 1,
+          name: '테스트 계좌',
+          provider: '테스트',
+          total_valuation_krw: 3000,
+          assets: [
+            { ticker: 'B', name: '자산B', category: '주식', valuation_krw: 1000, quantity: 1, price: 1000, country: 'KR' },
+            { ticker: 'A', name: '자산A', category: '현금', valuation_krw: 2000, quantity: 1, price: 2000, country: 'KR' },
+          ]
+        }
+      ]
+    };
+
+    vi.mocked(useDashboard).mockReturnValue({
+      data: mockDataWithAssets,
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    });
+
+    render(<DashboardPage />);
+    // 계좌 클릭하여 확장
+    const accountHeader = screen.getByText('테스트 계좌');
+    fireEvent.click(accountHeader);
+
+    // 기본 정렬: 평가액 순 (자산A(2000) -> 자산B(1000))
+    const assetNames = screen.getAllByText(/자산[AB]/).map(el => el.textContent);
+    expect(assetNames[0]).toBe('자산A');
+    expect(assetNames[1]).toBe('자산B');
+
+    // 카테고리별 정렬로 변경 (주식(자산B) -> 현금(자산A) 가나다순)
+    // 주식(J) vs 현금(H) -> 현금이 먼저 옴 (가나다순: 현금, 주식 순서 확인 필요)
+    // '주식' vs '현금' -> '주식'이 먼저? (ㅈ vs ㅎ -> ㅈ이 먼저)
+    const sortSelect = screen.getByRole('combobox');
+    fireEvent.change(sortSelect, { target: { value: 'category' } });
+
+    const sortedAssetNames = screen.getAllByText(/자산[AB]/).map(el => el.textContent);
+    // '주식'(자산B) vs '현금'(자산A) -> localeCompare에서 '주식'이 '현금'보다 뒤에 옴 (ㅎ이 뒤)
+    // 아, localeCompare는 '가' < '나'. '주' vs '현' -> '주' < '현'.
+    // 따라서 '주식'인 자산B가 첫 번째, '현금'인 자산A가 두 번째여야 함.
+    expect(sortedAssetNames[0]).toBe('자산B');
+    expect(sortedAssetNames[1]).toBe('자산A');
+  });
 });
