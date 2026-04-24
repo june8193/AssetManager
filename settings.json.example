@@ -1,8 +1,14 @@
 {
+  // 데이터베이스 설정
+  "database": {
+    "url": "sqlite:///./src/assets.db"
+  },
+
   // 키움증권 REST API 서비스 URL
   "base_url": "https://api.kiwoom.com",
 
-  // 증권사 계좌 정보 목록 (여러 계정 등록 가능)  "accounts": [
+  // 증권사 계좌 정보 목록 (여러 계정 등록 가능)
+  "accounts": [
     {
       "broker": "키움증권",                // 증권사 명칭
       "account": "5526-9093",             // 계좌 번호

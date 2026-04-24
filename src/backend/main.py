@@ -9,12 +9,12 @@ from .services.kiwoom_service import KiwoomStockService
 from .services.backup_service import BackupService
 import datetime
 
-# DB 테이블 생성 (처음 실행 시 SQLite 파일(assets.db)과 테이블이 생성됨)
-Base.metadata.create_all(bind=engine)
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """서버 생명주기 관리: 시작 시 DB 로드 및 초기화"""
+    # DB 테이블 생성 (처음 실행 시 SQLite 파일(assets.db)과 테이블이 생성됨)
+    Base.metadata.create_all(bind=engine)
+    
     # Startup: DB 백업 체크 및 수행
     try:
         BackupService().check_and_backup()

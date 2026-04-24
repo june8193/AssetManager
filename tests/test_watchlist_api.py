@@ -1,44 +1,10 @@
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, AsyncMock, MagicMock
-
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from unittest.mock import patch
 from src.backend.main import app
-from src.backend.database import Base, get_db
 from src.backend.models import Watchlist
 
-# 테스트용 DB 설정
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_watchlist.db"
-engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
-TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 client = TestClient(app)
-
-def override_get_db():
-    try:
-        db = TestingSessionLocal()
-        yield db
-    finally:
-        db.close()
-
-app.dependency_overrides[get_db] = override_get_db
-
-@pytest.fixture(autouse=True)
-def setup_db():
-    """테스트용 DB 테이블을 생성하고 삭제합니다."""
-    Base.metadata.create_all(bind=engine)
-    yield
-    Base.metadata.drop_all(bind=engine)
-
-@pytest.fixture
-def db_session():
-    """테스트용 DB 세션을 제공합니다."""
-    db = TestingSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
 
 def test_get_watchlist_empty(db_session):
     """관심종목이 없을 때 빈 리스트를 반환하는지 확인합니다."""
