@@ -19,6 +19,7 @@ const AssetChart = ({ data }) => {
     if (!history) return [];
     return history.map(item => ({
       ...item,
+      timestamp: new Date(item.date).getTime(),
       displayValue: filter === 'total' ? (item.total || 0) : (item[filter] || 0)
     }));
   }, [history, filter]);
@@ -79,14 +80,17 @@ const AssetChart = ({ data }) => {
             </defs>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
             <XAxis 
-              dataKey="date" 
+              dataKey="timestamp" 
+              type="number"
+              domain={['dataMin', 'dataMax']}
               axisLine={false}
               tickLine={false}
               tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 500 }}
               dy={10}
-              tickFormatter={(str) => {
-                const date = new Date(str);
-                return `${date.getMonth() + 1}/${date.getDate()}`;
+              tickFormatter={(ts) => {
+                const date = new Date(ts);
+                const year = date.getFullYear().toString().slice(-2);
+                return `${year}/${date.getMonth() + 1}/${date.getDate()}`;
               }}
             />
             <YAxis 
