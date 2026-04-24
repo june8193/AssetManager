@@ -1,7 +1,9 @@
 import React from 'react';
 import { Calendar, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpRight } from 'lucide-react';
+import { useMasking } from '../contexts/MaskingContext';
 
 const YearlyStatusTable = ({ data }) => {
+  const { maskValue } = useMasking();
   if (!data || data.length === 0) return null;
 
   return (
@@ -42,12 +44,12 @@ const YearlyStatusTable = ({ data }) => {
                       </span>
                     </td>
                     <td className="px-6 py-5 text-right font-medium text-slate-600">
-                      ₩ {Math.round(item.contribution).toLocaleString()}
+                      ₩ {maskValue(Math.round(item.contribution).toLocaleString())}
                     </td>
                     <td className={`px-6 py-5 text-right font-bold ${isPositiveProfit ? 'text-emerald-600' : 'text-rose-500'}`}>
                       <div className="flex items-center justify-end gap-1">
                         {isPositiveProfit ? <ArrowUpRight size={14} /> : <TrendingDown size={14} />}
-                        {isPositiveProfit ? '+' : ''}{Math.round(item.profit).toLocaleString()}
+                        {isPositiveProfit ? '+' : ''}{maskValue(Math.round(item.profit).toLocaleString())}
                       </div>
                     </td>
                     <td className="px-6 py-5 text-center">
@@ -60,12 +62,12 @@ const YearlyStatusTable = ({ data }) => {
                       </span>
                     </td>
                     <td className="px-6 py-5 text-right font-black text-slate-900">
-                      ₩ {Math.round(item.assets).toLocaleString()}
+                      ₩ {maskValue(Math.round(item.assets).toLocaleString())}
                     </td>
                     <td className={`px-6 py-5 text-right font-bold ${isPositiveIncrease ? 'text-blue-600' : 'text-slate-400'}`}>
                       {index === data.length - 1 ? '-' : (
                         <div className="flex items-center justify-end gap-1 text-sm">
-                          {isPositiveIncrease ? '+' : ''}{Math.round(item.increase).toLocaleString()}
+                          {isPositiveIncrease ? '+' : ''}{maskValue(Math.round(item.increase).toLocaleString())}
                         </div>
                       )}
                     </td>

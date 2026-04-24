@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import AssetChart from './AssetChart';
+import { MaskingProvider } from '../../contexts/MaskingContext';
 
 // Recharts의 ResponsiveContainer가 테스트 환경(jsdom)에서 0x0 사이즈로 잡히는 문제를 해결하기 위해 모킹
 vi.mock('recharts', async () => {
@@ -23,18 +24,30 @@ describe('AssetChart 컴포넌트', () => {
   };
 
   it('차트 제목과 필터가 렌더링되어야 한다', () => {
-    render(<AssetChart data={mockData} />);
+    render(
+      <MaskingProvider>
+        <AssetChart data={mockData} />
+      </MaskingProvider>
+    );
     expect(screen.getByText('자산 추이')).toBeInTheDocument();
     expect(screen.getByText('총 자산 합계')).toBeInTheDocument();
   });
 
   it('데이터가 없을 때 안내 메시지를 표시해야 한다', () => {
-    render(<AssetChart data={{ history: [], accounts: [] }} />);
+    render(
+      <MaskingProvider>
+        <AssetChart data={{ history: [], accounts: [] }} />
+      </MaskingProvider>
+    );
     expect(screen.getByText('표시할 자산 추이 데이터가 없습니다.')).toBeInTheDocument();
   });
 
   it('필터를 변경하면 텍스트가 업데이트되어야 한다', () => {
-    render(<AssetChart data={mockData} />);
+    render(
+      <MaskingProvider>
+        <AssetChart data={mockData} />
+      </MaskingProvider>
+    );
     const select = screen.getByRole('combobox');
     
     fireEvent.change(select, { target: { value: 'acc_1' } });

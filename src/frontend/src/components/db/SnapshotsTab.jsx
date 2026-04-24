@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { DB_API_BASE } from '../../config';
 import { Camera, Save, RefreshCw, AlertCircle, X, CheckCircle2 } from 'lucide-react';
+import { useMasking } from '../../contexts/MaskingContext';
 
 /**
  * 자산 상태 스냅샷 조회 탭 컴포넌트입니다.
@@ -10,6 +11,7 @@ const SnapshotsTab = () => {
   const [snapshots, setSnapshots] = useState([]); // 스냅샷 목록 상태
   const [accounts, setAccounts] = useState([]);   // 계좌 목록 상태 (이름 매핑용)
   const [loading, setLoading] = useState(true);   // 로딩 상태
+  const { maskValue } = useMasking();
 
   // 스냅샷 생성 관련 상태
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -151,13 +153,13 @@ const SnapshotsTab = () => {
                   {accounts.find(a => a.id === snap.account_id)?.name || snap.account_id}
                 </td>
                 <td className="px-4 py-3 text-sm text-right font-mono text-blue-600">
-                  {snap.period_deposit.toLocaleString()}
+                  {maskValue(snap.period_deposit.toLocaleString())}
                 </td>
                 <td className="px-4 py-3 text-sm text-right font-mono font-bold">
-                  {snap.total_valuation.toLocaleString()}
+                  {maskValue(snap.total_valuation.toLocaleString())}
                 </td>
                 <td className="px-4 py-3 text-sm text-right font-mono text-emerald-600">
-                  {snap.total_profit.toLocaleString()}
+                  {maskValue(snap.total_profit.toLocaleString())}
                 </td>
               </tr>
             ))}
@@ -261,13 +263,13 @@ const SnapshotsTab = () => {
                           <tr key={p.account_id}>
                             <td className="px-4 py-3 font-medium text-slate-800">{p.account_name}</td>
                             <td className="px-4 py-3 text-right font-mono font-bold">
-                              {Math.round(p.total_valuation).toLocaleString()}
+                              {maskValue(Math.round(p.total_valuation).toLocaleString())}
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-emerald-600">
-                              {Math.round(p.total_profit).toLocaleString()}
+                              {maskValue(Math.round(p.total_profit).toLocaleString())}
                             </td>
                             <td className="px-4 py-3 text-right font-mono text-blue-600">
-                              {Math.round(p.period_deposit).toLocaleString()}
+                              {maskValue(Math.round(p.period_deposit).toLocaleString())}
                             </td>
                           </tr>
                         ))}

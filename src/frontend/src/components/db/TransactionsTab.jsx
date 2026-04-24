@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Check, Search } from 'lucide-react';
 import { DB_API_BASE } from '../../config';
+import { useMasking } from '../../contexts/MaskingContext';
 
 /**
  * 거래 내역 관리 탭 컴포넌트입니다.
@@ -13,6 +14,7 @@ const TransactionsTab = () => {
   const [loading, setLoading] = useState(true);         // 로딩 상태
   const [editingId, setEditingId] = useState(null);     // 수정 중인 거래 ID
   const [accountFilter, setAccountFilter] = useState('all'); // 계좌 필터 상태
+  const { maskValue } = useMasking();
   
   // 입력 폼 데이터 상태
   const [formData, setFormData] = useState({
@@ -347,12 +349,12 @@ const TransactionsTab = () => {
                     {tx.type}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-sm text-right font-mono">{tx.quantity.toLocaleString()}</td>
+                <td className="px-4 py-3 text-sm text-right font-mono">{maskValue(tx.quantity.toLocaleString())}</td>
                 <td className="px-4 py-3 text-sm text-right font-mono text-slate-500">
-                  {tx.price.toLocaleString()} {tx.currency}
+                  {maskValue(tx.price.toLocaleString())} {tx.currency}
                 </td>
                 <td className="px-4 py-3 text-sm text-right font-bold font-mono">
-                  {tx.total_amount.toLocaleString()} {tx.currency}
+                  {maskValue(tx.total_amount.toLocaleString())} {tx.currency}
                 </td>
                 <td className="px-4 py-3 text-right">
                   <div className="flex justify-end gap-2">

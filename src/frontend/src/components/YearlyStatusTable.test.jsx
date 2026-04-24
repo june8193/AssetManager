@@ -1,7 +1,8 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import React from 'react';
 import YearlyStatusTable from './YearlyStatusTable';
+import { MaskingProvider } from '../contexts/MaskingContext';
 
 describe('YearlyStatusTable', () => {
   const mockData = [
@@ -23,8 +24,16 @@ describe('YearlyStatusTable', () => {
     }
   ];
 
+  beforeEach(() => {
+    localStorage.clear();
+  });
+
   it('최신 연도가 상단에 표시될 때, 가장 마지막(최초) 연도의 자산 증가액은 "-"로 표시되어야 한다', () => {
-    render(<YearlyStatusTable data={mockData} />);
+    render(
+      <MaskingProvider>
+        <YearlyStatusTable data={mockData} />
+      </MaskingProvider>
+    );
     
     const rows = screen.getAllByRole('row');
     // rows[0]은 thead이므로 rows[1]이 2023년, rows[2]가 2022년
@@ -42,11 +51,33 @@ describe('YearlyStatusTable', () => {
 
   it('데이터가 하나만 있을 경우 해당 연도의 자산 증가액은 "-"로 표시되어야 한다', () => {
     const singleData = [mockData[0]];
-    render(<YearlyStatusTable data={singleData} />);
+    render(
+      <MaskingProvider>
+        <YearlyStatusTable data={singleData} />
+      </MaskingProvider>
+    );
     
     const rows = screen.getAllByRole('row');
     const row2023 = rows[1];
     expect(row2023).toHaveTextContent('2023');
     expect(row2023).toHaveTextContent('-');
+  });
+
+  it('마스킹 모드가 활성화되면 금액 정보가 "***"로 표시되어야 한다', () => {
+    // localStorage를 통해 마스킹 활성화 상태 주입
+    localStorage.setItem('isMasked', 'true');
+    
+    render(
+      <MaskingProvider>
+        <YearlyStatusTable data={mockData} />
+      </MaskingProvider>
+    );
+
+    // 금액 정보들이 ***로 표시되는지 확인
+    expect(screen.getAllByText(/₩ \*\*\*/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/\+\*\*\*/).length).toBeGreaterThan(0);
+    
+    // 수익률(roi)은 마스킹 대상이 아니므로 숫자가 보여야 함
+    expect(screen.getByText('20%')).toBeInTheDocument();
   });
 });
