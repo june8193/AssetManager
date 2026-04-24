@@ -16,6 +16,7 @@ import AssetChart from '../components/Dashboard/AssetChart';
 const DashboardPage = () => {
   const { data, loading, error, refresh } = useDashboard();
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
+  const [expandedCategories, setExpandedCategories] = useState(new Set());
 
   const toggleAccount = (id) => {
     const newExpanded = new Set(expandedAccounts);
@@ -25,6 +26,16 @@ const DashboardPage = () => {
       newExpanded.add(id);
     }
     setExpandedAccounts(newExpanded);
+  };
+
+  const toggleCategory = (catName) => {
+    const newExpanded = new Set(expandedCategories);
+    if (newExpanded.has(catName)) {
+      newExpanded.delete(catName);
+    } else {
+      newExpanded.add(catName);
+    }
+    setExpandedCategories(newExpanded);
   };
 
   if (loading) {
@@ -229,37 +240,88 @@ const DashboardPage = () => {
 
           <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
             <div className="space-y-6">
-              {categories.map((cat, idx) => (
-                <div key={cat.category}>
-                  <div className="flex justify-between items-end mb-2">
-                    <span className="font-bold text-slate-700">{cat.category}</span>
-                    <span className="text-sm font-black text-slate-900">
-                      {((cat.value_krw / total_valuation_krw) * 100).toFixed(1)}%
-                    </span>
-                  </div>
-                  <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+              {categories.map((cat, idx) => {
+                const isExpanded = expandedCategories.has(cat.category);
+                const percentage = (cat.value_krw / total_valuation_krw) * 100;
+                
+                return (
+                  <div key={cat.category} className="group/cat">
+                    {/* Major Category Header */}
                     <div 
-                      className={`h-full rounded-full transition-all duration-1000 ${
-                        idx === 0 ? 'bg-blue-600' : 
-                        idx === 1 ? 'bg-indigo-500' : 
-                        idx === 2 ? 'bg-purple-500' : 
-                        'bg-slate-400'
-                      }`}
-                      style={{ width: `${(cat.value_krw / total_valuation_krw) * 100}%` }}
-                    ></div>
+                      className="flex justify-between items-end mb-2 cursor-pointer hover:opacity-70 transition-opacity"
+                      onClick={() => toggleCategory(cat.category)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-700">{cat.category}</span>
+                        <ChevronDown 
+                          size={14} 
+                          className={`text-slate-400 transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} 
+                        />
+                      </div>
+                      <span className="text-sm font-black text-slate-900">
+                        {percentage.toFixed(1)}%
+                      </span>
+                    </div>
+
+                    {/* Major Category Bar */}
+                    <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-1000 ${
+                          idx === 0 ? 'bg-blue-600' : 
+                          idx === 1 ? 'bg-indigo-500' : 
+                          idx === 2 ? 'bg-purple-500' : 
+                          'bg-slate-400'
+                        }`}
+                        style={{ width: `${percentage}%` }}
+                      ></div>
+                    </div>
+
+                    <div className="text-right mt-1.5 mb-2">
+                      <span className="text-[11px] font-bold text-slate-400">
+                        {Math.round(cat.value_krw).toLocaleString()} 원
+                      </span>
+                    </div>
+
+                    {/* Sub Categories (Collapsible) */}
+                    {isExpanded && cat.sub_categories && cat.sub_categories.length > 0 && (
+                      <div className="mt-4 pl-4 border-l-2 border-slate-100 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                        {cat.sub_categories.map((sub) => {
+                          const subInMajorPerc = (sub.value_krw / cat.value_krw) * 100;
+                          const subInTotalPerc = (sub.value_krw / total_valuation_krw) * 100;
+                          
+                          return (
+                            <div key={sub.category} className="relative">
+                              <div className="flex justify-between items-center mb-1.5">
+                                <span className="text-xs font-bold text-slate-600">{sub.category}</span>
+                                <div className="text-[10px] font-black">
+                                  <span className="text-slate-900">{subInMajorPerc.toFixed(1)}%</span>
+                                  <span className="text-slate-400 ml-1 font-bold">({subInTotalPerc.toFixed(1)}%)</span>
+                                </div>
+                              </div>
+                              <div className="h-1.5 w-full bg-slate-50 rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-slate-300 rounded-full transition-all duration-700"
+                                  style={{ width: `${subInMajorPerc}%` }}
+                                ></div>
+                              </div>
+                              <div className="text-right mt-1">
+                                <span className="text-[10px] font-bold text-slate-300">
+                                  {Math.round(sub.value_krw).toLocaleString()} 원
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
-                  <div className="text-right mt-1.5">
-                    <span className="text-[11px] font-bold text-slate-400">
-                      {Math.round(cat.value_krw).toLocaleString()} 원
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="mt-10 p-6 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
               <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                자산 비중은 각 자산의 현재가를 기준으로 자동 계산됩니다. 환율 변동 및 실시간 주가 변동에 따라 비중이 상시 변경될 수 있습니다.
+                자산 비중을 클릭하면 상세 중분류 내역을 확인할 수 있습니다. 각 자산의 현재가를 기준으로 자동 계산됩니다.
               </p>
             </div>
           </div>

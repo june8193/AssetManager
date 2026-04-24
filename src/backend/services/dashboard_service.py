@@ -281,7 +281,7 @@ class DashboardService:
         prices = await self.get_current_prices(tickers)
         
         account_summaries = {} # account_id -> {account_info, total_valuation_krw}
-        category_summaries = {} # category_name -> total_valuation_krw
+        category_summaries = {} # major_category -> {"value_krw": float, "sub_categories": {sub_category: float}}
         total_valuation_krw = 0.0
         
         for h in holdings:
@@ -319,18 +319,43 @@ class DashboardService:
                 "country": asset.country
             })
             
-            # 카테고리별 합산
+            # 카테고리별 합산 (대분류 & 중분류)
             cat = asset.major_category
+            sub_cat = asset.sub_category
             if cat not in category_summaries:
-                category_summaries[cat] = 0.0
-            category_summaries[cat] += valuation_krw
+                category_summaries[cat] = {"value_krw": 0.0, "sub_categories": {}}
+            
+            category_summaries[cat]["value_krw"] += valuation_krw
+            
+            if sub_cat not in category_summaries[cat]["sub_categories"]:
+                category_summaries[cat]["sub_categories"][sub_cat] = 0.0
+            category_summaries[cat]["sub_categories"][sub_cat] += valuation_krw
             
             # 총계 합산
             total_valuation_krw += valuation_krw
             
+        # 결과 포맷팅 및 정렬
+        formatted_categories = []
+        for cat_name, data in category_summaries.items():
+            sub_list = [
+                {"category": sk, "value_krw": sv} 
+                for sk, sv in data["sub_categories"].items()
+            ]
+            # 중분류 평가액 순 정렬
+            sub_list.sort(key=lambda x: x["value_krw"], reverse=True)
+            
+            formatted_categories.append({
+                "category": cat_name,
+                "value_krw": data["value_krw"],
+                "sub_categories": sub_list
+            })
+            
+        # 대분류 평가액 순 정렬
+        formatted_categories.sort(key=lambda x: x["value_krw"], reverse=True)
+
         return {
             "accounts": sorted(list(account_summaries.values()), key=lambda x: x['total_valuation_krw'], reverse=True),
-            "categories": [{"category": k, "value_krw": v} for k, v in category_summaries.items()],
+            "categories": formatted_categories,
             "total_valuation_krw": total_valuation_krw,
             "exchange_rate": exchange_info
         }
