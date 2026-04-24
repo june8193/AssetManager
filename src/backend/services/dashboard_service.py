@@ -271,7 +271,22 @@ class DashboardService:
 
 
     async def get_dashboard_summary(self) -> Dict[str, Any]:
-        """대시보드 요약 데이터를 생성합니다."""
+        """대시보드 요약 데이터를 생성합니다.
+
+        모든 활성 계좌의 보유 자산을 합산하고, 실시간 가격 및 환율을 적용하여
+        계좌별, 카테고리별 자산 현황을 계산합니다.
+
+        Returns:
+            Dict[str, Any]: 대시보드 데이터 딕셔너리
+                - accounts (List[Dict]): 계좌별 요약 리스트 (평가액 내림차순)
+                    - id, name, provider, alias, total_valuation_krw
+                    - assets (List[Dict]): 해당 계좌의 보유 자산 목록
+                        - name, ticker, quantity, price, valuation_krw, country, category, sub_category
+                - categories (List[Dict]): 카테고리별 합계 리스트
+                    - category, value_krw
+                - total_valuation_krw (float): 총 평가액
+                - exchange_rate (Dict): 적용 환율 정보
+        """
         holdings = self.get_holdings()
         exchange_info = self.get_latest_exchange_rate()
         usd_rate = exchange_info['rate']
@@ -316,7 +331,9 @@ class DashboardService:
                 "quantity": qty,
                 "price": price,
                 "valuation_krw": valuation_krw,
-                "country": asset.country
+                "country": asset.country,
+                "category": asset.major_category,
+                "sub_category": asset.sub_category
             })
             
             # 카테고리별 합산
