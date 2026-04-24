@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import DashboardPage from './DashboardPage';
 import { useDashboard } from '../hooks/useDashboard';
+import { MaskingProvider } from '../contexts/MaskingContext';
 
 // useDashboard 훅 모킹
 vi.mock('../hooks/useDashboard');
@@ -33,7 +34,11 @@ describe('DashboardPage', () => {
       refresh: refreshMock
     });
 
-    render(<DashboardPage />);
+    render(
+      <MaskingProvider>
+        <DashboardPage />
+      </MaskingProvider>
+    );
 
     // "새로고침" 텍스트를 가진 버튼 확인
     const refreshButton = screen.getByRole('button', { name: /새로고침/i });
@@ -53,7 +58,11 @@ describe('DashboardPage', () => {
       refresh: vi.fn()
     });
 
-    render(<DashboardPage />);
+    render(
+      <MaskingProvider>
+        <DashboardPage />
+      </MaskingProvider>
+    );
     expect(screen.getByText(/자산 데이터를 분석 중입니다/i)).toBeDefined();
   });
 
@@ -65,7 +74,11 @@ describe('DashboardPage', () => {
       refresh: vi.fn()
     });
 
-    render(<DashboardPage />);
+    render(
+      <MaskingProvider>
+        <DashboardPage />
+      </MaskingProvider>
+    );
     expect(screen.getByText(/데이터 로딩 실패/i)).toBeDefined();
   });
 });

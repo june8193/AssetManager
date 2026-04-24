@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import TransactionsTab from './TransactionsTab';
+import { MaskingProvider } from '../../contexts/MaskingContext';
 
 describe('TransactionsTab', () => {
   const mockTransactions = [
@@ -10,6 +11,7 @@ describe('TransactionsTab', () => {
   const mockAssets = [{ id: 1, ticker: '005930', name: 'Samsung' }];
 
   beforeEach(() => {
+    localStorage.clear();
     vi.stubGlobal('fetch', vi.fn((url) => {
       if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockTransactions) });
       if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
@@ -19,7 +21,11 @@ describe('TransactionsTab', () => {
   });
 
   it('거래 내역이 렌더링되어야 한다', async () => {
-    render(<TransactionsTab />);
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('2026-04-22')).toBeInTheDocument();
@@ -28,7 +34,11 @@ describe('TransactionsTab', () => {
   });
 
   it('계좌 필터링이 작동해야 한다', async () => {
-    render(<TransactionsTab />);
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
     
     await waitFor(() => {
       expect(screen.getByText('계좌 필터:')).toBeInTheDocument();

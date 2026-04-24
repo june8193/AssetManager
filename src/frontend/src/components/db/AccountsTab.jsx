@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, X, Check } from 'lucide-react';
 import { DB_API_BASE } from '../../config';
+import { useMasking } from '../../contexts/MaskingContext';
 
 /**
  * 계좌 관리 탭 컴포넌트입니다.
@@ -11,6 +12,7 @@ const AccountsTab = () => {
   const [users, setUsers] = useState([]);       // 사용자 목록 상태 (드롭다운용)
   const [loading, setLoading] = useState(true); // 로딩 상태
   const [editingId, setEditingId] = useState(null); // 현재 수정 중인 계좌 ID
+  const { maskValue } = useMasking();
   
   // 입력 폼 데이터 상태
   const [formData, setFormData] = useState({
@@ -231,7 +233,7 @@ const AccountsTab = () => {
                 <td className="px-4 py-3 text-sm text-slate-900 font-medium">
                   {users.find(u => u.id === account.user_id)?.name || account.user_id}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-700">{account.name}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{maskValue(account.name)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{account.provider}</td>
                 <td className="px-4 py-3 text-sm text-slate-500">{account.alias || '-'}</td>
                 <td className="px-4 py-3 text-sm">

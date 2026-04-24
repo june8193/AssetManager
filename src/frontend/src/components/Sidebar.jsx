@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Globe, Link as LinkIcon } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Globe, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
+import { useMasking } from '../contexts/MaskingContext';
 
 /**
  * 메뉴 항목 정의
@@ -20,6 +21,7 @@ const MENU_ITEMS = [
 const Sidebar = ({ isConnected }) => {
   const [isOpen, setIsOpen] = useState(true);
   const location = useLocation();
+  const { isMasked, toggleMasking } = useMasking();
 
   const isActive = (path) => {
     if (path === '/') {
@@ -78,8 +80,21 @@ const Sidebar = ({ isConnected }) => {
         })}
       </div>
 
-      {/* 하단 연결 상태 표시 */}
-      <div className="p-4 border-t border-slate-200">
+      {/* 하단 설정 영역 */}
+      <div className="p-4 border-t border-slate-200 flex flex-col gap-2">
+        {/* 모자이크 모드 토글 */}
+        <button
+          onClick={toggleMasking}
+          className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+            isMasked ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-slate-50'
+          } ${!isOpen && 'justify-center'}`}
+          title={!isOpen ? (isMasked ? "모자이크 해제" : "모자이크 설정") : ""}
+        >
+          {isMasked ? <EyeOff size={20} className="flex-shrink-0" /> : <Eye size={20} className="flex-shrink-0" />}
+          {isOpen && <span className="whitespace-nowrap overflow-hidden text-ellipsis">{isMasked ? "모자이크 해제" : "모자이크 설정"}</span>}
+        </button>
+
+        {/* 연결 상태 표시 */}
         {isConnected ? (
           <div className={`flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-sm font-medium border border-emerald-100 ${!isOpen && 'justify-center'}`} title={!isOpen ? "실시간 연동 중" : ""}>
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>

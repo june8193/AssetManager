@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { describe, it, expect, vi } from 'vitest';
 import Sidebar from './Sidebar';
+import { MaskingProvider } from '../contexts/MaskingContext';
 
 /**
  * Sidebar 컴포넌트 테스트
@@ -10,7 +11,9 @@ describe('Sidebar Component', () => {
   const renderSidebar = (isConnected = true) => {
     return render(
       <BrowserRouter>
-        <Sidebar isConnected={isConnected} />
+        <MaskingProvider>
+          <Sidebar isConnected={isConnected} />
+        </MaskingProvider>
       </BrowserRouter>
     );
   };
@@ -47,7 +50,9 @@ describe('Sidebar Component', () => {
 
     rerender(
       <BrowserRouter>
-        <Sidebar isConnected={false} />
+        <MaskingProvider>
+          <Sidebar isConnected={false} />
+        </MaskingProvider>
       </BrowserRouter>
     );
     expect(screen.getByText('연결 끊김')).toBeInTheDocument();
@@ -65,5 +70,22 @@ describe('Sidebar Component', () => {
     expectedMenus.forEach(menu => {
       expect(screen.getByText(menu)).toBeInTheDocument();
     });
+  });
+
+  it('모자이크 모드 버튼 클릭 시 텍스트가 변경되어야 한다', () => {
+    renderSidebar();
+    
+    // 초기 상태 확인
+    expect(screen.getByText('모자이크 설정')).toBeInTheDocument();
+    
+    // 모자이크 설정 클릭
+    fireEvent.click(screen.getByText('모자이크 설정'));
+    
+    // 텍스트가 변경되었는지 확인
+    expect(screen.getByText('모자이크 해제')).toBeInTheDocument();
+    
+    // 다시 클릭하여 복구
+    fireEvent.click(screen.getByText('모자이크 해제'));
+    expect(screen.getByText('모자이크 설정')).toBeInTheDocument();
   });
 });

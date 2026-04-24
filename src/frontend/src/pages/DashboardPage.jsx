@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useDashboard } from '../hooks/useDashboard';
 import { Wallet, PieChart, TrendingUp, RefreshCw, AlertCircle, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
+import { useMasking } from '../contexts/MaskingContext';
 import YearlyStatusTable from '../components/YearlyStatusTable';
 import AssetChart from '../components/Dashboard/AssetChart';
 
@@ -16,6 +17,7 @@ import AssetChart from '../components/Dashboard/AssetChart';
 const DashboardPage = () => {
   const { data, loading, error, refresh } = useDashboard();
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
+  const { maskValue } = useMasking();
 
   const toggleAccount = (id) => {
     const newExpanded = new Set(expandedAccounts);
@@ -73,7 +75,7 @@ const DashboardPage = () => {
             </h1>
             <div className="flex items-baseline gap-2">
               <span className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-white to-blue-200">
-                {Math.round(total_valuation_krw).toLocaleString()}
+                {maskValue(Math.round(total_valuation_krw).toLocaleString())}
               </span>
               <span className="text-2xl font-bold text-blue-300">원</span>
             </div>
@@ -159,7 +161,7 @@ const DashboardPage = () => {
                     <div className="flex items-center gap-6">
                       <div className="text-right">
                         <div className={`text-xl font-black transition-colors ${isExpanded ? 'text-blue-700' : 'text-slate-900'}`}>
-                          {Math.round(acc.total_valuation_krw).toLocaleString()} <span className="text-sm font-bold text-slate-400">원</span>
+                          {maskValue(Math.round(acc.total_valuation_krw).toLocaleString())} <span className="text-sm font-bold text-slate-400">원</span>
                         </div>
                         <div className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-tighter">
                           {((acc.total_valuation_krw / total_valuation_krw) * 100).toFixed(1)}% of total
@@ -192,13 +194,13 @@ const DashboardPage = () => {
                                   <div className="text-[10px] font-mono text-slate-400">{asset.ticker}</div>
                                 </td>
                                 <td className="px-4 py-3 text-right font-medium text-slate-600">
-                                  {asset.quantity.toLocaleString()}
+                                  {maskValue(asset.quantity.toLocaleString())}
                                 </td>
                                 <td className="px-4 py-3 text-right font-medium text-slate-600">
                                   {asset.price.toLocaleString()} <span className="text-[10px] text-slate-300">{asset.country === 'US' ? 'USD' : 'KRW'}</span>
                                 </td>
                                 <td className="px-4 py-3 text-right font-bold text-slate-900">
-                                  {Math.round(asset.valuation_krw).toLocaleString()}
+                                  {maskValue(Math.round(asset.valuation_krw).toLocaleString())}
                                 </td>
                               </tr>
                             ))}
@@ -250,7 +252,7 @@ const DashboardPage = () => {
                   </div>
                   <div className="text-right mt-1.5">
                     <span className="text-[11px] font-bold text-slate-400">
-                      {Math.round(cat.value_krw).toLocaleString()} 원
+                      {maskValue(Math.round(cat.value_krw).toLocaleString())} 원
                     </span>
                   </div>
                 </div>

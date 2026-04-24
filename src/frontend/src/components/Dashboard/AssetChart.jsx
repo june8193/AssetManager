@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { TrendingUp, Filter } from 'lucide-react';
+import { useMasking } from '../../contexts/MaskingContext';
 
 /**
  * 자산 추이 시각화를 위한 라인 차트 컴포넌트입니다.
@@ -12,6 +13,7 @@ import { TrendingUp, Filter } from 'lucide-react';
  */
 const AssetChart = ({ data }) => {
   const [filter, setFilter] = useState('total'); // 'total' or account_id string 'acc_1'
+  const { maskValue } = useMasking();
 
   const { history, accounts } = data || {};
 
@@ -25,6 +27,11 @@ const AssetChart = ({ data }) => {
 
   const formatCurrency = (val) => {
     if (val === null || val === undefined) return '0';
+    
+    // 마스킹 적용
+    const masked = maskValue(null);
+    if (masked === '***') return '***';
+
     if (val >= 100000000) return `${(val / 100000000).toFixed(1)} 억`;
     if (val >= 10000) return `${(val / 10000).toFixed(0)} 만`;
     return val.toLocaleString();
@@ -103,7 +110,7 @@ const AssetChart = ({ data }) => {
                 boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
                 padding: '12px'
               }}
-              formatter={(value) => [Math.round(value).toLocaleString() + ' 원', currentFilterName]}
+              formatter={(value) => [maskValue(Math.round(value).toLocaleString()) + ' 원', currentFilterName]}
               labelFormatter={(label) => new Date(label).toLocaleDateString()}
             />
             <Area 
