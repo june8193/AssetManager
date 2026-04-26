@@ -1,23 +1,8 @@
 import pytest
 import datetime
-import asyncio
-from unittest.mock import MagicMock, AsyncMock, patch
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-from src.backend.models import Base, User, Account, Asset, Transaction, ExchangeRate
+from unittest.mock import AsyncMock, patch
+from src.backend.models import User, Account, Asset, Transaction, ExchangeRate
 from src.backend.services.dashboard_service import DashboardService
-
-@pytest.fixture
-def db_session():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
 
 @pytest.mark.asyncio
 async def test_get_dashboard_summary_includes_category_info(db_session):

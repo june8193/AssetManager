@@ -35,6 +35,38 @@ class LegacyDataMigrator:
         self._kiwoom_token = None
         self.asset_map = {} # (category, sub_category, alias) -> (ticker, name)
 
+    def split_name_alias(self, full_name):
+        """'계좌명 (별칭)' 형식에서 계좌명과 별칭을 분리합니다.
+
+        Args:
+            full_name (str): 전체 계좌명 문자열.
+
+        Returns:
+            tuple: (계좌명, 별칭) 형태의 튜플. 별칭이 없으면 (full_name, None).
+        """
+        if "(" in full_name and full_name.endswith(")"):
+            # 첫 번째 '('를 기준으로 분리하여 계좌명과 별칭을 나눔
+            parts = full_name.split("(", 1)
+            name = parts[0].strip()
+            alias = "(" + parts[1].strip()
+            return name, alias
+        return full_name, None
+
+    def extract_provider(self, account_name):
+        """계좌명에서 금융사를 추출합니다.
+
+        Args:
+            account_name (str): 계좌명 문자열.
+
+        Returns:
+            str: 추출된 금융사 이름. 해당되는 금융사가 없으면 '기타' 반환.
+        """
+        providers = ["키움", "미래에셋", "신한", "카카오뱅크", "업비트", "케이뱅크"]
+        for p in providers:
+            if p in account_name:
+                return p
+        return "기타"
+
     def get_kiwoom_token(self):
         """키움 API 호출용 토큰을 가져옵니다."""
         if self._kiwoom_token:

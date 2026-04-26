@@ -1,25 +1,7 @@
 import pytest
 import datetime
-import sys, os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-# 프로젝트 루트를 path에 추가
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from src.backend.models import Base, User, Account, AccountSnapshot, Transaction, Asset
+from src.backend.models import User, Account, AccountSnapshot, Transaction, Asset
 from src.backend.services.dashboard_service import DashboardService
-
-@pytest.fixture
-def db_session():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
 
 def test_get_yearly_stats_duplication_issue(db_session):
     """2024년 데이터 중복 합산 문제를 재현하는 테스트입니다.
@@ -179,4 +161,3 @@ def test_get_yearly_stats_order(db_session):
     assert stats[0]["year"] == 2023
     assert stats[1]["year"] == 2022
     assert stats[2]["year"] == 2021
-

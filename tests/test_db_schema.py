@@ -1,24 +1,6 @@
 import pytest
-import sys, os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
 import datetime
-
-# 프로젝트 루트를 path에 추가
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from src.backend.database import Base
 from src.backend.models import User, Account, Asset, Transaction, AccountSnapshot
-
-@pytest.fixture(scope="function")
-def db_session():
-    # 테스트용 인메모리 DB 생성
-    engine = create_engine("sqlite:///:memory:")
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    yield db
-    db.close()
 
 def test_models_exist():
     """새로운 모델 클래스들이 정의되어 있는지 확인합니다."""

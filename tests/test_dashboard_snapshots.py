@@ -1,25 +1,7 @@
 import pytest
 import datetime
-import sys, os
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-
-# 프로젝트 루트를 path에 추가
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-from src.backend.models import Base, User, Account, AccountSnapshot
+from src.backend.models import User, Account, AccountSnapshot
 from src.backend.services.dashboard_service import DashboardService
-
-@pytest.fixture
-def db_session():
-    engine = create_engine("sqlite:///:memory:")
-    Base.metadata.create_all(bind=engine)
-    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    session = SessionLocal()
-    try:
-        yield session
-    finally:
-        session.close()
 
 def test_get_snapshots(db_session):
     """시계열 자산 추이 데이터 조회 기능을 검증합니다."""
