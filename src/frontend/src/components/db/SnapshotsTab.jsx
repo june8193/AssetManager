@@ -165,6 +165,47 @@ const SnapshotsTab = () => {
     }
   };
 
+  // 은행 계좌 잔액 계산 요청
+  const calculateBankDiff = async (accId) => {
+    const data = accountsFormData[accId];
+    try {
+      setProcessing(true);
+      const response = await fetch(`${DB_API_BASE}/snapshots/bank/calculate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          account_id: accId,
+          snapshot_date: inputDate,
+          new_transactions: data.newTransactions.map(tx => ({
+            account_id: accId,
+            asset_id: 0, 
+            transaction_date: tx.date || inputDate,
+            type: tx.type,
+            total_amount: parseFloat(tx.amount) || 0,
+            currency: 'KRW',
+            quantity: parseFloat(tx.amount) || 0,
+            price: 1.0,
+            memo: tx.memo || ''
+          }))
+        })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setAccountsFormData(prev => ({
+          ...prev,
+          [accId]: { ...prev[accId], calcResult: result }
+        }));
+      } else {
+        alert('계산 중 오류가 발생했습니다.');
+      }
+    } catch (error) {
+      console.error('은행 잔액 계산 오류:', error);
+    } finally {
+      setProcessing(false);
+    }
+  };
+
   const handleConfirmAccount = (accId) => {
     setAccountsFormData(prev => ({
       ...prev,
@@ -227,7 +268,7 @@ const SnapshotsTab = () => {
               price: 1.0,
               memo: tx.memo || ''
             })),
-            total_valuation: parseFloat(accountsFormData[acc.id].currentKrw) || 0
+            total_valuation: accountsFormData[acc.id].calcResult?.theoretical_krw || 0
           }))
         };
       }
@@ -375,7 +416,13 @@ const SnapshotsTab = () => {
             <div className="space-y-3">
               {(data.newTransactions || []).map((tx, idx) => (
                 <div key={idx} className="bg-white p-3 rounded-lg border border-slate-100 space-y-2">
-                  <div className="flex gap-2 items-center">
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <input 
+                      type="date" 
+                      value={tx.date || inputDate} 
+                      onChange={(e) => updateTx(idx, 'date', e.target.value)}
+                      className="text-xs border-none focus:ring-0 font-mono w-[110px] bg-slate-50 rounded px-2 py-1"
+                    />
                     <select 
                       value={tx.type} 
                       onChange={(e) => updateTx(idx, 'type', e.target.value)}
@@ -391,7 +438,7 @@ const SnapshotsTab = () => {
                       placeholder="금액" 
                       value={tx.amount} 
                       onChange={(e) => updateTx(idx, 'amount', e.target.value)}
-                      className="flex-1 text-sm border-none focus:ring-0 font-mono"
+                      className="flex-1 text-sm border-none focus:ring-0 font-mono min-w-[100px]"
                     />
                     {!isBank && (
                       <select 
@@ -403,15 +450,15 @@ const SnapshotsTab = () => {
                         <option value="USD">USD</option>
                       </select>
                     )}
+                    <input 
+                      type="text" 
+                      placeholder="메모 (예: 축의금, 이자 등)" 
+                      value={tx.memo} 
+                      onChange={(e) => updateTx(idx, 'memo', e.target.value)}
+                      className="flex-[2] text-xs border-none focus:ring-0 bg-slate-50 rounded-md py-1.5 px-3 italic text-slate-600 min-w-[150px]"
+                    />
                     <button onClick={() => removeTx(idx)} className="text-slate-300 hover:text-red-500 p-1"><X size={16} /></button>
                   </div>
-                  <input 
-                    type="text" 
-                    placeholder="메모 (예: 재웅이형 축의금, 장준 용돈)" 
-                    value={tx.memo} 
-                    onChange={(e) => updateTx(idx, 'memo', e.target.value)}
-                    className="w-full text-xs border-none focus:ring-0 bg-slate-50 rounded-md py-1.5 px-3 italic text-slate-600"
-                  />
                 </div>
               ))}
               <button 
@@ -423,17 +470,17 @@ const SnapshotsTab = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{isBank ? '최종 잔액' : '현재 보유 원화'} (KRW)</label>
-              <input
-                type="number"
-                value={data.currentKrw}
-                onChange={(e) => updateAccData({ currentKrw: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
-              />
-            </div>
-            {!isBank && (
+          {!isBank && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">현재 보유 원화 (KRW)</label>
+                <input
+                  type="number"
+                  value={data.currentKrw}
+                  onChange={(e) => updateAccData({ currentKrw: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
+                />
+              </div>
               <div className="space-y-2">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">현재 보유 달러 (USD)</label>
                 <input
@@ -443,18 +490,18 @@ const SnapshotsTab = () => {
                   className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
                 />
               </div>
-            )}
-          </div>
+            </div>
+          )}
 
           <div className="pt-2">
-            {!isBank && !data.calcResult && (
+            {!data.calcResult && (
               <button 
-                onClick={() => calculateAccountDiff(acc.id)}
+                onClick={() => isBank ? calculateBankDiff(acc.id) : calculateAccountDiff(acc.id)}
                 disabled={processing}
-                className="w-full py-3 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-all flex items-center justify-center gap-2"
+                className={`w-full py-3 ${isBank ? 'bg-emerald-800 hover:bg-emerald-900' : 'bg-slate-800 hover:bg-slate-900'} text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2`}
               >
                 {processing ? <RefreshCw className="animate-spin" size={18} /> : <RefreshCw size={18} />}
-                배당금/차액 계산하기
+                {isBank ? '최종 잔액 계산하기' : '배당금/차액 계산하기'}
               </button>
             )}
             {!isBank && data.calcResult && (
@@ -482,13 +529,21 @@ const SnapshotsTab = () => {
                 </p>
               </div>
             )}
-            {isBank && (
-               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex gap-3">
-                <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
-                <div className="text-sm text-emerald-800">
-                  <p className="font-semibold">입력 완료</p>
-                  <p className="opacity-80">최종 잔액과 {data.newTransactions?.length || 0}건의 내역을 확인했습니다.</p>
+            {isBank && data.calcResult && (
+               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-emerald-800 font-bold flex items-center gap-1"><CheckCircle2 size={18} /> 최종 잔액 확인</span>
+                  <button onClick={() => updateAccData({ calcResult: null })} className="text-xs text-emerald-600 underline">내역 수정</button>
                 </div>
+                <div className="bg-white/50 p-4 rounded-lg border border-emerald-200/50">
+                  <p className="text-xs text-emerald-600 font-bold uppercase mb-1">계산된 최종 잔액 (KRW)</p>
+                  <p className="text-2xl font-mono font-bold text-emerald-700">
+                    {Math.round(data.calcResult.theoretical_krw).toLocaleString()}원
+                  </p>
+                </div>
+                <p className="text-xs text-emerald-700 opacity-80">
+                  이전 잔액과 입력하신 {data.newTransactions?.length || 0}건의 내역을 합산한 결과입니다. 실제 잔액과 맞는지 확인해 주세요.
+                </p>
               </div>
             )}
           </div>
@@ -507,7 +562,7 @@ const SnapshotsTab = () => {
           </button>
           <button 
             onClick={() => handleConfirmAccount(acc.id)}
-            disabled={(snapshotType === 'brokerage' && !data.calcResult) || processing}
+            disabled={!data.calcResult || processing}
             className={`${isBank ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} text-white px-10 py-3 rounded-xl font-bold disabled:bg-slate-200 transition-all flex items-center gap-2 shadow-lg`}
           >
             {currentAccIdx === brokerageAccounts.length - 1 ? '최종 확인 단계로' : '확인 및 다음 계좌'} <ChevronRight size={20} />
@@ -546,6 +601,7 @@ const SnapshotsTab = () => {
                 if (tx.type === 'DEPOSIT' || tx.type === 'INTEREST') return acc + amt;
                 return acc - amt;
               }, 0);
+              const finalVal = snapshotType === 'brokerage' ? data.currentKrw : data.calcResult?.theoretical_krw;
               return (
                 <tr key={acc.id}>
                   <td className="px-4 py-3 font-medium text-slate-800">{acc.name}</td>
@@ -556,7 +612,7 @@ const SnapshotsTab = () => {
                       : netTx.toLocaleString()
                     }
                   </td>
-                  <td className="px-4 py-3 text-right font-mono font-bold">{parseFloat(data.currentKrw || 0).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right font-mono font-bold">{parseFloat(finalVal || 0).toLocaleString()}</td>
                 </tr>
               );
             })}

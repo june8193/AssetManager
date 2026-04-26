@@ -441,7 +441,7 @@ class DashboardService:
                 
             if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST']:
                 theoretical[currency] += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'FEE']:
+            elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
                 theoretical[currency] -= tx.total_amount
             elif tx.type == 'BUY':
                 # 주식 매수는 해당 통화 현금 감소

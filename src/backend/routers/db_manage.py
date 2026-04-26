@@ -155,11 +155,21 @@ class BrokerageSaveRequest(BaseModel):
     exchange_rate: float
     accounts: List[BrokerageSaveAccountRequest]
 
+class BankCalculateRequest(BaseModel):
+    """은행계좌 잔액 계산을 위한 요청 스키마입니다."""
+    account_id: int
+    snapshot_date: date
+    new_transactions: List[TransactionSchema]
+
+class BankCalculateResponse(BaseModel):
+    """은행계좌 잔액 계산 결과 스키마입니다."""
+    theoretical_krw: float
+
 # Bank Snapshot Wizard Schemas
 class BankSaveAccountRequest(BaseModel):
     account_id: int
     new_transactions: List[TransactionSchema]
-    total_valuation: float # 은행 계좌는 현재 잔액이 곧 총 평가액
+    total_valuation: Optional[float] = None # 은행 계좌는 현재 잔액이 곧 총 평가액 (선택 사항)
 
 class BankSaveRequest(BaseModel):
     snapshot_date: date
@@ -484,6 +494,34 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
         diff_krw=diff_krw,
         diff_usd=diff_usd
     )
+
+@router.post("/snapshots/bank/calculate", response_model=BankCalculateResponse)
+async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depends(get_db)):
+    """은행계좌의 예상 잔액을 계산합니다.
+
+    Args:
+        req (BankCalculateRequest): 계산 요청 데이터 (계좌 ID, 기준일, 신규 내역 등)
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        BankCalculateResponse: 계산된 최종 잔액
+    """
+    dashboard_service = DashboardService(db)
+    
+    # 1. 기존 DB 기반 이론상 현금 계산 (KRW만 사용)
+    theoretical = dashboard_service.calculate_theoretical_cash(req.account_id, req.snapshot_date)
+    
+    # 2. 사용자가 새로 입력한 내역 반영
+    new_krw_net = 0.0
+    for tx in req.new_transactions:
+        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST']:
+            new_krw_net += tx.total_amount
+        elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
+            new_krw_net -= tx.total_amount
+            
+    final_balance = theoretical['KRW'] + new_krw_net
+    
+    return BankCalculateResponse(theoretical_krw=final_balance)
 
 @router.post("/snapshots/brokerage/save", response_model=List[SnapshotSchema])
 async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depends(get_db)):
