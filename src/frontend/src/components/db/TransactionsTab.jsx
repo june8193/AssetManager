@@ -244,6 +244,9 @@ const TransactionsTab = () => {
               <option value="WITHDRAW">출금 (WITHDRAW)</option>
               <option value="DIVIDEND">배당 (DIVIDEND)</option>
               <option value="INTEREST">이자 (INTEREST)</option>
+              <option value="FEE">수수료 (FEE)</option>
+              <option value="TAX">세금 (TAX)</option>
+              <option value="ADJUSTMENT">잔고 보정 (ADJUSTMENT)</option>
             </select>
           </div>
           <div>

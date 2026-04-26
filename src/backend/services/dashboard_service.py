@@ -127,9 +127,9 @@ class DashboardService:
             if key not in holdings:
                 holdings[key] = 0.0
             
-            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST']:
+            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
                 holdings[key] += tx.quantity
-            elif tx.type in ['SELL', 'WITHDRAW']:
+            elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
                 holdings[key] -= tx.quantity
         
         # 결과 정리
@@ -439,7 +439,7 @@ class DashboardService:
             if currency not in theoretical:
                 continue # KRW, USD 외 통화는 일단 제외
                 
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST']:
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
                 theoretical[currency] += tx.total_amount
             elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
                 theoretical[currency] -= tx.total_amount

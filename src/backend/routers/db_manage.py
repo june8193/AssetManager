@@ -560,30 +560,28 @@ async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depe
                 
                 db.add(Transaction(**data))
             
-            # 2. 차액(배당/수수료) 저장
+            # 2. 차액(잔고 보정) 저장
             if abs(acc_req.diff_krw) > 0.01:
-                tx_type = "DIVIDEND" if acc_req.diff_krw > 0 else "FEE"
                 db.add(Transaction(
                     account_id=acc_req.account_id,
                     asset_id=krw_asset.id,
                     transaction_date=req.snapshot_date,
-                    type=tx_type,
-                    quantity=abs(acc_req.diff_krw),
+                    type="ADJUSTMENT",
+                    quantity=acc_req.diff_krw,
                     price=1.0,
-                    total_amount=abs(acc_req.diff_krw),
+                    total_amount=acc_req.diff_krw,
                     currency="KRW"
                 ))
                 
             if abs(acc_req.diff_usd) > 0.01:
-                tx_type = "DIVIDEND" if acc_req.diff_usd > 0 else "FEE"
                 db.add(Transaction(
                     account_id=acc_req.account_id,
                     asset_id=usd_asset.id,
                     transaction_date=req.snapshot_date,
-                    type=tx_type,
-                    quantity=abs(acc_req.diff_usd),
+                    type="ADJUSTMENT",
+                    quantity=acc_req.diff_usd,
                     price=1.0,
-                    total_amount=abs(acc_req.diff_usd),
+                    total_amount=acc_req.diff_usd,
                     currency="USD"
                 ))
         

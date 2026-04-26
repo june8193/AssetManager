@@ -102,9 +102,9 @@ async def test_save_brokerage_snapshots_api(db_session, setup_assets):
     
     # 1. 트랜잭션 확인
     txs = db_session.query(Transaction).filter(Transaction.account_id == account.id).all()
-    assert len(txs) == 2 # DEPOSIT + DIVIDEND
+    assert len(txs) == 2 # DEPOSIT + ADJUSTMENT
     assert any(t.type == "DEPOSIT" and t.total_amount == 100000 for t in txs)
-    assert any(t.type == "DIVIDEND" and t.total_amount == 50000 for t in txs)
+    assert any(t.type == "ADJUSTMENT" and t.total_amount == 50000 for t in txs)
     
     # 2. 스냅샷 확인
     snap = db_session.query(AccountSnapshot).filter(AccountSnapshot.account_id == account.id).first()
