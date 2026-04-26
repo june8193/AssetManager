@@ -80,4 +80,16 @@ describe('YearlyStatusTable', () => {
     // 수익률(roi)은 마스킹 대상이 아니므로 숫자가 보여야 함
     expect(screen.getByText('20%')).toBeInTheDocument();
   });
+
+  it('lastSnapshotDate가 전달되면 화면에 해당 날짜가 표시되어야 한다', () => {
+    const lastSnapshotDate = '2024-04-26';
+    render(
+      <MaskingProvider>
+        <YearlyStatusTable data={mockData} lastSnapshotDate={lastSnapshotDate} />
+      </MaskingProvider>
+    );
+    
+    expect(screen.getByText(/최근 스냅샷 기준:/)).toBeInTheDocument();
+    expect(screen.getByText(lastSnapshotDate)).toBeInTheDocument();
+  });
 });

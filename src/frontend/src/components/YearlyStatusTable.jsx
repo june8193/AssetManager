@@ -2,17 +2,38 @@ import React from 'react';
 import { Calendar, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpRight } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
-const YearlyStatusTable = ({ data }) => {
+/**
+ * 연도별 자산 현황 및 수익률 정보를 테이블 형식으로 표시하는 컴포넌트입니다.
+ * 
+ * 각 연도별 추가 투자액(기여금), 실현/평가 수익, ROI(수익률), 
+ * 기말 자산 평가액 및 전년 대비 자산 증가액을 보여줍니다.
+ *
+ * Args:
+ *     data (Array): 연도별 데이터 배열 (year, contribution, profit, roi, assets, increase 포함)
+ *     lastSnapshotDate (string): 데이터의 기준이 되는 최신 스냅샷 날짜 (YYYY-MM-DD 형식)
+ *
+ * Returns:
+ *     JSX.Element: 연도별 현황 테이블 섹션
+ */
+const YearlyStatusTable = ({ data, lastSnapshotDate }) => {
   const { maskValue } = useMasking();
   if (!data || data.length === 0) return null;
 
   return (
     <div className="mt-12 space-y-6">
       <div className="flex items-center justify-between px-2">
-        <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-          <BarChart3 className="text-blue-600" size={28} />
-          연도별 현황
-        </h2>
+        <div className="flex flex-col">
+          <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+            <BarChart3 className="text-blue-600" size={28} />
+            연도별 현황
+          </h2>
+          {lastSnapshotDate && (
+            <p className="text-[11px] font-bold text-slate-400 mt-1 ml-10 flex items-center gap-1">
+              <Calendar size={12} className="text-slate-300" />
+              최근 스냅샷 기준: <span className="text-slate-600 font-black">{lastSnapshotDate}</span>
+            </p>
+          )}
+        </div>
         <div className="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-full uppercase tracking-wider">
           Yearly Performance
         </div>

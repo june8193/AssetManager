@@ -91,7 +91,10 @@ const DashboardPage = () => {
     );
   }
 
-  const { categories, total_valuation_krw, exchange_rate, yearly } = data;
+  const { categories, total_valuation_krw, exchange_rate, yearly, snapshots } = data;
+  const lastSnapshotDate = snapshots?.history?.length > 0 
+    ? snapshots.history[snapshots.history.length - 1].date 
+    : null;
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -374,7 +377,10 @@ const DashboardPage = () => {
       <AssetChart data={data.snapshots} />
 
       {/* Yearly Performance Table */}
-      <YearlyStatusTable data={yearly} />
+      <YearlyStatusTable 
+        data={yearly} 
+        lastSnapshotDate={lastSnapshotDate}
+      />
     </main>
   );
 };
