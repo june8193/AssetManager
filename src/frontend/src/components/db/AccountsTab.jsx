@@ -20,6 +20,7 @@ const AccountsTab = () => {
     name: '',
     provider: '',
     alias: '',
+    account_type: 'BROKERAGE',
     is_active: true
   });
 
@@ -100,6 +101,7 @@ const AccountsTab = () => {
       name: account.name,
       provider: account.provider,
       alias: account.alias || '',
+      account_type: account.account_type || 'BROKERAGE',
       is_active: account.is_active
     });
   };
@@ -127,6 +129,7 @@ const AccountsTab = () => {
       name: '',
       provider: '',
       alias: '',
+      account_type: 'BROKERAGE',
       is_active: true
     });
   };
@@ -141,10 +144,11 @@ const AccountsTab = () => {
           {editingId ? <Edit2 size={16} /> : <Plus size={16} />}
           {editingId ? '계좌 정보 수정' : '새 계좌 추가'}
         </h3>
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-end">
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">소유자</label>
+            <label htmlFor="user_id" className="block text-xs font-medium text-slate-500 mb-1">소유자</label>
             <select
+              id="user_id"
               name="user_id"
               value={formData.user_id}
               onChange={handleInputChange}
@@ -157,8 +161,9 @@ const AccountsTab = () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">계좌명/번호</label>
+            <label htmlFor="name" className="block text-xs font-medium text-slate-500 mb-1">계좌명/번호</label>
             <input
+              id="name"
               type="text"
               name="name"
               value={formData.name}
@@ -169,8 +174,9 @@ const AccountsTab = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">금융기관</label>
+            <label htmlFor="provider" className="block text-xs font-medium text-slate-500 mb-1">금융기관</label>
             <input
+              id="provider"
               type="text"
               name="provider"
               value={formData.provider}
@@ -181,8 +187,23 @@ const AccountsTab = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">별칭</label>
+            <label htmlFor="account_type" className="block text-xs font-medium text-slate-500 mb-1">종류</label>
+            <select
+              id="account_type"
+              name="account_type"
+              value={formData.account_type}
+              onChange={handleInputChange}
+              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              required
+            >
+              <option value="BROKERAGE">BROKERAGE</option>
+              <option value="BANK">BANK</option>
+            </select>
+          </div>
+          <div>
+            <label htmlFor="alias" className="block text-xs font-medium text-slate-500 mb-1">별칭</label>
             <input
+              id="alias"
               type="text"
               name="alias"
               value={formData.alias}
@@ -221,6 +242,7 @@ const AccountsTab = () => {
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">소유자</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">계좌명</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">금융기관</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">종류</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">별칭</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">상태</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">관리</th>
@@ -235,6 +257,7 @@ const AccountsTab = () => {
                 </td>
                 <td className="px-4 py-3 text-sm text-slate-700">{maskValue(account.name)}</td>
                 <td className="px-4 py-3 text-sm text-slate-700">{account.provider}</td>
+                <td className="px-4 py-3 text-sm text-slate-700">{account.account_type}</td>
                 <td className="px-4 py-3 text-sm text-slate-500">{account.alias || '-'}</td>
                 <td className="px-4 py-3 text-sm">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${

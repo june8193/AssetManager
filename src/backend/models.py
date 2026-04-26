@@ -73,6 +73,7 @@ class Account(Base):
         name (str): 계좌 이름 (예: '5526-9093')
         provider (str): 금융 기관 (예: 'KB증권', '신한은행')
         alias (str): 계좌 별칭 (예: '(일반 주식)')
+        account_type (str): 계좌 종류 (BROKERAGE, BANK)
         created_at (datetime): 생성 일시
         is_active (bool): 계좌 활성화 여부
     """
@@ -83,6 +84,7 @@ class Account(Base):
     name = Column(String, nullable=False)
     provider = Column(String, nullable=False)
     alias = Column(String, nullable=True)
+    account_type = Column(String, default="BROKERAGE", nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.now)
     is_active = Column(Boolean, default=True, nullable=False)
 

@@ -5,7 +5,7 @@ import { MaskingProvider } from '../../contexts/MaskingContext';
 
 describe('AccountsTab', () => {
   const mockAccounts = [
-    { id: 1, user_id: 1, name: '123-456', provider: 'TestBank', alias: 'Main', is_active: true }
+    { id: 1, user_id: 1, name: '123-456', provider: 'TestBank', alias: 'Main', account_type: 'BROKERAGE', is_active: true }
   ];
   const mockUsers = [
     { id: 1, name: 'Test User' }
@@ -43,6 +43,8 @@ describe('AccountsTab', () => {
       // 마스킹이 꺼져있을 때는 원본 이름이 보여야 함
       expect(screen.getByText('123-456')).toBeInTheDocument();
       expect(screen.getByText('TestBank')).toBeInTheDocument();
+      // 'BROKERAGE'는 select option과 table cell 모두에 있으므로 getAllByText 사용
+      expect(screen.getAllByText('BROKERAGE').length).toBeGreaterThan(0);
       // Test User가 드롭다운과 표에 모두 나타나므로 getAllByText 사용
       expect(screen.getAllByText('Test User').length).toBeGreaterThan(0);
     });
@@ -61,17 +63,22 @@ describe('AccountsTab', () => {
 
     const nameInput = screen.getByPlaceholderText('예: 5526-9093');
     const providerInput = screen.getByPlaceholderText('예: KB증권');
+    const typeSelect = screen.getByLabelText('종류');
     const addButton = screen.getByRole('button', { name: /추가/i });
 
     fireEvent.change(nameInput, { target: { value: '999-999', name: 'name' } });
     fireEvent.change(providerInput, { target: { value: 'NewBank', name: 'provider' } });
+    fireEvent.change(typeSelect, { target: { value: 'BANK', name: 'account_type' } });
     
     fireEvent.click(addButton);
 
     await waitFor(() => {
       expect(global.fetch).toHaveBeenCalledWith(
         expect.stringContaining('/accounts'),
-        expect.objectContaining({ method: 'POST' })
+        expect.objectContaining({ 
+          method: 'POST',
+          body: expect.stringContaining('"account_type":"BANK"')
+        })
       );
     });
   });
@@ -93,6 +100,7 @@ describe('AccountsTab', () => {
     // 폼 입력값(DisplayValue)은 마스킹되지 않아야 함
     expect(screen.getByDisplayValue('123-456')).toBeInTheDocument();
     expect(screen.getByDisplayValue('TestBank')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('BROKERAGE')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /저장/i })).toBeInTheDocument();
   });
 });

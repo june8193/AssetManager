@@ -30,23 +30,27 @@ def test_create_and_get_account(test_user):
         "name": "TEST-ACC-123",
         "provider": "TestBank",
         "alias": "TestAlias",
+        "account_type": "BROKERAGE",
         "is_active": True
     }
     response = client.post("/api/db/accounts", json=payload)
     assert response.status_code == 200
     data = response.json()
     assert data["name"] == "TEST-ACC-123"
+    assert data["account_type"] == "BROKERAGE"
     account_id = data["id"]
 
     # 목록 조회 확인
     get_res = client.get("/api/db/accounts")
     assert any(a["id"] == account_id for a in get_res.json())
 
-    # 수정
+    # 수정 (은행으로 변경)
     payload["name"] = "UPDATED-ACC"
+    payload["account_type"] = "BANK"
     put_res = client.put(f"/api/db/accounts/{account_id}", json=payload)
     assert put_res.status_code == 200
     assert put_res.json()["name"] == "UPDATED-ACC"
+    assert put_res.json()["account_type"] == "BANK"
 
     # 삭제
     del_res = client.delete(f"/api/db/accounts/{account_id}")

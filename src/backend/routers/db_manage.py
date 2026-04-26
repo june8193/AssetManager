@@ -36,6 +36,7 @@ class AccountSchema(BaseModel):
         name (str): 계좌 이름/번호
         provider (str): 금융 기관 이름
         alias (Optional[str]): 계좌 별칭
+        account_type (str): 계좌 종류 (BROKERAGE, BANK)
         is_active (bool): 계좌 활성 여부
     """
     id: Optional[int] = None
@@ -43,6 +44,7 @@ class AccountSchema(BaseModel):
     name: str
     provider: str
     alias: Optional[str] = None
+    account_type: str = "BROKERAGE"
     is_active: bool = True
 
     class Config:
