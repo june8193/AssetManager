@@ -32,8 +32,29 @@
 ### Frontend (React)
 * **Framework & Build:** React 19, Vite
 * **Styling:** Tailwind CSS v4
-* **Package Management:** `npm`
+* **Package Management:** `pnpm`
 
 ### Infrastructure & Network
 * **Host:** 개인 홈 서버 (또는 로컬 PC)
 * **Remote Access:** Tailscale (외부 네트워크 접속 보안 가상망)
+
+---
+
+## 🚀 Quick Start (Development)
+
+이 프로젝트는 개발 환경을 자동으로 구성하도록 설계되었습니다. 시스템에 `uv`와 `pnpm`이 설치되어 있어야 합니다.
+
+1. **저장소 복제 (Clone)**
+2. **개발 서버 실행:**
+   ```bash
+   uv run scripts/dev.py
+   ```
+   *이 명령어를 실행하면 필요한 경우 백엔드(Python) 및 프론트엔드(pnpm) 의존성을 자동으로 설치하고, 서버를 구동합니다.*
+
+## 🧪 Running Tests
+
+백엔드와 프론트엔드 전체 테스트를 실행하려면 다음 명령어를 사용하세요:
+```bash
+uv run scripts/test.py
+```
+*프론트엔드 테스트 실행 전에도 필요한 패키지가 없다면 자동으로 설치됩니다.*

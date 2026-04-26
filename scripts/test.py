@@ -15,15 +15,21 @@ def main():
     # 1. 백엔드 테스트 시작
     print("\n[1/2] Running Backend Tests (pytest)...")
     backend_result = subprocess.run(
-        ["uv", "run", "pytest"],
+        ["uv", "run", "python", "-m", "pytest"],
         cwd=root_dir
     )
 
     # 2. 프론트엔드 테스트 시작
     print("\n[2/2] Running Frontend Tests (vitest)...")
+    
+    # node_modules가 없으면 자동 설치
+    if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
+        print("   -> node_modules not found. Installing dependencies with pnpm...")
+        subprocess.run(["pnpm", "install"], cwd=frontend_dir, shell=True, check=True)
+
     # --run 플래그를 사용하여 Watch 모드가 아닌 일회성 실행으로 설정
     frontend_result = subprocess.run(
-        ["npm", "test", "--", "--run"],
+        ["pnpm", "test", "--", "--run"],
         cwd=frontend_dir,
         shell=True
     )

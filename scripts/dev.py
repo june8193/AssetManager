@@ -26,11 +26,17 @@ def main():
     # 잠시 대기하여 로그가 섞이는 것을 방지
     time.sleep(2)
 
-    # 2. 프론트엔드 서버 실행
+    # 2. 프론트엔드 준비 및 실행
     print("\n[2/2] Starting Frontend Server (Vite)...")
-    # Windows에서 npm은 shell을 통해 실행해야 함
+    
+    # node_modules가 없으면 자동 설치
+    if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
+        print("   -> node_modules not found. Installing dependencies with pnpm...")
+        subprocess.run(["pnpm", "install"], cwd=frontend_dir, shell=True, check=True)
+
+    # pnpm은 shell을 통해 실행해야 함
     frontend_process = subprocess.Popen(
-        ["npm", "run", "dev"],
+        ["pnpm", "run", "dev"],
         cwd=frontend_dir,
         shell=True,
         text=True
