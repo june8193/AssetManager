@@ -412,3 +412,42 @@ class DashboardService:
             "history": sorted(list(history_map.values()), key=lambda x: x["date"]),
             "accounts": [{"id": acc.id, "name": acc.name} for acc in accounts]
         }
+
+    def calculate_theoretical_cash(self, account_id: int, snapshot_date: datetime.date) -> Dict[str, float]:
+        """지정된 계좌의 특정 일자까지의 이론상 현금 잔액(KRW, USD)을 계산합니다.
+        
+        공식: SUM(입금/초기잔액/배당/이자) - SUM(출금/수수료) - SUM(주식매수) + SUM(주식매도)
+
+        Args:
+            account_id (int): 계좌 식별자
+            snapshot_date (datetime.date): 기준 일자
+
+        Returns:
+            Dict[str, float]: 통화별(KRW, USD) 이론상 잔액 딕셔너리
+        """
+        transactions = (
+            self.db.query(Transaction)
+            .filter(Transaction.account_id == account_id)
+            .filter(Transaction.transaction_date <= snapshot_date)
+            .all()
+        )
+        
+        theoretical = {"KRW": 0.0, "USD": 0.0}
+        
+        for tx in transactions:
+            currency = tx.currency
+            if currency not in theoretical:
+                continue # KRW, USD 외 통화는 일단 제외
+                
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST']:
+                theoretical[currency] += tx.total_amount
+            elif tx.type in ['WITHDRAW', 'FEE']:
+                theoretical[currency] -= tx.total_amount
+            elif tx.type == 'BUY':
+                # 주식 매수는 해당 통화 현금 감소
+                theoretical[currency] -= tx.total_amount
+            elif tx.type == 'SELL':
+                # 주식 매도는 해당 통화 현금 증가
+                theoretical[currency] += tx.total_amount
+                
+        return theoretical

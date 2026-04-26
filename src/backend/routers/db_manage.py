@@ -129,6 +129,32 @@ class UserSchema(BaseModel):
     class Config:
         from_attributes = True
 
+# --- 증권계좌 스냅샷 마법사용 스키마 ---
+
+class BrokerageCalculateRequest(BaseModel):
+    account_id: int
+    snapshot_date: date
+    new_transactions: List[TransactionSchema] # 사용자가 새로 입력한 입출금 내역
+    current_krw: float
+    current_usd: float
+
+class BrokerageCalculateResponse(BaseModel):
+    theoretical_krw: float
+    theoretical_usd: float
+    diff_krw: float
+    diff_usd: float
+
+class BrokerageSaveAccountRequest(BaseModel):
+    account_id: int
+    new_transactions: List[TransactionSchema]
+    diff_krw: float # 원화 차액 (배당 또는 수수료)
+    diff_usd: float # 달러 차액 (배당 또는 수수료)
+
+class BrokerageSaveRequest(BaseModel):
+    snapshot_date: date
+    exchange_rate: float
+    accounts: List[BrokerageSaveAccountRequest]
+
 # --- API Endpoints ---
 
 # Users (For dropdowns)
@@ -363,19 +389,18 @@ async def preview_snapshots(req: SaveSnapshotRequest, db: Session = Depends(get_
         
     return previews
 
-@router.post("/snapshots/save", response_model=List[SnapshotSchema])
-async def save_snapshots(previews: List[SnapshotPreviewSchema], db: Session = Depends(get_db)):
-    """확인된 미리보기 데이터를 바탕으로 스냅샷을 실제 DB에 저장합니다.
+def _save_snapshots_logic(previews: List[SnapshotPreviewSchema], db: Session, commit: bool = True) -> List[AccountSnapshot]:
+    """스냅샷 저장 로직의 실제 구현부입니다. (트랜잭션 제어 가능)
 
     Args:
-        previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 데이터 리스트
+        previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 미리보기 데이터 리스트
         db (Session): 데이터베이스 세션
+        commit (bool): DB 커밋 수행 여부. 기본값은 True.
 
     Returns:
-        List[SnapshotSchema]: DB에 저장된 최종 스냅샷 객체 리스트
+        List[AccountSnapshot]: 생성된 AccountSnapshot 객체 리스트
     """
     saved_snapshots = []
-    # 중복 제거 및 일괄 저장을 위한 계좌 ID 및 날짜 추출
     for p in previews:
         # 기존 동일 날짜 데이터 삭제
         db.query(AccountSnapshot).filter(
@@ -393,7 +418,141 @@ async def save_snapshots(previews: List[SnapshotPreviewSchema], db: Session = De
         db.add(new_snap)
         saved_snapshots.append(new_snap)
         
-    db.commit()
-    for snap in saved_snapshots:
-        db.refresh(snap)
+    if commit:
+        db.commit()
+        for snap in saved_snapshots:
+            db.refresh(snap)
     return saved_snapshots
+
+@router.post("/snapshots/save", response_model=List[SnapshotSchema])
+async def save_snapshots(previews: List[SnapshotPreviewSchema], db: Session = Depends(get_db)):
+    """확인된 미리보기 데이터를 바탕으로 스냅샷을 실제 DB에 저장합니다.
+
+    Args:
+        previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 데이터 리스트
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        List[SnapshotSchema]: DB에 저장된 최종 스냅샷 객체 리스트
+    """
+    return _save_snapshots_logic(previews, db, commit=True)
+
+# Brokerage Wizard Endpoints
+
+@router.post("/snapshots/brokerage/calculate", response_model=BrokerageCalculateResponse)
+async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Session = Depends(get_db)):
+    """증권계좌의 이론상 현금 잔액을 계산하고 입력값과의 차액(배당금 등)을 산출합니다.
+
+    Args:
+        req (BrokerageCalculateRequest): 계산 요청 데이터 (계좌 ID, 기준일, 신규 내역, 현재 잔액 등)
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        BrokerageCalculateResponse: 이론적 잔액 및 실제 잔액과의 차액 결과
+    """
+    dashboard_service = DashboardService(db)
+    
+    # 1. 기존 DB 기반 이론상 현금 계산
+    theoretical = dashboard_service.calculate_theoretical_cash(req.account_id, req.snapshot_date)
+    
+    # 2. 사용자가 새로 입력한 입출금 내역 반영
+    new_krw_net = sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'KRW' and tx.type == 'DEPOSIT') \
+                 - sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'KRW' and tx.type == 'WITHDRAW')
+    new_usd_net = sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'USD' and tx.type == 'DEPOSIT') \
+                 - sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'USD' and tx.type == 'WITHDRAW')
+    
+    theoretical_krw = theoretical['KRW'] + new_krw_net
+    theoretical_usd = theoretical['USD'] + new_usd_net
+    
+    # 3. 차액 계산
+    diff_krw = req.current_krw - theoretical_krw
+    diff_usd = req.current_usd - theoretical_usd
+    
+    return BrokerageCalculateResponse(
+        theoretical_krw=theoretical_krw,
+        theoretical_usd=theoretical_usd,
+        diff_krw=diff_krw,
+        diff_usd=diff_usd
+    )
+
+@router.post("/snapshots/brokerage/save", response_model=List[SnapshotSchema])
+async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depends(get_db)):
+    """증권계좌의 입출금, 차액(배당/수수료)을 저장하고 최종 스냅샷을 생성합니다.
+
+    Args:
+        req (BrokerageSaveRequest): 저장 요청 데이터 (기준일, 환율, 계좌별 상세 데이터 등)
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        List[SnapshotSchema]: 생성된 최종 스냅샷 객체 리스트
+    """
+    # 필요한 자산 ID 조회 (KRW, USD)
+    krw_asset = db.query(Asset).filter(Asset.ticker == "KRW").first()
+    usd_asset = db.query(Asset).filter(Asset.ticker == "USD").first()
+    
+    if not krw_asset or not usd_asset:
+        raise HTTPException(status_code=500, detail="KRW or USD asset not found in database")
+
+    try:
+        for acc_req in req.accounts:
+            # 1. 신규 입출금 내역 저장
+            for tx_schema in acc_req.new_transactions:
+                data = tx_schema.model_dump(exclude={"id"})
+                # currency에 맞는 asset_id 자동 매핑
+                if data['currency'] == 'KRW':
+                    data['asset_id'] = krw_asset.id
+                elif data['currency'] == 'USD':
+                    data['asset_id'] = usd_asset.id
+                else:
+                    raise HTTPException(status_code=400, detail=f"Unsupported currency: {data['currency']}")
+                
+                # 현금성 자산의 경우 quantity가 0이면 total_amount를 사용 (정합성 보장)
+                if data['quantity'] == 0 and data['total_amount'] != 0:
+                    data['quantity'] = data['total_amount']
+                
+                db.add(Transaction(**data))
+            
+            # 2. 차액(배당/수수료) 저장
+            if abs(acc_req.diff_krw) > 0.01:
+                tx_type = "DIVIDEND" if acc_req.diff_krw > 0 else "FEE"
+                db.add(Transaction(
+                    account_id=acc_req.account_id,
+                    asset_id=krw_asset.id,
+                    transaction_date=req.snapshot_date,
+                    type=tx_type,
+                    quantity=abs(acc_req.diff_krw),
+                    price=1.0,
+                    total_amount=abs(acc_req.diff_krw),
+                    currency="KRW"
+                ))
+                
+            if abs(acc_req.diff_usd) > 0.01:
+                tx_type = "DIVIDEND" if acc_req.diff_usd > 0 else "FEE"
+                db.add(Transaction(
+                    account_id=acc_req.account_id,
+                    asset_id=usd_asset.id,
+                    transaction_date=req.snapshot_date,
+                    type=tx_type,
+                    quantity=abs(acc_req.diff_usd),
+                    price=1.0,
+                    total_amount=abs(acc_req.diff_usd),
+                    currency="USD"
+                ))
+        
+        # 3. 전체 계좌 스냅샷 데이터 미리 계산 (새로 추가된 트랜잭션이 반영되도록 flush 수행)
+        db.flush() 
+        
+        previews = await preview_snapshots(SaveSnapshotRequest(
+            snapshot_date=req.snapshot_date,
+            exchange_rate=req.exchange_rate
+        ), db)
+        
+        # 4. 스냅샷 최종 저장 (전체 과정을 하나의 트랜잭션으로 commit)
+        result = _save_snapshots_logic(previews, db, commit=True)
+        return result
+
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Error during brokerage snapshot save: {str(e)}")
