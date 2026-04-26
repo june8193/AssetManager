@@ -5,7 +5,7 @@ from typing import List, Optional
 from datetime import date, datetime
 
 from ..database import get_db
-from ..models import Account, Asset, Transaction, AccountSnapshot, User
+from ..models import Account, Asset, Transaction, AccountSnapshot, User, ExchangeRate
 from ..services.dashboard_service import DashboardService
 
 router = APIRouter(
@@ -85,6 +85,7 @@ class TransactionSchema(BaseModel):
         total_amount (float): 총 거래 금액
         currency (str): 통화 (KRW, USD)
         exchange_rate (Optional[float]): 환율
+        memo (Optional[str]): 메모
     """
     id: Optional[int] = None
     account_id: int
@@ -96,6 +97,7 @@ class TransactionSchema(BaseModel):
     total_amount: float
     currency: str
     exchange_rate: Optional[float] = None
+    memo: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -129,12 +131,10 @@ class UserSchema(BaseModel):
     class Config:
         from_attributes = True
 
-# --- 증권계좌 스냅샷 마법사용 스키마 ---
-
 class BrokerageCalculateRequest(BaseModel):
     account_id: int
     snapshot_date: date
-    new_transactions: List[TransactionSchema] # 사용자가 새로 입력한 입출금 내역
+    new_transactions: List[TransactionSchema]
     current_krw: float
     current_usd: float
 
@@ -154,6 +154,16 @@ class BrokerageSaveRequest(BaseModel):
     snapshot_date: date
     exchange_rate: float
     accounts: List[BrokerageSaveAccountRequest]
+
+# Bank Snapshot Wizard Schemas
+class BankSaveAccountRequest(BaseModel):
+    account_id: int
+    new_transactions: List[TransactionSchema]
+    total_valuation: float # 은행 계좌는 현재 잔액이 곧 총 평가액
+
+class BankSaveRequest(BaseModel):
+    snapshot_date: date
+    accounts: List[BankSaveAccountRequest]
 
 # --- API Endpoints ---
 
@@ -556,3 +566,75 @@ async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depe
         if isinstance(e, HTTPException):
             raise e
         raise HTTPException(status_code=500, detail=f"Error during brokerage snapshot save: {str(e)}")
+
+@router.post("/snapshots/bank/save", response_model=List[SnapshotSchema])
+async def save_bank_snapshots(req: BankSaveRequest, db: Session = Depends(get_db)):
+    """은행 계좌의 입출금, 이자, 세금을 저장하고 최종 스냅샷을 생성합니다.
+
+    Args:
+        req (BankSaveRequest): 저장 요청 데이터 (기준일, 계좌별 상세 데이터 등)
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        List[SnapshotSchema]: 생성된 최종 스냅샷 객체 리스트
+    """
+    krw_asset = db.query(Asset).filter(Asset.ticker == "KRW").first()
+    if not krw_asset:
+        raise HTTPException(status_code=500, detail="KRW asset not found in database")
+
+    try:
+        # 최근 환율 조회 (미리보기 계산용)
+        latest_rate_obj = db.query(ExchangeRate).order_by(ExchangeRate.date.desc()).first()
+        latest_rate = latest_rate_obj.rate if latest_rate_obj else 1350.0
+
+        for acc_req in req.accounts:
+            # 1. 신규 내역 저장 (입금, 출금, 이자, 세금)
+            for tx_schema in acc_req.new_transactions:
+                data = tx_schema.model_dump(exclude={"id"})
+                data['asset_id'] = krw_asset.id # 은행은 KRW 고정
+                
+                if data['quantity'] == 0 and data['total_amount'] != 0:
+                    data['quantity'] = data['total_amount']
+                
+                db.add(Transaction(**data))
+        
+        db.flush() 
+        
+        # 2. 전체 계좌 스냅샷 데이터 미리 계산
+        previews = await preview_snapshots(SaveSnapshotRequest(
+            snapshot_date=req.snapshot_date,
+            exchange_rate=latest_rate
+        ), db)
+        
+        # 3. 은행 계좌의 경우 요청받은 total_valuation으로 강제 업데이트
+        bank_valuation_map = {acc.account_id: acc.total_valuation for acc in req.accounts}
+        for p in previews:
+            if p.account_id in bank_valuation_map:
+                # 총 평가액 업데이트
+                p.total_valuation = bank_valuation_map[p.account_id]
+                
+                # 해당 계좌의 누적 순 입금액 계산
+                total_net_deposit_krw = 0.0
+                all_txs = db.query(Transaction).filter(
+                    Transaction.account_id == p.account_id,
+                    Transaction.transaction_date <= p.snapshot_date
+                ).all()
+                
+                for tx in all_txs:
+                    # 단순화를 위해 트랜잭션 당시 환율 1.0 (은행은 KRW 고정)
+                    if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+                        total_net_deposit_krw += tx.total_amount
+                    elif tx.type == 'WITHDRAW':
+                        total_net_deposit_krw -= tx.total_amount
+                
+                p.total_profit = p.total_valuation - total_net_deposit_krw
+
+        # 4. 스냅샷 최종 저장
+        result = _save_snapshots_logic(previews, db, commit=True)
+        return result
+
+    except Exception as e:
+        db.rollback()
+        if isinstance(e, HTTPException):
+            raise e
+        raise HTTPException(status_code=500, detail=f"Error during bank snapshot save: {str(e)}")

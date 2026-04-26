@@ -139,6 +139,7 @@ class Transaction(Base):
     total_amount = Column(Float, nullable=False)
     currency = Column(String, nullable=False)
     exchange_rate = Column(Float, nullable=True)
+    memo = Column(String, nullable=True)
 
     account = relationship("Account", back_populates="transactions")
     asset = relationship("Asset", back_populates="transactions")

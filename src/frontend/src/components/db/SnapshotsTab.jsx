@@ -84,33 +84,30 @@ const SnapshotsTab = () => {
   // --- 위저드 단계별 핸들러 ---
 
   const handleSelectType = (type) => {
-    if (type === 'bank') {
-      alert('은행 계좌 스냅샷 기능은 준비 중입니다.');
-      return;
-    }
     setSnapshotType(type);
     setWizardStep('config');
   };
 
   const handleConfigSubmit = (e) => {
     e.preventDefault();
-    if (!exchangeRate || isNaN(exchangeRate)) {
+    if (snapshotType === 'brokerage' && (!exchangeRate || isNaN(exchangeRate))) {
       alert('올바른 환율을 입력해주세요.');
       return;
     }
     
-    // 증권계좌 필터링 및 초기화
-    const brAccounts = accounts.filter(a => a.account_type === 'BROKERAGE' && a.is_active);
-    setBrokerageAccounts(brAccounts);
+    // 계좌 필터링
+    const filteredAccounts = accounts.filter(a => a.account_type === (snapshotType === 'brokerage' ? 'BROKERAGE' : 'BANK') && a.is_active);
     
-    if (brAccounts.length === 0) {
-      alert('활성화된 증권계좌가 없습니다.');
+    if (filteredAccounts.length === 0) {
+      alert(`활성화된 ${snapshotType === 'brokerage' ? '증권' : '은행'}계좌가 없습니다.`);
       return;
     }
 
-    // 폼 데이터 초기화 (기존 데이터가 없으면)
+    setBrokerageAccounts(filteredAccounts); // 공용 상태 사용 (이름은 brokerageAccounts지만 filteredAccounts 의미)
+    
+    // 폼 데이터 초기화
     const newFormData = { ...accountsFormData };
-    brAccounts.forEach(acc => {
+    filteredAccounts.forEach(acc => {
       if (!newFormData[acc.id]) {
         newFormData[acc.id] = {
           newTransactions: [],
@@ -125,7 +122,7 @@ const SnapshotsTab = () => {
     setWizardStep('account-wizard');
   };
 
-  // 개별 계좌 계산 요청
+  // 개별 계좌 계산 요청 (증권계좌 전용)
   const calculateAccountDiff = async (accId) => {
     const data = accountsFormData[accId];
     try {
@@ -138,13 +135,14 @@ const SnapshotsTab = () => {
           snapshot_date: inputDate,
           new_transactions: data.newTransactions.map(tx => ({
             account_id: accId,
-            asset_id: 0, // 백엔드에서 통화별로 처리하므로 0 또는 적절한 값 (백엔드 로직에 따라 다름)
+            asset_id: 0, 
             transaction_date: tx.date || inputDate,
             type: tx.type,
             total_amount: parseFloat(tx.amount) || 0,
             currency: tx.currency,
             quantity: parseFloat(tx.amount) || 0,
-            price: 1.0
+            price: 1.0,
+            memo: tx.memo || ''
           })),
           current_krw: parseFloat(data.currentKrw) || 0,
           current_usd: parseFloat(data.currentUsd) || 0
@@ -176,67 +174,65 @@ const SnapshotsTab = () => {
     if (currentAccIdx < brokerageAccounts.length - 1) {
       setCurrentAccIdx(currentAccIdx + 1);
     } else {
-      // 모든 계좌 처리 완료 시 최종 미리보기로 이동
       handleGoToFinalPreview();
     }
   };
 
   const handleGoToFinalPreview = async () => {
-    try {
-      setProcessing(true);
-      // 백엔드에 최종 저장이 아닌 '미리보기' 요청 (기존 로직 활용을 위해 임시 저장 필요할 수 있으나, 
-      // 여기서는 일단 모든 확정된 데이터를 모아서 최종 저장 API로 보낼 준비를 함)
-      
-      const accountsPayload = brokerageAccounts.map(acc => ({
-        account_id: acc.id,
-        new_transactions: accountsFormData[acc.id].newTransactions.map(tx => ({
-          account_id: acc.id,
-          asset_id: 0,
-          transaction_date: tx.date || inputDate,
-          type: tx.type,
-          total_amount: parseFloat(tx.amount) || 0,
-          currency: tx.currency,
-          quantity: parseFloat(tx.amount) || 0,
-          price: 1.0
-        })),
-        diff_krw: accountsFormData[acc.id].calcResult?.diff_krw || 0,
-        diff_usd: accountsFormData[acc.id].calcResult?.diff_usd || 0
-      }));
-
-      // 최종 저장은 아니지만, 전체 스냅샷 요약을 위해 preview API 호출과 비슷한 결과를 얻어야 함.
-      // 일단은 바로 최종 저장을 위한 '확인' 단계로 이동 (UI에서 요약 보여줌)
-      setWizardStep('final-preview');
-    } catch (error) {
-      console.error('미리보기 준비 오류:', error);
-    } finally {
-      setProcessing(false);
-    }
+    setWizardStep('final-preview');
   };
 
   const handleFinalSave = async () => {
     try {
       setProcessing(true);
-      const payload = {
-        snapshot_date: inputDate,
-        exchange_rate: parseFloat(exchangeRate),
-        accounts: brokerageAccounts.map(acc => ({
-          account_id: acc.id,
-          new_transactions: accountsFormData[acc.id].newTransactions.map(tx => ({
-            account_id: acc.id,
-            asset_id: 0,
-            transaction_date: tx.date || inputDate,
-            type: tx.type,
-            total_amount: parseFloat(tx.amount) || 0,
-            currency: tx.currency,
-            quantity: parseFloat(tx.amount) || 0,
-            price: 1.0
-          })),
-          diff_krw: accountsFormData[acc.id].calcResult?.diff_krw || 0,
-          diff_usd: accountsFormData[acc.id].calcResult?.diff_usd || 0
-        }))
-      };
+      let payload;
+      let endpoint;
 
-      const response = await fetch(`${DB_API_BASE}/snapshots/brokerage/save`, {
+      if (snapshotType === 'brokerage') {
+        endpoint = `${DB_API_BASE}/snapshots/brokerage/save`;
+        payload = {
+          snapshot_date: inputDate,
+          exchange_rate: parseFloat(exchangeRate),
+          accounts: brokerageAccounts.map(acc => ({
+            account_id: acc.id,
+            new_transactions: accountsFormData[acc.id].newTransactions.map(tx => ({
+              account_id: acc.id,
+              asset_id: 0,
+              transaction_date: tx.date || inputDate,
+              type: tx.type,
+              total_amount: parseFloat(tx.amount) || 0,
+              currency: tx.currency,
+              quantity: parseFloat(tx.amount) || 0,
+              price: 1.0,
+              memo: tx.memo || ''
+            })),
+            diff_krw: accountsFormData[acc.id].calcResult?.diff_krw || 0,
+            diff_usd: accountsFormData[acc.id].calcResult?.diff_usd || 0
+          }))
+        };
+      } else {
+        endpoint = `${DB_API_BASE}/snapshots/bank/save`;
+        payload = {
+          snapshot_date: inputDate,
+          accounts: brokerageAccounts.map(acc => ({
+            account_id: acc.id,
+            new_transactions: accountsFormData[acc.id].newTransactions.map(tx => ({
+              account_id: acc.id,
+              asset_id: 0,
+              transaction_date: tx.date || inputDate,
+              type: tx.type,
+              total_amount: parseFloat(tx.amount) || 0,
+              currency: 'KRW',
+              quantity: parseFloat(tx.amount) || 0,
+              price: 1.0,
+              memo: tx.memo || ''
+            })),
+            total_valuation: parseFloat(accountsFormData[acc.id].currentKrw) || 0
+          }))
+        };
+      }
+
+      const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -275,14 +271,14 @@ const SnapshotsTab = () => {
       </button>
       <button
         onClick={() => handleSelectType('bank')}
-        className="flex flex-col items-center gap-4 p-8 rounded-2xl border-2 border-slate-100 hover:border-slate-200 transition-all opacity-60 cursor-not-allowed"
+        className="flex flex-col items-center gap-4 p-8 rounded-2xl border-2 border-slate-100 hover:border-emerald-500 hover:bg-emerald-50 transition-all group"
       >
-        <div className="w-16 h-16 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+        <div className="w-16 h-16 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
           <Landmark size={32} />
         </div>
         <div className="text-center">
           <h4 className="font-bold text-slate-800 text-lg">은행계좌 스냅샷</h4>
-          <p className="text-sm text-slate-400 mt-2">준비 중입니다. 예적금 잔액을 직접 입력하여 관리합니다.</p>
+          <p className="text-sm text-slate-500 mt-2">입출금, 이자, 세금 내역을 입력하고 계좌 잔액을 기록합니다.</p>
         </div>
       </button>
     </div>
@@ -293,8 +289,8 @@ const SnapshotsTab = () => {
       <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
         <AlertCircle className="text-blue-500 shrink-0" size={20} />
         <div className="text-sm text-blue-800">
-          <p className="font-semibold mb-1">스냅샷 기본 설정</p>
-          <p className="opacity-80">기록할 날짜와 달러 자산 환산을 위한 기준 환율을 입력해주세요.</p>
+          <p className="font-semibold mb-1">{snapshotType === 'brokerage' ? '증권계좌' : '은행계좌'} 스냅샷 기본 설정</p>
+          <p className="opacity-80">기록할 날짜와 {snapshotType === 'brokerage' ? '달러 자산 환산을 위한 기준 환율을' : '정보를'} 입력해주세요.</p>
         </div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -309,19 +305,21 @@ const SnapshotsTab = () => {
             className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </div>
-        <div className="space-y-2">
-          <label htmlFor="exchange-rate" className="text-xs font-bold text-slate-500 uppercase tracking-wider">당일 환율 (USD/KRW)</label>
-          <input
-            id="exchange-rate"
-            type="number"
-            step="0.01"
-            placeholder="예: 1350.5"
-            value={exchangeRate}
-            onChange={(e) => setExchangeRate(e.target.value)}
-            required
-            className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+        {snapshotType === 'brokerage' && (
+          <div className="space-y-2">
+            <label htmlFor="exchange-rate" className="text-xs font-bold text-slate-500 uppercase tracking-wider">당일 환율 (USD/KRW)</label>
+            <input
+              id="exchange-rate"
+              type="number"
+              step="0.01"
+              placeholder="예: 1350.5"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              required
+              className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        )}
       </div>
       <div className="flex justify-end gap-3 pt-4 border-t border-slate-100">
         <button type="button" onClick={() => setWizardStep('select-type')} className="px-6 py-2 text-slate-500 font-medium">이전</button>
@@ -336,16 +334,17 @@ const SnapshotsTab = () => {
     const acc = brokerageAccounts[currentAccIdx];
     if (!acc) return null;
     const data = accountsFormData[acc.id] || {};
+    const isBank = snapshotType === 'bank';
     
     const updateAccData = (updates) => {
       setAccountsFormData(prev => ({
         ...prev,
-        [acc.id]: { ...prev[acc.id], ...updates, isConfirmed: false, calcResult: null }
+        [acc.id]: { ...prev[acc.id], ...updates, isConfirmed: false, calcResult: isBank ? { success: true } : null }
       }));
     };
 
     const addTx = () => {
-      const newTxs = [...(data.newTransactions || []), { type: 'DEPOSIT', amount: '', currency: 'KRW', date: inputDate }];
+      const newTxs = [...(data.newTransactions || []), { type: 'DEPOSIT', amount: '', currency: 'KRW', date: inputDate, memo: '' }];
       updateAccData({ newTransactions: newTxs });
     };
 
@@ -363,7 +362,7 @@ const SnapshotsTab = () => {
       <div className="space-y-6 pt-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded-full">{currentAccIdx + 1} / {brokerageAccounts.length}</span>
+            <span className={`${isBank ? 'bg-emerald-100 text-emerald-700' : 'bg-blue-100 text-blue-700'} text-xs font-bold px-2 py-1 rounded-full`}>{currentAccIdx + 1} / {brokerageAccounts.length}</span>
             <h4 className="font-bold text-slate-800 text-lg">{acc.name} <span className="text-slate-400 font-normal">({acc.provider})</span></h4>
           </div>
         </div>
@@ -371,49 +370,62 @@ const SnapshotsTab = () => {
         <div className="space-y-4">
           <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
             <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <RefreshCw size={14} /> 기간 중 신규 입출금 내역 (직접 입력)
+              <RefreshCw size={14} /> 기간 중 신규 내역 (입출금, {isBank ? '이자, 세금' : '배당 등'})
             </h5>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {(data.newTransactions || []).map((tx, idx) => (
-                <div key={idx} className="flex gap-2 items-center bg-white p-2 rounded-lg border border-slate-100">
-                  <select 
-                    value={tx.type} 
-                    onChange={(e) => updateTx(idx, 'type', e.target.value)}
-                    className="text-sm border-none focus:ring-0 bg-transparent font-medium"
-                  >
-                    <option value="DEPOSIT">입금</option>
-                    <option value="WITHDRAW">출금</option>
-                  </select>
+                <div key={idx} className="bg-white p-3 rounded-lg border border-slate-100 space-y-2">
+                  <div className="flex gap-2 items-center">
+                    <select 
+                      value={tx.type} 
+                      onChange={(e) => updateTx(idx, 'type', e.target.value)}
+                      className="text-sm border-none focus:ring-0 bg-transparent font-medium min-w-[80px]"
+                    >
+                      <option value="DEPOSIT">입금</option>
+                      <option value="WITHDRAW">출금</option>
+                      {isBank && <option value="INTEREST">이자</option>}
+                      {isBank && <option value="TAX">세금</option>}
+                    </select>
+                    <input 
+                      type="number" 
+                      placeholder="금액" 
+                      value={tx.amount} 
+                      onChange={(e) => updateTx(idx, 'amount', e.target.value)}
+                      className="flex-1 text-sm border-none focus:ring-0 font-mono"
+                    />
+                    {!isBank && (
+                      <select 
+                        value={tx.currency} 
+                        onChange={(e) => updateTx(idx, 'currency', e.target.value)}
+                        className="text-xs border-none focus:ring-0 bg-slate-50 rounded px-1"
+                      >
+                        <option value="KRW">KRW</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    )}
+                    <button onClick={() => removeTx(idx)} className="text-slate-300 hover:text-red-500 p-1"><X size={16} /></button>
+                  </div>
                   <input 
-                    type="number" 
-                    placeholder="금액" 
-                    value={tx.amount} 
-                    onChange={(e) => updateTx(idx, 'amount', e.target.value)}
-                    className="flex-1 text-sm border-none focus:ring-0 font-mono"
+                    type="text" 
+                    placeholder="메모 (예: 재웅이형 축의금, 장준 용돈)" 
+                    value={tx.memo} 
+                    onChange={(e) => updateTx(idx, 'memo', e.target.value)}
+                    className="w-full text-xs border-none focus:ring-0 bg-slate-50 rounded-md py-1.5 px-3 italic text-slate-600"
                   />
-                  <select 
-                    value={tx.currency} 
-                    onChange={(e) => updateTx(idx, 'currency', e.target.value)}
-                    className="text-xs border-none focus:ring-0 bg-slate-50 rounded px-1"
-                  >
-                    <option value="KRW">KRW</option>
-                    <option value="USD">USD</option>
-                  </select>
-                  <button onClick={() => removeTx(idx)} className="text-slate-300 hover:text-red-500 p-1"><X size={16} /></button>
                 </div>
               ))}
               <button 
                 onClick={addTx}
-                className="w-full py-2 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 text-xs font-medium hover:border-blue-300 hover:text-blue-500 transition-all flex items-center justify-center gap-1"
+                className={`w-full py-2 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 text-xs font-medium ${isBank ? 'hover:border-emerald-300 hover:text-emerald-500' : 'hover:border-blue-300 hover:text-blue-500'} transition-all flex items-center justify-center gap-1`}
               >
                 <Plus size={14} /> 내역 추가하기
               </button>
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">현재 보유 원화 (KRW)</label>
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">{isBank ? '최종 잔액' : '현재 보유 원화'} (KRW)</label>
               <input
                 type="number"
                 value={data.currentKrw}
@@ -421,19 +433,21 @@ const SnapshotsTab = () => {
                 className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">현재 보유 달러 (USD)</label>
-              <input
-                type="number"
-                value={data.currentUsd}
-                onChange={(e) => updateAccData({ currentUsd: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
-              />
-            </div>
+            {!isBank && (
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">현재 보유 달러 (USD)</label>
+                <input
+                  type="number"
+                  value={data.currentUsd}
+                  onChange={(e) => updateAccData({ currentUsd: e.target.value })}
+                  className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold"
+                />
+              </div>
+            )}
           </div>
 
           <div className="pt-2">
-            {!data.calcResult ? (
+            {!isBank && !data.calcResult && (
               <button 
                 onClick={() => calculateAccountDiff(acc.id)}
                 disabled={processing}
@@ -442,7 +456,8 @@ const SnapshotsTab = () => {
                 {processing ? <RefreshCw className="animate-spin" size={18} /> : <RefreshCw size={18} />}
                 배당금/차액 계산하기
               </button>
-            ) : (
+            )}
+            {!isBank && data.calcResult && (
               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-5 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-emerald-800 font-bold flex items-center gap-1"><CheckCircle2 size={18} /> 정산 결과</span>
@@ -467,6 +482,15 @@ const SnapshotsTab = () => {
                 </p>
               </div>
             )}
+            {isBank && (
+               <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex gap-3">
+                <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
+                <div className="text-sm text-emerald-800">
+                  <p className="font-semibold">입력 완료</p>
+                  <p className="opacity-80">최종 잔액과 {data.newTransactions?.length || 0}건의 내역을 확인했습니다.</p>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -483,8 +507,8 @@ const SnapshotsTab = () => {
           </button>
           <button 
             onClick={() => handleConfirmAccount(acc.id)}
-            disabled={!data.calcResult || processing}
-            className="bg-blue-600 text-white px-10 py-3 rounded-xl font-bold hover:bg-blue-700 disabled:bg-slate-200 transition-all flex items-center gap-2 shadow-lg shadow-blue-100"
+            disabled={(snapshotType === 'brokerage' && !data.calcResult) || processing}
+            className={`${isBank ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-100'} text-white px-10 py-3 rounded-xl font-bold disabled:bg-slate-200 transition-all flex items-center gap-2 shadow-lg`}
           >
             {currentAccIdx === brokerageAccounts.length - 1 ? '최종 확인 단계로' : '확인 및 다음 계좌'} <ChevronRight size={20} />
           </button>
@@ -499,7 +523,7 @@ const SnapshotsTab = () => {
         <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
         <div className="text-sm text-emerald-800">
           <p className="font-semibold mb-1">모든 계좌 정산 완료</p>
-          <p className="opacity-80">입력하신 데이터와 계산된 배당금이 최종적으로 반영됩니다. [최종 저장]을 누르면 스냅샷이 생성됩니다.</p>
+          <p className="opacity-80">입력하신 데이터와 계산된 {snapshotType === 'brokerage' ? '배당금이' : '내역이'} 최종적으로 반영됩니다. [최종 저장]을 누르면 스냅샷이 생성됩니다.</p>
         </div>
       </div>
 
@@ -508,23 +532,30 @@ const SnapshotsTab = () => {
           <thead className="bg-slate-50 border-b border-slate-200">
             <tr>
               <th className="px-4 py-3 font-semibold text-slate-600">계좌명</th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-right">신규 입출금(KRW)</th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-right">배당/수수료(KRW)</th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-right">현재 보유(KRW)</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-right">신규 내역수</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-right">{snapshotType === 'brokerage' ? '배당/수수료(KRW)' : '내역 합계(KRW)'}</th>
+              <th className="px-4 py-3 font-semibold text-slate-600 text-right">최종 잔액(KRW)</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {brokerageAccounts.map((acc) => {
               const data = accountsFormData[acc.id] || {};
-              const krwNetTx = (data.newTransactions || []).reduce((acc, tx) => {
-                if (tx.currency === 'KRW') return tx.type === 'DEPOSIT' ? acc + parseFloat(tx.amount || 0) : acc - parseFloat(tx.amount || 0);
-                return acc;
+              const txCount = (data.newTransactions || []).length;
+              const netTx = (data.newTransactions || []).reduce((acc, tx) => {
+                const amt = parseFloat(tx.amount || 0);
+                if (tx.type === 'DEPOSIT' || tx.type === 'INTEREST') return acc + amt;
+                return acc - amt;
               }, 0);
               return (
                 <tr key={acc.id}>
                   <td className="px-4 py-3 font-medium text-slate-800">{acc.name}</td>
-                  <td className="px-4 py-3 text-right font-mono text-blue-600">{krwNetTx.toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right font-mono text-emerald-600">{Math.round(data.calcResult?.diff_krw || 0).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-right font-mono">{txCount}건</td>
+                  <td className="px-4 py-3 text-right font-mono text-emerald-600">
+                    {snapshotType === 'brokerage' 
+                      ? Math.round(data.calcResult?.diff_krw || 0).toLocaleString()
+                      : netTx.toLocaleString()
+                    }
+                  </td>
                   <td className="px-4 py-3 text-right font-mono font-bold">{parseFloat(data.currentKrw || 0).toLocaleString()}</td>
                 </tr>
               );
@@ -538,7 +569,7 @@ const SnapshotsTab = () => {
         <button 
           onClick={handleFinalSave}
           disabled={processing}
-          className="bg-blue-600 text-white px-10 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all flex items-center gap-2 shadow-xl shadow-blue-200"
+          className={`${snapshotType === 'bank' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'} text-white px-10 py-3 rounded-xl font-bold transition-all flex items-center gap-2 shadow-xl`}
         >
           {processing ? <RefreshCw className="animate-spin" size={20} /> : <Save size={20} />}
           스냅샷 최종 저장
