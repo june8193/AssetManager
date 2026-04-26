@@ -8,11 +8,11 @@ import { MaskingProvider } from '../contexts/MaskingContext';
  * Sidebar 컴포넌트 테스트
  */
 describe('Sidebar Component', () => {
-  const renderSidebar = (isConnected = true) => {
+  const renderSidebar = () => {
     return render(
       <BrowserRouter>
         <MaskingProvider>
-          <Sidebar isConnected={isConnected} />
+          <Sidebar />
         </MaskingProvider>
       </BrowserRouter>
     );
@@ -42,20 +42,6 @@ describe('Sidebar Component', () => {
     
     // 다시 텍스트가 나타남
     expect(screen.getByText('대시보드')).toBeInTheDocument();
-  });
-
-  it('연결 상태(isConnected)에 따라 적절한 메시지를 표시해야 한다', () => {
-    const { rerender } = renderSidebar(true);
-    expect(screen.getByText('실시간 연동 중')).toBeInTheDocument();
-
-    rerender(
-      <BrowserRouter>
-        <MaskingProvider>
-          <Sidebar isConnected={false} />
-        </MaskingProvider>
-      </BrowserRouter>
-    );
-    expect(screen.getByText('연결 끊김')).toBeInTheDocument();
   });
 
   it('모든 메뉴 항목이 렌더링되어야 한다', () => {

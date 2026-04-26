@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Globe, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -15,10 +15,8 @@ const MENU_ITEMS = [
 
 /**
  * 좌측 사이드바 컴포넌트
- * @param {Object} props - 컴포넌트 속성
- * @param {boolean} props.isConnected - 실시간 연결 상태
  */
-const Sidebar = ({ isConnected }) => {
+const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(true);
   const location = useLocation();
   const { isMasked, toggleMasking } = useMasking();
@@ -94,18 +92,6 @@ const Sidebar = ({ isConnected }) => {
           {isOpen && <span className="whitespace-nowrap overflow-hidden text-ellipsis">{isMasked ? "모자이크 해제" : "모자이크 설정"}</span>}
         </button>
 
-        {/* 연결 상태 표시 */}
-        {isConnected ? (
-          <div className={`flex items-center gap-2 px-3 py-2 bg-emerald-50 text-emerald-600 rounded-lg text-sm font-medium border border-emerald-100 ${!isOpen && 'justify-center'}`} title={!isOpen ? "실시간 연동 중" : ""}>
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0"></span>
-            {isOpen && <span className="whitespace-nowrap overflow-hidden text-ellipsis">실시간 연동 중</span>}
-          </div>
-        ) : (
-          <div className={`flex items-center gap-2 px-3 py-2 bg-red-50 text-red-600 rounded-lg text-sm font-medium border border-red-100 ${!isOpen && 'justify-center'}`} title={!isOpen ? "연결 끊김" : ""}>
-            <span className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0"></span>
-            {isOpen && <span className="whitespace-nowrap overflow-hidden text-ellipsis">연결 끊김</span>}
-          </div>
-        )}
       </div>
     </div>
   );
