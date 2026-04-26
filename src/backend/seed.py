@@ -29,9 +29,9 @@ def seed_data():
         if not db.query(Account).filter_by(user_id=user.id).first():
             print("기본 계좌 생성 중...")
             accounts = [
-                Account(user_id=user.id, name="KB증권 (일반주식)", provider="KB증권", alias="(일반주식)"),
-                Account(user_id=user.id, name="미래에셋 (연금저축)", provider="미래에셋증권", alias="(연금저축)"),
-                Account(user_id=user.id, name="신한은행 (주택청약)", provider="신한은행", alias="(주택청약)")
+                Account(user_id=user.id, name="KB증권 (일반주식)", provider="KB증권", alias="(일반주식)", account_type="BROKERAGE"),
+                Account(user_id=user.id, name="미래에셋 (연금저축)", provider="미래에셋증권", alias="(연금저축)", account_type="BROKERAGE"),
+                Account(user_id=user.id, name="신한은행 (주택청약)", provider="신한은행", alias="(주택청약)", account_type="BANK")
             ]
             db.add_all(accounts)
             db.commit()

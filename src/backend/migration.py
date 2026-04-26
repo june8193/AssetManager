@@ -13,20 +13,20 @@ class LegacyDataMigrator:
 
     # 사용자가 직접 정제한 계좌 데이터 리스트
     FIXED_ACCOUNTS = [
-        {"id": 1, "user_id": 1, "name": "Legacy_Total_Account", "provider": "시스템", "alias": "과거 데이터 이관용 가상계좌(Legacy)", "is_active": False},
-        {"id": 2, "user_id": 1, "name": "5526-9093", "provider": "키움증권", "alias": "(일반 주식)", "is_active": True},
-        {"id": 3, "user_id": 1, "name": "6066-7729", "provider": "키움증권", "alias": "(배당주)", "is_active": True},
-        {"id": 4, "user_id": 1, "name": "880-8864-2912-0", "provider": "미래에셋증권", "alias": "(장준, 연금저축)", "is_active": True},
-        {"id": 5, "user_id": 1, "name": "014-7558-3984-0", "provider": "미래에셋증권", "alias": "(장준, IRP)", "is_active": True},
-        {"id": 6, "user_id": 1, "name": "6106-8763", "provider": "키움증권", "alias": "(달러 지갑)", "is_active": True},
-        {"id": 8, "user_id": 2, "name": "848-8120-0360-0", "provider": "미래에셋증권", "alias": "(성은, IRP)", "is_active": True},
-        {"id": 9, "user_id": 2, "name": "264-4808-7048-0", "provider": "미래에셋증권", "alias": "(성은, 연금저축)", "is_active": True},
-        {"id": 10, "user_id": 1, "name": "구 현금합계(legacy)", "provider": "기타", "alias": "(과거 데이터 합산용 - 준 주택청약 + 준 카뱅 현금 + 성은 주택청약)", "is_active": False},
-        {"id": 11, "user_id": 1, "name": "업비트, 케이뱅크", "provider": "기타", "alias": "장준, 업비트/케이뱅크", "is_active": True},
-        {"id": 12, "user_id": 1, "name": "223-070-796423", "provider": "신한은행", "alias": "(신한 주택청약, 준)", "is_active": True},
-        {"id": 13, "user_id": 1, "name": "3333-19-6950366", "provider": "카카오뱅크", "alias": "(카카오뱅크 현금자산, 준)", "is_active": True},
-        {"id": 14, "user_id": 2, "name": "223-105-564395", "provider": "신한은행", "alias": "(신한 주택청약, 성은)", "is_active": True},
-        {"id": 15, "user_id": 2, "name": "738-5844-5652-0", "provider": "미래에셋증권", "alias": "(성은, 주식)", "is_active": True}
+        {"id": 1, "user_id": 1, "name": "Legacy_Total_Account", "provider": "시스템", "alias": "과거 데이터 이관용 가상계좌(Legacy)", "account_type": "BROKERAGE", "is_active": False},
+        {"id": 2, "user_id": 1, "name": "5526-9093", "provider": "키움증권", "alias": "(일반 주식)", "account_type": "BROKERAGE", "is_active": True},
+        {"id": 3, "user_id": 1, "name": "6066-7729", "provider": "키움증권", "alias": "(배당주)", "account_type": "BROKERAGE", "is_active": True},
+        {"id": 4, "user_id": 1, "name": "880-8864-2912-0", "provider": "미래에셋증권", "alias": "(장준, 연금저축)", "account_type": "BROKERAGE", "is_active": True},
+        {"id": 5, "user_id": 1, "name": "014-7558-3984-0", "provider": "미래에셋증권", "alias": "(장준, IRP)", "account_type": "BROKERAGE", "is_active": True},
+        {"id": 6, "user_id": 1, "name": "6106-8763", "provider": "키움증권", "alias": "(달러 지갑)", "account_type": "BROKERAGE", "is_active": True},
+        {"id": 8, "user_id": 2, "name": "848-8120-0360-0", "provider": "미래에셋증권", "alias": "(성은, IRP)", "account_type": "BROKERAGE", "is_active": True},
+        {"id": 9, "user_id": 2, "name": "264-4808-7048-0", "provider": "미래에셋증권", "alias": "(성은, 연금저축)", "account_type": "BROKERAGE", "is_active": True},
+        {"id": 10, "user_id": 1, "name": "구 현금합계(legacy)", "provider": "기타", "alias": "(과거 데이터 합산용 - 준 주택청약 + 준 카뱅 현금 + 성은 주택청약)", "account_type": "BANK", "is_active": False},
+        {"id": 11, "user_id": 1, "name": "업비트, 케이뱅크", "provider": "기타", "alias": "장준, 업비트/케이뱅크", "account_type": "BANK", "is_active": True},
+        {"id": 12, "user_id": 1, "name": "223-070-796423", "provider": "신한은행", "alias": "(신한 주택청약, 준)", "account_type": "BANK", "is_active": True},
+        {"id": 13, "user_id": 1, "name": "3333-19-6950366", "provider": "카카오뱅크", "alias": "(카카오뱅크 현금자산, 준)", "account_type": "BANK", "is_active": True},
+        {"id": 14, "user_id": 2, "name": "223-105-564395", "provider": "신한은행", "alias": "(신한 주택청약, 성은)", "account_type": "BANK", "is_active": True},
+        {"id": 15, "user_id": 2, "name": "738-5844-5652-0", "provider": "미래에셋증권", "alias": "(성은, 주식)", "account_type": "BROKERAGE", "is_active": True}
     ]
 
     def __init__(self):
@@ -310,6 +310,7 @@ class LegacyDataMigrator:
                     name=acc_data["name"],
                     provider=acc_data["provider"],
                     alias=acc_data["alias"],
+                    account_type=acc_data.get("account_type", "BROKERAGE"),
                     is_active=acc_data.get("is_active", True)
                 )
                 self.db.add(acc)

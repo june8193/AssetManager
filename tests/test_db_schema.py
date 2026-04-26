@@ -27,13 +27,32 @@ def test_create_account(db_session):
     db_session.add(user)
     db_session.commit()
     
-    account = Account(user_id=user.id, name="테스트계좌", provider="KB증권")
+    # 1. 명시적으로 account_type을 지정하여 생성
+    account = Account(
+        user_id=user.id, 
+        name="테스트계좌", 
+        provider="KB증권",
+        account_type="BANK"
+    )
     db_session.add(account)
     db_session.commit()
     
     saved_account = db_session.query(Account).filter_by(name="테스트계좌").first()
     assert saved_account is not None
     assert saved_account.user_id == user.id
+    assert saved_account.account_type == "BANK"
+
+    # 2. account_type을 생략할 경우 기본값(BROKERAGE) 확인
+    default_account = Account(
+        user_id=user.id,
+        name="기본계좌",
+        provider="미래에셋"
+    )
+    db_session.add(default_account)
+    db_session.commit()
+
+    saved_default = db_session.query(Account).filter_by(name="기본계좌").first()
+    assert saved_default.account_type == "BROKERAGE"
 
 def test_create_asset(db_session):
     """자산 마스터 생성을 테스트합니다."""
