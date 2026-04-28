@@ -182,35 +182,28 @@ class RatioService:
         }
 
     def update_target_ratios(self, ratios: List[Dict[str, Any]]):
-        """목표 비중 설정을 업데이트합니다. 
-        전달된 목록에 없는 기존 카테고리는 삭제됩니다.
-        """
+        """목표 비중 설정을 업데이트하거나 생성(Upsert)합니다."""
         # 1. 현재 DB에 저장된 모든 목표 비중 가져오기
         existing_targets = self.db.query(TargetRatio).all()
         existing_map = {(t.category_name, t.category_type): t for t in existing_targets}
         
         # 2. 업데이트 또는 추가된 항목 처리
-        incoming_keys = set()
         for r in ratios:
             key = (r["category_name"], r["category_type"])
-            incoming_keys.add(key)
             
             if key in existing_map:
                 target = existing_map[key]
                 target.target_percentage = r["target_percentage"]
                 target.parent_category = r.get("parent_category")
+                target.mode = r.get("mode", "absolute")
             else:
                 new_target = TargetRatio(
                     category_name=r["category_name"],
                     category_type=r["category_type"],
                     target_percentage=r["target_percentage"],
-                    parent_category=r.get("parent_category")
+                    parent_category=r.get("parent_category"),
+                    mode=r.get("mode", "absolute")
                 )
                 self.db.add(new_target)
-        
-        # 3. 전달된 목록에 없는 기존 항목 삭제
-        for key, target in existing_map.items():
-            if key not in incoming_keys:
-                self.db.delete(target)
         
         self.db.commit()

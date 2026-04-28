@@ -69,3 +69,47 @@ async def test_get_ratio_hierarchy_api(db_session: Session):
     assert len(domestic["children"]) == 1
     assert domestic["children"][0]["ticker"] == "005930"
     assert domestic["children"][0]["quantity"] == 10.0
+
+def test_bulk_update_target_ratios(db_session: Session):
+    """목표 비중 일괄 업데이트 API를 테스트합니다."""
+    # 1. 초기 데이터 설정 (기존 데이터가 있는 상태)
+    db_session.add(TargetRatio(category_name="기존", category_type="major", target_percentage=50.0))
+    db_session.commit()
+
+    # 2. 일괄 업데이트 요청 (하나의 업데이트, 하나의 신규, 기존 삭제 확인)
+    payload = [
+        {
+            "category_name": "주식",
+            "category_type": "major",
+            "target_percentage": 70.0,
+            "mode": "absolute"
+        },
+        {
+            "category_name": "국내주식",
+            "category_type": "sub",
+            "target_percentage": 50.0,
+            "parent_category": "주식",
+            "mode": "relative"
+        }
+    ]
+    
+    response = client.post("/api/ratios/targets", json=payload)
+    
+    # 3. 검증
+    assert response.status_code == 200
+    
+    # DB 확인
+    targets = db_session.query(TargetRatio).all()
+    assert len(targets) == 3
+    
+    major = next(t for t in targets if t.category_name == "주식")
+    assert major.target_percentage == 70.0
+    assert major.mode == "absolute"
+    
+    sub = next(t for t in targets if t.category_name == "국내주식")
+    assert sub.target_percentage == 50.0
+    assert sub.mode == "relative"
+    assert sub.parent_category == "주식"
+    
+    # 기존 데이터가 유지되는지 확인
+    assert any(t.category_name == "기존" for t in targets)

@@ -12,6 +12,7 @@ class TargetRatioSchema(BaseModel):
     category_type: str # 'major', 'sub'
     target_percentage: float
     parent_category: Optional[str] = None
+    mode: Optional[str] = 'absolute' # 'absolute', 'relative'
 
     class Config:
         from_attributes = True
