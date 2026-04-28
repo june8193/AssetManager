@@ -11,6 +11,101 @@ class RatioService:
         self.db = db
         self.dashboard_service = DashboardService(db)
 
+    async def get_hierarchy(self) -> List[Dict[str, Any]]:
+        """계층형 데이터 구조(Major > Sub > Stock)를 반환합니다.
+        
+        Returns:
+            List[Dict[str, Any]]: 계층형 데이터
+        """
+        # 1. 현재 자산 현황 가져오기
+        dashboard_data = await self.dashboard_service.get_dashboard_summary()
+        current_total = dashboard_data["total_valuation_krw"]
+        
+        # 2. 목표 비중 설정 가져오기
+        target_ratios = self.db.query(TargetRatio).all()
+        major_targets = {r.category_name: r for r in target_ratios if r.category_type == "major"}
+        sub_targets = {r.category_name: r for r in target_ratios if r.category_type == "sub"}
+
+        # 3. 계층 구조 생성
+        # Dashboard data provides: accounts, categories (major), total_valuation_krw
+        
+        # 자산들을 major > sub 로 그룹화
+        asset_tree = {} # major -> sub -> list of assets
+        for acc in dashboard_data["accounts"]:
+            for asset in acc["assets"]:
+                major_cat = asset["category"]
+                sub_cat = asset["sub_category"]
+                
+                if major_cat not in asset_tree:
+                    asset_tree[major_cat] = {}
+                if sub_cat not in asset_tree[major_cat]:
+                    asset_tree[major_cat][sub_cat] = []
+                
+                # 중복 자산 합산 (여러 계좌에 있을 수 있음)
+                existing_asset = next((a for a in asset_tree[major_cat][sub_cat] if a["ticker"] == asset["ticker"]), None)
+                if existing_asset:
+                    existing_asset["quantity"] += asset["quantity"]
+                    existing_asset["valuation_krw"] += asset["valuation_krw"]
+                else:
+                    asset_tree[major_cat][sub_cat].append({
+                        "ticker": asset["ticker"],
+                        "name": asset["name"],
+                        "quantity": asset["quantity"],
+                        "price": asset["price"],
+                        "valuation_krw": asset["valuation_krw"]
+                    })
+
+        # 4. 최종 트리 구성
+        hierarchy = []
+        all_major_names = set(major_targets.keys()) | set(asset_tree.keys())
+        
+        for major_name in all_major_names:
+            major_target = major_targets.get(major_name)
+            major_asset_data = asset_tree.get(major_name, {})
+            
+            # 대분류의 총 가치 계산
+            major_current_value = sum(
+                sum(a["valuation_krw"] for a in sub_assets)
+                for sub_assets in major_asset_data.values()
+            )
+            
+            major_node = {
+                "category_name": major_name,
+                "category_type": "major",
+                "target_percentage": major_target.target_percentage if major_target else 0.0,
+                "current_value": major_current_value,
+                "current_ratio": (major_current_value / current_total * 100.0) if current_total > 0 else 0.0,
+                "children": []
+            }
+            
+            # 중분류 (해당 대분류 하위의 목표 비중 또는 현재 자산)
+            all_sub_names = {name for name, r in sub_targets.items() if r.parent_category == major_name} | set(major_asset_data.keys())
+            
+            for sub_name in all_sub_names:
+                sub_target = sub_targets.get(sub_name)
+                sub_assets = major_asset_data.get(sub_name, [])
+                
+                sub_current_value = sum(a["valuation_krw"] for a in sub_assets)
+                
+                sub_node = {
+                    "category_name": sub_name,
+                    "category_type": "sub",
+                    "target_percentage": sub_target.target_percentage if sub_target else 0.0,
+                    "current_value": sub_current_value,
+                    "current_ratio": (sub_current_value / major_current_value * 100.0) if major_current_value > 0 else 0.0,
+                    "children": sorted(sub_assets, key=lambda x: x["valuation_krw"], reverse=True)
+                }
+                major_node["children"].append(sub_node)
+            
+            # 중분류 정렬 (평가액 순)
+            major_node["children"].sort(key=lambda x: x["current_value"], reverse=True)
+            hierarchy.append(major_node)
+            
+        # 대분류 정렬 (평가액 순)
+        hierarchy.sort(key=lambda x: x["current_value"], reverse=True)
+        
+        return hierarchy
+
     async def calculate_rebalancing(self, additional_cash: float = 0.0) -> Dict[str, Any]:
         """목표 비중과 현재 자산을 비교하여 리밸런싱 가이드를 계산합니다.
         

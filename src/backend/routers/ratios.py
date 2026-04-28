@@ -29,6 +29,12 @@ async def get_rebalancing(additional_cash: float = 0.0, db: Session = Depends(ge
     service = RatioService(db)
     return await service.calculate_rebalancing(additional_cash)
 
+@router.get("/hierarchy")
+async def get_hierarchy(db: Session = Depends(get_db)):
+    """계층형 자산 구조 데이터를 가져옵니다."""
+    service = RatioService(db)
+    return await service.get_hierarchy()
+
 @router.get("/targets", response_model=List[TargetRatioSchema])
 def get_target_ratios(db: Session = Depends(get_db)):
     """설정된 목표 비중 목록을 가져옵니다."""
