@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -9,6 +9,7 @@ import { useMasking } from '../contexts/MaskingContext';
 const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
   { path: '/watchlist', label: '관심종목', icon: Activity },
+  { path: '/ratios', label: '비율 계산기', icon: Calculator },
   { path: '/db', label: 'DB 관리', icon: Database },
   { path: '/connection', label: 'API 연결 관리', icon: LinkIcon },
 ];
