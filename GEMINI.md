@@ -56,6 +56,22 @@
 - **실행 방법**: `uv run <script_path>` 형식을 사용하여 일관된 가상환경 내에서 실행되도록 합니다. (예: `uv run pytest`, `uv run scripts/dev.py`)
 
 ## 7. Shell 명령어 실행 규칙
-- **주의 사항**: 현재 환경(Windows PowerShell)에서는 `&&` 연산자가 지원되지 않을 수 있습니다. 
-- **원칙**: 여러 명령어를 한 번에 실행해야 할 경우 `&&` 대신 `;`를 사용하거나, 가급적 도구 호출을 분리하고 `wait_for_previous: true` 옵션을 사용하여 순차적으로 실행합니다.
+- **환경**: 현재 환경은 **Windows PowerShell**입니다.
+- **리다이렉션**: `2>/dev/null` 대신 `2>$null`을 사용해야 합니다.
+- **연산자**: `&&` 연산자 대신 `;`를 사용하거나 도구 호출을 분리하십시오.
+- **대체 명령어**:
+  - `grep` -> `Select-String`
+  - `ls -d` -> `Test-Path` 또는 `Get-Item`
+  - `rm -rf` -> `Remove-Item -Recurse -Force`
+- **원칙**: 복잡한 파이프라인보다는 `wait_for_previous: true` 옵션을 활용하여 단계별로 실행하는 것을 권장합니다.
+
+## 8. Git Worktree 및 환경 설정 규칙
+- **원칙**: 신규 워크트리 생성 시 반드시 환경 설정 파일(`settings.json`)을 복사하고 의존성을 동기화합니다.
+- **절차**:
+  1. 워크트리 생성 직후 루트 디렉토리의 `settings.json`을 해당 워크트리 루트로 복사합니다. (`settings.json`은 `.gitignore` 대상이므로 자동 복사되지 않음)
+  2. 워크트리 디렉토리 내에서 `uv sync`를 실행하여 가상환경(`.venv`)을 구축합니다.
+  3. `uv run pytest` 등을 통해 기본 환경이 정상인지 확인합니다.
+- **주의 사항**:
+  - `settings.json` 내의 데이터베이스 경로나 API 설정이 워크트리 환경에서도 유효한지 확인하십시오.
+  - `uv sync` 중 오류가 발생할 경우 `uv lock` 파일의 변경 사항이 있는지 확인하고, 필요시 `uv clean` 후 재시도합니다.
 
