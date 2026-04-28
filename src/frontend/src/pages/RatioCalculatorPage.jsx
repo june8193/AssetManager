@@ -19,6 +19,18 @@ const RatioCalculatorPage = () => {
     }
   }, [targets]);
 
+  // 초기 로드 시 현재 자산 비중 정보를 가져옵니다.
+  useEffect(() => {
+    calculateRebalancing(0);
+  }, []);
+
+  const getCurrentRatio = (name, type) => {
+    if (!rebalancing) return 0;
+    const pool = type === 'major' ? rebalancing.major_results : rebalancing.sub_results;
+    const found = pool.find(r => r.category === name);
+    return found ? found.current_ratio : 0;
+  };
+
   const handleAddCategory = (type) => {
     const name = prompt(`${type === 'major' ? '대분류' : '중분류'} 이름을 입력하세요:`);
     if (!name) return;
@@ -112,10 +124,15 @@ const RatioCalculatorPage = () => {
                   >
                     <ArrowRight className="w-3 h-3 rotate-45" />
                   </button>
-                  <label className="text-xs font-semibold text-gray-500 uppercase">
-                    {target.category_name} 
-                    <span className="ml-1 text-[10px] bg-gray-200 px-1 rounded">
-                      {target.category_type === 'major' ? '대분류' : `중분류 (${target.parent_category})`}
+                  <label className="text-xs font-semibold text-gray-500 uppercase flex justify-between">
+                    <span>
+                      {target.category_name} 
+                      <span className="ml-1 text-[10px] bg-gray-200 px-1 rounded">
+                        {target.category_type === 'major' ? '대분류' : `중분류 (${target.parent_category})`}
+                      </span>
+                    </span>
+                    <span className="text-indigo-600">
+                      현재: {formatPercent(getCurrentRatio(target.category_name, target.category_type))}
                     </span>
                   </label>
                   <div className="relative mt-1">
