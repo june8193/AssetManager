@@ -1,6 +1,27 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, ForeignKey, Float, Date, Enum
+from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
+
+class TargetRatio(Base):
+    """자산 배분 목표 비중을 저장하는 모델입니다.
+    
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        category_name (str): 카테고리 명 (예: '주식', '국내주식')
+        category_type (str): 카테고리 구분 ('major', 'sub')
+        target_percentage (float): 목표 비중 (%)
+        parent_category (str): 상위 카테고리 명 (중분류인 경우 대분류 명)
+        updated_at (datetime): 수정 일시
+    """
+    __tablename__ = "target_ratios"
+
+    id = Column(Integer, primary_key=True, index=True)
+    category_name = Column(String, index=True, nullable=False)
+    category_type = Column(String, nullable=False) # 'major', 'sub'
+    target_percentage = Column(Float, default=0.0)
+    parent_category = Column(String, nullable=True)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 class Watchlist(Base):
     """관심종목 정보를 저장하는 모델입니다.
@@ -44,9 +65,6 @@ class SyncHistory(Base):
     last_sync_at = Column(DateTime, default=datetime.datetime.now)
 
 # --- 원장 기반 자산 관리 신규 모델 (Phase 1) ---
-
-from sqlalchemy import ForeignKey, Float, Date, Enum
-from sqlalchemy.orm import relationship
 
 class User(Base):
     """자산의 실제 소유자 정보를 저장하는 모델입니다.

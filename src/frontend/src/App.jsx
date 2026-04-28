@@ -5,6 +5,7 @@ import DashboardPage from './pages/DashboardPage';
 import WatchlistPage from './pages/WatchlistPage';
 import ConnectionPage from './pages/ConnectionPage';
 import DbManagementPage from './pages/DbManagementPage';
+import RatioCalculatorPage from './pages/RatioCalculatorPage';
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/watchlist/:country" element={<WatchlistPage />} />
+              <Route path="/ratios" element={<RatioCalculatorPage />} />
               <Route path="/connection" element={<ConnectionPage />} />
               <Route path="/db" element={<DbManagementPage />} />
             </Routes>
