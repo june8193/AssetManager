@@ -4,6 +4,7 @@ export const useRatios = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [targets, setTargets] = useState([]);
+  const [hierarchy, setHierarchy] = useState([]);
   const [rebalancing, setRebalancing] = useState(null);
 
   const fetchTargets = async () => {
@@ -13,6 +14,20 @@ export const useRatios = () => {
       if (!response.ok) throw new Error('목표 비중을 가져오는데 실패했습니다.');
       const data = await response.json();
       setTargets(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchHierarchy = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/ratios/hierarchy');
+      if (!response.ok) throw new Error('계층 구조를 가져오는데 실패했습니다.');
+      const data = await response.json();
+      setHierarchy(data);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -30,6 +45,7 @@ export const useRatios = () => {
       });
       if (!response.ok) throw new Error('목표 비중을 저장하는데 실패했습니다.');
       await fetchTargets();
+      await fetchHierarchy();
     } catch (err) {
       setError(err.message);
       throw err;
@@ -54,15 +70,18 @@ export const useRatios = () => {
 
   useEffect(() => {
     fetchTargets();
+    fetchHierarchy();
   }, []);
 
   return {
     loading,
     error,
     targets,
+    hierarchy,
     rebalancing,
     updateTargets,
     calculateRebalancing,
-    refreshTargets: fetchTargets
+    refreshTargets: fetchTargets,
+    refreshHierarchy: fetchHierarchy
   };
 };

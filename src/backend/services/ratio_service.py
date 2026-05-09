@@ -25,6 +25,7 @@ class RatioService:
         target_ratios = self.db.query(TargetRatio).all()
         major_targets = {r.category_name: r for r in target_ratios if r.category_type == "major"}
         sub_targets = {r.category_name: r for r in target_ratios if r.category_type == "sub"}
+        stock_targets = {r.category_name: r for r in target_ratios if r.category_type == "stock"}
 
         # 3. 계층 구조 생성
         # Dashboard data provides: accounts, categories (major), total_valuation_krw
@@ -89,6 +90,18 @@ class RatioService:
                 
                 sub_current_value = sum(a["valuation_krw"] for a in sub_assets)
                 
+                # 각 종목의 현재 비중 및 목표 비중 계산
+                for asset in sub_assets:
+                    asset["current_ratio"] = (asset["valuation_krw"] / sub_current_value * 100.0) if sub_current_value > 0 else 0.0
+                    
+                    # DB에서 해당 종목의 목표 비중 조회
+                    stock_target = stock_targets.get(asset["ticker"])
+                    if stock_target:
+                        asset["target_percentage"] = stock_target.target_percentage
+                    else:
+                        # DB에 없으면 현재 비중을 기본값으로 사용
+                        asset["target_percentage"] = asset["current_ratio"]
+
                 sub_node = {
                     "category_name": sub_name,
                     "category_type": "sub",

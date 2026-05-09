@@ -25,3 +25,6 @@ brain/
 # superpowers 플러그인
 superpowers/
 .superpowers/
+
+# playwright 관련 파일
+.playwright-mcp/
