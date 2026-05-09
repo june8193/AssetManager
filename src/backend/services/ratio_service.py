@@ -52,7 +52,9 @@ class RatioService:
                         "name": asset["name"],
                         "quantity": asset["quantity"],
                         "price": asset["price"],
-                        "valuation_krw": asset["valuation_krw"]
+                        "valuation_krw": asset["valuation_krw"],
+                        "category_name": asset["ticker"],
+                        "category_type": "stock"
                     })
 
         # 4. 최종 트리 구성
