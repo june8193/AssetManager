@@ -182,14 +182,16 @@ class RatioService:
         }
 
     def update_target_ratios(self, ratios: List[Dict[str, Any]]):
-        """목표 비중 설정을 업데이트하거나 생성(Upsert)합니다."""
+        """목표 비중 설정을 업데이트하거나 생성(Upsert)하며, 목록에 없는 항목은 삭제합니다."""
         # 1. 현재 DB에 저장된 모든 목표 비중 가져오기
         existing_targets = self.db.query(TargetRatio).all()
         existing_map = {(t.category_name, t.category_type): t for t in existing_targets}
         
         # 2. 업데이트 또는 추가된 항목 처리
+        processed_keys = set()
         for r in ratios:
             key = (r["category_name"], r["category_type"])
+            processed_keys.add(key)
             
             if key in existing_map:
                 target = existing_map[key]
@@ -205,5 +207,10 @@ class RatioService:
                     mode=r.get("mode", "absolute")
                 )
                 self.db.add(new_target)
+        
+        # 3. 목록에 없는 항목 삭제
+        for key, target in existing_map.items():
+            if key not in processed_keys:
+                self.db.delete(target)
         
         self.db.commit()

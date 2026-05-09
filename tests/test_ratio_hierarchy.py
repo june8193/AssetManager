@@ -100,7 +100,7 @@ def test_bulk_update_target_ratios(db_session: Session):
     
     # DB 확인
     targets = db_session.query(TargetRatio).all()
-    assert len(targets) == 3
+    assert len(targets) == 2
     
     major = next(t for t in targets if t.category_name == "주식")
     assert major.target_percentage == 70.0
@@ -111,5 +111,5 @@ def test_bulk_update_target_ratios(db_session: Session):
     assert sub.mode == "relative"
     assert sub.parent_category == "주식"
     
-    # 기존 데이터가 유지되는지 확인
-    assert any(t.category_name == "기존" for t in targets)
+    # 기존 데이터가 삭제되었는지 확인
+    assert not any(t.category_name == "기존" for t in targets)
