@@ -21,6 +21,7 @@ class TargetRatio(Base):
     category_type = Column(String, nullable=False) # 'major', 'sub'
     target_percentage = Column(Float, default=0.0)
     parent_category = Column(String, nullable=True)
+    mode = Column(String, nullable=True) # 'absolute', 'relative'
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 class Watchlist(Base):

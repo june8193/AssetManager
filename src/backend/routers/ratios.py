@@ -12,6 +12,7 @@ class TargetRatioSchema(BaseModel):
     category_type: str # 'major', 'sub'
     target_percentage: float
     parent_category: Optional[str] = None
+    mode: Optional[str] = 'absolute' # 'absolute', 'relative'
 
     class Config:
         from_attributes = True
@@ -28,6 +29,12 @@ async def get_rebalancing(additional_cash: float = 0.0, db: Session = Depends(ge
     """리밸런싱 계산 결과를 가져옵니다."""
     service = RatioService(db)
     return await service.calculate_rebalancing(additional_cash)
+
+@router.get("/hierarchy")
+async def get_hierarchy(db: Session = Depends(get_db)):
+    """계층형 자산 구조 데이터를 가져옵니다."""
+    service = RatioService(db)
+    return await service.get_hierarchy()
 
 @router.get("/targets", response_model=List[TargetRatioSchema])
 def get_target_ratios(db: Session = Depends(get_db)):

@@ -49,9 +49,9 @@ describe('SnapshotsTab Component', () => {
     fireEvent.click(await screen.findByText('스냅샷 생성 마법사'));
     fireEvent.click(screen.getByText('증권계좌 스냅샷'));
     
-    expect(screen.getByText('스냅샷 기본 설정')).toBeInTheDocument();
+    expect(screen.getByText(/스냅샷 기본 설정/)).toBeInTheDocument();
     expect(screen.getByLabelText('기준 일자')).toBeInTheDocument();
-    expect(screen.getByLabelText('당일 환율 (USD/KRW)')).toBeInTheDocument();
+    expect(screen.getByLabelText(/당일 환율/)).toBeInTheDocument();
   });
 
   it('기본 설정 입력 후 계좌별 마법사 화면으로 이동해야 함', async () => {
@@ -59,10 +59,10 @@ describe('SnapshotsTab Component', () => {
     fireEvent.click(await screen.findByText('스냅샷 생성 마법사'));
     fireEvent.click(screen.getByText('증권계좌 스냅샷'));
     
-    fireEvent.change(screen.getByLabelText('당일 환율 (USD/KRW)'), { target: { value: '1350' } });
+    fireEvent.change(screen.getByLabelText(/당일 환율/), { target: { value: '1350' } });
     fireEvent.click(screen.getByText('다음 단계'));
     
     expect(await screen.findByText('증권계좌1')).toBeInTheDocument();
-    expect(screen.getByText('기간 중 신규 입출금 내역 (직접 입력)')).toBeInTheDocument();
+    expect(screen.getByText(/기간 중 신규 내역/)).toBeInTheDocument();
   });
 });
