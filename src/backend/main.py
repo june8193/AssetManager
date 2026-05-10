@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -8,6 +8,13 @@ from .routers import watchlist, stocks, exchange, dashboard, db_manage, connecti
 from .services.kiwoom_service import KiwoomStockService
 from .services.backup_service import BackupService
 import datetime
+import os
+import signal
+import asyncio
+
+# 개발 모드 자동 종료를 위한 상태 변수
+active_heartbeat_connections = set()
+HEARTBEAT_SHUTDOWN_TIMEOUT = 10
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,6 +49,37 @@ async def lifespan(app: FastAPI):
     # Shutdown logic (none needed for now)
 
 app = FastAPI(title="AssetManager Backend API", lifespan=lifespan)
+
+# 하트비트 WebSocket 엔드포인트 (DEBUG 모드에서만 동작)
+@app.websocket("/ws/dev/heartbeat")
+async def dev_heartbeat(websocket: WebSocket):
+    if os.environ.get("DEBUG") != "true":
+        await websocket.close(code=1008) # Policy Violation
+        return
+
+    await websocket.accept()
+    active_heartbeat_connections.add(websocket)
+    try:
+        while True:
+            # 클라이언트로부터 데이터를 기다리거나 연결 종료를 감지
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        if websocket in active_heartbeat_connections:
+            active_heartbeat_connections.remove(websocket)
+        print(f"WebSocket disconnected. Active connections: {len(active_heartbeat_connections)}")
+        # 모든 연결이 끊기면 종료 타이머 시작
+        if len(active_heartbeat_connections) == 0:
+            print(f"Starting shutdown timer ({HEARTBEAT_SHUTDOWN_TIMEOUT}s)...")
+            asyncio.create_task(shutdown_after_timeout())
+
+async def shutdown_after_timeout():
+    """지정된 시간 대기 후 활성 연결이 없으면 서버 종료"""
+    await asyncio.sleep(HEARTBEAT_SHUTDOWN_TIMEOUT)
+    if len(active_heartbeat_connections) == 0:
+        print(f"No active heartbeat connections for {HEARTBEAT_SHUTDOWN_TIMEOUT}s. Shutting down...")
+        os.kill(os.getpid(), signal.SIGINT)
+    else:
+        print(f"Shutdown cancelled. Active connections: {len(active_heartbeat_connections)}")
 
 # CORS 활성화 (Vite 개발 서버의 로컬 접속을 허용)
 app.add_middleware(
