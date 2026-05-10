@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { MaskingProvider } from './contexts/MaskingContext';
 import Sidebar from './components/Sidebar';
@@ -8,6 +9,53 @@ import DbManagementPage from './pages/DbManagementPage';
 import RatioCalculatorPage from './pages/RatioCalculatorPage';
 
 function App() {
+  useEffect(() => {
+    // 개발 모드에서만 동작
+    if (!import.meta.env.DEV) return;
+
+    let socket;
+    let heartbeatInterval;
+    let reconnectTimeout;
+
+    const connect = () => {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws/dev/heartbeat`;
+      
+      console.log(`[Heartbeat] Connecting to ${wsUrl}...`);
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        console.log('[Heartbeat] Connected to backend');
+        // 5초마다 하트비트 전송
+        heartbeatInterval = setInterval(() => {
+          if (socket.readyState === WebSocket.OPEN) {
+            socket.send('heartbeat');
+          }
+        }, 5000);
+      };
+
+      socket.onclose = () => {
+        console.log('[Heartbeat] Disconnected. Reconnecting in 3s...');
+        clearInterval(heartbeatInterval);
+        reconnectTimeout = setTimeout(connect, 3000);
+      };
+
+      socket.onerror = (error) => {
+        console.error('[Heartbeat] WebSocket error:', error);
+        socket.close();
+      };
+    };
+
+    connect();
+
+    // Cleanup
+    return () => {
+      if (socket) socket.close();
+      clearInterval(heartbeatInterval);
+      clearTimeout(reconnectTimeout);
+    };
+  }, []);
+
   return (
     <Router>
       <MaskingProvider>

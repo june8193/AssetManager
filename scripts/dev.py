@@ -3,6 +3,18 @@ import os
 import sys
 import signal
 import time
+import socket
+
+def find_available_port(start_port, max_attempts=10):
+    """사용 가능한 비어있는 포트를 찾습니다."""
+    for port in range(start_port, start_port + max_attempts):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind(('localhost', port))
+                return port
+            except socket.error:
+                continue
+    raise IOError(f"Could not find an available port starting from {start_port}")
 
 def main():
     """백엔드와 프론트엔드 서버를 동시에 실행합니다."""
@@ -11,15 +23,28 @@ def main():
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     frontend_dir = os.path.join(root_dir, "src", "frontend")
 
+    # 동적 포트 할당
+    backend_port = find_available_port(8000)
+    frontend_port = find_available_port(5173)
+
+    # 환경 변수 설정
+    env = os.environ.copy()
+    env["ASSET_MANAGER_BACKEND_PORT"] = str(backend_port)
+    env["ASSET_MANAGER_FRONTEND_PORT"] = str(frontend_port)
+    env["DEBUG"] = "true"  # 하트비트 활성화를 위해 설정
+
     print("\n" + "="*50)
     print("   AssetManager Development Servers")
+    print(f"   Backend: http://localhost:{backend_port}")
+    print(f"   Frontend: http://localhost:{frontend_port}")
     print("="*50)
 
     # 1. 백엔드 서버 실행
-    print("\n[1/2]Starting Backend Server (FastAPI)...")
+    print(f"\n[1/2] Starting Backend Server (FastAPI) on port {backend_port}...")
     backend_process = subprocess.Popen(
         ["uv", "run", "python", "-m", "src.backend.main"],
         cwd=root_dir,
+        env=env,
         text=True
     )
 
@@ -27,7 +52,7 @@ def main():
     time.sleep(2)
 
     # 2. 프론트엔드 준비 및 실행
-    print("\n[2/2] Starting Frontend Server (Vite)...")
+    print(f"\n[2/2] Starting Frontend Server (Vite) on port {frontend_port}...")
     
     # node_modules가 없으면 자동 설치
     if not os.path.exists(os.path.join(frontend_dir, "node_modules")):
@@ -38,12 +63,19 @@ def main():
     frontend_process = subprocess.Popen(
         ["pnpm", "run", "dev"],
         cwd=frontend_dir,
+        env=env,
         shell=True,
         text=True
     )
 
+    # 3. 브라우저 자동 열기
+    import webbrowser
+    print(f"\n[3/3] Opening browser at http://localhost:{frontend_port}...")
+    webbrowser.open(f"http://localhost:{frontend_port}")
+
     print("\n" + "-"*50)
-    print(" 모든 서버가 구동되었습니다. 종료하려면 Ctrl+C를 누르세요.")
+    print(" 모든 서버가 구동되었습니다. 브라우저를 닫으면 약 10초 후 서버가 자동으로 종료됩니다.")
+    print(" (종료하려면 터미널에서 Ctrl+C를 눌러도 됩니다.)")
     print("-"*50 + "\n")
 
     try:
