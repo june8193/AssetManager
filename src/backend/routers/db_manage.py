@@ -143,6 +143,7 @@ class BrokerageCalculateResponse(BaseModel):
     theoretical_usd: float
     diff_krw: float
     diff_usd: float
+    existing_transactions: List[TransactionSchema] = []
 
 class BrokerageSaveAccountRequest(BaseModel):
     account_id: int
@@ -164,6 +165,7 @@ class BankCalculateRequest(BaseModel):
 class BankCalculateResponse(BaseModel):
     """은행계좌 잔액 계산 결과 스키마입니다."""
     theoretical_krw: float
+    existing_transactions: List[TransactionSchema] = []
 
 # Bank Snapshot Wizard Schemas
 class BankSaveAccountRequest(BaseModel):
@@ -174,6 +176,10 @@ class BankSaveAccountRequest(BaseModel):
 class BankSaveRequest(BaseModel):
     snapshot_date: date
     accounts: List[BankSaveAccountRequest]
+
+class LatestSnapshotDateResponse(BaseModel):
+    """최신 스냅샷 날짜 정보를 담는 스키마입니다."""
+    latest_date: Optional[date] = None
 
 # --- API Endpoints ---
 
@@ -309,6 +315,12 @@ def get_snapshots(db: Session = Depends(get_db)):
         List[SnapshotSchema]: 자산 상태 스냅샷 객체 리스트 (최신순)
     """
     return db.query(AccountSnapshot).order_by(AccountSnapshot.snapshot_date.desc()).all()
+
+@router.get("/snapshots/latest", response_model=LatestSnapshotDateResponse)
+def get_latest_snapshot_date(db: Session = Depends(get_db)):
+    """가장 최근에 기록된 스냅샷의 날짜를 조회합니다."""
+    latest_snapshot = db.query(AccountSnapshot).order_by(AccountSnapshot.snapshot_date.desc()).first()
+    return LatestSnapshotDateResponse(latest_date=latest_snapshot.snapshot_date if latest_snapshot else None)
 
 @router.post("/snapshots/preview", response_model=List[SnapshotPreviewSchema])
 async def preview_snapshots(req: SaveSnapshotRequest, db: Session = Depends(get_db)):
@@ -476,10 +488,19 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     theoretical = dashboard_service.calculate_theoretical_cash(req.account_id, req.snapshot_date)
     
     # 2. 사용자가 새로 입력한 입출금 내역 반영
-    new_krw_net = sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'KRW' and tx.type == 'DEPOSIT') \
-                 - sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'KRW' and tx.type == 'WITHDRAW')
-    new_usd_net = sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'USD' and tx.type == 'DEPOSIT') \
-                 - sum(tx.total_amount for tx in req.new_transactions if tx.currency == 'USD' and tx.type == 'WITHDRAW')
+    new_krw_net = 0.0
+    new_usd_net = 0.0
+    for tx in req.new_transactions:
+        if tx.currency == 'KRW':
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT', 'SELL']:
+                new_krw_net += tx.total_amount
+            elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
+                new_krw_net -= tx.total_amount
+        elif tx.currency == 'USD':
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT', 'SELL']:
+                new_usd_net += tx.total_amount
+            elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
+                new_usd_net -= tx.total_amount
     
     theoretical_krw = theoretical['KRW'] + new_krw_net
     theoretical_usd = theoretical['USD'] + new_usd_net
@@ -487,12 +508,27 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     # 3. 차액 계산
     diff_krw = req.current_krw - theoretical_krw
     diff_usd = req.current_usd - theoretical_usd
+
+    # 4. 마지막 스냅샷 이후의 기존 트랜잭션 조회
+    last_snapshot = db.query(AccountSnapshot).filter(
+        AccountSnapshot.account_id == req.account_id,
+        AccountSnapshot.snapshot_date < req.snapshot_date
+    ).order_by(AccountSnapshot.snapshot_date.desc()).first()
+    
+    last_date = last_snapshot.snapshot_date if last_snapshot else date(1970, 1, 1)
+    
+    existing_transactions = db.query(Transaction).filter(
+        Transaction.account_id == req.account_id,
+        Transaction.transaction_date > last_date,
+        Transaction.transaction_date <= req.snapshot_date
+    ).order_by(Transaction.transaction_date.desc()).all()
     
     return BrokerageCalculateResponse(
         theoretical_krw=theoretical_krw,
         theoretical_usd=theoretical_usd,
         diff_krw=diff_krw,
-        diff_usd=diff_usd
+        diff_usd=diff_usd,
+        existing_transactions=existing_transactions
     )
 
 @router.post("/snapshots/bank/calculate", response_model=BankCalculateResponse)
@@ -514,14 +550,35 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
     # 2. 사용자가 새로 입력한 내역 반영
     new_krw_net = 0.0
     for tx in req.new_transactions:
-        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST']:
+        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
             new_krw_net += tx.total_amount
         elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
             new_krw_net -= tx.total_amount
+        elif tx.type == 'BUY':
+            new_krw_net -= tx.total_amount
+        elif tx.type == 'SELL':
+            new_krw_net += tx.total_amount
             
     final_balance = theoretical['KRW'] + new_krw_net
+
+    # 3. 마지막 스냅샷 이후의 기존 트랜잭션 조회
+    last_snapshot = db.query(AccountSnapshot).filter(
+        AccountSnapshot.account_id == req.account_id,
+        AccountSnapshot.snapshot_date < req.snapshot_date
+    ).order_by(AccountSnapshot.snapshot_date.desc()).first()
     
-    return BankCalculateResponse(theoretical_krw=final_balance)
+    last_date = last_snapshot.snapshot_date if last_snapshot else date(1970, 1, 1)
+    
+    existing_transactions = db.query(Transaction).filter(
+        Transaction.account_id == req.account_id,
+        Transaction.transaction_date > last_date,
+        Transaction.transaction_date <= req.snapshot_date
+    ).order_by(Transaction.transaction_date.desc()).all()
+    
+    return BankCalculateResponse(
+        theoretical_krw=final_balance,
+        existing_transactions=existing_transactions
+    )
 
 @router.post("/snapshots/brokerage/save", response_model=List[SnapshotSchema])
 async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depends(get_db)):

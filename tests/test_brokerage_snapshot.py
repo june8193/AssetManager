@@ -110,3 +110,45 @@ async def test_save_brokerage_snapshots_api(db_session, setup_assets):
     snap = db_session.query(AccountSnapshot).filter(AccountSnapshot.account_id == account.id).first()
     assert snap is not None
     assert snap.total_valuation == 150000
+
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_with_various_types(db_session, setup_assets):
+    """증권계좌 계산 시 다양한 트랜잭션 타입이 반영되는지 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="테스트계좌", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    
+    # 기초 잔액 1,000,000원
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=today,
+        type="INITIAL_BALANCE", total_amount=1000000, currency="KRW"
+    ))
+    db_session.commit()
+    
+    # 신규 내역들
+    new_transactions = [
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="DIVIDEND", total_amount=50000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="INTEREST", total_amount=10000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="ADJUSTMENT", total_amount=5000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="FEE", total_amount=2000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="TAX", total_amount=3000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="BUY", total_amount=100000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="SELL", total_amount=200000, currency="KRW"),
+    ]
+    
+    # 계산: 1,000,000 + 50,000(배당) + 10,000(이자) + 5,000(조정) - 2,000(수수료) - 3,000(세금) - 100,000(매수) + 200,000(매도) = 1,160,000
+    expected_krw = 1160000
+    
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=new_transactions,
+        current_krw=expected_krw,
+        current_usd=0
+    )
+    
+    res = await calculate_brokerage_snapshot(req, db_session)
+    assert res.theoretical_krw == expected_krw

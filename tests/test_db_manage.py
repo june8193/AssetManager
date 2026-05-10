@@ -1,7 +1,8 @@
 import pytest
 from fastapi.testclient import TestClient
+from datetime import date
 from src.backend.main import app
-from src.backend.models import User
+from src.backend.models import User, Account, AccountSnapshot, Transaction, Asset
 
 client = TestClient(app)
 
@@ -83,3 +84,92 @@ def test_get_snapshots():
     response = client.get("/api/db/snapshots")
     assert response.status_code == 200
     assert isinstance(response.json(), list)
+
+def test_get_latest_snapshot_date(db_session, test_user):
+    """최신 스냅샷 날짜 API를 테스트합니다."""
+    # 계좌 생성
+    account = Account(user_id=test_user.id, name="Test Account", provider="Test Provider", account_type="BANK")
+    db_session.add(account)
+    db_session.commit()
+    
+    from datetime import date
+    # 두 개의 스냅샷 생성 (날짜가 다름)
+    snap1 = AccountSnapshot(account_id=account.id, snapshot_date=date(2023, 1, 1), total_valuation=1000)
+    snap2 = AccountSnapshot(account_id=account.id, snapshot_date=date(2023, 2, 1), total_valuation=2000)
+    db_session.add_all([snap1, snap2])
+    db_session.commit()
+    
+    response = client.get("/api/db/snapshots/latest")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["latest_date"] == "2023-02-01"
+
+def test_get_latest_snapshot_date_empty(db_session):
+    """스냅샷이 없을 때 최신 날짜 API를 테스트합니다."""
+    # 모든 스냅샷 삭제
+    db_session.query(AccountSnapshot).delete()
+    db_session.commit()
+    
+    response = client.get("/api/db/snapshots/latest")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["latest_date"] is None
+
+def test_calculate_returns_existing_transactions(db_session, test_user):
+    """계산 API가 마지막 스냅샷 이후의 기존 트랜잭션을 반환하는지 테스트합니다."""
+    # 1. KRW 자산 생성
+    krw = Asset(ticker="KRW", name="원화", major_category="CASH", sub_category="CASH", country="KR")
+    db_session.add(krw)
+    db_session.flush()
+    
+    # 2. 계좌 생성
+    acc = Account(user_id=test_user.id, name="테스트계좌", provider="테스트", account_type="BROKERAGE", is_active=True)
+    db_session.add(acc)
+    db_session.flush()
+    
+    # 3. 과거 트랜잭션 (첫 번째 스냅샷 이전)
+    db_session.add(Transaction(
+        account_id=acc.id, asset_id=krw.id, transaction_date=date(2023, 12, 15),
+        type="DEPOSIT", total_amount=10000, currency="KRW"
+    ))
+    
+    # 4. 첫 번째 스냅샷 (2024-01-01)
+    db_session.add(AccountSnapshot(
+        account_id=acc.id, snapshot_date=date(2024, 1, 1),
+        period_deposit=10000, total_valuation=10000, total_profit=0
+    ))
+    
+    # 5. 새로운 트랜잭션 (첫 번째 스냅샷 이후, 두 번째 계산 이전)
+    db_session.add(Transaction(
+        account_id=acc.id, asset_id=krw.id, transaction_date=date(2024, 1, 15),
+        type="DEPOSIT", total_amount=5000, currency="KRW", memo="Middle Transaction"
+    ))
+    
+    db_session.commit()
+
+    # 증권 계좌 테스트
+    response = client.post("/api/db/snapshots/brokerage/calculate", json={
+        "account_id": acc.id,
+        "snapshot_date": "2024-01-31",
+        "new_transactions": [],
+        "current_krw": 15000,
+        "current_usd": 0
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["existing_transactions"]) == 1
+    assert data["existing_transactions"][0]["memo"] == "Middle Transaction"
+
+    # 은행 계좌 테스트를 위해 타입 변경
+    acc.account_type = "BANK"
+    db_session.commit()
+
+    response = client.post("/api/db/snapshots/bank/calculate", json={
+        "account_id": acc.id,
+        "snapshot_date": "2024-01-31",
+        "new_transactions": []
+    })
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data["existing_transactions"]) == 1
+    assert data["existing_transactions"][0]["memo"] == "Middle Transaction"

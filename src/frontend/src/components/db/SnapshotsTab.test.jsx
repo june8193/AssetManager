@@ -63,6 +63,39 @@ describe('SnapshotsTab Component', () => {
     fireEvent.click(screen.getByText('다음 단계'));
     
     expect(await screen.findByText('증권계좌1')).toBeInTheDocument();
-    expect(screen.getByText(/기간 중 신규 내역/)).toBeInTheDocument();
+    expect(screen.getByText(/기간 중 내역/)).toBeInTheDocument();
+  });
+
+  it('계산 후 기존 내역(existingTransactions)이 렌더링되어야 함', async () => {
+    // 1. 마법사 진입 및 설정 완료
+    renderComponent();
+    fireEvent.click(await screen.findByText('스냅샷 생성 마법사'));
+    fireEvent.click(screen.getByText('증권계좌 스냅샷'));
+    fireEvent.change(screen.getByLabelText(/당일 환율/), { target: { value: '1350' } });
+    fireEvent.click(screen.getByText('다음 단계'));
+
+    // 2. 계산 요청 모킹 (기존 내역 포함)
+    const mockCalcResult = {
+      theoretical_krw: 1000000,
+      theoretical_usd: 1000,
+      diff_krw: 5000,
+      diff_usd: 5,
+      existing_transactions: [
+        { transaction_date: '2023-01-01', type: 'DEPOSIT', total_amount: 10000, currency: 'KRW', memo: '기존내역테스트' }
+      ]
+    };
+
+    fetch.mockImplementationOnce(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve(mockCalcResult)
+    }));
+
+    // 3. 계산 버튼 클릭
+    fireEvent.click(screen.getByText(/배당금\/차액 계산하기/));
+
+    // 4. 기존 내역 렌더링 확인
+    expect(await screen.findByText('기존내역테스트')).toBeInTheDocument();
+    expect(screen.getByText('기존')).toBeInTheDocument();
+    expect(screen.getByText('10,000')).toBeInTheDocument();
   });
 });

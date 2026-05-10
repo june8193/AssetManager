@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DB_API_BASE } from '../../config';
-import { Camera, Save, RefreshCw, AlertCircle, X, CheckCircle2, ChevronRight, ChevronLeft, Plus, Trash2, Wallet, Landmark } from 'lucide-react';
+import { Camera, Save, RefreshCw, AlertCircle, X, CheckCircle2, ChevronRight, ChevronLeft, Plus, Trash2, Wallet, Landmark, Calendar, Clock } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 
 /**
@@ -10,6 +10,7 @@ import { useMasking } from '../../contexts/MaskingContext';
 const SnapshotsTab = () => {
   const [snapshots, setSnapshots] = useState([]); // 스냅샷 목록 상태
   const [accounts, setAccounts] = useState([]);   // 전체 계좌 목록
+  const [latestInfo, setLatestInfo] = useState(null); // 최신 스냅샷 정보
   const [loading, setLoading] = useState(true);   // 로딩 상태
   const { maskValue } = useMasking();
 
@@ -47,14 +48,18 @@ const SnapshotsTab = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [snapRes, accRes] = await Promise.all([
+      const [snapRes, accRes, latestRes] = await Promise.all([
         fetch(`${DB_API_BASE}/snapshots`),
-        fetch(`${DB_API_BASE}/accounts`)
+        fetch(`${DB_API_BASE}/accounts`),
+        fetch(`${DB_API_BASE}/snapshots/latest`)
       ]);
       const snapData = await snapRes.json();
       const accData = await accRes.json();
+      const latestData = await latestRes.json();
+      
       setSnapshots(snapData);
       setAccounts(accData);
+      setLatestInfo(latestData);
     } catch (error) {
       console.error('스냅샷 데이터 로딩 오류:', error);
     } finally {
@@ -111,6 +116,7 @@ const SnapshotsTab = () => {
       if (!newFormData[acc.id]) {
         newFormData[acc.id] = {
           newTransactions: [],
+          existingTransactions: [],
           currentKrw: '0',
           currentUsd: '0',
           calcResult: null,
@@ -153,7 +159,11 @@ const SnapshotsTab = () => {
         const result = await response.json();
         setAccountsFormData(prev => ({
           ...prev,
-          [accId]: { ...prev[accId], calcResult: result }
+          [accId]: { 
+            ...prev[accId], 
+            calcResult: result,
+            existingTransactions: result.existing_transactions || []
+          }
         }));
       } else {
         alert('계산 중 오류가 발생했습니다.');
@@ -194,7 +204,11 @@ const SnapshotsTab = () => {
         const result = await response.json();
         setAccountsFormData(prev => ({
           ...prev,
-          [accId]: { ...prev[accId], calcResult: result }
+          [accId]: { 
+            ...prev[accId], 
+            calcResult: result,
+            existingTransactions: result.existing_transactions || []
+          }
         }));
       } else {
         alert('계산 중 오류가 발생했습니다.');
@@ -411,12 +425,33 @@ const SnapshotsTab = () => {
         <div className="space-y-4">
           <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
             <h5 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-              <RefreshCw size={14} /> 기간 중 신규 내역 (입출금, {isBank ? '이자, 세금' : '배당 등'})
+              <RefreshCw size={14} /> 기간 중 내역 (입출금, {isBank ? '이자, 세금' : '배당 등'})
             </h5>
             <div className="space-y-3">
-              {(data.newTransactions || []).map((tx, idx) => (
-                <div key={idx} className="bg-white p-3 rounded-lg border border-slate-100 space-y-2">
+              {/* 기존 DB에 저장된 내역 표시 */}
+              {(data.existingTransactions || []).map((tx, idx) => (
+                <div key={`existing-${idx}`} className="bg-slate-100/50 p-3 rounded-lg border border-slate-200 space-y-2 opacity-80">
                   <div className="flex gap-2 items-center flex-wrap">
+                    <span className="text-[10px] font-bold bg-slate-300 text-slate-700 px-1.5 py-0.5 rounded">기존</span>
+                    <span className="text-xs font-mono w-[100px] text-slate-500">{tx.transaction_date}</span>
+                    <span className="text-sm font-bold min-w-[60px] text-slate-600">
+                      {tx.type === 'DEPOSIT' ? '입금' : tx.type === 'WITHDRAW' ? '출금' : tx.type === 'INTEREST' ? '이자' : tx.type === 'TAX' ? '세금' : tx.type}
+                    </span>
+                    <span className="flex-1 text-sm font-mono font-bold text-slate-700">
+                      {tx.total_amount.toLocaleString()}
+                    </span>
+                    {!isBank && <span className="text-xs font-bold text-slate-500">{tx.currency}</span>}
+                    <span className="flex-[2] text-xs italic text-slate-500 truncate">{tx.memo || '-'}</span>
+                    <div className="w-8"></div> {/* 삭제 버튼 자리 확보용 */}
+                  </div>
+                </div>
+              ))}
+
+              {/* 신규 추가 내역 */}
+              {(data.newTransactions || []).map((tx, idx) => (
+                <div key={`new-${idx}`} className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm space-y-2 ring-1 ring-blue-50">
+                  <div className="flex gap-2 items-center flex-wrap">
+                    <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">신규</span>
                     <input 
                       type="date" 
                       value={tx.date || inputDate} 
@@ -452,7 +487,7 @@ const SnapshotsTab = () => {
                     )}
                     <input 
                       type="text" 
-                      placeholder="메모 (예: 축의금, 이자 등)" 
+                      placeholder="메모" 
                       value={tx.memo} 
                       onChange={(e) => updateTx(idx, 'memo', e.target.value)}
                       className="flex-[2] text-xs border-none focus:ring-0 bg-slate-50 rounded-md py-1.5 px-3 italic text-slate-600 min-w-[150px]"
@@ -651,6 +686,40 @@ const SnapshotsTab = () => {
           스냅샷 생성 마법사
         </button>
       </div>
+
+      {/* 최신 스냅샷 요약 정보 */}
+      {latestInfo && latestInfo.latest_date && (
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
+            <div className="w-12 h-12 rounded-xl bg-blue-50 flex items-center justify-center text-blue-600 border border-blue-100">
+              <Calendar size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">마지막 스냅샷 기준일</p>
+              <p className="text-xl font-bold text-slate-800 font-mono">{latestInfo.latest_date}</p>
+            </div>
+          </div>
+          <div className="bg-white border border-slate-200 rounded-2xl p-5 flex items-center gap-4 shadow-sm">
+            <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 border border-emerald-100">
+              <Clock size={24} />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-0.5">경과 일수</p>
+              <p className="text-xl font-bold text-slate-800 font-mono">
+                {(() => {
+                  const today = new Date();
+                  today.setHours(0, 0, 0, 0);
+                  const latest = new Date(latestInfo.latest_date);
+                  latest.setHours(0, 0, 0, 0);
+                  const diffTime = Math.abs(today - latest);
+                  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                  return diffDays;
+                })()}일 전
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse">
