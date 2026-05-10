@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
@@ -8,6 +8,9 @@ from .routers import watchlist, stocks, exchange, dashboard, db_manage, connecti
 from .services.kiwoom_service import KiwoomStockService
 from .services.backup_service import BackupService
 import datetime
+import os
+import signal
+import asyncio
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -63,6 +66,54 @@ app.include_router(dashboard.router)
 app.include_router(db_manage.router)
 app.include_router(connection.router)
 app.include_router(ratios.router)
+
+# 개발 모드 하트비트 및 자동 종료 로직
+class HeartbeatManager:
+    def __init__(self):
+        self.active_connections = set()
+        self.shutdown_timeout = 10
+        self.shutdown_task = None
+
+    async def add_connection(self, connection_id):
+        self.active_connections.add(connection_id)
+        if self.shutdown_task:
+            self.shutdown_task.cancel()
+            self.shutdown_task = None
+        print(f"WebSocket connected. Active connections: {len(self.active_connections)}")
+
+    async def remove_connection(self, connection_id):
+        if connection_id in self.active_connections:
+            self.active_connections.remove(connection_id)
+        print(f"WebSocket disconnected. Active connections: {len(self.active_connections)}")
+        
+        if len(self.active_connections) == 0:
+            self.shutdown_task = asyncio.create_task(self._delayed_shutdown())
+
+    async def _delayed_shutdown(self):
+        try:
+            print(f"Starting shutdown timer ({self.shutdown_timeout}s)...")
+            await asyncio.sleep(self.shutdown_timeout)
+            if len(self.active_connections) == 0:
+                print("No active connections. Shutting down server...")
+                os.kill(os.getpid(), signal.SIGINT)
+        except asyncio.CancelledError:
+            print("Shutdown timer cancelled.")
+
+heartbeat_manager = HeartbeatManager()
+
+if os.environ.get("DEBUG") == "true":
+    @app.websocket("/ws/dev/heartbeat")
+    async def dev_heartbeat(websocket: WebSocket):
+        await websocket.accept()
+        client_id = id(websocket)
+        await heartbeat_manager.add_connection(client_id)
+        
+        try:
+            while True:
+                # 클라이언트로부터 데이터를 기다림 (연결 유지 확인용)
+                await websocket.receive_text()
+        except WebSocketDisconnect:
+            await heartbeat_manager.remove_connection(client_id)
 
 if __name__ == "__main__":
     import uvicorn
