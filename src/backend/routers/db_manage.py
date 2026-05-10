@@ -33,6 +33,7 @@ class AccountSchema(BaseModel):
     Attributes:
         id (Optional[int]): 계좌 식별자 (생성 시 생략 가능)
         user_id (int): 사용자 식별자 (FK)
+        user_name (Optional[str]): 사용자 이름 (추가)
         name (str): 계좌 이름/번호
         provider (str): 금융 기관 이름
         alias (Optional[str]): 계좌 별칭
@@ -41,6 +42,7 @@ class AccountSchema(BaseModel):
     """
     id: Optional[int] = None
     user_id: int
+    user_name: Optional[str] = None
     name: str
     provider: str
     alias: Optional[str] = None
@@ -192,13 +194,23 @@ def get_users(db: Session = Depends(get_db)):
 # Accounts
 @router.get("/accounts", response_model=List[AccountSchema])
 def get_accounts(db: Session = Depends(get_db)):
-    """전체 계좌 목록을 조회합니다."""
-    return db.query(Account).order_by(Account.id.desc()).all()
+    """전체 계좌 목록을 조회합니다 (소유자 이름 포함)."""
+    results = db.query(Account, User.name.label("user_name")) \
+                .join(User, Account.user_id == User.id) \
+                .order_by(Account.id.desc()).all()
+    
+    accounts = []
+    for acc, user_name in results:
+        # Pydantic schema expects user_name to be present in the dict/object
+        acc_dict = {c.name: getattr(acc, c.name) for c in acc.__table__.columns}
+        acc_dict['user_name'] = user_name
+        accounts.append(AccountSchema(**acc_dict))
+    return accounts
 
 @router.post("/accounts", response_model=AccountSchema)
 def create_account(account: AccountSchema, db: Session = Depends(get_db)):
     """새로운 계좌를 생성합니다."""
-    data = account.model_dump(exclude={"id"})
+    data = account.model_dump(exclude={"id", "user_name"})
     db_account = Account(**data)
     db.add(db_account)
     db.commit()
@@ -211,7 +223,7 @@ def update_account(account_id: int, account: AccountSchema, db: Session = Depend
     db_account = db.query(Account).filter(Account.id == account_id).first()
     if not db_account:
         raise HTTPException(status_code=404, detail="Account not found")
-    data = account.model_dump(exclude={"id"})
+    data = account.model_dump(exclude={"id", "user_name"})
     for key, value in data.items():
         setattr(db_account, key, value)
     db.commit()

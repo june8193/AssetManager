@@ -22,6 +22,35 @@ def test_get_users(test_user):
     assert len(data) >= 1
     assert any(u["name"] == "Test User" for u in data)
 
+def test_get_accounts_includes_user_name(db_session, test_user):
+    """계좌 목록 조회 시 소유자 이름(user_name)이 포함되어 있는지 확인합니다."""
+    # 계좌 생성
+    account = Account(
+        user_id=test_user.id,
+        name="TEST-ACC-NAME",
+        provider="TestProvider",
+        account_type="BROKERAGE",
+        is_active=True
+    )
+    db_session.add(account)
+    db_session.commit()
+    db_session.refresh(account)
+
+    # API 호출
+    response = client.get("/api/db/accounts")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert len(data) >= 1
+    
+    # 생성한 계좌 찾기
+    target_acc = next((a for a in data if a["id"] == account.id), None)
+    assert target_acc is not None
+    
+    # user_name 필드가 있고, 올바른 값이 들어있는지 확인
+    assert "user_name" in target_acc
+    assert target_acc["user_name"] == "Test User"
+
 def test_create_and_get_account(test_user):
     user_id = test_user.id
 
