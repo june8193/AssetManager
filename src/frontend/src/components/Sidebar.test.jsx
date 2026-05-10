@@ -58,6 +58,40 @@ describe('Sidebar Component', () => {
     });
   });
 
+  it('DB 관리 메뉴 클릭 시 하위 메뉴가 표시되어야 한다', () => {
+    renderSidebar();
+    
+    // 초기에는 하위 메뉴가 보이지 않음
+    expect(screen.queryByText('마스터 관리')).not.toBeInTheDocument();
+    
+    // DB 관리 클릭
+    const dbMenu = screen.getByText('DB 관리');
+    fireEvent.click(dbMenu);
+    
+    // 하위 메뉴가 나타남
+    expect(screen.getByText('마스터 관리')).toBeInTheDocument();
+    expect(screen.getByText('스냅샷 생성')).toBeInTheDocument();
+  });
+
+  it('사이드바가 접힌 상태에서 DB 관리 클릭 시 사이드바가 펼쳐지고 하위 메뉴가 보여야 한다', () => {
+    renderSidebar();
+    
+    // 사이드바 접기
+    const toggleButton = screen.getByLabelText('사이드바 접기');
+    fireEvent.click(toggleButton);
+    expect(screen.queryByText('대시보드')).not.toBeInTheDocument();
+    
+    // DB 관리 아이콘 클릭 (title로 찾음)
+    const dbMenuIcon = screen.getByTitle('DB 관리');
+    fireEvent.click(dbMenuIcon);
+    
+    // 사이드바가 펼쳐졌는지 확인
+    expect(screen.getByText('대시보드')).toBeInTheDocument();
+    
+    // 하위 메뉴가 나타남
+    expect(screen.getByText('마스터 관리')).toBeInTheDocument();
+  });
+
   it('모자이크 모드 버튼 클릭 시 텍스트가 변경되어야 한다', () => {
     renderSidebar();
     

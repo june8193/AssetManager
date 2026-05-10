@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -10,7 +10,14 @@ const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
   { path: '/watchlist', label: '관심종목', icon: Activity },
   { path: '/ratios', label: '비율 계산기', icon: Calculator },
-  { path: '/db', label: 'DB 관리', icon: Database },
+  { 
+    label: 'DB 관리', 
+    icon: Database,
+    subItems: [
+      { path: '/db', label: '마스터 관리' },
+      { path: '/db/snapshots/new', label: '스냅샷 생성' }
+    ]
+  },
   { path: '/connection', label: 'API 연결 관리', icon: LinkIcon },
 ];
 
@@ -19,10 +26,12 @@ const MENU_ITEMS = [
  */
 const Sidebar = () => {
   const [isOpen, setIsOpen] = useState(true);
+  const [openMenus, setOpenMenus] = useState({});
   const location = useLocation();
   const { isMasked, toggleMasking } = useMasking();
 
   const isActive = (path) => {
+    if (!path) return false;
     if (path === '/') {
       return location.pathname === '/' || location.pathname === '/dashboard';
     }
@@ -32,7 +41,27 @@ const Sidebar = () => {
     return location.pathname === path;
   };
 
+  const isParentActive = (item) => {
+    if (item.path) return isActive(item.path);
+    if (item.subItems) {
+      return item.subItems.some(subItem => isActive(subItem.path));
+    }
+    return false;
+  };
+
   const toggleSidebar = () => setIsOpen(!isOpen);
+
+  const toggleMenu = (label) => {
+    if (!isOpen) {
+      setIsOpen(true);
+      setOpenMenus(prev => ({ ...prev, [label]: true }));
+      return;
+    }
+    setOpenMenus(prev => ({
+      ...prev,
+      [label]: !prev[label]
+    }));
+  };
 
   return (
     <div className={`flex flex-col bg-white border-r border-slate-200 transition-all duration-300 ${isOpen ? 'w-64' : 'w-20'} relative z-50`}>
@@ -61,20 +90,58 @@ const Sidebar = () => {
       <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-2">
         {MENU_ITEMS.map((item) => {
           const Icon = item.icon;
-          const active = isActive(item.path);
+          const hasSubItems = item.subItems && item.subItems.length > 0;
+          const active = isParentActive(item);
+          const isExpanded = openMenus[item.label];
           
           return (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'
-              } ${!isOpen && 'justify-center'}`}
-              title={!isOpen ? item.label : ''}
-            >
-              <Icon size={20} className="flex-shrink-0" />
-              {isOpen && <span className="whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>}
-            </Link>
+            <React.Fragment key={item.label}>
+              {hasSubItems ? (
+                <button
+                  onClick={() => toggleMenu(item.label)}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all w-full text-left ${
+                    active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'
+                  } ${!isOpen && 'justify-center'}`}
+                  title={!isOpen ? item.label : ''}
+                >
+                  <Icon size={20} className="flex-shrink-0" />
+                  {isOpen && (
+                    <>
+                      <span className="whitespace-nowrap overflow-hidden text-ellipsis flex-1">{item.label}</span>
+                      {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </>
+                  )}
+                </button>
+              ) : (
+                <Link
+                  to={item.path}
+                  className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
+                    active ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50'
+                  } ${!isOpen && 'justify-center'}`}
+                  title={!isOpen ? item.label : ''}
+                >
+                  <Icon size={20} className="flex-shrink-0" />
+                  {isOpen && <span className="whitespace-nowrap overflow-hidden text-ellipsis">{item.label}</span>}
+                </Link>
+              )}
+
+              {/* 하위 메뉴 */}
+              {isOpen && hasSubItems && isExpanded && (
+                <div className="flex flex-col gap-1 ml-4 border-l border-slate-100 pl-2">
+                  {item.subItems.map((subItem) => (
+                    <Link
+                      key={subItem.path}
+                      to={subItem.path}
+                      className={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                        isActive(subItem.path) ? 'text-blue-700 bg-blue-50/50' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="whitespace-nowrap overflow-hidden text-ellipsis">{subItem.label}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </React.Fragment>
           );
         })}
       </div>
