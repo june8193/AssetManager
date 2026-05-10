@@ -6,6 +6,7 @@ import WatchlistPage from './pages/WatchlistPage';
 import ConnectionPage from './pages/ConnectionPage';
 import DbManagementPage from './pages/DbManagementPage';
 import RatioCalculatorPage from './pages/RatioCalculatorPage';
+import SnapshotWizardPage from './pages/SnapshotWizardPage';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
               <Route path="/ratios" element={<RatioCalculatorPage />} />
               <Route path="/connection" element={<ConnectionPage />} />
               <Route path="/db" element={<DbManagementPage />} />
+              <Route path="/db/snapshots/new" element={<SnapshotWizardPage />} />
             </Routes>
           </div>
         </div>

@@ -1,8 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import SnapshotsTab from './SnapshotsTab';
 import { MaskingProvider } from '../../contexts/MaskingContext';
+
+// useNavigate 모킹
+const mockNavigate = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  };
+});
 
 // fetch 모킹
 global.fetch = vi.fn();
@@ -25,9 +36,11 @@ describe('SnapshotsTab Component', () => {
   });
 
   const renderComponent = () => render(
-    <MaskingProvider>
-      <SnapshotsTab />
-    </MaskingProvider>
+    <MemoryRouter>
+      <MaskingProvider>
+        <SnapshotsTab />
+      </MaskingProvider>
+    </MemoryRouter>
   );
 
   it('스냅샷 생성 마법사 버튼이 렌더링되어야 함', async () => {
@@ -35,67 +48,12 @@ describe('SnapshotsTab Component', () => {
     expect(await screen.findByText('스냅샷 생성 마법사')).toBeInTheDocument();
   });
 
-  it('마법사 클릭 시 증권계좌/은행계좌 선택 화면이 표시되어야 함', async () => {
+  it('마법사 클릭 시 신규 스냅샷 페이지로 이동해야 함', async () => {
     renderComponent();
     const btn = await screen.findByText('스냅샷 생성 마법사');
     fireEvent.click(btn);
     
-    expect(screen.getByText('증권계좌 스냅샷')).toBeInTheDocument();
-    expect(screen.getByText('은행계좌 스냅샷')).toBeInTheDocument();
-  });
-
-  it('증권계좌 선택 후 다음 단계(기본 설정)로 이동해야 함', async () => {
-    renderComponent();
-    fireEvent.click(await screen.findByText('스냅샷 생성 마법사'));
-    fireEvent.click(screen.getByText('증권계좌 스냅샷'));
-    
-    expect(screen.getByText(/스냅샷 기본 설정/)).toBeInTheDocument();
-    expect(screen.getByLabelText('기준 일자')).toBeInTheDocument();
-    expect(screen.getByLabelText(/당일 환율/)).toBeInTheDocument();
-  });
-
-  it('기본 설정 입력 후 계좌별 마법사 화면으로 이동해야 함', async () => {
-    renderComponent();
-    fireEvent.click(await screen.findByText('스냅샷 생성 마법사'));
-    fireEvent.click(screen.getByText('증권계좌 스냅샷'));
-    
-    fireEvent.change(screen.getByLabelText(/당일 환율/), { target: { value: '1350' } });
-    fireEvent.click(screen.getByText('다음 단계'));
-    
-    expect(await screen.findByText('증권계좌1')).toBeInTheDocument();
-    expect(screen.getByText(/기간 중 내역/)).toBeInTheDocument();
-  });
-
-  it('계산 후 기존 내역(existingTransactions)이 렌더링되어야 함', async () => {
-    // 1. 마법사 진입 및 설정 완료
-    renderComponent();
-    fireEvent.click(await screen.findByText('스냅샷 생성 마법사'));
-    fireEvent.click(screen.getByText('증권계좌 스냅샷'));
-    fireEvent.change(screen.getByLabelText(/당일 환율/), { target: { value: '1350' } });
-    fireEvent.click(screen.getByText('다음 단계'));
-
-    // 2. 계산 요청 모킹 (기존 내역 포함)
-    const mockCalcResult = {
-      theoretical_krw: 1000000,
-      theoretical_usd: 1000,
-      diff_krw: 5000,
-      diff_usd: 5,
-      existing_transactions: [
-        { transaction_date: '2023-01-01', type: 'DEPOSIT', total_amount: 10000, currency: 'KRW', memo: '기존내역테스트' }
-      ]
-    };
-
-    fetch.mockImplementationOnce(() => Promise.resolve({
-      ok: true,
-      json: () => Promise.resolve(mockCalcResult)
-    }));
-
-    // 3. 계산 버튼 클릭
-    fireEvent.click(screen.getByText(/배당금\/차액 계산하기/));
-
-    // 4. 기존 내역 렌더링 확인
-    expect(await screen.findByText('기존내역테스트')).toBeInTheDocument();
-    expect(screen.getByText('기존')).toBeInTheDocument();
-    expect(screen.getByText('10,000')).toBeInTheDocument();
+    expect(mockNavigate).toHaveBeenCalledWith('/db/snapshots/new');
   });
 });
+
