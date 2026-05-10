@@ -47,12 +47,17 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="AssetManager Backend API", lifespan=lifespan)
 
 # CORS 활성화 (Vite 개발 서버의 로컬 접속을 허용)
+frontend_port = os.environ.get("ASSET_MANAGER_FRONTEND_PORT", "5173")
+allow_origins = [
+    f"http://localhost:{frontend_port}",
+    f"http://127.0.0.1:{frontend_port}"
+]
+# 기본 포트(5173, 5174)도 하드코딩된 경우를 대비해 유지할 수 있지만, 요구사항에 맞춰 동적으로 설정합니다.
+# 만약 여러 포트를 허용해야 한다면 리스트를 확장합니다.
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173", "http://127.0.0.1:5173",
-        "http://localhost:5174", "http://127.0.0.1:5174"
-    ],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -117,4 +122,5 @@ if os.environ.get("DEBUG") == "true":
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.environ.get("ASSET_MANAGER_BACKEND_PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
