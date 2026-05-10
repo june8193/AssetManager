@@ -438,9 +438,13 @@ class DashboardService:
             currency = tx.currency
             if currency not in theoretical:
                 continue # KRW, USD 외 통화는 일단 제외
-                
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
+
+            if tx.type in ['DEPOSIT', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
                 theoretical[currency] += tx.total_amount
+            elif tx.type == 'INITIAL_BALANCE':
+                # INITIAL_BALANCE는 자산이 현금(KRW, USD)인 경우에만 더합니다.
+                if tx.asset and tx.asset.ticker in ['KRW', 'USD']:
+                    theoretical[currency] += tx.total_amount
             elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
                 theoretical[currency] -= tx.total_amount
             elif tx.type == 'BUY':
