@@ -31,6 +31,7 @@ def main():
     env = os.environ.copy()
     env["ASSET_MANAGER_BACKEND_PORT"] = str(backend_port)
     env["ASSET_MANAGER_FRONTEND_PORT"] = str(frontend_port)
+    env["DEBUG"] = "true"  # 하트비트 활성화를 위해 설정
 
     print("\n" + "="*50)
     print("   AssetManager Development Servers")
@@ -67,8 +68,14 @@ def main():
         text=True
     )
 
+    # 3. 브라우저 자동 열기
+    import webbrowser
+    print(f"\n[3/3] Opening browser at http://localhost:{frontend_port}...")
+    webbrowser.open(f"http://localhost:{frontend_port}")
+
     print("\n" + "-"*50)
-    print(" 모든 서버가 구동되었습니다. 종료하려면 Ctrl+C를 누르세요.")
+    print(" 모든 서버가 구동되었습니다. 브라우저를 닫으면 약 10초 후 서버가 자동으로 종료됩니다.")
+    print(" (종료하려면 터미널에서 Ctrl+C를 눌러도 됩니다.)")
     print("-"*50 + "\n")
 
     try:
