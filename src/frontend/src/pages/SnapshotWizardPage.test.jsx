@@ -5,6 +5,8 @@ import SnapshotWizardPage from './SnapshotWizardPage';
 
 // window.confirm 모킹
 window.confirm = vi.fn();
+// window.alert 모킹
+window.alert = vi.fn();
 
 // fetch 모킹
 global.fetch = vi.fn();
@@ -13,90 +15,149 @@ const renderWithRouter = (ui) => {
   return render(ui, { wrapper: BrowserRouter });
 };
 
-describe('SnapshotWizardPage', () => {
+const mockAccounts = [
+  { id: 1, name: '증권 계좌 1', provider: '미래에셋', account_type: 'BROKERAGE', is_active: true, user_name: '홍길동' },
+  { id: 2, name: '은행 계좌 1', provider: '국민은행', account_type: 'BANK', is_active: true, user_name: '홍길동' }
+];
+
+describe('SnapshotWizardPage (Unified 5-Step)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     global.fetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve([
-        { id: 1, name: '테스트 계좌', provider: '테스트 증권', account_type: 'BROKERAGE', is_active: true, user_name: '홍길동' }
-      ])
+      json: () => Promise.resolve(mockAccounts)
     });
+    window.confirm.mockReturnValue(true);
   });
 
-  it('초기 렌더링 시 1단계(유형 선택)가 표시된다', () => {
+  it('초기 렌더링 시 1단계(기본 정보 및 증권 계좌 선택)가 표시된다', async () => {
     renderWithRouter(<SnapshotWizardPage />);
     
     expect(screen.getByText('신규 스냅샷 생성')).toBeDefined();
-    expect(screen.getByText('스냅샷 유형을 선택하세요')).toBeDefined();
-    expect(screen.getByText('증권사')).toBeDefined();
-    expect(screen.getByText('은행')).toBeDefined();
-  });
-
-  it('유형 선택 시 2단계로 이동한다', async () => {
-    renderWithRouter(<SnapshotWizardPage />);
+    expect(screen.getByText('기본 정보 및 증권 계좌 선택')).toBeDefined();
     
-    // 증권사 버튼 클릭
-    const brokerageButton = screen.getByText('증권사');
-    fireEvent.click(brokerageButton);
-    
-    // 2단계 제목 확인
-    expect(screen.getByText('기본 설정 및 계좌 선택')).toBeDefined();
-    // 상단 인디케이터의 '계좌 선택' 텍스트 확인
-    expect(screen.getAllByText('계좌 선택')).toBeDefined();
-  });
-
-  it('이전 버튼 클릭 시 이전 단계로 돌아간다', async () => {
-    renderWithRouter(<SnapshotWizardPage />);
-    
-    // 1단계 -> 2단계
-    fireEvent.click(screen.getByText('증권사'));
-    expect(screen.getByText('기본 설정 및 계좌 선택')).toBeDefined();
-    
-    // 2단계 -> 1단계
-    const prevButton = screen.getByRole('button', { name: /이전/i });
-    fireEvent.click(prevButton);
-    expect(screen.getByText('스냅샷 유형을 선택하세요')).toBeDefined();
-  });
-
-  it('취소 버튼 클릭 시 확인 창이 뜬다', () => {
-    renderWithRouter(<SnapshotWizardPage />);
-    
-    const cancelButton = screen.getByText('취소');
-    fireEvent.click(cancelButton);
-    
-    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('취소하시겠습니까'));
-  });
-
-  it('2단계에서 계좌 선택 후 다음 클릭 시 3단계로 이동한다', async () => {
-    renderWithRouter(<SnapshotWizardPage />);
-    
-    // 1단계 -> 2단계
-    fireEvent.click(screen.getByText('증권사'));
-    
-    // 계좌가 로드될 때까지 대기
+    // 계좌 로드 대기
     await waitFor(() => {
-      expect(screen.getByText('테스트 계좌')).toBeDefined();
+      expect(screen.getByText('증권 계좌 1')).toBeDefined();
+      // 은행 계좌는 1단계에 나오지 않아야 함
+      expect(screen.queryByText('은행 계좌 1')).toBeNull();
     });
+  });
 
-    // 환율 입력
-    const exchangeRateInput = screen.getByPlaceholderText(/예: 1350.5/);
-    fireEvent.change(exchangeRateInput, { target: { value: '1350' } });
+  it('1단계에서 필수 정보 미입력 시 다음 단계로 이동 불가', async () => {
+    renderWithRouter(<SnapshotWizardPage />);
+    
+    await waitFor(() => expect(screen.getByText('증권 계좌 1')).toBeDefined());
 
-    // 계좌 선택 (테이블 행 클릭)
-    const accountRow = screen.getByText('테스트 계좌').closest('tr');
-    fireEvent.click(accountRow);
-
-    // 다음 버튼 클릭
     const nextButton = screen.getByRole('button', { name: /다음/i });
     fireEvent.click(nextButton);
 
-    // 3단계 제목 확인
-    expect(screen.getByText('상세 정보 입력')).toBeDefined();
-    // 3단계 상단 '1 / 1 계좌' 텍스트 확인 (split 되어 있으므로 부분 텍스트로 확인)
-    expect(screen.getByText('1')).toBeDefined();
-    expect(screen.getByText('/')).toBeDefined();
-    expect(screen.getByText(/1 계좌/)).toBeDefined();
-    expect(screen.getByText('테스트 계좌')).toBeDefined();
+    expect(window.alert).toHaveBeenCalledWith('올바른 환율을 입력해주세요.');
+  });
+
+  it('증권 계좌 선택 없이 진행 시 건너뛰기 확인 창이 뜬다', async () => {
+    renderWithRouter(<SnapshotWizardPage />);
+    
+    await waitFor(() => expect(screen.getByText('증권 계좌 1')).toBeDefined());
+
+    // 환율 입력
+    const rateInput = screen.getByPlaceholderText(/예: 1350.5/);
+    fireEvent.change(rateInput, { target: { value: '1350' } });
+
+    const nextButton = screen.getByRole('button', { name: /다음/i });
+    fireEvent.click(nextButton);
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('증권사 단계를 건너뛰시겠습니까'));
+  });
+
+  it('증권 계좌 정산 후 은행 계좌 선택 단계로 이동한다', async () => {
+    // Mock for calculation
+    global.fetch.mockImplementation((url) => {
+      if (url.includes('/accounts')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      }
+      if (url.includes('/calculate')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ diff_krw: 1000, diff_usd: 0, existing_transactions: [] }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderWithRouter(<SnapshotWizardPage />);
+    
+    await waitFor(() => expect(screen.getByText('증권 계좌 1')).toBeDefined());
+
+    // 1단계 입력
+    fireEvent.change(screen.getByPlaceholderText(/예: 1350.5/), { target: { value: '1350' } });
+    fireEvent.click(screen.getByText('증권 계좌 1'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // 2단계: 증권 상세 입력
+    expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined();
+    
+    // 계산 버튼 클릭
+    fireEvent.click(screen.getByText('정산 결과 계산하기'));
+    
+    await waitFor(() => {
+      expect(screen.getByText(/1,000원/)).toBeDefined();
+    });
+
+    // 확정 버튼 클릭
+    fireEvent.click(screen.getByText('이 결과로 확정'));
+
+    // 다음 버튼 클릭 (Step 3로 이동)
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // 3단계: 은행 계좌 선택
+    expect(screen.getByRole('heading', { name: '은행 계좌 선택', level: 2 })).toBeDefined();
+    expect(screen.getByText('은행 계좌 1')).toBeDefined();
+  });
+
+  it('통합 저장 프로세스 검증 (증권1 + 은행1)', async () => {
+    global.fetch.mockImplementation((url) => {
+      if (url.includes('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.includes('/brokerage/calculate')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ diff_krw: 500, diff_usd: 0 }) });
+      if (url.includes('/bank/calculate')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ theoretical_krw: 2000000 }) });
+      if (url.includes('/unified/save')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success' }) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderWithRouter(<SnapshotWizardPage />);
+    
+    // Step 1
+    await waitFor(() => expect(screen.getByText('증권 계좌 1')).toBeDefined());
+    fireEvent.change(screen.getByPlaceholderText(/예: 1350.5/), { target: { value: '1350' } });
+    fireEvent.click(screen.getByText('증권 계좌 1'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 2
+    fireEvent.click(screen.getByText('정산 결과 계산하기'));
+    await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeDefined());
+    fireEvent.click(screen.getByText('이 결과로 확정'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 3
+    expect(screen.getByRole('heading', { name: '은행 계좌 선택', level: 2 })).toBeDefined();
+    fireEvent.click(screen.getByText('은행 계좌 1'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 4
+    expect(screen.getByText('은행 상세 정보 입력')).toBeDefined();
+    fireEvent.click(screen.getByText('예상 잔액 계산하기'));
+    await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeDefined());
+    fireEvent.click(screen.getByText('이 결과로 확정'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 5
+    expect(screen.getByText('최종 확인')).toBeDefined();
+    expect(screen.getByText('증권 계좌 1')).toBeDefined();
+    expect(screen.getByText('은행 계좌 1')).toBeDefined();
+
+    const saveButton = screen.getByRole('button', { name: /저장하기/i });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledWith(expect.stringContaining('/unified/save'), expect.any(Object));
+      expect(window.alert).toHaveBeenCalledWith('스냅샷이 성공적으로 저장되었습니다.');
+    });
   });
 });

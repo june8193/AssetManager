@@ -12,11 +12,16 @@ SETTINGS_PATH = BASE_DIR / "settings.json"
 
 def load_database_url():
     """settings.json 파일에서 데이터베이스 URL을 로드합니다."""
-    # 테스트 환경(pytest)인 경우 안전을 위해 별도의 테스트용 DB 파일 사용
+    # 1. 테스트 환경(pytest)인 경우 격리된 테스트용 DB 사용
     if "pytest" in sys.modules:
         return "sqlite:///./test_pytest.db"
 
-    # 기본값 설정 (src/assets.db)
+    # 2. 개발 환경(APP_ENV=development)인 경우 개발용 DB 사용
+    if os.getenv("APP_ENV") == "development":
+        dev_db_path = BASE_DIR / "src" / "dev_assets.db"
+        return f"sqlite:///{dev_db_path}"
+
+    # 3. 기본값 설정 (운영용 DB)
     default_db_path = BASE_DIR / "src" / "assets.db"
     default_url = f"sqlite:///{default_db_path}"
     

@@ -1,36 +1,36 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, ChevronLeft, ChevronRight, Check, LayoutGrid, Settings, ListChecks, FileSearch, AlertCircle, Calendar, DollarSign, Wallet, Landmark, Plus, Trash2, X, RefreshCw, CheckCircle2, Save } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Check, Settings, ListChecks, FileSearch, Calendar, DollarSign, Wallet, Landmark, Plus, Trash2, X, RefreshCw, CheckCircle2, Save } from 'lucide-react';
 import { DB_API_BASE } from '../config';
 
 /**
- * 신규 스냅샷 생성을 위한 위저드 페이지 컴포넌트입니다.
- * 4단계의 과정을 통해 증권사 또는 은행의 자산 상태를 기록합니다.
+ * 신규 스냅샷 생성을 위한 통합 위저드 페이지 컴포넌트입니다.
+ * 5단계의 과정을 통해 증권사와 은행의 자산 상태를 한 번에 기록합니다.
  */
 const SnapshotWizardPage = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
-  const [snapshotType, setSnapshotType] = useState(null); // 'brokerage' | 'bank'
 
-  // Step 2 관련 상태
+  // 기본 정보 및 계좌 목록 상태
   const [inputDate, setInputDate] = useState(new Date().toISOString().split('T')[0]);
   const [exchangeRate, setExchangeRate] = useState('');
   const [accounts, setAccounts] = useState([]);
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
 
-  // Step 3 관련 상태
+  // 상세 입력 관련 상태
   const [currentAccIdx, setCurrentAccIdx] = useState(0);
   const [accountsFormData, setAccountsFormData] = useState({});
   const [processing, setProcessing] = useState(false);
 
-  const totalSteps = 4;
+  const totalSteps = 5;
 
   const steps = [
-    { id: 1, label: '유형 선택', icon: <LayoutGrid size={18} /> },
-    { id: 2, label: '계좌 선택', icon: <Settings size={18} /> },
-    { id: 3, label: '상세 입력', icon: <ListChecks size={18} /> },
-    { id: 4, label: '최종 확인', icon: <FileSearch size={18} /> },
+    { id: 1, label: '기본 정보/증권 선택', icon: <Settings size={18} /> },
+    { id: 2, label: '증권 상세 입력', icon: <ListChecks size={18} /> },
+    { id: 3, label: '은행 계좌 선택', icon: <Landmark size={18} /> },
+    { id: 4, label: '은행 상세 입력', icon: <ListChecks size={18} /> },
+    { id: 5, label: '최종 확인', icon: <FileSearch size={18} /> },
   ];
 
   // 계좌 데이터 가져오기
@@ -53,19 +53,23 @@ const SnapshotWizardPage = () => {
     fetchAccounts();
   }, []);
 
-  // Step 3 폼 데이터 초기화
-  const initializeStep3Data = () => {
+  // 계좌 필터링
+  const brokerageAccounts = accounts.filter(acc => acc.is_active && acc.account_type === 'BROKERAGE');
+  const bankAccounts = accounts.filter(acc => acc.is_active && acc.account_type === 'BANK');
+
+  // 상세 입력을 위한 폼 데이터 초기화
+  const initializeStepFormData = (targetAccounts) => {
     const newFormData = { ...accountsFormData };
-    // 선택된 계좌뿐만 아니라 모든 활성 계좌를 초기화하여 최종 단계에서 누락되지 않도록 함
-    filteredAccounts.forEach(acc => {
+    targetAccounts.forEach(acc => {
       if (!newFormData[acc.id]) {
         newFormData[acc.id] = {
           newTransactions: [],
           existingTransactions: [],
           currentKrw: '0',
           currentUsd: '0',
+          totalValuation: '0',
           calcResult: null,
-          isConfirmed: !selectedAccountIds.includes(acc.id)
+          isConfirmed: false
         };
       }
     });
@@ -74,24 +78,37 @@ const SnapshotWizardPage = () => {
   };
 
   const nextStep = () => {
-    if (step === 2) {
+    if (step === 1) {
       if (!inputDate) {
         alert('기준 일자를 선택해주세요.');
         return;
       }
-      if (snapshotType === 'brokerage' && (!exchangeRate || isNaN(exchangeRate))) {
+      if (!exchangeRate || isNaN(exchangeRate)) {
         alert('올바른 환율을 입력해주세요.');
         return;
       }
-      if (selectedAccountIds.length === 0) {
-        alert('최소 하나 이상의 계좌를 선택해주세요.');
-        return;
+      
+      const selectedBrokerageIds = selectedAccountIds.filter(id => 
+        brokerageAccounts.some(acc => acc.id === id)
+      );
+      
+      if (selectedBrokerageIds.length === 0) {
+        if (window.confirm('선택된 증권 계좌가 없습니다. 증권사 단계를 건너뛰시겠습니까?')) {
+          setStep(3);
+          return;
+        } else {
+          return;
+        }
       }
-      initializeStep3Data();
+      
+      initializeStepFormData(brokerageAccounts.filter(acc => selectedBrokerageIds.includes(acc.id)));
     }
     
-    if (step === 3) {
-      const currentAccountId = selectedAccountIds[currentAccIdx];
+    else if (step === 2) {
+      const selectedBrokerageIds = selectedAccountIds.filter(id => 
+        brokerageAccounts.some(acc => acc.id === id)
+      );
+      const currentAccountId = selectedBrokerageIds[currentAccIdx];
       const currentData = accountsFormData[currentAccountId];
       
       if (!currentData?.isConfirmed) {
@@ -99,7 +116,51 @@ const SnapshotWizardPage = () => {
         return;
       }
 
-      if (currentAccIdx < selectedAccountIds.length - 1) {
+      if (currentAccIdx < selectedBrokerageIds.length - 1) {
+        setCurrentAccIdx(currentAccIdx + 1);
+        return;
+      }
+    }
+
+    else if (step === 3) {
+      const selectedBankIds = selectedAccountIds.filter(id => 
+        bankAccounts.some(acc => acc.id === id)
+      );
+      
+      const selectedBrokerageIds = selectedAccountIds.filter(id => 
+        brokerageAccounts.some(acc => acc.id === id)
+      );
+
+      if (selectedBrokerageIds.length === 0 && selectedBankIds.length === 0) {
+        alert('최소 하나 이상의 계좌(증권 또는 은행)를 선택해야 합니다.');
+        return;
+      }
+
+      if (selectedBankIds.length === 0) {
+        if (window.confirm('선택된 은행 계좌가 없습니다. 바로 최종 확인으로 이동하시겠습니까?')) {
+          setStep(5);
+          return;
+        } else {
+          return;
+        }
+      }
+
+      initializeStepFormData(bankAccounts.filter(acc => selectedBankIds.includes(acc.id)));
+    }
+
+    else if (step === 4) {
+      const selectedBankIds = selectedAccountIds.filter(id => 
+        bankAccounts.some(acc => acc.id === id)
+      );
+      const currentAccountId = selectedBankIds[currentAccIdx];
+      const currentData = accountsFormData[currentAccountId];
+      
+      if (!currentData?.isConfirmed) {
+        alert('현재 계좌의 정산 결과를 확인하고 확인 버튼을 눌러주세요.');
+        return;
+      }
+
+      if (currentAccIdx < selectedBankIds.length - 1) {
         setCurrentAccIdx(currentAccIdx + 1);
         return;
       }
@@ -109,12 +170,37 @@ const SnapshotWizardPage = () => {
   };
 
   const prevStep = () => {
-    if (step === 3) {
+    if (step === 2 || step === 4) {
       if (currentAccIdx > 0) {
         setCurrentAccIdx(currentAccIdx - 1);
         return;
       }
     }
+    
+    if (step === 3) {
+      const selectedBrokerageIds = selectedAccountIds.filter(id => 
+        brokerageAccounts.some(acc => acc.id === id)
+      );
+      if (selectedBrokerageIds.length === 0) {
+        setStep(1);
+        return;
+      }
+      // Step 2로 돌아갈 때는 마지막 계좌 인덱스로 설정
+      setCurrentAccIdx(selectedBrokerageIds.length - 1);
+    }
+
+    if (step === 5) {
+      const selectedBankIds = selectedAccountIds.filter(id => 
+        bankAccounts.some(acc => acc.id === id)
+      );
+      if (selectedBankIds.length === 0) {
+        setStep(3);
+        return;
+      }
+      // Step 4로 돌아갈 때는 마지막 계좌 인덱스로 설정
+      setCurrentAccIdx(selectedBankIds.length - 1);
+    }
+
     if (step > 1) setStep(step - 1);
   };
 
@@ -130,13 +216,7 @@ const SnapshotWizardPage = () => {
     );
   };
 
-  const filteredAccounts = accounts.filter(acc => 
-    acc.is_active && acc.account_type === (snapshotType === 'brokerage' ? 'BROKERAGE' : 'BANK')
-  );
-
-  const selectedAccounts = accounts.filter(acc => selectedAccountIds.includes(acc.id));
-
-  // --- Step 3 관련 핸들러 ---
+  // --- 상세 정보 핸들러 ---
 
   const calculateAccountDiff = async (accId) => {
     const data = accountsFormData[accId];
@@ -234,10 +314,15 @@ const SnapshotWizardPage = () => {
       [accId]: { ...prev[accId], isConfirmed: true }
     }));
     
-    if (currentAccIdx < selectedAccountIds.length - 1) {
+    // 자동 다음 계좌 이동
+    const isBrokerage = step === 2;
+    const targetAccounts = isBrokerage ? brokerageAccounts : bankAccounts;
+    const selectedIds = selectedAccountIds.filter(id => 
+      targetAccounts.some(acc => acc.id === id)
+    );
+
+    if (currentAccIdx < selectedIds.length - 1) {
       setCurrentAccIdx(currentAccIdx + 1);
-    } else {
-      setStep(4);
     }
   };
 
@@ -269,60 +354,57 @@ const SnapshotWizardPage = () => {
   const handleFinalSave = async () => {
     try {
       setProcessing(true);
-      let payload;
-      let endpoint;
+      
+      const selectedBrokerageIds = selectedAccountIds.filter(id => 
+        brokerageAccounts.some(acc => acc.id === id)
+      );
+      const selectedBankIds = selectedAccountIds.filter(id => 
+        bankAccounts.some(acc => acc.id === id)
+      );
 
-      if (snapshotType === 'brokerage') {
-        endpoint = `${DB_API_BASE}/snapshots/brokerage/save`;
-        payload = {
-          snapshot_date: inputDate,
-          exchange_rate: parseFloat(exchangeRate),
-          accounts: filteredAccounts.map(acc => {
-            const data = accountsFormData[acc.id] || { newTransactions: [] };
-            return {
-              account_id: acc.id,
-              new_transactions: (data.newTransactions || []).map(tx => ({
-                account_id: acc.id,
-                asset_id: 0,
-                transaction_date: tx.date || inputDate,
-                type: tx.type,
-                total_amount: parseFloat(tx.amount) || 0,
-                currency: tx.currency || 'KRW',
-                quantity: parseFloat(tx.amount) || 0,
-                price: 1.0,
-                memo: tx.memo || ''
-              })),
-              diff_krw: data.calcResult?.diff_krw || 0,
-              diff_usd: data.calcResult?.diff_usd || 0
-            };
-          })
-        };
-      } else {
-        endpoint = `${DB_API_BASE}/snapshots/bank/save`;
-        payload = {
-          snapshot_date: inputDate,
-          accounts: filteredAccounts.map(acc => {
-            const data = accountsFormData[acc.id] || { newTransactions: [] };
-            return {
-              account_id: acc.id,
-              new_transactions: (data.newTransactions || []).map(tx => ({
-                account_id: acc.id,
-                asset_id: 0,
-                transaction_date: tx.date || inputDate,
-                type: tx.type,
-                total_amount: parseFloat(tx.amount) || 0,
-                currency: 'KRW',
-                quantity: parseFloat(tx.amount) || 0,
-                price: 1.0,
-                memo: tx.memo || ''
-              })),
-              total_valuation: data.calcResult?.theoretical_krw || null
-            };
-          })
-        };
-      }
+      const payload = {
+        snapshot_date: inputDate,
+        exchange_rate: parseFloat(exchangeRate),
+        brokerage_accounts: selectedBrokerageIds.map(accId => {
+          const data = accountsFormData[accId] || { newTransactions: [] };
+          return {
+            account_id: accId,
+            new_transactions: (data.newTransactions || []).map(tx => ({
+              account_id: accId,
+              asset_id: 0,
+              transaction_date: tx.date || inputDate,
+              type: tx.type,
+              total_amount: parseFloat(tx.amount) || 0,
+              currency: tx.currency || 'KRW',
+              quantity: parseFloat(tx.amount) || 0,
+              price: 1.0,
+              memo: tx.memo || ''
+            })),
+            diff_krw: parseFloat(data.calcResult?.diff_krw || 0),
+            diff_usd: parseFloat(data.calcResult?.diff_usd || 0)
+          };
+        }),
+        bank_accounts: selectedBankIds.map(accId => {
+          const data = accountsFormData[accId] || { newTransactions: [] };
+          return {
+            account_id: accId,
+            new_transactions: (data.newTransactions || []).map(tx => ({
+              account_id: accId,
+              asset_id: 0,
+              transaction_date: tx.date || inputDate,
+              type: tx.type,
+              total_amount: parseFloat(tx.amount) || 0,
+              currency: 'KRW',
+              quantity: parseFloat(tx.amount) || 0,
+              price: 1.0,
+              memo: tx.memo || ''
+            })),
+            total_valuation: parseFloat(data.totalValuation) || data.calcResult?.theoretical_krw || null
+          };
+        })
+      };
 
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${DB_API_BASE}/snapshots/unified/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -343,83 +425,666 @@ const SnapshotWizardPage = () => {
     }
   };
 
-  const renderFinalPreview = () => (
-    <div className="space-y-6">
-      <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex gap-3">
-        <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
-        <div className="text-sm text-emerald-800">
-          <p className="font-semibold mb-1">모든 계좌 정산 완료</p>
-          <p className="opacity-80">
-            입력하신 데이터와 계산된 {snapshotType === 'brokerage' ? '배당금이' : '내역이'} 최종적으로 반영됩니다. 
-            [저장하기]를 누르면 스냅샷이 생성됩니다.
-          </p>
+  // --- 렌더링 함수들 ---
+
+  const renderStep1 = () => (
+    <div className="py-2 space-y-8">
+      <div>
+        <h2 className="text-xl font-semibold mb-2">기본 정보 및 증권 계좌 선택</h2>
+        <p className="text-slate-500 mb-6">스냅샷 기준 일자와 대상 증권 계좌를 선택해주세요.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-xl border border-slate-100">
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+            <Calendar size={14} /> 기준 일자
+          </label>
+          <input
+            type="date"
+            value={inputDate}
+            onChange={(e) => setInputDate(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+            <DollarSign size={14} /> 기준 환율 (USD/KRW)
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            placeholder="예: 1350.5"
+            value={exchangeRate}
+            onChange={(e) => setExchangeRate(e.target.value)}
+            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
         </div>
       </div>
 
-      <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
-        <table className="w-full text-left text-sm border-collapse">
-          <thead className="bg-slate-50 border-b border-slate-200">
-            <tr>
-              <th className="px-4 py-3 font-semibold text-slate-600">계좌명</th>
-              <th className="px-4 py-3 font-semibold text-slate-600">금융기관</th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-right">신규 내역</th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-right">
-                {snapshotType === 'brokerage' ? '정산 결과(차액)' : '정산 결과(내역합계)'}
-              </th>
-              <th className="px-4 py-3 font-semibold text-slate-600 text-right">최종 잔액(KRW)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {filteredAccounts.map((acc) => {
-              const data = accountsFormData[acc.id] || {};
-              const txCount = (data.newTransactions || []).length;
-              const netTx = (data.newTransactions || []).reduce((sum, tx) => {
-                const amt = parseFloat(tx.amount || 0);
-                if (tx.type === 'DEPOSIT' || tx.type === 'INTEREST') return sum + amt;
-                return sum - amt;
-              }, 0);
-              
-              // 최종 잔액 표시
-              let finalValText = '-';
-              if (snapshotType === 'brokerage') {
-                if (selectedAccountIds.includes(acc.id)) {
-                   finalValText = Math.round(parseFloat(data.currentKrw || 0)).toLocaleString() + '원';
-                }
-              } else {
-                if (data.calcResult?.theoretical_krw !== undefined) {
-                  finalValText = Math.round(data.calcResult.theoretical_krw).toLocaleString() + '원';
-                }
-              }
-
-              // 정산 결과 표시
-              let resultText = '0';
-              if (snapshotType === 'brokerage') {
-                if (data.calcResult) {
-                   const diff = Math.round(data.calcResult.diff_krw);
-                   resultText = (diff >= 0 ? '+' : '') + diff.toLocaleString();
-                }
-              } else {
-                resultText = (netTx >= 0 ? '+' : '') + netTx.toLocaleString();
-              }
-
-              return (
-                <tr key={acc.id} className={!selectedAccountIds.includes(acc.id) ? 'opacity-60 bg-slate-50/50' : ''}>
-                  <td className="px-4 py-3 font-medium text-slate-800">
-                    {acc.name}
-                    {!selectedAccountIds.includes(acc.id) && <span className="ml-2 text-[10px] bg-slate-200 text-slate-500 px-1.5 py-0.5 rounded">미선택</span>}
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{acc.provider}</td>
-                  <td className="px-4 py-3 text-right font-mono">{txCount}건</td>
-                  <td className="px-4 py-3 text-right font-mono text-emerald-600">{resultText}</td>
-                  <td className="px-4 py-3 text-right font-mono font-bold text-slate-900">{finalValText}</td>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-sm font-bold text-slate-700">증권 계좌 목록 ({brokerageAccounts.length})</h3>
+          <span className="text-xs text-slate-400 font-medium">선택됨: {selectedAccountIds.filter(id => brokerageAccounts.some(acc => acc.id === id)).length}개</span>
+        </div>
+        
+        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3 w-12">
+                  <input 
+                    type="checkbox" 
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                    checked={brokerageAccounts.length > 0 && brokerageAccounts.every(a => selectedAccountIds.includes(a.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        const newIds = [...new Set([...selectedAccountIds, ...brokerageAccounts.map(a => a.id)])];
+                        setSelectedAccountIds(newIds);
+                      } else {
+                        const bIds = brokerageAccounts.map(a => a.id);
+                        setSelectedAccountIds(selectedAccountIds.filter(id => !bIds.includes(id)));
+                      }
+                    }}
+                  />
+                </th>
+                <th className="px-4 py-3 font-semibold text-slate-600">소유자</th>
+                <th className="px-4 py-3 font-semibold text-slate-600">금융기관</th>
+                <th className="px-4 py-3 font-semibold text-slate-600">계좌명(번호)</th>
+                <th className="px-4 py-3 font-semibold text-slate-600">별칭</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingAccounts ? (
+                <tr>
+                  <td colSpan="5" className="px-4 py-10 text-center text-slate-400">계좌 목록을 불러오는 중...</td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              ) : brokerageAccounts.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-4 py-10 text-center text-slate-400">활성화된 증권 계좌가 없습니다.</td>
+                </tr>
+              ) : (
+                brokerageAccounts.map((acc) => (
+                  <tr 
+                    key={acc.id} 
+                    className={`hover:bg-slate-50 transition-colors cursor-pointer ${selectedAccountIds.includes(acc.id) ? 'bg-blue-50/30' : ''}`}
+                    onClick={() => toggleAccountSelection(acc.id)}
+                  >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                        checked={selectedAccountIds.includes(acc.id)}
+                        onChange={() => toggleAccountSelection(acc.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{acc.user_name}</td>
+                    <td className="px-4 py-3 text-slate-600">{acc.provider}</td>
+                    <td className="px-4 py-3 text-slate-800 font-medium">{acc.name}</td>
+                    <td className="px-4 py-3 text-slate-500">{acc.alias || '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
+
+  const renderBrokerageDetail = () => {
+    const selectedBrokerageIds = selectedAccountIds.filter(id => 
+      brokerageAccounts.some(acc => acc.id === id)
+    );
+    const accId = selectedBrokerageIds[currentAccIdx];
+    const acc = accounts.find(a => a.id === accId);
+    if (!acc) return null;
+
+    const data = accountsFormData[accId] || { newTransactions: [], currentKrw: '0', currentUsd: '0' };
+    const calc = data.calcResult;
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold mb-2">증권사 상세 정보 입력</h2>
+            <p className="text-slate-500">선택한 증권 계좌별 상세 잔고 및 자산 정보를 입력합니다.</p>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full">
+            <span className="text-sm font-bold text-blue-600">{currentAccIdx + 1}</span>
+            <span className="text-sm text-slate-400">/</span>
+            <span className="text-sm font-medium text-slate-600">{selectedBrokerageIds.length} 계좌</span>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-600 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-sm">
+              {acc.provider[0]}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-lg text-slate-900">{acc.name}</h3>
+                <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">증권</span>
+              </div>
+              <p className="text-slate-500 text-sm">{acc.provider} · {acc.user_name}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">기준 일자</p>
+            <p className="font-mono font-bold text-slate-700">{inputDate}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                <Plus size={18} className="text-blue-600" /> 신규 입출금/배당 내역
+              </h4>
+              <button 
+                onClick={() => addTx(accId)}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1"
+              >
+                <Plus size={14} /> 내역 추가
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {data.newTransactions.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-sm">
+                  추가된 내역이 없습니다.
+                </div>
+              ) : (
+                data.newTransactions.map((tx, idx) => (
+                  <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 relative group">
+                    <button 
+                      onClick={() => removeTx(accId, idx)}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <X size={14} />
+                    </button>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select 
+                        value={tx.type}
+                        onChange={(e) => updateTx(accId, idx, 'type', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="DEPOSIT">입금</option>
+                        <option value="WITHDRAW">출금</option>
+                        <option value="DIVIDEND">배당</option>
+                        <option value="INTEREST">이자</option>
+                        <option value="FEE">수수료</option>
+                        <option value="TAX">세금</option>
+                      </select>
+                      <select 
+                        value={tx.currency}
+                        onChange={(e) => updateTx(accId, idx, 'currency', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="KRW">KRW</option>
+                        <option value="USD">USD</option>
+                      </select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input 
+                        type="number"
+                        placeholder="금액"
+                        value={tx.amount}
+                        onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <input 
+                        type="text"
+                        placeholder="메모 (선택)"
+                        value={tx.memo}
+                        onChange={(e) => updateTx(accId, idx, 'memo', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 space-y-6">
+              <h4 className="font-bold text-blue-900 flex items-center gap-2">
+                <Wallet size={18} /> 현재 예수금 잔액 입력
+              </h4>
+              
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">원화 잔액 (KRW)</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      value={data.currentKrw}
+                      onChange={(e) => updateAccData(accId, { currentKrw: e.target.value })}
+                      className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">달러 잔액 (USD)</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      value={data.currentUsd}
+                      onChange={(e) => updateAccData(accId, { currentUsd: e.target.value })}
+                      className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => calculateAccountDiff(accId)}
+                disabled={processing}
+                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:bg-blue-300"
+              >
+                {processing ? <RefreshCw className="animate-spin" size={20} /> : <RefreshCw size={20} />}
+                정산 결과 계산하기
+              </button>
+            </div>
+
+            {calc && (
+              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
+                <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                  <CheckCircle2 size={18} className="text-emerald-500" /> 계산 결과 (차액)
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">원화 차액</p>
+                    <p className={`text-lg font-mono font-bold ${calc.diff_krw >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {calc.diff_krw > 0 ? '+' : ''}{Math.round(calc.diff_krw).toLocaleString()}원
+                    </p>
+                  </div>
+                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">달러 차액</p>
+                    <p className={`text-lg font-mono font-bold ${calc.diff_usd >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {calc.diff_usd > 0 ? '+' : ''}{calc.diff_usd.toLocaleString()}$
+                    </p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => handleConfirmAccount(accId)}
+                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                >
+                  <Check size={20} /> 이 결과로 확정
+                </button>
+              </div>
+            )}
+            
+            {data.isConfirmed && !calc && (
+               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-3">
+                 <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                    <Check size={24} />
+                 </div>
+                 <p className="font-bold text-emerald-900">확인 완료</p>
+               </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBankDetail = () => {
+    const selectedBankIds = selectedAccountIds.filter(id => 
+      bankAccounts.some(acc => acc.id === id)
+    );
+    const accId = selectedBankIds[currentAccIdx];
+    const acc = accounts.find(a => a.id === accId);
+    if (!acc) return null;
+
+    const data = accountsFormData[accId] || { newTransactions: [], totalValuation: '0' };
+    const calc = data.calcResult;
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold mb-2">은행 상세 정보 입력</h2>
+            <p className="text-slate-500">선택한 은행 계좌별 신규 내역 및 최종 잔액을 입력합니다.</p>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full">
+            <span className="text-sm font-bold text-blue-600">{currentAccIdx + 1}</span>
+            <span className="text-sm text-slate-400">/</span>
+            <span className="text-sm font-medium text-slate-600">{selectedBankIds.length} 계좌</span>
+          </div>
+        </div>
+
+        <div className="bg-slate-50 rounded-xl p-5 border border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-amber-500 text-white rounded-full flex items-center justify-center font-bold text-lg shadow-sm">
+              {acc.provider[0]}
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="font-bold text-lg text-slate-900">{acc.name}</h3>
+                <span className="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-bold">은행</span>
+              </div>
+              <p className="text-slate-500 text-sm">{acc.provider} · {acc.user_name}</p>
+            </div>
+          </div>
+          <div className="text-right">
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">기준 일자</p>
+            <p className="font-mono font-bold text-slate-700">{inputDate}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                <Plus size={18} className="text-blue-600" /> 신규 입출금/이자/세금 내역
+              </h4>
+              <button 
+                onClick={() => addTx(accId)}
+                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1"
+              >
+                <Plus size={14} /> 내역 추가
+              </button>
+            </div>
+
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+              {data.newTransactions.length === 0 ? (
+                <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-sm">
+                  추가된 내역이 없습니다.
+                </div>
+              ) : (
+                data.newTransactions.map((tx, idx) => (
+                  <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 relative group">
+                    <button 
+                      onClick={() => removeTx(accId, idx)}
+                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
+                    >
+                      <X size={14} />
+                    </button>
+                    <div className="grid grid-cols-2 gap-3">
+                      <select 
+                        value={tx.type}
+                        onChange={(e) => updateTx(accId, idx, 'type', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="DEPOSIT">입금</option>
+                        <option value="WITHDRAW">출금</option>
+                        <option value="INTEREST">이자</option>
+                        <option value="FEE">수수료</option>
+                        <option value="TAX">세금</option>
+                        <option value="ADJUSTMENT">조정</option>
+                      </select>
+                      <input 
+                        type="date"
+                        value={tx.date || inputDate}
+                        onChange={(e) => updateTx(accId, idx, 'date', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <input 
+                        type="number"
+                        placeholder="금액"
+                        value={tx.amount}
+                        onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      />
+                      <input 
+                        type="text"
+                        placeholder="메모 (선택)"
+                        value={tx.memo}
+                        onChange={(e) => updateTx(accId, idx, 'memo', e.target.value)}
+                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-6">
+            <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100 space-y-6">
+              <h4 className="font-bold text-amber-900 flex items-center gap-2">
+                <Landmark size={18} /> 최종 잔액(평가액) 입력
+              </h4>
+              
+              <div className="space-y-4">
+                <button 
+                  onClick={() => calculateBankDiff(accId)}
+                  disabled={processing}
+                  className="w-full py-3 bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  {processing ? <RefreshCw className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+                  예상 잔액 계산하기
+                </button>
+
+                {calc && (
+                  <div className="bg-white/60 p-4 rounded-xl border border-amber-200">
+                    <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">시스템 계산 예상 잔액</p>
+                    <p className="text-xl font-mono font-bold text-slate-700">
+                      {Math.round(calc.theoretical_krw).toLocaleString()}원
+                    </p>
+                    <button 
+                      onClick={() => updateAccData(accId, { totalValuation: Math.round(calc.theoretical_krw).toString() })}
+                      className="mt-2 text-xs text-blue-600 font-bold hover:underline"
+                    >
+                      이 금액 적용하기
+                    </button>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-amber-700 uppercase tracking-wider">실제 최종 잔액 (KRW)</label>
+                  <div className="relative">
+                    <input 
+                      type="number"
+                      value={data.totalValuation}
+                      onChange={(e) => updateAccData(accId, { totalValuation: e.target.value })}
+                      className="w-full pl-4 pr-12 py-3 bg-white border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent font-mono font-bold text-lg"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
+                  </div>
+                </div>
+              </div>
+
+              <button 
+                onClick={() => handleConfirmAccount(accId)}
+                className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
+              >
+                <Check size={20} /> 이 결과로 확정
+              </button>
+            </div>
+            
+            {data.isConfirmed && (
+               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-3">
+                 <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                    <Check size={24} />
+                 </div>
+                 <p className="font-bold text-emerald-900">확인 완료</p>
+               </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderBankSelection = () => (
+    <div className="py-2 space-y-8 animate-in fade-in duration-500">
+      <div>
+        <h2 className="text-xl font-semibold mb-2">은행 계좌 선택</h2>
+        <p className="text-slate-500 mb-6">스냅샷에 포함할 은행 계좌를 선택해주세요.</p>
+      </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
+          <h3 className="text-sm font-bold text-slate-700">은행 계좌 목록 ({bankAccounts.length})</h3>
+          <span className="text-xs text-slate-400 font-medium">선택됨: {selectedAccountIds.filter(id => bankAccounts.some(acc => acc.id === id)).length}개</span>
+        </div>
+        
+        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3 w-12">
+                  <input 
+                    type="checkbox" 
+                    className="rounded text-blue-600 focus:ring-blue-500"
+                    checked={bankAccounts.length > 0 && bankAccounts.every(a => selectedAccountIds.includes(a.id))}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        const newIds = [...new Set([...selectedAccountIds, ...bankAccounts.map(a => a.id)])];
+                        setSelectedAccountIds(newIds);
+                      } else {
+                        const bIds = bankAccounts.map(a => a.id);
+                        setSelectedAccountIds(selectedAccountIds.filter(id => !bIds.includes(id)));
+                      }
+                    }}
+                  />
+                </th>
+                <th className="px-4 py-3 font-semibold text-slate-600">소유자</th>
+                <th className="px-4 py-3 font-semibold text-slate-600">금융기관</th>
+                <th className="px-4 py-3 font-semibold text-slate-600">계좌명(번호)</th>
+                <th className="px-4 py-3 font-semibold text-slate-600">별칭</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loadingAccounts ? (
+                <tr>
+                  <td colSpan="5" className="px-4 py-10 text-center text-slate-400">계좌 목록을 불러오는 중...</td>
+                </tr>
+              ) : bankAccounts.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-4 py-10 text-center text-slate-400">활성화된 은행 계좌가 없습니다.</td>
+                </tr>
+              ) : (
+                bankAccounts.map((acc) => (
+                  <tr 
+                    key={acc.id} 
+                    className={`hover:bg-slate-50 transition-colors cursor-pointer ${selectedAccountIds.includes(acc.id) ? 'bg-blue-50/30' : ''}`}
+                    onClick={() => toggleAccountSelection(acc.id)}
+                  >
+                    <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="checkbox" 
+                        className="rounded text-blue-600 focus:ring-blue-500"
+                        checked={selectedAccountIds.includes(acc.id)}
+                        onChange={() => toggleAccountSelection(acc.id)}
+                      />
+                    </td>
+                    <td className="px-4 py-3 font-medium text-slate-900">{acc.user_name}</td>
+                    <td className="px-4 py-3 text-slate-600">{acc.provider}</td>
+                    <td className="px-4 py-3 text-slate-800 font-medium">{acc.name}</td>
+                    <td className="px-4 py-3 text-slate-500">{acc.alias || '-'}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderFinalPreview = () => {
+    const selectedAccounts = accounts.filter(acc => selectedAccountIds.includes(acc.id));
+    
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex gap-3">
+          <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
+          <div className="text-sm text-emerald-800">
+            <p className="font-semibold mb-1">모든 계좌 정산 완료</p>
+            <p className="opacity-80">
+              입력하신 데이터와 계산된 내역이 최종적으로 반영됩니다. 
+              [저장하기]를 누르면 스냅샷이 생성됩니다.
+            </p>
+          </div>
+        </div>
+
+        <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
+          <table className="w-full text-left text-sm border-collapse">
+            <thead className="bg-slate-50 border-b border-slate-200">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-slate-600">계좌명</th>
+                <th className="px-4 py-3 font-semibold text-slate-600">유형</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 text-right">신규 내역</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 text-right">정산 결과(차액)</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 text-right">최종 잔액/평가액</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {selectedAccounts.map((acc) => {
+                const data = accountsFormData[acc.id] || {};
+                const txCount = (data.newTransactions || []).length;
+                
+                let resultElement = <span className="text-slate-400">-</span>;
+                let finalValElement = <span className="text-slate-400">-</span>;
+
+                if (acc.account_type === 'BROKERAGE') {
+                  if (data.calcResult) {
+                    const diffKrw = Math.round(data.calcResult.diff_krw);
+                    const diffUsd = data.calcResult.diff_usd;
+                    resultElement = (
+                      <div className="flex flex-col items-end">
+                        <span className={diffKrw >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          {diffKrw > 0 ? '+' : ''}{diffKrw.toLocaleString()}원
+                        </span>
+                        {Math.abs(diffUsd) > 0.001 && (
+                          <span className={`text-[10px] ${diffUsd >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {diffUsd > 0 ? '+' : ''}{diffUsd.toLocaleString()}$
+                          </span>
+                        )}
+                      </div>
+                    );
+                  }
+                  finalValElement = (
+                    <div className="flex flex-col items-end">
+                      <span className="font-bold text-slate-900">{Math.round(parseFloat(data.currentKrw || 0)).toLocaleString()}원</span>
+                      {parseFloat(data.currentUsd || 0) > 0 && (
+                        <span className="text-[10px] text-slate-500">{parseFloat(data.currentUsd || 0).toLocaleString()}$</span>
+                      )}
+                    </div>
+                  );
+                } else {
+                  // Bank
+                  const finalVal = parseFloat(data.totalValuation) || data.calcResult?.theoretical_krw || 0;
+                  finalValElement = (
+                    <span className="font-bold text-slate-900">{Math.round(finalVal).toLocaleString()}원</span>
+                  );
+                }
+
+                return (
+                  <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="px-4 py-4">
+                      <div className="font-medium text-slate-800">{acc.name}</div>
+                      <div className="text-[10px] text-slate-400">{acc.provider} · {acc.user_name}</div>
+                    </td>
+                    <td className="px-4 py-4 text-xs">
+                      <span className={`px-2 py-0.5 rounded-full font-bold ${acc.account_type === 'BROKERAGE' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
+                        {acc.account_type === 'BROKERAGE' ? '증권' : '은행'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-4 text-right font-mono text-slate-600">{txCount}건</td>
+                    <td className="px-4 py-4 text-right font-mono">
+                      {resultElement}
+                    </td>
+                    <td className="px-4 py-4 text-right font-mono">
+                      {finalValElement}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
@@ -431,7 +1096,7 @@ const SnapshotWizardPage = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">신규 스냅샷 생성</h1>
-            <p className="text-slate-500 text-sm">현재 자산 상태를 기록하기 위한 위저드를 시작합니다.</p>
+            <p className="text-slate-500 text-sm">현재 자산 상태를 기록하기 위한 통합 위저드를 시작합니다.</p>
           </div>
         </div>
         <button
@@ -445,7 +1110,6 @@ const SnapshotWizardPage = () => {
       {/* 스텝 인디케이터 */}
       <div className="mb-10">
         <div className="flex items-center justify-between relative">
-          {/* 연결선 */}
           <div className="absolute left-0 top-1/2 -translate-y-1/2 w-full h-0.5 bg-slate-200 -z-10"></div>
           <div 
             className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 bg-blue-600 transition-all duration-300 -z-10"
@@ -475,384 +1139,11 @@ const SnapshotWizardPage = () => {
 
       {/* 콘텐츠 영역 */}
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 min-h-[400px]">
-        {step === 1 && (
-          <div className="text-center py-10">
-            <h2 className="text-xl font-semibold mb-2">스냅샷 유형을 선택하세요</h2>
-            <p className="text-slate-500 mb-8">기록하고자 하는 자산의 종류를 선택해주세요.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-              <button
-                onClick={() => { setSnapshotType('brokerage'); nextStep(); }}
-                className={`flex flex-col items-center gap-4 p-8 rounded-2xl border-2 transition-all text-center hover:shadow-md group ${
-                  snapshotType === 'brokerage' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-blue-200'
-                }`}
-              >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors ${
-                  snapshotType === 'brokerage' ? 'bg-blue-600 text-white' : 'bg-blue-100 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
-                }`}>
-                  <Wallet size={32} />
-                </div>
-                <div>
-                  <div className="font-bold text-lg mb-2">증권사</div>
-                  <div className="text-sm text-slate-500">주식, ETF, 예수금 등 금융 상품 현황 기록</div>
-                </div>
-              </button>
-              <button
-                onClick={() => { setSnapshotType('bank'); nextStep(); }}
-                className={`flex flex-col items-center gap-4 p-8 rounded-2xl border-2 transition-all text-center hover:shadow-md group ${
-                  snapshotType === 'bank' ? 'border-blue-600 bg-blue-50' : 'border-slate-100 hover:border-blue-200'
-                }`}
-              >
-                <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-colors ${
-                  snapshotType === 'bank' ? 'bg-emerald-600 text-white' : 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-600 group-hover:text-white'
-                }`}>
-                  <Landmark size={32} />
-                </div>
-                <div>
-                  <div className="font-bold text-lg mb-2">은행</div>
-                  <div className="text-sm text-slate-500">예적금, 입출금 통장 잔액 현황 기록</div>
-                </div>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {step === 2 && (
-          <div className="py-2 space-y-8">
-            <div>
-              <h2 className="text-xl font-semibold mb-2">기본 설정 및 계좌 선택</h2>
-              <p className="text-slate-500 mb-6">스냅샷 기준 일자와 대상 계좌를 선택해주세요.</p>
-            </div>
-
-            {/* 기본 설정 영역 */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-xl border border-slate-100">
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                  <Calendar size={14} /> 기준 일자
-                </label>
-                <input
-                  type="date"
-                  value={inputDate}
-                  onChange={(e) => setInputDate(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
-              {snapshotType === 'brokerage' && (
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                    <DollarSign size={14} /> 기준 환율 (USD/KRW)
-                  </label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    placeholder="예: 1350.5"
-                    value={exchangeRate}
-                    onChange={(e) => setExchangeRate(e.target.value)}
-                    className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* 계좌 선택 테이블 */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between px-1">
-                <h3 className="text-sm font-bold text-slate-700">대상 계좌 목록 ({filteredAccounts.length})</h3>
-                <span className="text-xs text-slate-400 font-medium">선택됨: {selectedAccountIds.length}개</span>
-              </div>
-              
-              <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
-                <table className="w-full text-left text-sm border-collapse">
-                  <thead className="bg-slate-50 border-b border-slate-200">
-                    <tr>
-                      <th className="px-4 py-3 w-12">
-                        <input 
-                          type="checkbox" 
-                          className="rounded text-blue-600 focus:ring-blue-500"
-                          checked={filteredAccounts.length > 0 && selectedAccountIds.length === filteredAccounts.length}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedAccountIds(filteredAccounts.map(a => a.id));
-                            } else {
-                              setSelectedAccountIds([]);
-                            }
-                          }}
-                        />
-                      </th>
-                      <th className="px-4 py-3 font-semibold text-slate-600">소유자</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600">금융기관</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600">계좌명(번호)</th>
-                      <th className="px-4 py-3 font-semibold text-slate-600">별칭</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {loadingAccounts ? (
-                      <tr>
-                        <td colSpan="5" className="px-4 py-10 text-center text-slate-400">계좌 목록을 불러오는 중...</td>
-                      </tr>
-                    ) : filteredAccounts.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" className="px-4 py-10 text-center text-slate-400">활성화된 계좌가 없습니다.</td>
-                      </tr>
-                    ) : (
-                      filteredAccounts.map((acc) => (
-                        <tr 
-                          key={acc.id} 
-                          className={`hover:bg-slate-50 transition-colors cursor-pointer ${selectedAccountIds.includes(acc.id) ? 'bg-blue-50/30' : ''}`}
-                          onClick={() => toggleAccountSelection(acc.id)}
-                        >
-                          <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                            <input 
-                              type="checkbox" 
-                              className="rounded text-blue-600 focus:ring-blue-500"
-                              checked={selectedAccountIds.includes(acc.id)}
-                              onChange={() => toggleAccountSelection(acc.id)}
-                            />
-                          </td>
-                          <td className="px-4 py-3 font-medium text-slate-900">{acc.user_name}</td>
-                          <td className="px-4 py-3 text-slate-600">{acc.provider}</td>
-                          <td className="px-4 py-3 text-slate-800 font-medium">{acc.name}</td>
-                          <td className="px-4 py-3 text-slate-500">{acc.alias || '-'}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 flex gap-3">
-              <AlertCircle className="text-blue-500 shrink-0" size={20} />
-              <div className="text-sm text-blue-800">
-                <p className="opacity-90">선택한 {selectedAccountIds.length}개의 계좌에 대해 다음 단계에서 상세 정보를 입력합니다.</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {step === 3 && (
-          <div className="py-2 space-y-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold mb-2">상세 정보 입력</h2>
-                <p className="text-slate-500">선택한 계좌별 상세 잔고 및 자산 정보를 입력합니다.</p>
-              </div>
-              <div className="flex items-center gap-2 bg-slate-100 px-4 py-2 rounded-full">
-                <span className="text-sm font-bold text-blue-600">{currentAccIdx + 1}</span>
-                <span className="text-sm text-slate-400">/</span>
-                <span className="text-sm font-medium text-slate-600">{selectedAccountIds.length} 계좌</span>
-              </div>
-            </div>
-
-            {selectedAccounts[currentAccIdx] && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3 p-4 bg-blue-50 border border-blue-100 rounded-xl">
-                  {snapshotType === 'brokerage' ? <Wallet className="text-blue-600" size={24} /> : <Landmark className="text-emerald-600" size={24} />}
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-lg">
-                      {selectedAccounts[currentAccIdx].name}
-                      <span className="text-slate-500 font-normal text-sm ml-2">({selectedAccounts[currentAccIdx].provider})</span>
-                    </h3>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div className="bg-slate-50 rounded-xl p-6 border border-slate-200">
-                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2">
-                      <RefreshCw size={14} /> 기간 중 내역 (입출금, {snapshotType === 'bank' ? '이자, 세금' : '배당 등'})
-                    </h4>
-                    
-                    <div className="space-y-3">
-                      {/* 기존 DB에 저장된 내역 표시 */}
-                      {(accountsFormData[selectedAccountIds[currentAccIdx]]?.existingTransactions || []).map((tx, idx) => (
-                        <div key={`existing-${idx}`} className="bg-slate-100/50 p-3 rounded-lg border border-slate-200 space-y-2 opacity-80">
-                          <div className="flex gap-4 items-center">
-                            <span className="text-[10px] font-bold bg-slate-300 text-slate-700 px-1.5 py-0.5 rounded shrink-0">기존</span>
-                            <span className="text-sm font-mono text-slate-500 w-24 shrink-0">{tx.transaction_date}</span>
-                            <span className="text-sm font-bold text-slate-600 w-16 shrink-0">
-                              {tx.type === 'DEPOSIT' ? '입금' : tx.type === 'WITHDRAW' ? '출금' : tx.type === 'INTEREST' ? '이자' : tx.type === 'TAX' ? '세금' : tx.type}
-                            </span>
-                            <span className="text-sm font-mono font-bold text-slate-700 grow">
-                              {tx.total_amount.toLocaleString()}
-                            </span>
-                            {snapshotType === 'brokerage' && <span className="text-xs font-bold text-slate-500 w-10">{tx.currency}</span>}
-                            <span className="text-xs italic text-slate-500 truncate max-w-xs">{tx.memo || '-'}</span>
-                          </div>
-                        </div>
-                      ))}
-
-                      {/* 신규 추가 내역 */}
-                      {(accountsFormData[selectedAccountIds[currentAccIdx]]?.newTransactions || []).map((tx, idx) => (
-                        <div key={`new-${idx}`} className="bg-white p-3 rounded-lg border border-blue-100 shadow-sm space-y-2 ring-1 ring-blue-50">
-                          <div className="flex gap-3 items-center">
-                            <span className="text-[10px] font-bold bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded shrink-0">신규</span>
-                            <input 
-                              type="date" 
-                              value={tx.date || inputDate} 
-                              onChange={(e) => updateTx(selectedAccountIds[currentAccIdx], idx, 'date', e.target.value)}
-                              className="text-sm border border-slate-200 rounded px-2 py-1 w-32 shrink-0"
-                            />
-                            <select 
-                              value={tx.type} 
-                              onChange={(e) => updateTx(selectedAccountIds[currentAccIdx], idx, 'type', e.target.value)}
-                              className="text-sm border border-slate-200 rounded px-2 py-1 w-24 shrink-0"
-                            >
-                              <option value="DEPOSIT">입금</option>
-                              <option value="WITHDRAW">출금</option>
-                              {snapshotType === 'bank' && <option value="INTEREST">이자</option>}
-                              {snapshotType === 'bank' && <option value="TAX">세금</option>}
-                            </select>
-                            <input 
-                              type="number" 
-                              placeholder="금액" 
-                              value={tx.amount} 
-                              onChange={(e) => updateTx(selectedAccountIds[currentAccIdx], idx, 'amount', e.target.value)}
-                              className="text-sm border border-slate-200 rounded px-2 py-1 grow font-mono"
-                            />
-                            {snapshotType === 'brokerage' && (
-                              <select 
-                                value={tx.currency} 
-                                onChange={(e) => updateTx(selectedAccountIds[currentAccIdx], idx, 'currency', e.target.value)}
-                                className="text-sm border border-slate-200 rounded px-2 py-1 w-16 shrink-0"
-                              >
-                                <option value="KRW">KRW</option>
-                                <option value="USD">USD</option>
-                              </select>
-                            )}
-                            <input 
-                              type="text" 
-                              placeholder="메모" 
-                              value={tx.memo} 
-                              onChange={(e) => updateTx(selectedAccountIds[currentAccIdx], idx, 'memo', e.target.value)}
-                              className="text-xs italic text-slate-500 border border-slate-100 rounded px-2 py-1 grow"
-                            />
-                            <button onClick={() => removeTx(selectedAccountIds[currentAccIdx], idx)} className="text-slate-300 hover:text-red-500 shrink-0">
-                              <X size={18} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-
-                      <button 
-                        onClick={() => addTx(selectedAccountIds[currentAccIdx])}
-                        className="w-full py-3 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 text-sm font-medium hover:border-blue-300 hover:text-blue-500 transition-all flex items-center justify-center gap-2"
-                      >
-                        <Plus size={16} /> 거래 내역 추가하기
-                      </button>
-                    </div>
-                  </div>
-
-                  {snapshotType === 'brokerage' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                          현재 보유 원화 (KRW)
-                        </label>
-                        <input
-                          type="number"
-                          value={accountsFormData[selectedAccountIds[currentAccIdx]]?.currentKrw || '0'}
-                          onChange={(e) => updateAccData(selectedAccountIds[currentAccIdx], { currentKrw: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-lg"
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                          현재 보유 달러 (USD)
-                        </label>
-                        <input
-                          type="number"
-                          value={accountsFormData[selectedAccountIds[currentAccIdx]]?.currentUsd || '0'}
-                          onChange={(e) => updateAccData(selectedAccountIds[currentAccIdx], { currentUsd: e.target.value })}
-                          className="w-full px-4 py-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono font-bold text-lg"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="pt-2">
-                    {!(accountsFormData[selectedAccountIds[currentAccIdx]]?.calcResult) && (
-                      <button 
-                        onClick={() => snapshotType === 'bank' ? calculateBankDiff(selectedAccountIds[currentAccIdx]) : calculateAccountDiff(selectedAccountIds[currentAccIdx])}
-                        disabled={processing}
-                        className={`w-full py-4 ${snapshotType === 'bank' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-800 hover:bg-slate-900'} text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 text-lg shadow-md`}
-                      >
-                        {processing ? <RefreshCw className="animate-spin" size={20} /> : <RefreshCw size={20} />}
-                        {snapshotType === 'bank' ? '최종 잔액 계산하기' : '배당금/차액 계산하기'}
-                      </button>
-                    )}
-
-                    {snapshotType === 'brokerage' && accountsFormData[selectedAccountIds[currentAccIdx]]?.calcResult && (
-                      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 space-y-4 shadow-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="text-emerald-800 font-bold flex items-center gap-2"><CheckCircle2 size={20} /> 정산 결과</span>
-                          <button 
-                            onClick={() => updateAccData(selectedAccountIds[currentAccIdx], { calcResult: null })} 
-                            className="text-sm text-emerald-600 font-medium hover:underline"
-                          >
-                            다시 입력
-                          </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-white p-4 rounded-xl border border-emerald-200/50">
-                            <p className="text-xs text-emerald-600 font-bold uppercase mb-1">원화 차액 (배당금 등)</p>
-                            <p className={`text-2xl font-mono font-bold ${accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.diff_krw >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                              {accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.diff_krw >= 0 ? '+' : ''}{Math.round(accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.diff_krw).toLocaleString()}원
-                            </p>
-                          </div>
-                          <div className="bg-white p-4 rounded-xl border border-emerald-200/50">
-                            <p className="text-xs text-emerald-600 font-bold uppercase mb-1">달러 차액 (배당금 등)</p>
-                            <p className={`text-2xl font-mono font-bold ${accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.diff_usd >= 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                              {accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.diff_usd >= 0 ? '+' : ''}{accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.diff_usd.toFixed(2)} USD
-                            </p>
-                          </div>
-                        </div>
-                        <p className="text-sm text-emerald-700 opacity-80 leading-relaxed">
-                          이론상 잔액(KRW {Math.round(accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.theoretical_krw).toLocaleString()} / USD {accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.theoretical_usd.toFixed(2)})과의 차액입니다.
-                        </p>
-                        <button
-                          onClick={() => handleConfirmAccount(selectedAccountIds[currentAccIdx])}
-                          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-md mt-2"
-                        >
-                          위 결과가 맞습니다 (확인) <ChevronRight size={18} />
-                        </button>
-                      </div>
-                    )}
-
-                    {snapshotType === 'bank' && accountsFormData[selectedAccountIds[currentAccIdx]]?.calcResult && (
-                      <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 space-y-4 shadow-sm">
-                        <div className="flex items-center justify-between">
-                          <span className="text-emerald-800 font-bold flex items-center gap-2"><CheckCircle2 size={20} /> 최종 잔액 확인</span>
-                          <button 
-                            onClick={() => updateAccData(selectedAccountIds[currentAccIdx], { calcResult: null })} 
-                            className="text-sm text-emerald-600 font-medium hover:underline"
-                          >
-                            내역 수정
-                          </button>
-                        </div>
-                        <div className="bg-white p-5 rounded-xl border border-emerald-200/50">
-                          <p className="text-xs text-emerald-600 font-bold uppercase mb-1">계산된 최종 잔액 (KRW)</p>
-                          <p className="text-3xl font-mono font-bold text-emerald-700">
-                            {Math.round(accountsFormData[selectedAccountIds[currentAccIdx]].calcResult.theoretical_krw).toLocaleString()}원
-                          </p>
-                        </div>
-                        <p className="text-sm text-emerald-700 opacity-80 leading-relaxed">
-                          이전 잔액과 입력하신 {accountsFormData[selectedAccountIds[currentAccIdx]].newTransactions?.length || 0}건의 내역을 합산한 결과입니다. 실제 잔액과 맞는지 확인해 주세요.
-                        </p>
-                        <button
-                          onClick={() => handleConfirmAccount(selectedAccountIds[currentAccIdx])}
-                          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-bold hover:bg-emerald-700 transition-all flex items-center justify-center gap-2 shadow-md mt-2"
-                        >
-                          최종 잔액이 맞습니다 (확인) <ChevronRight size={18} />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {step === 4 && renderFinalPreview()}
+        {step === 1 && renderStep1()}
+        {step === 2 && renderBrokerageDetail()}
+        {step === 3 && renderBankSelection()}
+        {step === 4 && renderBankDetail()}
+        {step === 5 && renderFinalPreview()}
       </div>
 
       {/* 네비게이션 버튼 */}
@@ -869,33 +1160,33 @@ const SnapshotWizardPage = () => {
           <ChevronLeft size={18} />
           이전
         </button>
-        {step !== 3 && (
-          <button
-            onClick={step === totalSteps ? handleFinalSave : nextStep}
-            disabled={(step === totalSteps && processing) || (step === 1 && !snapshotType)}
-            className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-colors ${
-              (step === totalSteps && processing) || (step === 1 && !snapshotType)
-                ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                : 'bg-blue-600 text-white hover:bg-blue-700'
-            }`}
-          >
-            {step === totalSteps ? (
-              <>
-                {processing ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
-                저장하기
-              </>
-            ) : (
-              <>
-                다음
-                <ChevronRight size={18} />
-              </>
-            )}
-          </button>
-        )}
+        <button
+          onClick={step === totalSteps ? handleFinalSave : nextStep}
+          disabled={
+            (step === totalSteps && (processing || selectedAccountIds.length === 0 || !selectedAccountIds.every(id => accountsFormData[id]?.isConfirmed))) ||
+            (processing)
+          }
+          className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-colors ${
+            ((step === totalSteps && (processing || selectedAccountIds.length === 0 || !selectedAccountIds.every(id => accountsFormData[id]?.isConfirmed))) || processing)
+              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+        >
+          {step === totalSteps ? (
+            <>
+              {processing ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
+              저장하기
+            </>
+          ) : (
+            <>
+              다음
+              <ChevronRight size={18} />
+            </>
+          )}
+        </button>
       </div>
     </div>
   );
 };
 
 export default SnapshotWizardPage;
-

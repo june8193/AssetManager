@@ -202,3 +202,113 @@ def test_calculate_returns_existing_transactions(db_session, test_user):
     data = response.json()
     assert len(data["existing_transactions"]) == 1
     assert data["existing_transactions"][0]["memo"] == "Middle Transaction"
+
+@pytest.mark.asyncio
+async def test_save_unified_snapshots_integration(db_session, test_user):
+    """통합 스냅샷 저장 API가 증권 및 은행 계좌를 올바르게 처리하는지 테스트합니다."""
+    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest, BrokerageSaveAccountRequest, BankSaveAccountRequest, TransactionSchema
+    import datetime
+    
+    today = datetime.date.today()
+
+    # 1. 기초 자산 생성
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    db_session.add_all([krw, usd])
+    db_session.flush()
+
+    # 2. 계좌 생성
+    brokerage_acc = Account(user_id=test_user.id, name="증권계좌", provider="KB", account_type="BROKERAGE")
+    bank_acc = Account(user_id=test_user.id, name="은행계좌", provider="신한", account_type="BANK")
+    db_session.add_all([brokerage_acc, bank_acc])
+    db_session.commit()
+
+    # 증권 계좌 요청 데이터
+    brokerage_req = BrokerageSaveAccountRequest(
+        account_id=brokerage_acc.id,
+        new_transactions=[
+            TransactionSchema(
+                account_id=brokerage_acc.id, asset_id=0, transaction_date=today, 
+                type="DEPOSIT", total_amount=100000, currency="KRW"
+            )
+        ],
+        diff_krw=5000,
+        diff_usd=0
+    )
+
+    # 은행 계좌 요청 데이터
+    bank_req = BankSaveAccountRequest(
+        account_id=bank_acc.id,
+        new_transactions=[
+            TransactionSchema(
+                account_id=bank_acc.id, asset_id=0, transaction_date=today, 
+                type="INTEREST", total_amount=1000, currency="KRW"
+            )
+        ],
+        total_valuation=500000.0
+    )
+
+    req = UnifiedSaveRequest(
+        snapshot_date=today,
+        exchange_rate=1350.0,
+        brokerage_accounts=[brokerage_req],
+        bank_accounts=[bank_req]
+    )
+
+    # API 실행
+    await save_unified_snapshots(req, db_session)
+
+    # 검증: 트랜잭션 및 스냅샷 확인
+    txs = db_session.query(Transaction).all()
+    assert len(txs) >= 3
+    
+    snaps = db_session.query(AccountSnapshot).filter(AccountSnapshot.snapshot_date == today).all()
+    assert len(snaps) == 2
+
+@pytest.mark.asyncio
+async def test_save_unified_snapshots_bank_none_valuation(db_session, test_user):
+    """은행 계좌의 total_valuation이 None일 경우 계산된 값을 사용하는지 테스트합니다."""
+    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest, BankSaveAccountRequest
+    import datetime
+    
+    today = datetime.date.today()
+
+    # 1. 기초 자산 생성
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    db_session.add_all([krw, usd])
+    db_session.flush()
+
+    # 2. 계좌 생성
+    bank_acc = Account(user_id=test_user.id, name="은행계좌", provider="신한", account_type="BANK")
+    db_session.add(bank_acc)
+    db_session.commit()
+
+    # 은행 계좌에 초기 잔액 추가
+    db_session.add(Transaction(
+        account_id=bank_acc.id, asset_id=krw.id, transaction_date=today,
+        type="INITIAL_BALANCE", quantity=300000, total_amount=300000, currency="KRW"
+    ))
+    db_session.commit()
+
+    bank_req = BankSaveAccountRequest(
+        account_id=bank_acc.id,
+        new_transactions=[],
+        total_valuation=None
+    )
+
+    req = UnifiedSaveRequest(
+        snapshot_date=today,
+        exchange_rate=1350.0,
+        brokerage_accounts=[],
+        bank_accounts=[bank_req]
+    )
+
+    await save_unified_snapshots(req, db_session)
+
+    bank_snap = db_session.query(AccountSnapshot).filter(
+        AccountSnapshot.account_id == bank_acc.id,
+        AccountSnapshot.snapshot_date == today
+    ).first()
+    
+    assert bank_snap.total_valuation == 300000

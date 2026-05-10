@@ -18,6 +18,10 @@ def find_available_port(start_port, max_attempts=10):
 
 def main():
     """백엔드와 프론트엔드 서버를 동시에 실행합니다."""
+    import argparse
+    parser = argparse.ArgumentParser(description="AssetManager 개발/운영 서버 실행 도구")
+    parser.add_argument("--prod", action="store_true", help="운영 데이터베이스를 사용하여 실행합니다.")
+    args = parser.parse_args()
     
     # 프로젝트 루트 경로 설정
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -32,11 +36,19 @@ def main():
     env["ASSET_MANAGER_BACKEND_PORT"] = str(backend_port)
     env["ASSET_MANAGER_FRONTEND_PORT"] = str(frontend_port)
     env["DEBUG"] = "true"  # 하트비트 활성화를 위해 설정
+    
+    if args.prod:
+        env["APP_ENV"] = "production"
+        db_msg = "운영 (src/assets.db)"
+    else:
+        env["APP_ENV"] = "development"
+        db_msg = "개발/테스트 (src/dev_assets.db)"
 
     print("\n" + "="*50)
     print("   AssetManager Development Servers")
     print(f"   Backend: http://localhost:{backend_port}")
     print(f"   Frontend: http://localhost:{frontend_port}")
+    print(f"   Database: {db_msg}")
     print("="*50)
 
     # 1. 백엔드 서버 실행
