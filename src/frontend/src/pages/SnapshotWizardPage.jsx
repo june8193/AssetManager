@@ -815,7 +815,7 @@ const SnapshotWizardPage = () => {
                         <option value="INTEREST">이자</option>
                         <option value="FEE">수수료</option>
                         <option value="TAX">세금</option>
-                        <option value="ADJUSTMENT">조정</option>
+                        <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
                       </select>
                       <input 
                         type="date"

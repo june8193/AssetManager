@@ -102,9 +102,9 @@ async def test_save_brokerage_snapshots_api(db_session, setup_assets):
     
     # 1. 트랜잭션 확인
     txs = db_session.query(Transaction).filter(Transaction.account_id == account.id).all()
-    assert len(txs) == 2 # DEPOSIT + ADJUSTMENT
+    assert len(txs) == 2 # DEPOSIT + CASH_ADJUSTMENT
     assert any(t.type == "DEPOSIT" and t.total_amount == 100000 for t in txs)
-    assert any(t.type == "ADJUSTMENT" and t.total_amount == 50000 for t in txs)
+    assert any(t.type == "CASH_ADJUSTMENT" and t.total_amount == 50000 for t in txs)
     
     # 2. 스냅샷 확인
     snap = db_session.query(AccountSnapshot).filter(AccountSnapshot.account_id == account.id).first()
@@ -132,7 +132,7 @@ async def test_calculate_brokerage_snapshot_with_various_types(db_session, setup
     new_transactions = [
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="DIVIDEND", total_amount=50000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="INTEREST", total_amount=10000, currency="KRW"),
-        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="ADJUSTMENT", total_amount=5000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="CASH_ADJUSTMENT", total_amount=5000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="FEE", total_amount=2000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="TAX", total_amount=3000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="BUY", total_amount=100000, currency="KRW"),
@@ -152,3 +152,47 @@ async def test_calculate_brokerage_snapshot_with_various_types(db_session, setup
     
     res = await calculate_brokerage_snapshot(req, db_session)
     assert res.theoretical_krw == expected_krw
+
+def test_get_holdings_dynamic_cash_calculation(db_session, setup_assets):
+    """주식 매매 및 비용 거래 발생 시 get_holdings()가 현금 보유량을 동적으로 가감하는지 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="KB주식", provider="KB증권", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    
+    # 1. 1,000,000원 입금 트랜잭션 추가
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=today,
+        type="DEPOSIT", quantity=1000000.0, price=1.0, total_amount=1000000.0, currency="KRW"
+    ))
+    # 2. 삼성전자 10주 매수 (50,000원 * 10 = 500,000원) 트랜잭션 추가
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today,
+        type="BUY", quantity=10.0, price=50000.0, total_amount=500000.0, currency="KRW"
+    ))
+    # 3. 수수료(FEE) 2,000원 트랜잭션 추가 (주식 자산에 매칭)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today,
+        type="FEE", quantity=0.0, price=0.0, total_amount=2000.0, currency="KRW"
+    ))
+    db_session.commit()
+    
+    service = DashboardService(db_session)
+    holdings = service.get_holdings()
+    
+    krw_qty = 0.0
+    stock_qty = 0.0
+    for h in holdings:
+        if h['account'].id == account.id:
+            if h['asset'].id == krw.id:
+                krw_qty = h['quantity']
+            elif h['asset'].id == stock.id:
+                stock_qty = h['quantity']
+                
+    # 주식은 10주여야 함
+    assert stock_qty == 10.0
+    # 현금(KRW) 잔고는 입금(100만) - 매수(50만) - 수수료(2천) = 498,000원 이어야 함!
+    assert krw_qty == 498000.0
+

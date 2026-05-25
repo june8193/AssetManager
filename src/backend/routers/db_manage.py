@@ -527,7 +527,7 @@ def _process_brokerage_accounts_logic(
                 account_id=acc_req.account_id,
                 asset_id=krw_asset_id,
                 transaction_date=snapshot_date,
-                type="ADJUSTMENT",
+                type="CASH_ADJUSTMENT",
                 quantity=acc_req.diff_krw,
                 price=1.0,
                 total_amount=acc_req.diff_krw,
@@ -539,7 +539,7 @@ def _process_brokerage_accounts_logic(
                 account_id=acc_req.account_id,
                 asset_id=usd_asset_id,
                 transaction_date=snapshot_date,
-                type="ADJUSTMENT",
+                type="CASH_ADJUSTMENT",
                 quantity=acc_req.diff_usd,
                 price=1.0,
                 total_amount=acc_req.diff_usd,
@@ -629,12 +629,12 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     new_usd_net = 0.0
     for tx in req.new_transactions:
         if tx.currency == 'KRW':
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT', 'SELL']:
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
                 new_krw_net += tx.total_amount
             elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
                 new_krw_net -= tx.total_amount
         elif tx.currency == 'USD':
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT', 'SELL']:
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
                 new_usd_net += tx.total_amount
             elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
                 new_usd_net -= tx.total_amount
@@ -687,7 +687,7 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
     # 2. 사용자가 새로 입력한 내역 반영
     new_krw_net = 0.0
     for tx in req.new_transactions:
-        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
+        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
             new_krw_net += tx.total_amount
         elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
             new_krw_net -= tx.total_amount

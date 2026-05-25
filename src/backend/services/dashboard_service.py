@@ -120,17 +120,34 @@ class DashboardService:
             .filter(Account.is_active == True)
             .all()
         )
+        # 현금 자산 ID 매핑 구축 (KRW, USD)
+        cash_assets = self.db.query(Asset).filter(Asset.ticker.in_(['KRW', 'USD'])).all()
+        ticker_to_asset_id = {asset.ticker: asset.id for asset in cash_assets}
+        
         holdings = {} # (account_id, asset_id) -> quantity
 
         for tx in transactions:
+            # (1) 원래 자산의 수량 증감 처리
             key = (tx.account_id, tx.asset_id)
             if key not in holdings:
                 holdings[key] = 0.0
             
-            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
+            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
                 holdings[key] += tx.quantity
             elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
                 holdings[key] -= tx.quantity
+
+            # (2) 현금 자산에 대한 상대적 증감 동적 반영
+            cash_asset_id = ticker_to_asset_id.get(tx.currency)
+            if cash_asset_id and tx.asset_id != cash_asset_id:
+                cash_key = (tx.account_id, cash_asset_id)
+                if cash_key not in holdings:
+                    holdings[cash_key] = 0.0
+                
+                if tx.type in ['BUY', 'FEE', 'TAX']:
+                    holdings[cash_key] -= tx.total_amount
+                elif tx.type in ['SELL', 'DIVIDEND', 'INTEREST']:
+                    holdings[cash_key] += tx.total_amount
         
         # 결과 정리
         results = []
@@ -439,7 +456,7 @@ class DashboardService:
             if currency not in theoretical:
                 continue # KRW, USD 외 통화는 일단 제외
 
-            if tx.type in ['DEPOSIT', 'DIVIDEND', 'INTEREST', 'ADJUSTMENT']:
+            if tx.type in ['DEPOSIT', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
                 theoretical[currency] += tx.total_amount
             elif tx.type == 'INITIAL_BALANCE':
                 # INITIAL_BALANCE는 자산이 현금(KRW, USD)인 경우에만 더합니다.

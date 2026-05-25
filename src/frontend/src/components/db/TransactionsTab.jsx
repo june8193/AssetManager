@@ -246,7 +246,7 @@ const TransactionsTab = () => {
               <option value="INTEREST">이자 (INTEREST)</option>
               <option value="FEE">수수료 (FEE)</option>
               <option value="TAX">세금 (TAX)</option>
-              <option value="ADJUSTMENT">잔고 보정 (ADJUSTMENT)</option>
+              <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
             </select>
           </div>
           <div>

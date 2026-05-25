@@ -18,6 +18,13 @@ async def lifespan(app: FastAPI):
     # DB 테이블 생성 (처음 실행 시 SQLite 파일(assets.db)과 테이블이 생성됨)
     Base.metadata.create_all(bind=engine)
     
+    # ADJUSTMENT -> CASH_ADJUSTMENT 데이터 마이그레이션 실행
+    try:
+        from .migration_v3 import run_migration
+        run_migration()
+    except Exception as e:
+        print(f"⚠️ 데이터 마이그레이션 중 오류 발생 (무시하고 서버 기동): {e}")
+    
     # Startup: DB 백업 체크 및 수행
     try:
         BackupService().check_and_backup()
