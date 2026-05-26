@@ -66,7 +66,8 @@ async def test_calculate_brokerage_snapshot_api(db_session, setup_assets):
         snapshot_date=today,
         new_transactions=[new_tx],
         current_krw=650000, # 500k + 100k = 600k (이론상). 실제 650k이므로 50k가 배당금
-        current_usd=0
+        current_usd=0,
+        exchange_rate=1350.0
     )
     
     res = await calculate_brokerage_snapshot(req, db_session)
@@ -147,11 +148,72 @@ async def test_calculate_brokerage_snapshot_with_various_types(db_session, setup
         snapshot_date=today,
         new_transactions=new_transactions,
         current_krw=expected_krw,
-        current_usd=0
+        current_usd=0,
+        exchange_rate=1350.0
     )
     
     res = await calculate_brokerage_snapshot(req, db_session)
     assert res.theoretical_krw == expected_krw
+
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_period_values(db_session, setup_assets):
+    """이전 스냅샷이 있는 경우 스냅샷 마법사 계산 시 기간 입금액 및 기간 수익이 올바르게 구해지는지 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="기간수익테스트계좌", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    ten_days_ago = today - datetime.timedelta(days=10)
+    
+    # 1. 10일 전 마지막 스냅샷 생성 (총 평가액 1,000,000원)
+    db_session.add(AccountSnapshot(
+        account_id=account.id,
+        snapshot_date=ten_days_ago,
+        period_deposit=500000.0,
+        total_valuation=1000000.0,
+        total_profit=100000.0
+    ))
+    
+    # 2. 현재 보유량 설정 (비현금 자산은 없음)
+    db_session.commit()
+    
+    # 3. 신규 입금 100,000원 입력 시뮬레이션
+    new_tx = TransactionSchema(
+        account_id=account.id, asset_id=0, transaction_date=today,
+        type="DEPOSIT", total_amount=100000.0, currency="KRW"
+    )
+    
+    # 입력 예수금: 원화 600,000원 + 달러 100달러 (환율 1350원 적용 시 135,000원)
+    # 현재 비현금 자산: 삼성전자 10주 (테스트에서 주가 API 호출은 005930에 대해 0.0을 반환할 수 있으므로, setup_assets에서 Mock이나 가격을 정의하는 대시보드 로직 동작)
+    # 단, 테스트에서는 yfinance나 키움 API가 동작하지 않고 0.0을 리턴할 수 있으므로 이 부분 감안 필요.
+    # get_current_prices의 mock을 위해 DashboardService의 가격 조회 부분을 감안하거나, ticker가 mock_price를 가지도록 처리 필요.
+    # tests/test_brokerage_snapshot.py 에서는 yfinance 등이 호출되면 0.0을 반환하므로 주가를 Mock하지 않으면 non_cash_valuation이 0.0이 됨.
+    # 안전하게, mock_price가 50,000원이라고 가정하고 계산할 수 있도록 테스트 코드를 작성하거나 
+    # 혹은 Asset category가 'USD' / 'KRW'가 아닌 '005930'에 대해 calculate 시 non_cash_valuation을 계산할 때 mock을 적용해야 함.
+    # 일단은 prices.get(ticker, 0.0)을 처리하기 위해 mock을 구성하거나 테스트 코드 내에서 DB의 stock가 아니라 cash만 다루는 테스트를 수행할 수 있음.
+    # 예수금과 이전 스냅샷만으로 계산되는 시나리오를 만들어 봅시다:
+    # 이전 스냅샷 총평가액 = 1,000,000원
+    # 현재 예수금 = 1,150,000원
+    # 신규 입금 = 100,000원
+    # 현금 제외 자산(주식) = 없음 (0원)
+    # 예상 기간 입금액 = 100,000원
+    # 예상 기간 수익 = 현재 총 평가액(1,150,000) - 이전 스냅샷 총 평가액(1,000,000) - 기간 입금액(100,000) = 50,000원.
+    # 이렇게 하면 주가 조회 Mocking 없이도 완벽하게 테스트 가능!
+    
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=[new_tx],
+        current_krw=1015000.0, # 1,015,000원
+        current_usd=100.0,     # 100달러 (환율 1350.0 적용 시 135,000원) -> 총 예수금 1,150,000원
+        exchange_rate=1350.0
+    )
+    
+    res = await calculate_brokerage_snapshot(req, db_session)
+    assert res.period_deposit == 100000.0
+    assert res.period_profit == 50000.0
+
 
 def test_get_holdings_dynamic_cash_calculation(db_session, setup_assets):
     """주식 매매 및 비용 거래 발생 시 get_holdings()가 현금 보유량을 동적으로 가감하는지 테스트합니다."""

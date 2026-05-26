@@ -95,7 +95,7 @@ def main():
             time.sleep(1)
             
     except KeyboardInterrupt:
-        print("\n\n🛑 종료 요청 수신 (Ctrl+C). 서버를 정지합니다...")
+        print("\n\n[Stop] 종료 요청 수신 (Ctrl+C). 서버를 정지합니다...")
     finally:
         # 프로세스 종료 처리
         print("정리 중...")
@@ -107,7 +107,7 @@ def main():
         # 프로세스가 완전히 종료될 때까지 잠시 대기
         backend_process.wait(timeout=5)
         frontend_process.wait(timeout=5)
-        print("✅ 모든 서버가 안전하게 종료되었습니다.")
+        print("[OK] 모든 서버가 안전하게 종료되었습니다.")
 
 if __name__ == "__main__":
     main()

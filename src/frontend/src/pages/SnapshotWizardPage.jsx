@@ -240,7 +240,8 @@ const SnapshotWizardPage = () => {
             memo: tx.memo || ''
           })),
           current_krw: parseFloat(data.currentKrw) || 0,
-          current_usd: parseFloat(data.currentUsd) || 0
+          current_usd: parseFloat(data.currentUsd) || 0,
+          exchange_rate: parseFloat(exchangeRate) || 1.0
         })
       });
 
@@ -709,6 +710,20 @@ const SnapshotWizardPage = () => {
                     </p>
                   </div>
                 </div>
+                <div className="border-t border-slate-100 my-4 pt-4 space-y-3">
+                  <div className="flex justify-between items-center bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-500">기간 입금액</span>
+                    <span className="font-mono font-bold text-slate-700">
+                      {Math.round(calc.period_deposit).toLocaleString()}원
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
+                    <span className="text-xs font-bold text-slate-500">기간 수익</span>
+                    <span className={`font-mono font-bold ${calc.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                      {calc.period_profit > 0 ? '+' : ''}{Math.round(calc.period_profit).toLocaleString()}원
+                    </span>
+                  </div>
+                </div>
                 <button 
                   onClick={() => handleConfirmAccount(accId)}
                   className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
@@ -1014,6 +1029,7 @@ const SnapshotWizardPage = () => {
                 <th className="px-4 py-3 font-semibold text-slate-600">유형</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 text-right">신규 내역</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 text-right">정산 결과(차액)</th>
+                <th className="px-4 py-3 font-semibold text-slate-600 text-right">기간 입금 / 수익</th>
                 <th className="px-4 py-3 font-semibold text-slate-600 text-right">최종 잔액/평가액</th>
               </tr>
             </thead>
@@ -1023,6 +1039,7 @@ const SnapshotWizardPage = () => {
                 const txCount = (data.newTransactions || []).length;
                 
                 let resultElement = <span className="text-slate-400">-</span>;
+                let periodElement = <span className="text-slate-400">-</span>;
                 let finalValElement = <span className="text-slate-400">-</span>;
 
                 if (acc.account_type === 'BROKERAGE') {
@@ -1050,6 +1067,18 @@ const SnapshotWizardPage = () => {
                       )}
                     </div>
                   );
+                  if (data.calcResult) {
+                    const pDeposit = Math.round(data.calcResult.period_deposit || 0);
+                    const pProfit = Math.round(data.calcResult.period_profit || 0);
+                    periodElement = (
+                      <div className="flex flex-col items-end">
+                        <span className="text-xs text-slate-600">입금: {pDeposit.toLocaleString()}원</span>
+                        <span className={`text-xs font-bold ${pProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          수익: {pProfit > 0 ? '+' : ''}{pProfit.toLocaleString()}원
+                        </span>
+                      </div>
+                    );
+                  }
                 } else {
                   // Bank
                   const finalVal = parseFloat(data.totalValuation) || data.calcResult?.theoretical_krw || 0;
@@ -1072,6 +1101,9 @@ const SnapshotWizardPage = () => {
                     <td className="px-4 py-4 text-right font-mono text-slate-600">{txCount}건</td>
                     <td className="px-4 py-4 text-right font-mono">
                       {resultElement}
+                    </td>
+                    <td className="px-4 py-4 text-right font-mono">
+                      {periodElement}
                     </td>
                     <td className="px-4 py-4 text-right font-mono">
                       {finalValElement}

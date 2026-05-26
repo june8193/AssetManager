@@ -139,6 +139,7 @@ class BrokerageCalculateRequest(BaseModel):
     new_transactions: List[TransactionSchema]
     current_krw: float
     current_usd: float
+    exchange_rate: float
 
 class BrokerageCalculateResponse(BaseModel):
     theoretical_krw: float
@@ -146,6 +147,8 @@ class BrokerageCalculateResponse(BaseModel):
     diff_krw: float
     diff_usd: float
     existing_transactions: List[TransactionSchema] = []
+    period_deposit: float = 0.0
+    period_profit: float = 0.0
 
 class BrokerageSaveAccountRequest(BaseModel):
     account_id: int
@@ -426,7 +429,11 @@ async def preview_snapshots(req: SaveSnapshotRequest, db: Session = Depends(get_
                 elif tx.type == 'WITHDRAW':
                     period_deposit_krw -= amount_krw
                 
-        total_profit = val_krw - total_net_deposit_krw
+        if acc.account_type == 'BROKERAGE':
+            last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
+            total_profit = val_krw - last_valuation - period_deposit_krw
+        else:
+            total_profit = val_krw - total_net_deposit_krw
         
         previews.append(SnapshotPreviewSchema(
             account_id=acc.id,
@@ -660,12 +667,60 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
         Transaction.transaction_date <= req.snapshot_date
     ).order_by(Transaction.transaction_date.desc()).all()
     
+    # 5. 기간 입금액 계산 (기존 트랜잭션 + 신규 입력 트랜잭션 중 입출금 내역의 원화 환산액 합계)
+    period_deposit = 0.0
+    for tx in existing_transactions:
+        tx_rate = tx.exchange_rate if tx.exchange_rate else (req.exchange_rate if tx.currency == 'USD' else 1.0)
+        amount_krw = tx.total_amount
+        if tx.currency == 'USD':
+            amount_krw = tx.total_amount * tx_rate
+            
+        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+            period_deposit += amount_krw
+        elif tx.type == 'WITHDRAW':
+            period_deposit -= amount_krw
+            
+    for tx in req.new_transactions:
+        tx_rate = tx.exchange_rate if tx.exchange_rate else (req.exchange_rate if tx.currency == 'USD' else 1.0)
+        amount_krw = tx.total_amount
+        if tx.currency == 'USD':
+            amount_krw = tx.total_amount * tx_rate
+            
+        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+            period_deposit += amount_krw
+        elif tx.type == 'WITHDRAW':
+            period_deposit -= amount_krw
+
+    # 6. 비현금 자산 평가액 및 기간 수익 계산
+    holdings = dashboard_service.get_holdings()
+    acc_holdings = [h for h in holdings if h['account'].id == req.account_id and h['asset'].ticker not in ['KRW', 'USD']]
+    
+    non_cash_valuation = 0.0
+    if acc_holdings:
+        tickers = list(set([h['asset'].ticker for h in acc_holdings]))
+        prices = await dashboard_service.get_current_prices(tickers)
+        for h in acc_holdings:
+            asset = h['asset']
+            qty = h['quantity']
+            price = prices.get(asset.ticker, 0.0)
+            val = qty * price
+            if asset.country == 'US' or asset.ticker == 'USD':
+                val = val * req.exchange_rate
+            non_cash_valuation += val
+            
+    total_valuation = (req.current_krw + req.current_usd * req.exchange_rate) + non_cash_valuation
+    last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
+    
+    period_profit = total_valuation - last_valuation - period_deposit
+    
     return BrokerageCalculateResponse(
         theoretical_krw=theoretical_krw,
         theoretical_usd=theoretical_usd,
         diff_krw=diff_krw,
         diff_usd=diff_usd,
-        existing_transactions=existing_transactions
+        existing_transactions=existing_transactions,
+        period_deposit=period_deposit,
+        period_profit=period_profit
     )
 
 @router.post("/snapshots/bank/calculate", response_model=BankCalculateResponse)
