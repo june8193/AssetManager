@@ -26,7 +26,7 @@ const TransactionsTab = () => {
     price: 0,
     total_amount: 0,
     currency: 'KRW',
-    exchange_rate: 1
+    exchange_rate: null
   });
 
   /**
@@ -121,7 +121,7 @@ const TransactionsTab = () => {
       price: tx.price,
       total_amount: tx.total_amount,
       currency: tx.currency,
-      exchange_rate: tx.exchange_rate || 1
+      exchange_rate: tx.exchange_rate !== undefined ? tx.exchange_rate : null
     });
   };
 
@@ -152,7 +152,7 @@ const TransactionsTab = () => {
       price: 0,
       total_amount: 0,
       currency: 'KRW',
-      exchange_rate: 1
+      exchange_rate: null
     });
   };
 

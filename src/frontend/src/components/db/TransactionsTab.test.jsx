@@ -52,4 +52,38 @@ describe('TransactionsTab', () => {
     
     expect(screen.getByText('2026-04-22')).toBeInTheDocument();
   });
+
+  it('새 거래 기록 추가 시 exchange_rate는 null로 전송되어야 한다', async () => {
+    let requestBody = null;
+    vi.stubGlobal('fetch', vi.fn((url, options) => {
+      if (url.endsWith('/transactions')) {
+        if (options && options.method === 'POST') {
+          requestBody = JSON.parse(options.body);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 2 }) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockTransactions) });
+      }
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const submitButton = screen.getByText('거래 기록 추가');
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(requestBody).not.toBeNull();
+      expect(requestBody.exchange_rate).toBeNull();
+    });
+  });
 });
