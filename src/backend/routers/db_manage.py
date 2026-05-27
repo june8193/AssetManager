@@ -7,6 +7,8 @@ from datetime import date, datetime
 from ..database import get_db
 from ..models import Account, Asset, Transaction, AccountSnapshot, User, ExchangeRate
 from ..services.dashboard_service import DashboardService
+from ..services.price_service import price_service
+
 
 router = APIRouter(
     prefix="/api/db",
@@ -141,6 +143,20 @@ class BrokerageCalculateRequest(BaseModel):
     current_usd: float
     exchange_rate: float
 
+class AssetProfitSchema(BaseModel):
+    asset_id: int
+    ticker: str
+    asset_name: str
+    country: str
+    period_profit: Optional[float] = None
+    current_price: Optional[float] = None
+    current_valuation: Optional[float] = None
+    last_price: Optional[float] = None
+    last_valuation: Optional[float] = None
+    period_buy: float = 0.0
+    period_sell: float = 0.0
+    period_dividend: float = 0.0
+
 class BrokerageCalculateResponse(BaseModel):
     theoretical_krw: float
     theoretical_usd: float
@@ -149,6 +165,8 @@ class BrokerageCalculateResponse(BaseModel):
     existing_transactions: List[TransactionSchema] = []
     period_deposit: float = 0.0
     period_profit: float = 0.0
+    asset_profits: List[AssetProfitSchema] = []
+
 
 class BrokerageSaveAccountRequest(BaseModel):
     account_id: int
@@ -326,6 +344,22 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     db.delete(db_transaction)
     db.commit()
     return {"message": "Deleted"}
+
+@router.get("/accounts/{account_id}/transactions/period", response_model=List[TransactionSchema])
+def get_period_transactions(
+    account_id: int,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
+    """특정 계좌의 특정 기간 내 기존 거래 내역을 조회합니다."""
+    query = db.query(Transaction).filter(Transaction.account_id == account_id)
+    if start_date:
+        query = query.filter(Transaction.transaction_date > start_date)
+    if end_date:
+        query = query.filter(Transaction.transaction_date <= end_date)
+    return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
+
 
 # Snapshots
 @router.get("/snapshots", response_model=List[SnapshotSchema])
@@ -712,7 +746,155 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
     
     period_profit = total_valuation - last_valuation - period_deposit
+
+    # 7. 개별 종목별 기간 수익 상세 계산
+    asset_profits = []
     
+    # last_date 당시 각 자산의 잔고 수량 계산
+    all_past_txs = db.query(Transaction).filter(
+        Transaction.account_id == req.account_id,
+        Transaction.transaction_date <= last_date
+    ).all()
+    
+    last_qtys = {}
+    for tx in all_past_txs:
+        if tx.asset and tx.asset.ticker in ['KRW', 'USD']:
+            continue
+        if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+            last_qtys[tx.asset_id] = last_qtys.get(tx.asset_id, 0.0) + tx.quantity
+        elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
+            last_qtys[tx.asset_id] = last_qtys.get(tx.asset_id, 0.0) - tx.quantity
+            
+    past_active_asset_ids = [aid for aid, qty in last_qtys.items() if abs(qty) > 0.001]
+    
+    period_asset_ids = []
+    for tx in existing_transactions:
+        if tx.asset and tx.asset.ticker not in ['KRW', 'USD']:
+            period_asset_ids.append(tx.asset_id)
+            
+    for tx in req.new_transactions:
+        if tx.asset_id != 0:
+            asset_obj = db.query(Asset).filter(Asset.id == tx.asset_id).first()
+            if asset_obj and asset_obj.ticker not in ['KRW', 'USD']:
+                period_asset_ids.append(tx.asset_id)
+                
+    target_asset_ids = list(set(past_active_asset_ids + period_asset_ids))
+    
+    if target_asset_ids:
+        last_rate_obj = db.query(ExchangeRate).filter(ExchangeRate.date <= last_date).order_by(ExchangeRate.date.desc()).first()
+        last_rate = last_rate_obj.rate if last_rate_obj else 1350.0
+        
+        assets_map = {asset.id: asset for asset in db.query(Asset).filter(Asset.id.in_(target_asset_ids)).all()}
+        target_tickers = [asset.ticker for asset in assets_map.values()]
+        
+        current_prices = await dashboard_service.get_current_prices(target_tickers)
+        
+        for asset_id in target_asset_ids:
+            asset = assets_map.get(asset_id)
+            if not asset:
+                continue
+                
+            l_qty = last_qtys.get(asset_id, 0.0)
+            
+            c_qty = l_qty
+            for tx in existing_transactions:
+                if tx.asset_id == asset_id:
+                    if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+                        c_qty += tx.quantity
+                    elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
+                        c_qty -= tx.quantity
+                        
+            for tx in req.new_transactions:
+                if tx.asset_id == asset_id:
+                    if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+                        c_qty += tx.quantity
+                    elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
+                        c_qty -= tx.quantity
+            
+            p_buy = 0.0
+            p_sell = 0.0
+            p_div = 0.0
+            
+            def get_tx_rate(t):
+                if t.exchange_rate:
+                    return t.exchange_rate
+                return req.exchange_rate if t.currency == 'USD' else 1.0
+                
+            for tx in existing_transactions:
+                if tx.asset_id == asset_id:
+                    tx_rate = get_tx_rate(tx)
+                    if tx.type == 'BUY':
+                        p_buy += tx.total_amount * tx_rate
+                    elif tx.type == 'SELL':
+                        p_sell += tx.total_amount * tx_rate
+                    elif tx.type == 'DIVIDEND':
+                        p_div += tx.total_amount * tx_rate
+                        
+            for tx in req.new_transactions:
+                if tx.asset_id == asset_id:
+                    tx_rate = get_tx_rate(tx)
+                    if tx.type == 'BUY':
+                        p_buy += tx.total_amount * tx_rate
+                    elif tx.type == 'SELL':
+                        p_sell += tx.total_amount * tx_rate
+                    elif tx.type == 'DIVIDEND':
+                        p_div += tx.total_amount * tx_rate
+            
+            l_price = 0.0
+            l_price_ok = False
+            if l_qty > 0:
+                try:
+                    if asset.country == 'US' or asset.ticker == 'USD':
+                        l_price = await price_service.get_us_historical_price(asset.ticker, last_date.isoformat())
+                    else:
+                        l_price = await price_service.get_kr_historical_price(asset.ticker, last_date.isoformat())
+                    if l_price > 0:
+                        l_price_ok = True
+                except Exception as e:
+                    print(f"이전 주가 조회 실패 ({asset.ticker}): {e}")
+            else:
+                l_price_ok = True
+                
+            c_price = current_prices.get(asset.ticker, 0.0)
+            c_price_ok = False
+            if c_qty > 0:
+                c_price_ok = c_price > 0.0
+            else:
+                c_price_ok = True
+            
+            l_val = None
+            c_val = None
+            p_profit_asset = None
+            
+            if l_price_ok:
+                l_val = l_qty * l_price
+                if asset.country == 'US' or asset.ticker == 'USD':
+                    l_val = l_val * last_rate
+            
+            if c_price_ok:
+                c_val = c_qty * c_price
+                if c_qty > 0 and (asset.country == 'US' or asset.ticker == 'USD'):
+                    c_val = c_val * req.exchange_rate
+
+                    
+            if l_val is not None and c_val is not None:
+                p_profit_asset = c_val - l_val - p_buy + p_sell + p_div
+                
+            asset_profits.append(AssetProfitSchema(
+                asset_id=asset_id,
+                ticker=asset.ticker,
+                asset_name=asset.name,
+                country=asset.country,
+                period_profit=p_profit_asset,
+                current_price=c_price if c_price_ok else None,
+                current_valuation=c_val,
+                last_price=l_price if (l_qty > 0 and l_price_ok) else (0.0 if l_qty == 0 else None),
+                last_valuation=l_val,
+                period_buy=p_buy,
+                period_sell=p_sell,
+                period_dividend=p_div
+            ))
+            
     return BrokerageCalculateResponse(
         theoretical_krw=theoretical_krw,
         theoretical_usd=theoretical_usd,
@@ -720,8 +902,10 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
         diff_usd=diff_usd,
         existing_transactions=existing_transactions,
         period_deposit=period_deposit,
-        period_profit=period_profit
+        period_profit=period_profit,
+        asset_profits=asset_profits
     )
+
 
 @router.post("/snapshots/bank/calculate", response_model=BankCalculateResponse)
 async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depends(get_db)):

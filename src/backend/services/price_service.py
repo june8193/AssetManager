@@ -103,5 +103,71 @@ class PriceService:
             
         return results
 
+    async def get_kr_historical_price(self, code: str, qry_dt: str) -> float:
+        """키움 REST API를 통해 특정 일자의 국내 주식 종가를 조회합니다.
+        
+        Args:
+            code (str): 종목 코드
+            qry_dt (str): 조회일자 (YYYYMMDD 또는 YYYY-MM-DD 형식)
+            
+        Returns:
+            float: 종가 (조회 실패 시 0.0)
+        """
+        try:
+            # YYYY-MM-DD 형식을 YYYYMMDD로 통일
+            clean_dt = qry_dt.replace("-", "")
+            token = await self.kiwoom_auth.get_valid_token()
+            res = await run_in_threadpool(self.kiwoom_api.get_historical_stock_price, token, code, clean_dt)
+            if res and res.get("return_code") == 0:
+                daly_stkpc = res.get("daly_stkpc", [])
+                if daly_stkpc:
+                    for day_data in daly_stkpc:
+                        resp_date = day_data.get("date", "").replace("-", "")
+                        if resp_date == clean_dt:
+                            price_str = day_data.get("close_pric", "0").strip("+- ")
+                            return float(price_str) if price_str else 0.0
+                    
+                    # 일치하는 날짜가 없으면 첫 번째 데이터의 종가 사용
+                    price_str = daly_stkpc[0].get("close_pric", "0").strip("+- ")
+                    return float(price_str) if price_str else 0.0
+            else:
+                error_msg = res.get("return_msg") if res else "응답 없음"
+                print(f"⚠️ 키움 API 일별 주가 조회 실패: {error_msg}")
+        except Exception as e:
+            print(f"⚠️ 국내 주식 일별 주가 조회 중 예외 발생: {e}")
+        return 0.0
+
+    async def get_us_historical_price(self, symbol: str, qry_dt: str) -> float:
+        """yfinance를 통해 특정 일자의 미국 주식 종가를 조회합니다.
+        
+        Args:
+            symbol (str): 티커
+            qry_dt (str): 조회일자 (YYYYMMDD 또는 YYYY-MM-DD 형식)
+            
+        Returns:
+            float: 종가 (조회 실패 시 0.0)
+        """
+        try:
+            # yfinance 포맷에 맞게 YYYY-MM-DD로 변환
+            clean_dt = qry_dt.replace("-", "")
+            if len(clean_dt) == 8:
+                formatted_date = f"{clean_dt[:4]}-{clean_dt[4:6]}-{clean_dt[6:]}"
+            else:
+                formatted_date = qry_dt
+            
+            import datetime
+            dt = datetime.datetime.strptime(formatted_date, "%Y-%m-%d")
+            start_date = dt.strftime("%Y-%m-%d")
+            end_date = (dt + datetime.timedelta(days=5)).strftime("%Y-%m-%d")
+            
+            ticker = await run_in_threadpool(yf.Ticker, symbol)
+            hist = await run_in_threadpool(ticker.history, start=start_date, end=end_date)
+            if not hist.empty:
+                return float(hist['Close'].iloc[0])
+        except Exception as e:
+            print(f"⚠️ 미국 주식 일별 주가 조회 중 예외 발생 ({symbol}): {e}")
+        return 0.0
+
+
 # 싱글톤 인스턴스
 price_service = PriceService()

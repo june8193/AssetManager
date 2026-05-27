@@ -151,6 +151,40 @@ class KiwoomAPI:
             print(f"Bulk 종목 정보 조회 에러: {e}")
         return None
 
+    def get_historical_stock_price(self, token, stock_code, qry_dt):
+        """특정 일자의 주식 시세 정보를 조회합니다 (ka10086).
+
+        Args:
+            token (str): 발급된 접근 토큰.
+            stock_code (str): 종목 코드 (예: '005930').
+            qry_dt (str): 조회일자 (YYYYMMDD 형식).
+
+        Returns:
+            dict: API 응답 결과 (실패 시 None).
+        """
+        url = f"{self.base_url}/api/dostk/mrkcond"
+        headers = {
+            "Content-Type": "application/json;charset=UTF-8",
+            "api-id": "ka10086",
+            "authorization": f"Bearer {token}"
+        }
+        data = {
+            "stk_cd": stock_code,
+            "qry_dt": qry_dt,
+            "indc_tp": "0"  # 표시구분 (0: 수량, 1: 금액)
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, json=data, timeout=10)
+            if response.status_code == 200:
+                return response.json()
+            else:
+                print(f"일별 주가 조회 실패 (Status: {response.status_code}): {response.text}")
+        except Exception as e:
+            print(f"일별 주가 조회 에러: {e}")
+        return None
+
+
 
     def check_all_connections(self):
         """모든 계정의 연결 상태를 확인하고 결과를 반환합니다.

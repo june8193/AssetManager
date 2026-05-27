@@ -1,8 +1,10 @@
 import pytest
 import datetime
+from unittest.mock import patch, AsyncMock
 from src.backend.models import Account, Asset, Transaction, AccountSnapshot
 from src.backend.services.dashboard_service import DashboardService
 from src.backend.routers.db_manage import BrokerageCalculateRequest, TransactionSchema, BrokerageSaveRequest, BrokerageSaveAccountRequest, calculate_brokerage_snapshot, save_brokerage_snapshots
+
 
 @pytest.fixture
 def setup_assets(db_session):
@@ -288,5 +290,245 @@ def test_calculate_theoretical_cash_filters_before_initial_balance(db_session, s
 
     # 이전 입금 6,000,000원은 무시되고, INITIAL_BALANCE인 86,216원만 남아야 함
     assert theoretical["KRW"] == 86216.0
+
+
+@pytest.mark.asyncio
+async def test_get_transactions_period_api(db_session, setup_assets):
+    """지정 기간 내의 기존 트랜잭션 목록 조회 API를 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="기간거래조회테스트", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    five_days_ago = today - datetime.timedelta(days=5)
+    ten_days_ago = today - datetime.timedelta(days=10)
+    
+    # 1. 기간 이전 거래 (12일 전)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=today - datetime.timedelta(days=12),
+        type="DEPOSIT", total_amount=100000.0, currency="KRW"
+    ))
+    # 2. 기간 내 거래 (8일 전)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=today - datetime.timedelta(days=8),
+        type="DEPOSIT", total_amount=200000.0, currency="KRW"
+    ))
+    # 3. 기간 내 거래 (2일 전)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today - datetime.timedelta(days=2),
+        type="BUY", quantity=5, price=50000, total_amount=250000.0, currency="KRW"
+    ))
+    db_session.commit()
+    
+    # db_manage 라우터의 get_period_transactions 엔드포인트 직접 호출
+    from src.backend.routers.db_manage import get_period_transactions
+    
+    # 10일 전 ~ 오늘
+    res = get_period_transactions(
+        account_id=account.id,
+        start_date=ten_days_ago,
+        end_date=today,
+        db=db_session
+    )
+    
+    assert len(res) == 2
+    assert any(t.total_amount == 200000.0 for t in res)
+    assert any(t.type == "BUY" and t.quantity == 5 for t in res)
+
+
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_with_asset_profits(db_session, setup_assets):
+    """증권계좌 정산 계산 시 종목별 기간수익이 올바르게 반환되는지 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="종목수익테스트", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    ten_days_ago = today - datetime.timedelta(days=10)
+    
+    # 1. 이전 스냅샷 등록 (10일 전)
+    db_session.add(AccountSnapshot(
+        account_id=account.id,
+        snapshot_date=ten_days_ago,
+        period_deposit=0.0,
+        total_valuation=500000.0, # 이전 평가액 50만원
+        total_profit=50000.0
+    ))
+    
+    # 2. 이전 시점(10일 전) 주식 잔고 설정: 삼성전자 10주 보유 중이었음
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=ten_days_ago - datetime.timedelta(days=1),
+        type="BUY", quantity=10.0, price=45000.0, total_amount=450000.0, currency="KRW"
+    ))
+    # 3. 기간 내 추가 거래: 삼성전자 5주 추가 매수 (50,000원 * 5 = 250,000원)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today - datetime.timedelta(days=2),
+        type="BUY", quantity=5.0, price=50000.0, total_amount=250000.0, currency="KRW"
+    ))
+    # 4. 기간 내 배당금 발생: 삼성전자 배당 20,000원
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today - datetime.timedelta(days=1),
+        type="DIVIDEND", quantity=0.0, price=0.0, total_amount=20000.0, currency="KRW"
+    ))
+    db_session.commit()
+    
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=[],
+        current_krw=100000.0, # 현재 예수금
+        current_usd=0.0,
+        exchange_rate=1350.0
+    )
+    
+    from src.backend.services.price_service import price_service
+    from unittest.mock import patch, AsyncMock
+    
+    # price_service의 과거 주가 조회 및 DashboardService의 현재 주가 조회 Mocking
+    with patch.object(price_service, 'get_kr_historical_price', new_callable=AsyncMock) as mock_hist, \
+         patch('src.backend.services.dashboard_service.DashboardService.get_current_prices', new_callable=AsyncMock) as mock_curr:
+        
+        mock_hist.return_value = 45000.0 # 10일 전 주가
+        mock_curr.return_value = {"005930": 60000.0} # 현재 주가
+        
+        res = await calculate_brokerage_snapshot(req, db_session)
+        
+        # asset_profits 확인
+        assert len(res.asset_profits) == 1
+        profit_data = res.asset_profits[0]
+        assert profit_data.ticker == "005930"
+        assert profit_data.last_valuation == 450000.0
+        assert profit_data.current_valuation == 900000.0
+        assert profit_data.period_buy == 250000.0
+        assert profit_data.period_dividend == 20000.0
+        assert profit_data.period_profit == 220000.0
+
+
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_sell_all(db_session, setup_assets):
+    """특정 종목을 전량 매도한 엣지 케이스에 대해 기간수익이 올바르게 계산되는지 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="전량매도테스트", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    ten_days_ago = today - datetime.timedelta(days=10)
+    
+    # 1. 이전 스냅샷 등록
+    db_session.add(AccountSnapshot(
+        account_id=account.id,
+        snapshot_date=ten_days_ago,
+        period_deposit=0.0,
+        total_valuation=450000.0,
+        total_profit=0.0
+    ))
+    
+    # 2. 10일 전 시점에 10주 보유 중이었음
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=ten_days_ago - datetime.timedelta(days=1),
+        type="BUY", quantity=10.0, price=45000.0, total_amount=450000.0, currency="KRW"
+    ))
+    
+    # 3. 기간 내 전량 매도 (10주 매도, 총 600,000원 획득)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today - datetime.timedelta(days=2),
+        type="SELL", quantity=10.0, price=60000.0, total_amount=600000.0, currency="KRW"
+    ))
+    db_session.commit()
+    
+    # 현재 수량 = 0
+    # 예상 수익 = 현재평가(0) - 이전평가(450,000) - 기간매수(0) + 기간매도(600,000) = 150,000원 이익
+    
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=[],
+        current_krw=600000.0,
+        current_usd=0.0,
+        exchange_rate=1350.0
+    )
+    
+    from src.backend.services.price_service import price_service
+    
+    with patch.object(price_service, 'get_kr_historical_price', new_callable=AsyncMock) as mock_hist, \
+         patch('src.backend.services.dashboard_service.DashboardService.get_current_prices', new_callable=AsyncMock) as mock_curr:
+        
+        mock_hist.return_value = 45000.0
+        mock_curr.return_value = {"005930": 65000.0} # 현재 수량이 0이므로 현재 주가는 계산에 영향 없음
+        
+        res = await calculate_brokerage_snapshot(req, db_session)
+        
+        assert len(res.asset_profits) == 1
+        profit_data = res.asset_profits[0]
+        assert profit_data.ticker == "005930"
+        assert profit_data.last_valuation == 450000.0
+        assert profit_data.current_valuation == 0.0
+        assert profit_data.period_sell == 600000.0
+        assert profit_data.period_profit == 150000.0
+
+
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_new_asset(db_session, setup_assets):
+    """신규로 종목이 추가된 엣지 케이스에 대해 기간수익이 올바르게 계산되는지 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="신규종목테스트", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    ten_days_ago = today - datetime.timedelta(days=10)
+    
+    # 1. 이전 스냅샷 등록
+    db_session.add(AccountSnapshot(
+        account_id=account.id,
+        snapshot_date=ten_days_ago,
+        period_deposit=0.0,
+        total_valuation=0.0,
+        total_profit=0.0
+    ))
+    db_session.commit()
+    
+    # 2. 10일 전 시점에 0주 보유 (이전 트랜잭션 없음)
+    # 3. 기간 내 10주 신규 매수 (총 500,000원 지출)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today - datetime.timedelta(days=2),
+        type="BUY", quantity=10.0, price=50000.0, total_amount=500000.0, currency="KRW"
+    ))
+    db_session.commit()
+    
+    # 현재 수량 = 10주. 현재가 = 60,000원 (현재 평가액 = 60만원)
+    # 예상 수익 = 현재평가(600,000) - 이전평가(0) - 기간매수(500,000) + 기간매도(0) = 100,000원 이익
+    
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=[],
+        current_krw=100000.0,
+        current_usd=0.0,
+        exchange_rate=1350.0
+    )
+    
+    from src.backend.services.price_service import price_service
+    
+    with patch.object(price_service, 'get_kr_historical_price', new_callable=AsyncMock) as mock_hist, \
+         patch('src.backend.services.dashboard_service.DashboardService.get_current_prices', new_callable=AsyncMock) as mock_curr:
+        
+        mock_hist.return_value = 0.0 # 이전 주가 조회는 발생하지 않음 (l_qty = 0이므로)
+        mock_curr.return_value = {"005930": 60000.0} # 현재 주가
+        
+        res = await calculate_brokerage_snapshot(req, db_session)
+        
+        assert len(res.asset_profits) == 1
+        profit_data = res.asset_profits[0]
+        assert profit_data.ticker == "005930"
+        assert profit_data.last_valuation == 0.0
+        assert profit_data.current_valuation == 600000.0
+        assert profit_data.period_buy == 500000.0
+        assert profit_data.period_profit == 100000.0
+
+
 
 

@@ -22,6 +22,13 @@ const SnapshotWizardPage = () => {
   const [currentAccIdx, setCurrentAccIdx] = useState(0);
   const [accountsFormData, setAccountsFormData] = useState({});
   const [processing, setProcessing] = useState(false);
+  const [existingTxs, setExistingTxs] = useState({});
+  const [loadingExistingTxs, setLoadingExistingTxs] = useState(false);
+
+  const getAccountDisplayName = (acc) => {
+    if (!acc) return '';
+    return acc.alias ? `${acc.name} (${acc.alias})` : acc.name;
+  };
 
   const totalSteps = 5;
 
@@ -52,6 +59,51 @@ const SnapshotWizardPage = () => {
 
     fetchAccounts();
   }, []);
+
+  // 2단계/4단계 계좌 전환 시 기존 트랜잭션 로드
+  useEffect(() => {
+    const fetchExistingTransactions = async () => {
+      const isBrokerage = step === 2;
+      const isBank = step === 4;
+      if (!isBrokerage && !isBank) return;
+
+      const targetAccounts = isBrokerage ? brokerageAccounts : bankAccounts;
+      const selectedIds = selectedAccountIds.filter(id => 
+        targetAccounts.some(acc => acc.id === id)
+      );
+      const accId = selectedIds[currentAccIdx];
+      if (!accId) return;
+
+      try {
+        setLoadingExistingTxs(true);
+        // 마지막 스냅샷 날짜 조회
+        const latestResponse = await fetch(`${DB_API_BASE}/snapshots/latest`);
+        let lastDate = '1970-01-01';
+        if (latestResponse.ok) {
+          const latestData = await latestResponse.json();
+          if (latestData.latest_date) {
+            lastDate = latestData.latest_date;
+          }
+        }
+        
+        // 기존 트랜잭션 API 호출
+        const response = await fetch(`${DB_API_BASE}/accounts/${accId}/transactions/period?start_date=${lastDate}&end_date=${inputDate}`);
+        if (response.ok) {
+          const data = await response.json();
+          setExistingTxs(prev => ({
+            ...prev,
+            [accId]: data
+          }));
+        }
+      } catch (error) {
+        console.error('기존 거래 내역 로드 실패:', error);
+      } finally {
+        setLoadingExistingTxs(false);
+      }
+    };
+
+    fetchExistingTransactions();
+  }, [step, currentAccIdx, inputDate, selectedAccountIds, accounts]);
 
   // 계좌 필터링
   const brokerageAccounts = accounts.filter(acc => acc.is_active && acc.account_type === 'BROKERAGE');
@@ -426,6 +478,115 @@ const SnapshotWizardPage = () => {
     }
   };
 
+  const renderExistingTransactions = (accId) => {
+    const txs = existingTxs[accId] || [];
+    return (
+      <div className="space-y-4">
+        <h4 className="font-bold text-slate-800 flex items-center gap-2">
+          <ListChecks size={18} className="text-slate-500" /> 기간 내 기존 거래 내역 ({txs.length})
+        </h4>
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 max-h-[400px] overflow-y-auto custom-scrollbar">
+          {loadingExistingTxs ? (
+            <div className="text-center py-10 text-slate-400 text-sm">기존 거래 내역 불러오는 중...</div>
+          ) : txs.length === 0 ? (
+            <div className="text-center py-10 text-slate-400 text-sm">해당 기간 내 기록된 거래가 없습니다.</div>
+          ) : (
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-100 border-b border-slate-200 text-slate-500 sticky top-0">
+                <tr>
+                  <th className="px-3 py-2 font-semibold">날짜</th>
+                  <th className="px-3 py-2 font-semibold">유형</th>
+                  <th className="px-3 py-2 font-semibold text-right">금액/수량</th>
+                  <th className="px-3 py-2 font-semibold">메모</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200 bg-white">
+                {txs.map((tx) => (
+                  <tr key={tx.id} className="hover:bg-slate-50 text-slate-700">
+                    <td className="px-3 py-2 font-mono">{tx.transaction_date}</td>
+                    <td className="px-3 py-2">
+                      <span className={`px-1.5 py-0.5 rounded-full font-bold text-[10px] ${
+                        ['BUY', 'WITHDRAW', 'TAX', 'FEE'].includes(tx.type) ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
+                      }`}>
+                        {tx.type}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono font-medium">
+                      {tx.currency === 'USD' ? '$' : ''}{tx.total_amount.toLocaleString()}{tx.currency === 'KRW' ? '원' : ''}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500 max-w-[100px] truncate" title={tx.memo}>{tx.memo || '-'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAssetProfits = (calcResult) => {
+    const profits = calcResult?.asset_profits || [];
+    if (profits.length === 0) return null;
+
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
+        <h4 className="font-bold text-slate-800 flex items-center gap-2">
+          <DollarSign size={18} className="text-blue-600" /> 종목별 기간수익 상세
+        </h4>
+        <div className="overflow-x-auto border border-slate-100 rounded-xl">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
+              <tr>
+                <th className="px-3 py-2.5 font-semibold">종목(국가)</th>
+                <th className="px-3 py-2.5 font-semibold text-right">이전 평가액</th>
+                <th className="px-3 py-2.5 font-semibold text-right">매수/매도/배당</th>
+                <th className="px-3 py-2.5 font-semibold text-right">현재 평가액</th>
+                <th className="px-3 py-2.5 font-semibold text-right">기간 수익</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {profits.map((p) => {
+                const hasProfit = p.period_profit !== null && p.period_profit !== undefined;
+                const hasLast = p.last_valuation !== null && p.last_valuation !== undefined;
+                const hasCurrent = p.current_valuation !== null && p.current_valuation !== undefined;
+                
+                return (
+                  <tr key={p.asset_id} className="hover:bg-slate-50/50">
+                    <td className="px-3 py-3">
+                      <div className="font-semibold text-slate-800">{p.asset_name}</div>
+                      <div className="text-[9px] text-slate-400 font-mono">{p.ticker} · {p.country}</div>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-slate-600">
+                      {hasLast ? `${Math.round(p.last_valuation).toLocaleString()}원` : '-'}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono text-[10px] text-slate-500">
+                      <div className="text-rose-500">매수: {Math.round(p.period_buy).toLocaleString()}원</div>
+                      <div className="text-emerald-500">매도: {Math.round(p.period_sell).toLocaleString()}원</div>
+                      <div className="text-blue-500">배당: {Math.round(p.period_dividend).toLocaleString()}원</div>
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono font-semibold text-slate-800">
+                      {hasCurrent ? `${Math.round(p.current_valuation).toLocaleString()}원` : '-'}
+                    </td>
+                    <td className="px-3 py-3 text-right font-mono">
+                      {hasProfit ? (
+                        <span className={`font-bold ${p.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {p.period_profit > 0 ? '+' : ''}{Math.round(p.period_profit).toLocaleString()}원
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">조회 실패</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  };
+
   // --- 렌더링 함수들 ---
 
   const renderStep1 = () => (
@@ -520,7 +681,7 @@ const SnapshotWizardPage = () => {
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-900">{acc.user_name}</td>
                     <td className="px-4 py-3 text-slate-600">{acc.provider}</td>
-                    <td className="px-4 py-3 text-slate-800 font-medium">{acc.name}</td>
+                    <td className="px-4 py-3 text-slate-800 font-medium">{getAccountDisplayName(acc)}</td>
                     <td className="px-4 py-3 text-slate-500">{acc.alias || '-'}</td>
                   </tr>
                 ))
@@ -564,7 +725,7 @@ const SnapshotWizardPage = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-lg text-slate-900">{acc.name}</h3>
+                <h3 className="font-bold text-lg text-slate-900">{getAccountDisplayName(acc)}</h3>
                 <span className="text-xs bg-blue-100 text-blue-600 px-2 py-0.5 rounded-full font-bold">증권</span>
               </div>
               <p className="text-slate-500 text-sm">{acc.provider} · {acc.user_name}</p>
@@ -576,7 +737,11 @@ const SnapshotWizardPage = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          {/* Column 1: 기존 거래 내역 (읽기 전용) */}
+          {renderExistingTransactions(accId)}
+
+          {/* Column 2: 신규 거래 내역 입력 */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="font-bold text-slate-800 flex items-center gap-2">
@@ -648,6 +813,7 @@ const SnapshotWizardPage = () => {
             </div>
           </div>
 
+          {/* Column 3: 잔고 입력 및 결과 */}
           <div className="space-y-6">
             <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 space-y-6">
               <h4 className="font-bold text-blue-900 flex items-center gap-2">
@@ -751,6 +917,9 @@ const SnapshotWizardPage = () => {
             )}
           </div>
         </div>
+
+        {/* 종목별 기간수익 상세 테이블 하단 표시 */}
+        {calc && renderAssetProfits(calc)}
       </div>
     );
   };
@@ -787,7 +956,7 @@ const SnapshotWizardPage = () => {
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-lg text-slate-900">{acc.name}</h3>
+                <h3 className="font-bold text-lg text-slate-900">{getAccountDisplayName(acc)}</h3>
                 <span className="text-xs bg-amber-100 text-amber-600 px-2 py-0.5 rounded-full font-bold">은행</span>
               </div>
               <p className="text-slate-500 text-sm">{acc.provider} · {acc.user_name}</p>
@@ -799,7 +968,11 @@ const SnapshotWizardPage = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          {/* Column 1: 기존 거래 내역 (읽기 전용) */}
+          {renderExistingTransactions(accId)}
+
+          {/* Column 2: 신규 거래 내역 */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h4 className="font-bold text-slate-800 flex items-center gap-2">
@@ -869,6 +1042,7 @@ const SnapshotWizardPage = () => {
             </div>
           </div>
 
+          {/* Column 3: 최종 잔액 입력 */}
           <div className="space-y-6">
             <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100 space-y-6">
               <h4 className="font-bold text-amber-900 flex items-center gap-2">
@@ -1001,7 +1175,7 @@ const SnapshotWizardPage = () => {
                     </td>
                     <td className="px-4 py-3 font-medium text-slate-900">{acc.user_name}</td>
                     <td className="px-4 py-3 text-slate-600">{acc.provider}</td>
-                    <td className="px-4 py-3 text-slate-800 font-medium">{acc.name}</td>
+                    <td className="px-4 py-3 text-slate-800 font-medium">{getAccountDisplayName(acc)}</td>
                     <td className="px-4 py-3 text-slate-500">{acc.alias || '-'}</td>
                   </tr>
                 ))
@@ -1098,7 +1272,7 @@ const SnapshotWizardPage = () => {
                 return (
                   <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-4">
-                      <div className="font-medium text-slate-800">{acc.name}</div>
+                      <div className="font-medium text-slate-800">{getAccountDisplayName(acc)}</div>
                       <div className="text-[10px] text-slate-400">{acc.provider} · {acc.user_name}</div>
                     </td>
                     <td className="px-4 py-4 text-xs">
@@ -1122,6 +1296,22 @@ const SnapshotWizardPage = () => {
             </tbody>
           </table>
         </div>
+        {/* 증권 계좌들의 종목별 기간수익 정보 노출 */}
+        {selectedAccounts
+          .filter(acc => acc.account_type === 'BROKERAGE')
+          .map(acc => {
+            const data = accountsFormData[acc.id] || {};
+            if (!data.calcResult) return null;
+            return (
+              <div key={acc.id} className="mt-6 space-y-3">
+                <div className="text-sm font-bold text-slate-700 px-1">
+                  [{getAccountDisplayName(acc)}] 종목별 기간수익 상세
+                </div>
+                {renderAssetProfits(data.calcResult)}
+              </div>
+            );
+          })
+        }
       </div>
     );
   };
