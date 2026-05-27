@@ -706,29 +706,106 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
         Transaction.transaction_date <= req.snapshot_date
     ).order_by(Transaction.transaction_date.desc()).all()
     
-    # 5. 기간 입금액 계산 (기존 트랜잭션 + 신규 입력 트랜잭션 중 입출금 내역의 원화 환산액 합계)
+    # 5. 기간 입금액 계산 및 통화별 주식 매매/입출금액의 원화 환산액 집계
     period_deposit = 0.0
+    period_deposit_krw = 0.0
+    period_deposit_usd_krw = 0.0
+    
+    # 비현금 자산(주식)의 매수/매도 대금 합계
+    buy_krw_non_cash = 0.0
+    sell_krw_non_cash = 0.0
+    buy_usd_non_cash_krw = 0.0
+    sell_usd_non_cash_krw = 0.0
+
+    # 예수금 화면 표시용 변수 (순수 입금/출금 수량 합계)
+    deposit_krw = 0.0
+    withdraw_krw = 0.0
+    deposit_usd = 0.0
+    withdraw_usd = 0.0
+
+    def get_tx_rate(t):
+        if t.exchange_rate:
+            return t.exchange_rate
+        return req.exchange_rate if t.currency == 'USD' else 1.0
+
+    # 기존 트랜잭션 집계
     for tx in existing_transactions:
-        tx_rate = tx.exchange_rate if tx.exchange_rate else (req.exchange_rate if tx.currency == 'USD' else 1.0)
-        amount_krw = tx.total_amount
-        if tx.currency == 'USD':
-            amount_krw = tx.total_amount * tx_rate
-            
+        tx_rate = get_tx_rate(tx)
+        amount_krw = tx.total_amount * tx_rate if tx.currency == 'USD' else tx.total_amount
+        
+        # 입출금 집계
         if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
             period_deposit += amount_krw
+            if tx.currency == 'KRW':
+                period_deposit_krw += amount_krw
+                if tx.type == 'DEPOSIT':
+                    deposit_krw += tx.total_amount
+            elif tx.currency == 'USD':
+                period_deposit_usd_krw += amount_krw
+                if tx.type == 'DEPOSIT':
+                    deposit_usd += tx.total_amount
         elif tx.type == 'WITHDRAW':
             period_deposit -= amount_krw
-            
+            if tx.currency == 'KRW':
+                period_deposit_krw -= amount_krw
+                withdraw_krw += tx.total_amount
+            elif tx.currency == 'USD':
+                period_deposit_usd_krw -= amount_krw
+                withdraw_usd += tx.total_amount
+                
+        # 비현금 자산의 주식 매매액 집계
+        if tx.asset and tx.asset.ticker not in ['KRW', 'USD']:
+            if tx.type == 'BUY':
+                if tx.currency == 'KRW':
+                    buy_krw_non_cash += amount_krw
+                elif tx.currency == 'USD':
+                    buy_usd_non_cash_krw += amount_krw
+            elif tx.type == 'SELL':
+                if tx.currency == 'KRW':
+                    sell_krw_non_cash += amount_krw
+                elif tx.currency == 'USD':
+                    sell_usd_non_cash_krw += amount_krw
+
+    # 신규 트랜잭션 집계
     for tx in req.new_transactions:
-        tx_rate = tx.exchange_rate if tx.exchange_rate else (req.exchange_rate if tx.currency == 'USD' else 1.0)
-        amount_krw = tx.total_amount
-        if tx.currency == 'USD':
-            amount_krw = tx.total_amount * tx_rate
-            
+        tx_rate = get_tx_rate(tx)
+        amount_krw = tx.total_amount * tx_rate if tx.currency == 'USD' else tx.total_amount
+        
+        # 입출금 집계
         if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
             period_deposit += amount_krw
+            if tx.currency == 'KRW':
+                period_deposit_krw += amount_krw
+                if tx.type == 'DEPOSIT':
+                    deposit_krw += tx.total_amount
+            elif tx.currency == 'USD':
+                period_deposit_usd_krw += amount_krw
+                if tx.type == 'DEPOSIT':
+                    deposit_usd += tx.total_amount
         elif tx.type == 'WITHDRAW':
             period_deposit -= amount_krw
+            if tx.currency == 'KRW':
+                period_deposit_krw -= amount_krw
+                withdraw_krw += tx.total_amount
+            elif tx.currency == 'USD':
+                period_deposit_usd_krw -= amount_krw
+                withdraw_usd += tx.total_amount
+                
+        # 비현금 자산의 주식 매매액 집계
+        if tx.asset_id != 0:
+            asset_obj = db.query(Asset).filter(Asset.id == tx.asset_id).first()
+            if asset_obj and asset_obj.ticker not in ['KRW', 'USD']:
+                if tx.type == 'BUY':
+                    if tx.currency == 'KRW':
+                        buy_krw_non_cash += amount_krw
+                    elif tx.currency == 'USD':
+                        buy_usd_non_cash_krw += amount_krw
+                elif tx.type == 'SELL':
+                    if tx.currency == 'KRW':
+                        sell_krw_non_cash += amount_krw
+                    elif tx.currency == 'USD':
+                        sell_usd_non_cash_krw += amount_krw
+
 
     # 6. 비현금 자산 평가액 및 기간 수익 계산
     holdings = dashboard_service.get_holdings()
@@ -941,45 +1018,17 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     # 원화/달러 예수금 정보 추가
     krw_asset = db.query(Asset).filter(Asset.ticker == "KRW").first()
     usd_asset = db.query(Asset).filter(Asset.ticker == "USD").first()
-    
-    # 기간 내 예수금 자체의 입금/출금 합산
-    deposit_krw = 0.0
-    withdraw_krw = 0.0
-    deposit_usd = 0.0
-    withdraw_usd = 0.0
-    
-    for tx in existing_transactions:
-        if tx.type == 'DEPOSIT':
-            if tx.currency == 'KRW':
-                deposit_krw += tx.total_amount
-            elif tx.currency == 'USD':
-                deposit_usd += tx.total_amount
-        elif tx.type == 'WITHDRAW':
-            if tx.currency == 'KRW':
-                withdraw_krw += tx.total_amount
-            elif tx.currency == 'USD':
-                withdraw_usd += tx.total_amount
-                
-    for tx in req.new_transactions:
-        if tx.type == 'DEPOSIT':
-            if tx.currency == 'KRW':
-                deposit_krw += tx.total_amount
-            elif tx.currency == 'USD':
-                deposit_usd += tx.total_amount
-        elif tx.type == 'WITHDRAW':
-            if tx.currency == 'KRW':
-                withdraw_krw += tx.total_amount
-            elif tx.currency == 'USD':
-                withdraw_usd += tx.total_amount
 
     # 원화 예수금 추가
     if krw_asset:
+        # 개선된 원화 예수금 기간 수익 공식 적용 (수수료, 이자, 세금 및 과거 오차 완벽 통합)
+        krw_period_profit = req.current_krw - last_krw - period_deposit_krw + buy_krw_non_cash - sell_krw_non_cash
         asset_profits.append(AssetProfitSchema(
             asset_id=krw_asset.id,
             ticker=krw_asset.ticker,
             asset_name="원화 예수금",
             country=krw_asset.country,
-            period_profit=diff_krw, # 원화 보정액이 예수금의 기간 수익
+            period_profit=krw_period_profit,
             current_price=1.0,
             current_valuation=req.current_krw,
             last_price=1.0,
@@ -991,12 +1040,14 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     # 달러 예수금 추가
     if usd_asset:
         last_rate_to_use = last_rate if 'last_rate' in locals() else 1350.0
+        # 개선된 달러 예수금 기간 수익 공식 적용 (환차손익, 수수료, 이자, 세금 및 과거 오차 완벽 통합)
+        usd_period_profit = (req.current_usd * req.exchange_rate) - (last_usd * last_rate_to_use) - period_deposit_usd_krw + buy_usd_non_cash_krw - sell_usd_non_cash_krw
         asset_profits.append(AssetProfitSchema(
             asset_id=usd_asset.id,
             ticker=usd_asset.ticker,
             asset_name="달러 예수금",
             country=usd_asset.country,
-            period_profit=diff_usd * req.exchange_rate, # 달러 보정액의 원화 환산액
+            period_profit=usd_period_profit,
             current_price=1.0,
             current_valuation=req.current_usd * req.exchange_rate,
             last_price=1.0,

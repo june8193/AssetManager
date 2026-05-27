@@ -681,7 +681,7 @@ async def test_calculate_brokerage_snapshot_with_cash_assets_and_us_dollars(db_s
         assert usd_profit.current_valuation == 250.0 * 1350.0 # 337,500원
         assert usd_profit.period_buy == 650.0 # 달러 입금액 (달러 단위)
         assert usd_profit.period_sell == 0.0
-        assert usd_profit.period_profit == 0.0
+        assert usd_profit.period_profit == -8000.0
 
 
 
