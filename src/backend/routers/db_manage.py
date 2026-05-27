@@ -159,6 +159,8 @@ class AssetProfitSchema(BaseModel):
     last_valuation: Optional[float] = None
     period_buy: float = 0.0
     period_sell: float = 0.0
+    cash_buy_stock: Optional[float] = 0.0
+    cash_sell_stock: Optional[float] = 0.0
 
 class BrokerageCalculateResponse(BaseModel):
     theoretical_krw: float
@@ -716,6 +718,8 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     sell_krw_non_cash = 0.0
     buy_usd_non_cash_krw = 0.0
     sell_usd_non_cash_krw = 0.0
+    buy_usd_non_cash = 0.0
+    sell_usd_non_cash = 0.0
 
     # 예수금 화면 표시용 변수 (순수 입금/출금 수량 합계)
     deposit_krw = 0.0
@@ -760,11 +764,13 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
                     buy_krw_non_cash += amount_krw
                 elif tx.currency == 'USD':
                     buy_usd_non_cash_krw += amount_krw
+                    buy_usd_non_cash += tx.total_amount
             elif tx.type == 'SELL':
                 if tx.currency == 'KRW':
                     sell_krw_non_cash += amount_krw
                 elif tx.currency == 'USD':
                     sell_usd_non_cash_krw += amount_krw
+                    sell_usd_non_cash += tx.total_amount
 
     # 신규 트랜잭션 집계
     for tx in req.new_transactions:
@@ -800,11 +806,13 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
                         buy_krw_non_cash += amount_krw
                     elif tx.currency == 'USD':
                         buy_usd_non_cash_krw += amount_krw
+                        buy_usd_non_cash += tx.total_amount
                 elif tx.type == 'SELL':
                     if tx.currency == 'KRW':
                         sell_krw_non_cash += amount_krw
                     elif tx.currency == 'USD':
                         sell_usd_non_cash_krw += amount_krw
+                        sell_usd_non_cash += tx.total_amount
 
 
     # 6. 비현금 자산 평가액 및 기간 수익 계산
@@ -1034,7 +1042,9 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
             last_price=1.0,
             last_valuation=last_krw,
             period_buy=deposit_krw,
-            period_sell=withdraw_krw
+            period_sell=withdraw_krw,
+            cash_buy_stock=buy_krw_non_cash,
+            cash_sell_stock=sell_krw_non_cash
         ))
 
     # 달러 예수금 추가
@@ -1053,7 +1063,9 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
             last_price=1.0,
             last_valuation=last_usd * last_rate_to_use,
             period_buy=deposit_usd,
-            period_sell=withdraw_usd
+            period_sell=withdraw_usd,
+            cash_buy_stock=buy_usd_non_cash,
+            cash_sell_stock=sell_usd_non_cash
         ))
             
     return BrokerageCalculateResponse(

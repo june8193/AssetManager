@@ -673,6 +673,8 @@ async def test_calculate_brokerage_snapshot_with_cash_assets_and_us_dollars(db_s
         assert krw_profit.period_buy == 50000.0 # 입금액
         assert krw_profit.period_sell == 0.0 # 출금액
         assert krw_profit.period_profit == 0.0 # 보정액이 0이므로
+        assert krw_profit.cash_buy_stock == 0.0
+        assert krw_profit.cash_sell_stock == 0.0
         
         # 달러 예수금 검증
         usd_profit = next(p for p in res.asset_profits if p.ticker == "USD")
@@ -682,6 +684,8 @@ async def test_calculate_brokerage_snapshot_with_cash_assets_and_us_dollars(db_s
         assert usd_profit.period_buy == 650.0 # 달러 입금액 (달러 단위)
         assert usd_profit.period_sell == 0.0
         assert usd_profit.period_profit == -8000.0
+        assert usd_profit.cash_buy_stock == 600.0  # AAPL 5주 매수 (120달러 * 5 = 600달러)
+        assert usd_profit.cash_sell_stock == 0.0
 
 
 

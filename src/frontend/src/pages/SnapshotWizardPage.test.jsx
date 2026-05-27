@@ -89,7 +89,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
           existing_transactions: [],
           asset_profits: [
             { asset_id: 10, ticker: '005930', asset_name: '삼성전자', country: 'KR', period_profit: 50000, current_valuation: 600000, last_valuation: 550000, period_buy: 0, period_sell: 0 },
-            { asset_id: 1001, ticker: 'KRW', asset_name: '원화 예수금', country: 'KR', period_profit: 1000, current_valuation: 100000, last_valuation: 990000, period_buy: 0, period_sell: 0 }
+            { asset_id: 1001, ticker: 'KRW', asset_name: '원화 예수금', country: 'KR', period_profit: 1000, current_valuation: 100000, last_valuation: 990000, period_buy: 0, period_sell: 0, cash_buy_stock: 0, cash_sell_stock: 0 }
           ]
         }) });
       }

@@ -695,7 +695,13 @@ const SnapshotWizardPage = () => {
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-[10px] text-slate-500">
                       <div className="text-rose-500">{buyLabel}: {formatBuySell(p.period_buy)}</div>
+                      {(p.ticker === 'KRW' || p.ticker === 'USD') && p.cash_sell_stock > 0 && (
+                        <div className="text-rose-400 text-[9px] mt-0.5">주식매도: +{formatBuySell(p.cash_sell_stock)}</div>
+                      )}
                       <div className="text-emerald-500">{sellLabel}: {formatBuySell(p.period_sell)}</div>
+                      {(p.ticker === 'KRW' || p.ticker === 'USD') && p.cash_buy_stock > 0 && (
+                        <div className="text-emerald-400 text-[9px] mt-0.5">주식매수: -{formatBuySell(p.cash_buy_stock)}</div>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-semibold text-slate-800">
                       {hasCurrent ? `${Math.round(p.current_valuation).toLocaleString()}원` : '-'}
