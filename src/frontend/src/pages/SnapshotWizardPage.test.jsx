@@ -182,4 +182,34 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
       expect(window.alert).toHaveBeenCalledWith('스냅샷이 성공적으로 저장되었습니다.');
     });
   });
+
+  it('증권사 상세 입력 화면에서 가로 분할(grid-cols-3) 대신 세로 배치 레이아웃(space-y-8)이 적용된다', async () => {
+    global.fetch.mockImplementation((url) => {
+      if (url.includes('/accounts') && !url.includes('/transactions/period')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      }
+      if (url.includes('/transactions/period')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([
+          { id: 101, transaction_date: '2026-05-20', type: 'BUY', total_amount: 500000, currency: 'KRW', memo: '기존거래' }
+        ]) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    const { container } = renderWithRouter(<SnapshotWizardPage />);
+    
+    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    fireEvent.change(screen.getByPlaceholderText(/예: 1350.5/), { target: { value: '1350' } });
+    fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
+    
+    // space-y-8 클래스를 가진 엘리먼트가 존재하고, 가로 분할용 grid-cols-3는 존재하지 않아야 함
+    const spaceYDiv = container.querySelector('.space-y-8');
+    expect(spaceYDiv).toBeInTheDocument();
+    
+    const gridDiv = container.querySelector('.grid-cols-3');
+    expect(gridDiv).toBeNull();
+  });
 });

@@ -827,13 +827,13 @@ const SnapshotWizardPage = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Column 1 & 2: 통합 거래 내역 테이블 */}
-          <div className="xl:col-span-2 space-y-4">
+        <div className="space-y-8">
+          {/* 통합 거래 내역 테이블 */}
+          <div className="space-y-4">
             {renderUnifiedTransactions(accId, true)}
           </div>
 
-          {/* Column 3: 잔고 입력 및 결과 */}
+          {/* 잔고 입력 및 결과 */}
           <div className="space-y-6">
             <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 space-y-6">
               <h4 className="font-bold text-blue-900 flex items-center gap-2">
@@ -988,13 +988,13 @@ const SnapshotWizardPage = () => {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Column 1 & 2: 통합 거래 내역 테이블 */}
-          <div className="xl:col-span-2 space-y-4">
+        <div className="space-y-8">
+          {/* 통합 거래 내역 테이블 */}
+          <div className="space-y-4">
             {renderUnifiedTransactions(accId, false)}
           </div>
 
-          {/* Column 3: 최종 잔액 입력 */}
+          {/* 최종 잔액 입력 */}
           <div className="space-y-6">
             <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100 space-y-6">
               <h4 className="font-bold text-amber-900 flex items-center gap-2">
