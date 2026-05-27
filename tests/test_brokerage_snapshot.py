@@ -1,7 +1,7 @@
 import pytest
 import datetime
 from unittest.mock import patch, AsyncMock
-from src.backend.models import Account, Asset, Transaction, AccountSnapshot
+from src.backend.models import Account, Asset, Transaction, AccountSnapshot, ExchangeRate
 from src.backend.services.dashboard_service import DashboardService
 from src.backend.routers.db_manage import BrokerageCalculateRequest, TransactionSchema, BrokerageSaveRequest, BrokerageSaveAccountRequest, calculate_brokerage_snapshot, save_brokerage_snapshots
 
@@ -390,8 +390,8 @@ async def test_calculate_brokerage_snapshot_with_asset_profits(db_session, setup
         res = await calculate_brokerage_snapshot(req, db_session)
         
         # asset_profits 확인
-        assert len(res.asset_profits) == 1
-        profit_data = res.asset_profits[0]
+        assert len([p for p in res.asset_profits if p.ticker not in ["KRW", "USD"]]) == 1
+        profit_data = next(p for p in res.asset_profits if p.ticker == "005930")
         assert profit_data.ticker == "005930"
         assert profit_data.last_valuation == 450000.0
         assert profit_data.current_valuation == 900000.0
@@ -454,8 +454,8 @@ async def test_calculate_brokerage_snapshot_sell_all(db_session, setup_assets):
         
         res = await calculate_brokerage_snapshot(req, db_session)
         
-        assert len(res.asset_profits) == 1
-        profit_data = res.asset_profits[0]
+        assert len([p for p in res.asset_profits if p.ticker not in ["KRW", "USD"]]) == 1
+        profit_data = next(p for p in res.asset_profits if p.ticker == "005930")
         assert profit_data.ticker == "005930"
         assert profit_data.last_valuation == 450000.0
         assert profit_data.current_valuation == 0.0
@@ -514,8 +514,8 @@ async def test_calculate_brokerage_snapshot_new_asset(db_session, setup_assets):
         
         res = await calculate_brokerage_snapshot(req, db_session)
         
-        assert len(res.asset_profits) == 1
-        profit_data = res.asset_profits[0]
+        assert len([p for p in res.asset_profits if p.ticker not in ["KRW", "USD"]]) == 1
+        profit_data = next(p for p in res.asset_profits if p.ticker == "005930")
         assert profit_data.ticker == "005930"
         assert profit_data.last_valuation == 0.0
         assert profit_data.current_valuation == 600000.0
@@ -568,6 +568,121 @@ async def test_calculate_brokerage_snapshot_needs_last_rate(db_session, setup_as
     res = await calculate_brokerage_snapshot(req, db_session)
     assert res.need_last_exchange_rate is True
     assert res.last_snapshot_date == ten_days_ago
+
+
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_with_cash_assets_and_us_dollars(db_session, setup_assets):
+    """원화 예수금, 달러 예수금 행이 상세 기간수익 목록에 추가되고, 해외 주식의 매수/매도 금액이 달러로 표시되는지 테스트합니다."""
+    krw, usd, stock_kr = setup_assets
+    
+    # 1. 미국 주식 생성
+    stock_us = Asset(ticker="AAPL", name="Apple", major_category="주식", sub_category="해외주식", country="US")
+    db_session.add(stock_us)
+    
+    account = Account(user_id=1, name="통합정산테스트", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    ten_days_ago = today - datetime.timedelta(days=10)
+    
+    # 2. 10일 전 스냅샷 등록
+    db_session.add(AccountSnapshot(
+        account_id=account.id,
+        snapshot_date=ten_days_ago,
+        period_deposit=0.0,
+        total_valuation=1000000.0,
+        total_profit=10000.0
+    ))
+    
+    # 10일 전 환율 설정
+    db_session.add(ExchangeRate(date=ten_days_ago, rate=1300.0, currency="USD"))
+    
+    # 3. 10일 전 시점 자산 보유 현황 (이론상 계산용 이전 트랜잭션들)
+    # 원화 예수금 100,000원
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=ten_days_ago - datetime.timedelta(days=2),
+        type="INITIAL_BALANCE", quantity=100000.0, price=1.0, total_amount=100000.0, currency="KRW"
+    ))
+    # 달러 예수금 1200달러 (이후 AAPL 1000달러 매수하여 잔액 200달러)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=usd.id, transaction_date=ten_days_ago - datetime.timedelta(days=2),
+        type="INITIAL_BALANCE", quantity=1200.0, price=1.0, total_amount=1200.0, currency="USD"
+    ))
+    # 미국 주식 10주
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock_us.id, transaction_date=ten_days_ago - datetime.timedelta(days=2),
+        type="BUY", quantity=10.0, price=100.0, total_amount=1000.0, currency="USD"
+    ))
+    
+    # 4. 기간 내 추가 거래 내역 등록
+    # 미국 주식 5주 추가 매수 (120달러 * 5 = 600달러, 적용환율 1320원)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock_us.id, transaction_date=today - datetime.timedelta(days=5),
+        type="BUY", quantity=5.0, price=120.0, total_amount=600.0, currency="USD", exchange_rate=1320.0
+    ))
+    # 원화 입금 50,000원
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=today - datetime.timedelta(days=5),
+        type="DEPOSIT", total_amount=50000.0, currency="KRW"
+    ))
+    # 달러 입금 650달러
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=usd.id, transaction_date=today - datetime.timedelta(days=5),
+        type="DEPOSIT", total_amount=650.0, currency="USD"
+    ))
+    db_session.commit()
+    
+    # 5. 계산 요청 파라미터 (현재 환율 1350원)
+    # 현재 입력 잔고: 원화 150,000원, 달러 250달러
+    # (이론상 잔고와 정확히 일치하여 보정액 0원)
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=[],
+        current_krw=150000.0,
+        current_usd=250.0,
+        exchange_rate=1350.0
+    )
+    
+    from src.backend.services.price_service import price_service
+    
+    with patch.object(price_service, 'get_us_historical_price', new_callable=AsyncMock) as mock_hist, \
+         patch('src.backend.services.dashboard_service.DashboardService.get_current_prices', new_callable=AsyncMock) as mock_curr:
+        
+        mock_hist.return_value = 100.0 # 10일 전 주가
+        mock_curr.return_value = {"AAPL": 150.0} # 현재 주가
+        
+        res = await calculate_brokerage_snapshot(req, db_session)
+        
+        # asset_profits 에 AAPL, KRW, USD 자산이 모두 존재해야 함
+        assert len(res.asset_profits) == 3
+        
+        # AAPL (미국 주식) 검증
+        aapl_profit = next(p for p in res.asset_profits if p.ticker == "AAPL")
+        # 미국 주식이므로 매수액이 원화가 아닌 달러 자체 금액(600달러)이어야 함
+        assert aapl_profit.period_buy == 600.0
+        # 수익(원화) = 현재(15 * 150 * 1350 = 3,037,500) - 이전(10 * 100 * 1300 = 1,300,000) - 매수원화(600 * 1320 = 792,000) = 945,500원
+        assert aapl_profit.period_profit == 945500.0
+        
+        # 원화 예수금 검증
+        krw_profit = next(p for p in res.asset_profits if p.ticker == "KRW")
+        assert krw_profit.asset_name == "원화 예수금"
+        assert krw_profit.last_valuation == 100000.0
+        assert krw_profit.current_valuation == 150000.0
+        assert krw_profit.period_buy == 50000.0 # 입금액
+        assert krw_profit.period_sell == 0.0 # 출금액
+        assert krw_profit.period_profit == 0.0 # 보정액이 0이므로
+        
+        # 달러 예수금 검증
+        usd_profit = next(p for p in res.asset_profits if p.ticker == "USD")
+        assert usd_profit.asset_name == "달러 예수금"
+        assert usd_profit.last_valuation == 200.0 * 1300.0 # 260,000원
+        assert usd_profit.current_valuation == 250.0 * 1350.0 # 337,500원
+        assert usd_profit.period_buy == 650.0 # 달러 입금액 (달러 단위)
+        assert usd_profit.period_sell == 0.0
+        assert usd_profit.period_profit == 0.0
+
 
 
 

@@ -88,7 +88,8 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
           diff_usd: 0, 
           existing_transactions: [],
           asset_profits: [
-            { asset_id: 10, ticker: '005930', asset_name: '삼성전자', country: 'KR', period_profit: 50000, current_valuation: 600000, last_valuation: 550000, period_buy: 0, period_sell: 0 }
+            { asset_id: 10, ticker: '005930', asset_name: '삼성전자', country: 'KR', period_profit: 50000, current_valuation: 600000, last_valuation: 550000, period_buy: 0, period_sell: 0 },
+            { asset_id: 1001, ticker: 'KRW', asset_name: '원화 예수금', country: 'KR', period_profit: 1000, current_valuation: 100000, last_valuation: 990000, period_buy: 0, period_sell: 0 }
           ]
         }) });
       }
@@ -117,7 +118,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     
     // 계산결과와 종목별 기간수익 상세 테이블 검증
     await waitFor(() => {
-      expect(screen.getByText(/1,000원/)).toBeDefined();
+      expect(screen.getByText('+1,000원')).toBeDefined();
       expect(screen.getByText('삼성전자')).toBeDefined();
       expect(screen.getByText('+50,000원')).toBeDefined();
     });

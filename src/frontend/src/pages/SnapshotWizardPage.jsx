@@ -501,10 +501,11 @@ const SnapshotWizardPage = () => {
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-slate-100 border-b border-slate-200 text-slate-500 sticky top-0">
               <tr>
-                <th className="px-3 py-3 font-semibold w-[20%]">날짜</th>
-                <th className="px-3 py-3 font-semibold w-[20%]">유형</th>
+                <th className="px-3 py-3 font-semibold w-[15%]">날짜</th>
+                <th className="px-3 py-3 font-semibold w-[25%]">종목</th>
+                <th className="px-3 py-3 font-semibold w-[15%]">유형</th>
                 <th className="px-3 py-3 font-semibold w-[20%] text-right">금액/수량</th>
-                <th className="px-3 py-3 font-semibold w-[30%]">메모</th>
+                <th className="px-3 py-3 font-semibold w-[15%]">메모</th>
                 <th className="px-3 py-3 font-semibold w-[10%] text-center">동작</th>
               </tr>
             </thead>
@@ -512,103 +513,128 @@ const SnapshotWizardPage = () => {
               {/* 기존 거래 내역 (읽기 전용) */}
               {loadingExistingTxs ? (
                 <tr>
-                  <td colSpan="5" className="text-center py-10 text-slate-400">기존 거래 내역 불러오는 중...</td>
+                  <td colSpan="6" className="text-center py-10 text-slate-400">기존 거래 내역 불러오는 중...</td>
                 </tr>
               ) : txs.length === 0 && newTxs.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="text-center py-10 text-slate-400">기록된 거래 내역이 없습니다. 신규 거래를 추가해 보세요.</td>
+                  <td colSpan="6" className="text-center py-10 text-slate-400">기록된 거래 내역이 없습니다. 신규 거래를 추가해 보세요.</td>
                 </tr>
               ) : (
-                txs.map((tx) => (
-                  <tr key={tx.id} className="bg-slate-50/50 text-slate-500 hover:bg-slate-50">
-                    <td className="px-3 py-3 font-mono">{tx.transaction_date}</td>
-                    <td className="px-3 py-3">
-                      <span className="px-1.5 py-0.5 rounded-full font-bold text-[9px] bg-slate-200 text-slate-600">
-                        {tx.type} (기존)
-                      </span>
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono font-medium">
-                      {tx.currency === 'USD' ? '$' : ''}{tx.total_amount.toLocaleString()}{tx.currency === 'KRW' ? '원' : ''}
-                    </td>
-                    <td className="px-3 py-3 text-slate-400 truncate max-w-[150px]" title={tx.memo}>{tx.memo || '-'}</td>
-                    <td className="px-3 py-3 text-center text-[10px] text-slate-400 font-medium">읽기 전용</td>
-                  </tr>
-                ))
+                txs.map((tx) => {
+                  const displayAmount = tx.currency === 'USD' ? `$${tx.total_amount.toLocaleString()}` : `${tx.total_amount.toLocaleString()}원`;
+                  const isStock = tx.asset_ticker && tx.asset_ticker !== 'KRW' && tx.asset_ticker !== 'USD';
+                  const displayValue = isStock ? `${tx.quantity.toLocaleString()}주 / ${displayAmount}` : displayAmount;
+                  
+                  return (
+                    <tr key={tx.id} className="bg-slate-50/50 text-slate-500 hover:bg-slate-50">
+                      <td className="px-3 py-3 font-mono">{tx.transaction_date}</td>
+                      <td className="px-3 py-3">
+                        {tx.asset_name ? (
+                          <div>
+                            <span className="font-semibold text-slate-700">{tx.asset_name}</span>
+                            <span className="text-[10px] text-slate-400 font-mono ml-1">({tx.asset_ticker})</span>
+                          </div>
+                        ) : '-'}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span className="px-1.5 py-0.5 rounded-full font-bold text-[9px] bg-slate-200 text-slate-600">
+                          {tx.type} (기존)
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono font-medium text-slate-700">
+                        {displayValue}
+                      </td>
+                      <td className="px-3 py-3 text-slate-400 truncate max-w-[150px]" title={tx.memo}>{tx.memo || '-'}</td>
+                      <td className="px-3 py-3 text-center text-[10px] text-slate-400 font-medium">읽기 전용</td>
+                    </tr>
+                  );
+                })
               )}
 
               {/* 신규 거래 내역 (편집 가능) */}
-              {newTxs.map((tx, idx) => (
-                <tr key={`new-${idx}`} className="bg-blue-50/10 hover:bg-blue-50/20">
-                  <td className="px-2 py-2">
-                    <input 
-                      type="date"
-                      value={tx.date || inputDate}
-                      onChange={(e) => updateTx(accId, idx, 'date', e.target.value)}
-                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </td>
-                  <td className="px-2 py-2">
-                    <div className="flex gap-1">
-                      <select 
-                        value={tx.type}
-                        onChange={(e) => updateTx(accId, idx, 'type', e.target.value)}
-                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium"
-                      >
-                        <option value="DEPOSIT">입금</option>
-                        <option value="WITHDRAW">출금</option>
-                        <option value="INTEREST">이자</option>
-                        <option value="FEE">수수료</option>
-                        <option value="TAX">세금</option>
-                        {!isBrokerage && (
-                          <option value="CASH_ADJUSTMENT">현금 보정</option>
-                        )}
-                      </select>
-                      {isBrokerage && (
-                        <select 
-                          value={tx.currency}
-                          onChange={(e) => updateTx(accId, idx, 'currency', e.target.value)}
-                          className="px-1 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                        >
-                          <option value="KRW">KRW</option>
-                          <option value="USD">USD</option>
-                        </select>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-2 py-2 text-right">
-                    <div className="relative">
+              {newTxs.map((tx, idx) => {
+                const newTxAssetName = tx.currency === 'USD' ? '달러 예수금' : '원화 예수금';
+                const newTxAssetTicker = tx.currency === 'USD' ? 'USD' : 'KRW';
+                
+                return (
+                  <tr key={`new-${idx}`} className="bg-blue-50/10 hover:bg-blue-50/20">
+                    <td className="px-2 py-2">
                       <input 
-                        type="number"
-                        placeholder="금액"
-                        value={tx.amount}
-                        onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
-                        className="w-full pl-2 pr-6 py-1 text-xs text-right border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono font-medium"
+                        type="date"
+                        value={tx.date || inputDate}
+                        onChange={(e) => updateTx(accId, idx, 'date', e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
                       />
-                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">
-                        {isBrokerage ? (tx.currency === 'USD' ? '$' : '₩') : '₩'}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-2">
-                    <input 
-                      type="text"
-                      placeholder="메모 (선택)"
-                      value={tx.memo}
-                      onChange={(e) => updateTx(accId, idx, 'memo', e.target.value)}
-                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </td>
-                  <td className="px-2 py-2 text-center">
-                    <button 
-                      onClick={() => removeTx(accId, idx)}
-                      className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors inline-flex items-center justify-center"
-                      title="삭제"
-                    >
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-3 py-2 text-slate-500">
+                      <div>
+                        <span className="font-medium">{newTxAssetName}</span>
+                        <span className="text-[10px] text-slate-400 font-mono ml-1">({newTxAssetTicker})</span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <div className="flex gap-1">
+                        <select 
+                          value={tx.type}
+                          onChange={(e) => updateTx(accId, idx, 'type', e.target.value)}
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium"
+                        >
+                          <option value="DEPOSIT">입금</option>
+                          <option value="WITHDRAW">출금</option>
+                          <option value="INTEREST">이자</option>
+                          <option value="FEE">수수료</option>
+                          <option value="TAX">세금</option>
+                          {!isBrokerage && (
+                            <option value="CASH_ADJUSTMENT">현금 보정</option>
+                          )}
+                        </select>
+                        {isBrokerage && (
+                          <select 
+                            value={tx.currency}
+                            onChange={(e) => updateTx(accId, idx, 'currency', e.target.value)}
+                            className="px-1 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                          >
+                            <option value="KRW">KRW</option>
+                            <option value="USD">USD</option>
+                          </select>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <div className="relative">
+                        <input 
+                          type="number"
+                          placeholder="금액"
+                          value={tx.amount}
+                          onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
+                          className="w-full pl-2 pr-6 py-1 text-xs text-right border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono font-medium"
+                        />
+                        <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">
+                          {isBrokerage ? (tx.currency === 'USD' ? '$' : '₩') : '₩'}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input 
+                        type="text"
+                        placeholder="메모 (선택)"
+                        value={tx.memo}
+                        onChange={(e) => updateTx(accId, idx, 'memo', e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </td>
+                    <td className="px-2 py-2 text-center">
+                      <button 
+                        onClick={() => removeTx(accId, idx)}
+                        className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors inline-flex items-center justify-center"
+                        title="삭제"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -619,6 +645,10 @@ const SnapshotWizardPage = () => {
   const renderAssetProfits = (calcResult) => {
     const profits = calcResult?.asset_profits || [];
     if (profits.length === 0) return null;
+
+    const totalLastValuation = profits.reduce((sum, p) => sum + (p.last_valuation || 0), 0);
+    const totalCurrentValuation = profits.reduce((sum, p) => sum + (p.current_valuation || 0), 0);
+    const totalPeriodProfit = profits.reduce((sum, p) => sum + (p.period_profit || 0), 0);
 
     return (
       <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
@@ -642,6 +672,18 @@ const SnapshotWizardPage = () => {
                 const hasLast = p.last_valuation !== null && p.last_valuation !== undefined;
                 const hasCurrent = p.current_valuation !== null && p.current_valuation !== undefined;
                 
+                const isUsd = p.country === 'US' || p.ticker === 'USD';
+                const buyLabel = (p.ticker === 'KRW' || p.ticker === 'USD') ? '입금' : '매수';
+                const sellLabel = (p.ticker === 'KRW' || p.ticker === 'USD') ? '출금' : '매도';
+
+                const formatBuySell = (val) => {
+                  if (val === null || val === undefined) return '-';
+                  const rounded = Math.round(val * 100) / 100;
+                  return isUsd 
+                    ? `$${rounded.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` 
+                    : `${Math.round(val).toLocaleString()}원`;
+                };
+
                 return (
                   <tr key={p.asset_id} className="hover:bg-slate-50/50">
                     <td className="px-3 py-3">
@@ -652,8 +694,8 @@ const SnapshotWizardPage = () => {
                       {hasLast ? `${Math.round(p.last_valuation).toLocaleString()}원` : '-'}
                     </td>
                     <td className="px-3 py-3 text-right font-mono text-[10px] text-slate-500">
-                      <div className="text-rose-500">매수: {Math.round(p.period_buy).toLocaleString()}원</div>
-                      <div className="text-emerald-500">매도: {Math.round(p.period_sell).toLocaleString()}원</div>
+                      <div className="text-rose-500">{buyLabel}: {formatBuySell(p.period_buy)}</div>
+                      <div className="text-emerald-500">{sellLabel}: {formatBuySell(p.period_sell)}</div>
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-semibold text-slate-800">
                       {hasCurrent ? `${Math.round(p.current_valuation).toLocaleString()}원` : '-'}
@@ -670,6 +712,24 @@ const SnapshotWizardPage = () => {
                   </tr>
                 );
               })}
+              {/* 합계 행 추가 */}
+              <tr className="bg-slate-50 font-bold border-t border-slate-200">
+                <td className="px-3 py-3 text-slate-800 font-semibold">합계 (원화)</td>
+                <td className="px-3 py-3 text-right font-mono text-slate-800">
+                  {Math.round(totalLastValuation).toLocaleString()}원
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-[10px] text-slate-400">
+                  -
+                </td>
+                <td className="px-3 py-3 text-right font-mono text-slate-800">
+                  {Math.round(totalCurrentValuation).toLocaleString()}원
+                </td>
+                <td className="px-3 py-3 text-right font-mono">
+                  <span className={`font-bold ${totalPeriodProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    {totalPeriodProfit > 0 ? '+' : ''}{Math.round(totalPeriodProfit).toLocaleString()}원
+                  </span>
+                </td>
+              </tr>
             </tbody>
           </table>
         </div>
@@ -911,41 +971,27 @@ const SnapshotWizardPage = () => {
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                    <CheckCircle2 size={18} className="text-emerald-500" /> 계산 결과 (현금 보정액)
+                    <CheckCircle2 size={18} className="text-emerald-500" /> 계산 결과
                   </h4>
                   <div className="relative group/tooltip">
                     <HelpCircle size={16} className="text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
                     <div className="absolute right-0 bottom-full mb-2 w-72 p-3 bg-slate-800 text-white text-xs rounded-xl shadow-xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 transition-opacity z-50 normal-case font-normal leading-relaxed">
-                      입력하신 실제 현금 잔고와 시스템상 계산된 이론적 잔고의 차이입니다. 주로 수수료, 배당, 이자수익 등 누락된 현금 거래 내역으로 인해 발생하며, 스냅샷 저장 시 '현금 보정(CASH_ADJUSTMENT)' 내역으로 자동 기록되어 실제 잔고와 일치하도록 보정합니다.
+                      입력하신 현재 잔고와 거래 내역을 바탕으로 산출된 정산 결과입니다. 원화/달러 예수금의 보정액은 하단 '종목별 기간수익 상세'의 예수금 항목 기간 수익에 자동으로 반영됩니다.
                     </div>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">원화 잔고 보정액</p>
-                    <p className={`text-lg font-mono font-bold ${calc.diff_krw >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {calc.diff_krw > 0 ? '+' : ''}{Math.round(calc.diff_krw).toLocaleString()}원
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">기간 입금액</p>
+                    <p className="text-lg font-mono font-bold text-slate-700">
+                      {Math.round(calc.period_deposit).toLocaleString()}원
                     </p>
                   </div>
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">달러 잔고 보정액</p>
-                    <p className={`text-lg font-mono font-bold ${calc.diff_usd >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {calc.diff_usd > 0 ? '+' : ''}{calc.diff_usd.toLocaleString()}$
-                    </p>
-                  </div>
-                </div>
-                <div className="border-t border-slate-100 my-4 pt-4 space-y-3">
-                  <div className="flex justify-between items-center bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
-                    <span className="text-xs font-bold text-slate-500">기간 입금액</span>
-                    <span className="font-mono font-bold text-slate-700">
-                      {Math.round(calc.period_deposit).toLocaleString()}원
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center bg-slate-50 px-4 py-2.5 rounded-xl border border-slate-100">
-                    <span className="text-xs font-bold text-slate-500">기간 수익</span>
-                    <span className={`font-mono font-bold ${calc.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">기간 수익</p>
+                    <p className={`text-lg font-mono font-bold ${calc.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {calc.period_profit > 0 ? '+' : ''}{Math.round(calc.period_profit).toLocaleString()}원
-                    </span>
+                    </p>
                   </div>
                 </div>
                 <button 

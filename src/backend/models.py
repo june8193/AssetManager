@@ -163,6 +163,16 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
     asset = relationship("Asset", back_populates="transactions")
 
+    @property
+    def asset_name(self):
+        """거래 대상 자산의 이름을 반환합니다."""
+        return self.asset.name if self.asset else None
+
+    @property
+    def asset_ticker(self):
+        """거래 대상 자산의 티커(심볼)를 반환합니다."""
+        return self.asset.ticker if self.asset else None
+
 class AccountSnapshot(Base):
     """주기적으로 계산된 계좌의 상태를 캐싱하는 모델입니다.
     
