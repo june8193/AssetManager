@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Camera, ChevronLeft, ChevronRight, Check, Settings, ListChecks, FileSearch, Calendar, DollarSign, Wallet, Landmark, Plus, Trash2, X, RefreshCw, CheckCircle2, Save } from 'lucide-react';
+import { Camera, ChevronLeft, ChevronRight, Check, Settings, ListChecks, FileSearch, Calendar, DollarSign, Wallet, Landmark, Plus, Trash2, X, RefreshCw, CheckCircle2, Save, HelpCircle } from 'lucide-react';
 import { DB_API_BASE } from '../config';
 
 /**
@@ -693,18 +693,26 @@ const SnapshotWizardPage = () => {
 
             {calc && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
-                <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                  <CheckCircle2 size={18} className="text-emerald-500" /> 계산 결과 (차액)
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                    <CheckCircle2 size={18} className="text-emerald-500" /> 계산 결과 (현금 보정액)
+                  </h4>
+                  <div className="relative group/tooltip">
+                    <HelpCircle size={16} className="text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                    <div className="absolute right-0 bottom-full mb-2 w-72 p-3 bg-slate-800 text-white text-xs rounded-xl shadow-xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 transition-opacity z-50 normal-case font-normal leading-relaxed">
+                      입력하신 실제 현금 잔고와 시스템상 계산된 이론적 잔고의 차이입니다. 주로 수수료, 배당, 이자수익 등 누락된 현금 거래 내역으로 인해 발생하며, 스냅샷 저장 시 '현금 보정(CASH_ADJUSTMENT)' 내역으로 자동 기록되어 실제 잔고와 일치하도록 보정합니다.
+                    </div>
+                  </div>
+                </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">원화 차액</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">원화 잔고 보정액</p>
                     <p className={`text-lg font-mono font-bold ${calc.diff_krw >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {calc.diff_krw > 0 ? '+' : ''}{Math.round(calc.diff_krw).toLocaleString()}원
                     </p>
                   </div>
                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">달러 차액</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">달러 잔고 보정액</p>
                     <p className={`text-lg font-mono font-bold ${calc.diff_usd >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
                       {calc.diff_usd > 0 ? '+' : ''}{calc.diff_usd.toLocaleString()}$
                     </p>

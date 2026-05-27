@@ -182,7 +182,8 @@ def test_calculate_returns_existing_transactions(db_session, test_user):
         "snapshot_date": "2024-01-31",
         "new_transactions": [],
         "current_krw": 15000,
-        "current_usd": 0
+        "current_usd": 0,
+        "exchange_rate": 1.0
     })
     assert response.status_code == 200
     data = response.json()

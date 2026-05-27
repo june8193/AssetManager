@@ -258,3 +258,35 @@ def test_get_holdings_dynamic_cash_calculation(db_session, setup_assets):
     # 현금(KRW) 잔고는 입금(100만) - 매수(50만) - 수수료(2천) = 498,000원 이어야 함!
     assert krw_qty == 498000.0
 
+
+def test_calculate_theoretical_cash_filters_before_initial_balance(db_session, setup_assets):
+    """INITIAL_BALANCE 트랜잭션이 있을 때, 그 이전의 거래 내역이 이론상 현금 잔액 계산에서 제외되는지 테스트합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="필터테스트계좌", provider="미래에셋", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+
+    today = datetime.date.today()
+    ten_days_ago = today - datetime.timedelta(days=10)
+    five_days_ago = today - datetime.timedelta(days=5)
+
+    # 1. 10일 전 현금 입금 6,000,000원 (INITIAL_BALANCE 이전의 거래)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=ten_days_ago,
+        type="DEPOSIT", quantity=6000000.0, price=1.0, total_amount=6000000.0, currency="KRW"
+    ))
+
+    # 2. 5일 전 INITIAL_BALANCE 설정 (KRW 예수금 86,216원)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=five_days_ago,
+        type="INITIAL_BALANCE", quantity=86216.0, price=1.0, total_amount=86216.0, currency="KRW"
+    ))
+    db_session.commit()
+
+    service = DashboardService(db_session)
+    theoretical = service.calculate_theoretical_cash(account.id, today)
+
+    # 이전 입금 6,000,000원은 무시되고, INITIAL_BALANCE인 86,216원만 남아야 함
+    assert theoretical["KRW"] == 86216.0
+
+

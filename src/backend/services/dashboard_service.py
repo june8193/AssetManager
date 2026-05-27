@@ -434,6 +434,7 @@ class DashboardService:
         """지정된 계좌의 특정 일자까지의 이론상 현금 잔액(KRW, USD)을 계산합니다.
         
         공식: SUM(입금/초기잔액/배당/이자) - SUM(출금/수수료) - SUM(주식매수) + SUM(주식매도)
+        단, 해당 통화의 INITIAL_BALANCE 트랜잭션이 존재하는 경우 그 날짜 이전(미만)의 거래는 계산에서 제외합니다.
 
         Args:
             account_id (int): 계좌 식별자
@@ -449,12 +450,25 @@ class DashboardService:
             .all()
         )
         
+        # 통화별 INITIAL_BALANCE 적용 날짜 수집
+        initial_balance_dates = {}
+        for tx in transactions:
+            if tx.type == 'INITIAL_BALANCE':
+                curr = tx.currency
+                if curr not in initial_balance_dates or tx.transaction_date > initial_balance_dates[curr]:
+                    initial_balance_dates[curr] = tx.transaction_date
+        
         theoretical = {"KRW": 0.0, "USD": 0.0}
         
         for tx in transactions:
             currency = tx.currency
             if currency not in theoretical:
                 continue # KRW, USD 외 통화는 일단 제외
+
+            # 해당 통화의 INITIAL_BALANCE 설정 날짜 이전(미만)의 거래는 스킵
+            ib_date = initial_balance_dates.get(currency)
+            if ib_date and tx.transaction_date < ib_date:
+                continue
 
             if tx.type in ['DEPOSIT', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
                 theoretical[currency] += tx.total_amount
