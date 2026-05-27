@@ -133,7 +133,6 @@ async def test_calculate_brokerage_snapshot_with_various_types(db_session, setup
     
     # 신규 내역들
     new_transactions = [
-        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="DIVIDEND", total_amount=50000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="INTEREST", total_amount=10000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="CASH_ADJUSTMENT", total_amount=5000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="FEE", total_amount=2000, currency="KRW"),
@@ -142,8 +141,8 @@ async def test_calculate_brokerage_snapshot_with_various_types(db_session, setup
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="SELL", total_amount=200000, currency="KRW"),
     ]
     
-    # 계산: 1,000,000 + 50,000(배당) + 10,000(이자) + 5,000(조정) - 2,000(수수료) - 3,000(세금) - 100,000(매수) + 200,000(매도) = 1,160,000
-    expected_krw = 1160000
+    # 계산: 1,000,000 + 10,000(이자) + 5,000(조정) - 2,000(수수료) - 3,000(세금) - 100,000(매수) + 200,000(매도) = 1,110,000
+    expected_krw = 1110000
     
     req = BrokerageCalculateRequest(
         account_id=account.id,
@@ -367,11 +366,6 @@ async def test_calculate_brokerage_snapshot_with_asset_profits(db_session, setup
         account_id=account.id, asset_id=stock.id, transaction_date=today - datetime.timedelta(days=2),
         type="BUY", quantity=5.0, price=50000.0, total_amount=250000.0, currency="KRW"
     ))
-    # 4. 기간 내 배당금 발생: 삼성전자 배당 20,000원
-    db_session.add(Transaction(
-        account_id=account.id, asset_id=stock.id, transaction_date=today - datetime.timedelta(days=1),
-        type="DIVIDEND", quantity=0.0, price=0.0, total_amount=20000.0, currency="KRW"
-    ))
     db_session.commit()
     
     req = BrokerageCalculateRequest(
@@ -402,8 +396,7 @@ async def test_calculate_brokerage_snapshot_with_asset_profits(db_session, setup
         assert profit_data.last_valuation == 450000.0
         assert profit_data.current_valuation == 900000.0
         assert profit_data.period_buy == 250000.0
-        assert profit_data.period_dividend == 20000.0
-        assert profit_data.period_profit == 220000.0
+        assert profit_data.period_profit == 200000.0
 
 
 @pytest.mark.asyncio

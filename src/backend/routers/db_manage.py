@@ -155,7 +155,6 @@ class AssetProfitSchema(BaseModel):
     last_valuation: Optional[float] = None
     period_buy: float = 0.0
     period_sell: float = 0.0
-    period_dividend: float = 0.0
 
 class BrokerageCalculateResponse(BaseModel):
     theoretical_krw: float
@@ -670,12 +669,12 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     new_usd_net = 0.0
     for tx in req.new_transactions:
         if tx.currency == 'KRW':
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
                 new_krw_net += tx.total_amount
             elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
                 new_krw_net -= tx.total_amount
         elif tx.currency == 'USD':
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
+            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
                 new_usd_net += tx.total_amount
             elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
                 new_usd_net -= tx.total_amount
@@ -760,7 +759,7 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     for tx in all_past_txs:
         if tx.asset and tx.asset.ticker in ['KRW', 'USD']:
             continue
-        if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+        if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
             last_qtys[tx.asset_id] = last_qtys.get(tx.asset_id, 0.0) + tx.quantity
         elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
             last_qtys[tx.asset_id] = last_qtys.get(tx.asset_id, 0.0) - tx.quantity
@@ -799,21 +798,20 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
             c_qty = l_qty
             for tx in existing_transactions:
                 if tx.asset_id == asset_id:
-                    if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+                    if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
                         c_qty += tx.quantity
                     elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
                         c_qty -= tx.quantity
                         
             for tx in req.new_transactions:
                 if tx.asset_id == asset_id:
-                    if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+                    if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
                         c_qty += tx.quantity
                     elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
                         c_qty -= tx.quantity
             
             p_buy = 0.0
             p_sell = 0.0
-            p_div = 0.0
             
             def get_tx_rate(t):
                 if t.exchange_rate:
@@ -827,8 +825,6 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
                         p_buy += tx.total_amount * tx_rate
                     elif tx.type == 'SELL':
                         p_sell += tx.total_amount * tx_rate
-                    elif tx.type == 'DIVIDEND':
-                        p_div += tx.total_amount * tx_rate
                         
             for tx in req.new_transactions:
                 if tx.asset_id == asset_id:
@@ -837,8 +833,6 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
                         p_buy += tx.total_amount * tx_rate
                     elif tx.type == 'SELL':
                         p_sell += tx.total_amount * tx_rate
-                    elif tx.type == 'DIVIDEND':
-                        p_div += tx.total_amount * tx_rate
             
             l_price = 0.0
             l_price_ok = False
@@ -878,7 +872,7 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
 
                     
             if l_val is not None and c_val is not None:
-                p_profit_asset = c_val - l_val - p_buy + p_sell + p_div
+                p_profit_asset = c_val - l_val - p_buy + p_sell
                 
             asset_profits.append(AssetProfitSchema(
                 asset_id=asset_id,
@@ -891,8 +885,7 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
                 last_price=l_price if (l_qty > 0 and l_price_ok) else (0.0 if l_qty == 0 else None),
                 last_valuation=l_val,
                 period_buy=p_buy,
-                period_sell=p_sell,
-                period_dividend=p_div
+                period_sell=p_sell
             ))
             
     return BrokerageCalculateResponse(
@@ -926,7 +919,7 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
     # 2. 사용자가 새로 입력한 내역 반영
     new_krw_net = 0.0
     for tx in req.new_transactions:
-        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
             new_krw_net += tx.total_amount
         elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
             new_krw_net -= tx.total_amount

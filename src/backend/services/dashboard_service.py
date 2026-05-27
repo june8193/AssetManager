@@ -132,7 +132,7 @@ class DashboardService:
             if key not in holdings:
                 holdings[key] = 0.0
             
-            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
                 holdings[key] += tx.quantity
             elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
                 holdings[key] -= tx.quantity
@@ -146,7 +146,7 @@ class DashboardService:
                 
                 if tx.type in ['BUY', 'FEE', 'TAX']:
                     holdings[cash_key] -= tx.total_amount
-                elif tx.type in ['SELL', 'DIVIDEND', 'INTEREST']:
+                elif tx.type in ['SELL', 'INTEREST']:
                     holdings[cash_key] += tx.total_amount
         
         # 결과 정리
@@ -470,7 +470,7 @@ class DashboardService:
             if ib_date and tx.transaction_date < ib_date:
                 continue
 
-            if tx.type in ['DEPOSIT', 'DIVIDEND', 'INTEREST', 'CASH_ADJUSTMENT']:
+            if tx.type in ['DEPOSIT', 'INTEREST', 'CASH_ADJUSTMENT']:
                 theoretical[currency] += tx.total_amount
             elif tx.type == 'INITIAL_BALANCE':
                 # INITIAL_BALANCE는 자산이 현금(KRW, USD)인 경우에만 더합니다.

@@ -478,48 +478,139 @@ const SnapshotWizardPage = () => {
     }
   };
 
-  const renderExistingTransactions = (accId) => {
+  const renderUnifiedTransactions = (accId, isBrokerage) => {
     const txs = existingTxs[accId] || [];
+    const data = accountsFormData[accId] || { newTransactions: [] };
+    const newTxs = data.newTransactions || [];
+
     return (
       <div className="space-y-4">
-        <h4 className="font-bold text-slate-800 flex items-center gap-2">
-          <ListChecks size={18} className="text-slate-500" /> 기간 내 기존 거래 내역 ({txs.length})
-        </h4>
-        <div className="border border-slate-200 rounded-xl overflow-hidden bg-slate-50 max-h-[400px] overflow-y-auto custom-scrollbar">
-          {loadingExistingTxs ? (
-            <div className="text-center py-10 text-slate-400 text-sm">기존 거래 내역 불러오는 중...</div>
-          ) : txs.length === 0 ? (
-            <div className="text-center py-10 text-slate-400 text-sm">해당 기간 내 기록된 거래가 없습니다.</div>
-          ) : (
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="bg-slate-100 border-b border-slate-200 text-slate-500 sticky top-0">
+        <div className="flex items-center justify-between">
+          <h4 className="font-bold text-slate-800 flex items-center gap-2">
+            <ListChecks size={18} className="text-slate-500" /> 기간 내 거래 내역 (기존: {txs.length}건 / 신규: {newTxs.length}건)
+          </h4>
+          <button 
+            onClick={() => addTx(accId)}
+            className="text-xs bg-blue-50 hover:bg-blue-100 text-blue-600 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1 border border-blue-100"
+          >
+            <Plus size={14} /> 신규 거래 추가
+          </button>
+        </div>
+
+        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-sm overflow-x-auto">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead className="bg-slate-100 border-b border-slate-200 text-slate-500 sticky top-0">
+              <tr>
+                <th className="px-3 py-3 font-semibold w-[20%]">날짜</th>
+                <th className="px-3 py-3 font-semibold w-[20%]">유형</th>
+                <th className="px-3 py-3 font-semibold w-[20%] text-right">금액/수량</th>
+                <th className="px-3 py-3 font-semibold w-[30%]">메모</th>
+                <th className="px-3 py-3 font-semibold w-[10%] text-center">동작</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {/* 기존 거래 내역 (읽기 전용) */}
+              {loadingExistingTxs ? (
                 <tr>
-                  <th className="px-3 py-2 font-semibold">날짜</th>
-                  <th className="px-3 py-2 font-semibold">유형</th>
-                  <th className="px-3 py-2 font-semibold text-right">금액/수량</th>
-                  <th className="px-3 py-2 font-semibold">메모</th>
+                  <td colSpan="5" className="text-center py-10 text-slate-400">기존 거래 내역 불러오는 중...</td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200 bg-white">
-                {txs.map((tx) => (
-                  <tr key={tx.id} className="hover:bg-slate-50 text-slate-700">
-                    <td className="px-3 py-2 font-mono">{tx.transaction_date}</td>
-                    <td className="px-3 py-2">
-                      <span className={`px-1.5 py-0.5 rounded-full font-bold text-[10px] ${
-                        ['BUY', 'WITHDRAW', 'TAX', 'FEE'].includes(tx.type) ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'
-                      }`}>
-                        {tx.type}
+              ) : txs.length === 0 && newTxs.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="text-center py-10 text-slate-400">기록된 거래 내역이 없습니다. 신규 거래를 추가해 보세요.</td>
+                </tr>
+              ) : (
+                txs.map((tx) => (
+                  <tr key={tx.id} className="bg-slate-50/50 text-slate-500 hover:bg-slate-50">
+                    <td className="px-3 py-3 font-mono">{tx.transaction_date}</td>
+                    <td className="px-3 py-3">
+                      <span className="px-1.5 py-0.5 rounded-full font-bold text-[9px] bg-slate-200 text-slate-600">
+                        {tx.type} (기존)
                       </span>
                     </td>
-                    <td className="px-3 py-2 text-right font-mono font-medium">
+                    <td className="px-3 py-3 text-right font-mono font-medium">
                       {tx.currency === 'USD' ? '$' : ''}{tx.total_amount.toLocaleString()}{tx.currency === 'KRW' ? '원' : ''}
                     </td>
-                    <td className="px-3 py-2 text-slate-500 max-w-[100px] truncate" title={tx.memo}>{tx.memo || '-'}</td>
+                    <td className="px-3 py-3 text-slate-400 truncate max-w-[150px]" title={tx.memo}>{tx.memo || '-'}</td>
+                    <td className="px-3 py-3 text-center text-[10px] text-slate-400 font-medium">읽기 전용</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+                ))
+              )}
+
+              {/* 신규 거래 내역 (편집 가능) */}
+              {newTxs.map((tx, idx) => (
+                <tr key={`new-${idx}`} className="bg-blue-50/10 hover:bg-blue-50/20">
+                  <td className="px-2 py-2">
+                    <input 
+                      type="date"
+                      value={tx.date || inputDate}
+                      onChange={(e) => updateTx(accId, idx, 'date', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <div className="flex gap-1">
+                      <select 
+                        value={tx.type}
+                        onChange={(e) => updateTx(accId, idx, 'type', e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white font-medium"
+                      >
+                        <option value="DEPOSIT">입금</option>
+                        <option value="WITHDRAW">출금</option>
+                        <option value="INTEREST">이자</option>
+                        <option value="FEE">수수료</option>
+                        <option value="TAX">세금</option>
+                        {!isBrokerage && (
+                          <option value="CASH_ADJUSTMENT">현금 보정</option>
+                        )}
+                      </select>
+                      {isBrokerage && (
+                        <select 
+                          value={tx.currency}
+                          onChange={(e) => updateTx(accId, idx, 'currency', e.target.value)}
+                          className="px-1 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                        >
+                          <option value="KRW">KRW</option>
+                          <option value="USD">USD</option>
+                        </select>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-2 py-2 text-right">
+                    <div className="relative">
+                      <input 
+                        type="number"
+                        placeholder="금액"
+                        value={tx.amount}
+                        onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
+                        className="w-full pl-2 pr-6 py-1 text-xs text-right border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono font-medium"
+                      />
+                      <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">
+                        {isBrokerage ? (tx.currency === 'USD' ? '$' : '₩') : '₩'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-2 py-2">
+                    <input 
+                      type="text"
+                      placeholder="메모 (선택)"
+                      value={tx.memo}
+                      onChange={(e) => updateTx(accId, idx, 'memo', e.target.value)}
+                      className="w-full px-2 py-1 text-xs border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <button 
+                      onClick={() => removeTx(accId, idx)}
+                      className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors inline-flex items-center justify-center"
+                      title="삭제"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
     );
@@ -540,7 +631,7 @@ const SnapshotWizardPage = () => {
               <tr>
                 <th className="px-3 py-2.5 font-semibold">종목(국가)</th>
                 <th className="px-3 py-2.5 font-semibold text-right">이전 평가액</th>
-                <th className="px-3 py-2.5 font-semibold text-right">매수/매도/배당</th>
+                <th className="px-3 py-2.5 font-semibold text-right">매수/매도</th>
                 <th className="px-3 py-2.5 font-semibold text-right">현재 평가액</th>
                 <th className="px-3 py-2.5 font-semibold text-right">기간 수익</th>
               </tr>
@@ -563,7 +654,6 @@ const SnapshotWizardPage = () => {
                     <td className="px-3 py-3 text-right font-mono text-[10px] text-slate-500">
                       <div className="text-rose-500">매수: {Math.round(p.period_buy).toLocaleString()}원</div>
                       <div className="text-emerald-500">매도: {Math.round(p.period_sell).toLocaleString()}원</div>
-                      <div className="text-blue-500">배당: {Math.round(p.period_dividend).toLocaleString()}원</div>
                     </td>
                     <td className="px-3 py-3 text-right font-mono font-semibold text-slate-800">
                       {hasCurrent ? `${Math.round(p.current_valuation).toLocaleString()}원` : '-'}
@@ -738,79 +828,9 @@ const SnapshotWizardPage = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Column 1: 기존 거래 내역 (읽기 전용) */}
-          {renderExistingTransactions(accId)}
-
-          {/* Column 2: 신규 거래 내역 입력 */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                <Plus size={18} className="text-blue-600" /> 신규 입출금/배당 내역
-              </h4>
-              <button 
-                onClick={() => addTx(accId)}
-                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1"
-              >
-                <Plus size={14} /> 내역 추가
-              </button>
-            </div>
-
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {data.newTransactions.length === 0 ? (
-                <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-sm">
-                  추가된 내역이 없습니다.
-                </div>
-              ) : (
-                data.newTransactions.map((tx, idx) => (
-                  <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 relative group">
-                    <button 
-                      onClick={() => removeTx(accId, idx)}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <X size={14} />
-                    </button>
-                    <div className="grid grid-cols-2 gap-3">
-                      <select 
-                        value={tx.type}
-                        onChange={(e) => updateTx(accId, idx, 'type', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="DEPOSIT">입금</option>
-                        <option value="WITHDRAW">출금</option>
-                        <option value="DIVIDEND">배당</option>
-                        <option value="INTEREST">이자</option>
-                        <option value="FEE">수수료</option>
-                        <option value="TAX">세금</option>
-                      </select>
-                      <select 
-                        value={tx.currency}
-                        onChange={(e) => updateTx(accId, idx, 'currency', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="KRW">KRW</option>
-                        <option value="USD">USD</option>
-                      </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <input 
-                        type="number"
-                        placeholder="금액"
-                        value={tx.amount}
-                        onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <input 
-                        type="text"
-                        placeholder="메모 (선택)"
-                        value={tx.memo}
-                        onChange={(e) => updateTx(accId, idx, 'memo', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+          {/* Column 1 & 2: 통합 거래 내역 테이블 */}
+          <div className="xl:col-span-2 space-y-4">
+            {renderUnifiedTransactions(accId, true)}
           </div>
 
           {/* Column 3: 잔고 입력 및 결과 */}
@@ -969,77 +989,9 @@ const SnapshotWizardPage = () => {
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
-          {/* Column 1: 기존 거래 내역 (읽기 전용) */}
-          {renderExistingTransactions(accId)}
-
-          {/* Column 2: 신규 거래 내역 */}
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                <Plus size={18} className="text-blue-600" /> 신규 입출금/이자/세금 내역
-              </h4>
-              <button 
-                onClick={() => addTx(accId)}
-                className="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg font-bold transition-colors flex items-center gap-1"
-              >
-                <Plus size={14} /> 내역 추가
-              </button>
-            </div>
-
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {data.newTransactions.length === 0 ? (
-                <div className="text-center py-10 bg-slate-50 rounded-xl border border-dashed border-slate-200 text-slate-400 text-sm">
-                  추가된 내역이 없습니다.
-                </div>
-              ) : (
-                data.newTransactions.map((tx, idx) => (
-                  <div key={idx} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm space-y-3 relative group">
-                    <button 
-                      onClick={() => removeTx(accId, idx)}
-                      className="absolute -top-2 -right-2 w-6 h-6 bg-red-100 text-red-500 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all opacity-0 group-hover:opacity-100"
-                    >
-                      <X size={14} />
-                    </button>
-                    <div className="grid grid-cols-2 gap-3">
-                      <select 
-                        value={tx.type}
-                        onChange={(e) => updateTx(accId, idx, 'type', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="DEPOSIT">입금</option>
-                        <option value="WITHDRAW">출금</option>
-                        <option value="INTEREST">이자</option>
-                        <option value="FEE">수수료</option>
-                        <option value="TAX">세금</option>
-                        <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
-                      </select>
-                      <input 
-                        type="date"
-                        value={tx.date || inputDate}
-                        onChange={(e) => updateTx(accId, idx, 'date', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <input 
-                        type="number"
-                        placeholder="금액"
-                        value={tx.amount}
-                        onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      />
-                      <input 
-                        type="text"
-                        placeholder="메모 (선택)"
-                        value={tx.memo}
-                        onChange={(e) => updateTx(accId, idx, 'memo', e.target.value)}
-                        className="text-sm border-slate-200 rounded-lg focus:ring-blue-500 focus:border-blue-500"
-                      />
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+          {/* Column 1 & 2: 통합 거래 내역 테이블 */}
+          <div className="xl:col-span-2 space-y-4">
+            {renderUnifiedTransactions(accId, false)}
           </div>
 
           {/* Column 3: 최종 잔액 입력 */}
