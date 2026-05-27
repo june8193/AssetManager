@@ -523,5 +523,53 @@ async def test_calculate_brokerage_snapshot_new_asset(db_session, setup_assets):
         assert profit_data.period_profit == 100000.0
 
 
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_needs_last_rate(db_session, setup_assets):
+    """이전 스냅샷이 있고 해외 자산을 보유하고 있으나 당일 환율 데이터가 없는 경우 환율 입력을 요구하는지 테스트합니다."""
+    krw, usd, stock_kr = setup_assets
+    
+    # 미국 주식 생성
+    stock_us = Asset(ticker="KO", name="Coca-Cola", major_category="주식", sub_category="해외주식", country="US")
+    db_session.add(stock_us)
+    
+    account = Account(user_id=1, name="해외주식테스트", provider="KB", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+    
+    today = datetime.date.today()
+    ten_days_ago = today - datetime.timedelta(days=10)
+    
+    # 1. 10일 전 스냅샷 등록
+    db_session.add(AccountSnapshot(
+        account_id=account.id,
+        snapshot_date=ten_days_ago,
+        period_deposit=0.0,
+        total_valuation=1000000.0,
+        total_profit=10000.0
+    ))
+    
+    # 2. 10일 전 시점에 미국 주식 10주 보유 중이었음
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock_us.id, transaction_date=ten_days_ago - datetime.timedelta(days=1),
+        type="BUY", quantity=10.0, price=50.0, total_amount=500.0, currency="USD"
+    ))
+    db_session.commit()
+    
+    # 3. DB에 ten_days_ago (10일 전) 환율 데이터가 없는 상태로 계산 요청
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=[],
+        current_krw=100000.0,
+        current_usd=0.0,
+        exchange_rate=1350.0
+    )
+    
+    res = await calculate_brokerage_snapshot(req, db_session)
+    assert res.need_last_exchange_rate is True
+    assert res.last_snapshot_date == ten_days_ago
+
+
+
 
 

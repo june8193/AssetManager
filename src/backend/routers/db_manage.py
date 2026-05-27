@@ -165,6 +165,8 @@ class BrokerageCalculateResponse(BaseModel):
     period_deposit: float = 0.0
     period_profit: float = 0.0
     asset_profits: List[AssetProfitSchema] = []
+    need_last_exchange_rate: bool = False
+    last_snapshot_date: Optional[date] = None
 
 
 class BrokerageSaveAccountRequest(BaseModel):
@@ -780,10 +782,30 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     target_asset_ids = list(set(past_active_asset_ids + period_asset_ids))
     
     if target_asset_ids:
-        last_rate_obj = db.query(ExchangeRate).filter(ExchangeRate.date <= last_date).order_by(ExchangeRate.date.desc()).first()
-        last_rate = last_rate_obj.rate if last_rate_obj else 1350.0
-        
         assets_map = {asset.id: asset for asset in db.query(Asset).filter(Asset.id.in_(target_asset_ids)).all()}
+        
+        # 해외 자산(US) 보유 여부 판단
+        has_us_assets = any(asset.country == 'US' or asset.ticker == 'USD' for asset in assets_map.values())
+        
+        last_rate = 1350.0  # 기본값 fallback
+        if has_us_assets and last_snapshot:  # 해외 자산이 있고 이전 스냅샷이 있는 경우에만 정확한 과거 환율 요구
+            last_rate_obj = db.query(ExchangeRate).filter(ExchangeRate.date == last_date).first()
+            if not last_rate_obj:
+                # 당일 환율 데이터가 없음 -> 정산 조기 종료 및 과거 환율 입력 요구 응답
+                return BrokerageCalculateResponse(
+                    theoretical_krw=theoretical_krw,
+                    theoretical_usd=theoretical_usd,
+                    diff_krw=diff_krw,
+                    diff_usd=diff_usd,
+                    existing_transactions=existing_transactions,
+                    period_deposit=period_deposit,
+                    period_profit=0.0,
+                    asset_profits=[],
+                    need_last_exchange_rate=True,
+                    last_snapshot_date=last_date
+                )
+            last_rate = last_rate_obj.rate
+            
         target_tickers = [asset.ticker for asset in assets_map.values()]
         
         current_prices = await dashboard_service.get_current_prices(target_tickers)

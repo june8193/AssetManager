@@ -877,7 +877,37 @@ const SnapshotWizardPage = () => {
               </button>
             </div>
 
-            {calc && (
+            {calc && calc.need_last_exchange_rate && (
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4 animate-in slide-in-from-top-2 duration-300">
+                <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+                  <HelpCircle size={18} className="text-amber-600" />
+                  이전 스냅샷 일자({calc.last_snapshot_date})의 환율 정보가 없습니다.
+                </div>
+                <p className="text-xs text-amber-700 leading-relaxed font-medium">
+                  정확한 정산 계산(해외 자산의 이전 평가액 계산)을 위해 이전 스냅샷 일자의 환율 정보가 필요합니다. 
+                  <br />
+                  <strong>[DB 관리 &gt; 마스터 관리 &gt; 환율 관리]</strong> 메뉴에서 <strong>{calc.last_snapshot_date}</strong> 일자의 환율(USD/KRW)을 등록한 후 다시 정산 계산을 시도해 주세요.
+                </p>
+                <div className="flex gap-3">
+                  <a 
+                    href="/db" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="flex-1 py-3 bg-white border border-amber-200 hover:bg-amber-100 text-amber-800 rounded-xl font-bold text-center text-xs transition-all shadow-sm"
+                  >
+                    DB 관리 바로가기 (새창)
+                  </a>
+                  <button 
+                    onClick={() => calculateAccountDiff(accId)}
+                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1 shadow-md shadow-amber-100"
+                  >
+                    <RefreshCw size={14} /> 다시 계산하기
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {calc && !calc.need_last_exchange_rate && (
               <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
                 <div className="flex items-center justify-between">
                   <h4 className="font-bold text-slate-800 flex items-center gap-2">
@@ -939,7 +969,7 @@ const SnapshotWizardPage = () => {
         </div>
 
         {/* 종목별 기간수익 상세 테이블 하단 표시 */}
-        {calc && renderAssetProfits(calc)}
+        {calc && !calc.need_last_exchange_rate && renderAssetProfits(calc)}
       </div>
     );
   };
