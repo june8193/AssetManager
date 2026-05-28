@@ -55,5 +55,43 @@ describe('SnapshotsTab Component', () => {
     
     expect(mockNavigate).toHaveBeenCalledWith('/db/snapshots/new');
   });
+
+  it('스냅샷 목록의 계좌 정보가 금융기관, 계좌명, 종류, 별칭 열로 분리되어 올바르게 렌더링되는지 검증', async () => {
+    const customAccounts = [
+      { id: 1, name: '123-456', provider: 'KB증권', account_type: 'BROKERAGE', alias: '주식별칭', is_active: true },
+      { id: 2, name: '987-654', provider: '신한은행', account_type: 'BANK', alias: '', is_active: true }
+    ];
+    const activeSnapshots = [
+      { id: 10, snapshot_date: '2026-05-28', account_id: 1, period_deposit: 1000, total_valuation: 20000, total_profit: 5000 },
+      { id: 11, snapshot_date: '2026-05-28', account_id: 2, period_deposit: 2000, total_valuation: 30000, total_profit: -1000 }
+    ];
+
+    fetch.mockImplementation((url) => {
+      if (url.includes('/snapshots/latest')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ latest_date: '2026-05-28' }) });
+      if (url.includes('/snapshots')) return Promise.resolve({ ok: true, json: () => Promise.resolve(activeSnapshots) });
+      if (url.includes('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(customAccounts) });
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    renderComponent();
+
+    // 헤더 검증
+    expect(await screen.findByText('금융기관')).toBeInTheDocument();
+    expect(await screen.findByText('계좌명')).toBeInTheDocument();
+    expect(await screen.findByText('종류')).toBeInTheDocument();
+    expect(await screen.findByText('별칭')).toBeInTheDocument();
+
+    // 1번 계좌 데이터 검증
+    expect(await screen.findByText('KB증권')).toBeInTheDocument();
+    expect(await screen.findByText('123-456')).toBeInTheDocument();
+    expect(await screen.findByText('BROKERAGE')).toBeInTheDocument();
+    expect(await screen.findByText('주식별칭')).toBeInTheDocument();
+
+    // 2번 계좌 데이터 검증 (별칭이 없으므로 '-')
+    expect(await screen.findByText('신한은행')).toBeInTheDocument();
+    expect(await screen.findByText('987-654')).toBeInTheDocument();
+    expect(await screen.findByText('BANK')).toBeInTheDocument();
+    expect(await screen.findByText('-')).toBeInTheDocument();
+  });
 });
 

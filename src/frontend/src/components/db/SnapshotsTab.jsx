@@ -102,30 +102,45 @@ const SnapshotsTab = () => {
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">기준 일자</th>
-              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">계좌</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">금융기관</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">계좌명</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">종류</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">별칭</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">기간 입금액</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">총 평가액</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">기간 수익</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {snapshots.map((snap) => (
-              <tr key={snap.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 text-sm text-slate-900 font-medium">{snap.snapshot_date}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {accounts.find(a => a.id === snap.account_id)?.name || snap.account_id}
-                </td>
-                <td className="px-4 py-3 text-sm text-right font-mono text-blue-600">
-                  {maskValue(snap.period_deposit.toLocaleString())}
-                </td>
-                <td className="px-4 py-3 text-sm text-right font-mono font-bold">
-                  {maskValue(snap.total_valuation.toLocaleString())}
-                </td>
-                <td className="px-4 py-3 text-sm text-right font-mono text-emerald-600">
-                  {maskValue(snap.total_profit.toLocaleString())}
-                </td>
-              </tr>
-            ))}
+            {snapshots.map((snap) => {
+              const account = accounts.find(a => a.id === snap.account_id);
+              return (
+                <tr key={snap.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-3 text-sm text-slate-900 font-medium">{snap.snapshot_date}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {account?.provider || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {account ? maskValue(account.name) : snap.account_id}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {account?.account_type || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-500">
+                    {account?.alias || '-'}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right font-mono text-blue-600">
+                    {maskValue(snap.period_deposit.toLocaleString())}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right font-mono font-bold">
+                    {maskValue(snap.total_valuation.toLocaleString())}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right font-mono text-emerald-600">
+                    {maskValue(snap.total_profit.toLocaleString())}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {snapshots.length === 0 && (
