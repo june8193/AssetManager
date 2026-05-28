@@ -100,7 +100,16 @@ const TransactionsTab = () => {
 
       if (response.ok) {
         fetchData();
-        resetForm();
+        if (editingId) {
+          resetForm();
+        } else {
+          setFormData(prev => ({
+            ...prev,
+            quantity: 0,
+            price: 0,
+            total_amount: 0
+          }));
+        }
       }
     } catch (error) {
       console.error('거래 내역 저장 오류:', error);
@@ -178,7 +187,9 @@ const TransactionsTab = () => {
         >
           <option value="all">전체 계좌</option>
           {accounts.map(acc => (
-            <option key={acc.id} value={acc.id}>{acc.provider} - {acc.name}</option>
+            <option key={acc.id} value={acc.id}>
+              {acc.provider} / {acc.name}{acc.alias ? ` / ${acc.alias}` : ''}
+            </option>
           ))}
         </select>
       </div>
@@ -211,7 +222,9 @@ const TransactionsTab = () => {
               required
             >
               {accounts.map(acc => (
-                <option key={acc.id} value={acc.id}>{acc.provider} - {acc.name}</option>
+                <option key={acc.id} value={acc.id}>
+                  {acc.provider} / {acc.name}{acc.alias ? ` / ${acc.alias}` : ''}
+                </option>
               ))}
             </select>
           </div>
