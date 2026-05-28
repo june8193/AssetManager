@@ -31,6 +31,18 @@ async def get_yearly_stats(db: Session = Depends(get_db)):
         print(f"연도별 통계 조회 중 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/daily", response_model=List[Dict[str, Any]])
+async def get_daily_stats(db: Session = Depends(get_db)):
+    """일자별 자산 현황 통계를 조회합니다."""
+    try:
+        service = DashboardService(db)
+        stats = service.get_daily_stats()
+        return stats
+    except Exception as e:
+        print(f"일자별 통계 조회 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/snapshots", response_model=Dict[str, Any])
 async def get_snapshots(db: Session = Depends(get_db)):
     """자산 추이 스냅샷 데이터를 조회합니다."""

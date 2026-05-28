@@ -161,3 +161,107 @@ def test_get_yearly_stats_order(db_session):
     assert stats[0]["year"] == 2023
     assert stats[1]["year"] == 2022
     assert stats[2]["year"] == 2021
+
+def test_get_daily_stats(db_session):
+    """일자별 자산 통계 및 수익률 계산 로직을 검증합니다."""
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+    
+    acc1 = Account(user_id=user.id, name="Account 1", provider="Bank A")
+    acc2 = Account(user_id=user.id, name="Account 2", provider="Bank B")
+    db_session.add_all([acc1, acc2])
+    db_session.commit()
+
+    # 2024-01-01: 기초 설정 (최초일자)
+    # 계좌1: 추가액 1000, 평가액 1000
+    # 계좌2: 추가액 2000, 평가액 2000
+    # 총자산: 3000, 총추가액: 3000 -> 기초자산: 0, 증가액: 3000, 수익: 0, 수익률: 0.0%
+    db_session.add(AccountSnapshot(
+        account_id=acc1.id,
+        snapshot_date=datetime.date(2024, 1, 1),
+        period_deposit=1000.0,
+        total_valuation=1000.0,
+        total_profit=0.0
+    ))
+    db_session.add(AccountSnapshot(
+        account_id=acc2.id,
+        snapshot_date=datetime.date(2024, 1, 1),
+        period_deposit=2000.0,
+        total_valuation=2000.0,
+        total_profit=0.0
+    ))
+
+    # 2024-01-02: 수익 및 추가액 발생
+    # 계좌1: 추가액 0, 평가액 1500
+    # 계좌2: 추가액 500, 평가액 2500
+    # 총자산: 4000, 총추가액: 500 -> 기초자산: 3000, 증가액: 1000, 수익: 500, 수익률: (500 / 3500) * 100 = 14.29%
+    db_session.add(AccountSnapshot(
+        account_id=acc1.id,
+        snapshot_date=datetime.date(2024, 1, 2),
+        period_deposit=0.0,
+        total_valuation=1500.0,
+        total_profit=500.0
+    ))
+    db_session.add(AccountSnapshot(
+        account_id=acc2.id,
+        snapshot_date=datetime.date(2024, 1, 2),
+        period_deposit=500.0,
+        total_valuation=2500.0,
+        total_profit=0.0
+    ))
+
+    # 2024-01-03: 손실 발생
+    # 계좌1: 추가액 0, 평가액 1400
+    # 계좌2: 추가액 0, 평가액 2300
+    # 총자산: 3700, 총추가액: 0 -> 기초자산: 4000, 증가액: -300, 수익: -300, 수익률: (-300 / 4000) * 100 = -7.50%
+    db_session.add(AccountSnapshot(
+        account_id=acc1.id,
+        snapshot_date=datetime.date(2024, 1, 3),
+        period_deposit=0.0,
+        total_valuation=1400.0,
+        total_profit=400.0
+    ))
+    db_session.add(AccountSnapshot(
+        account_id=acc2.id,
+        snapshot_date=datetime.date(2024, 1, 3),
+        period_deposit=0.0,
+        total_valuation=2300.0,
+        total_profit=-200.0
+    ))
+
+    db_session.commit()
+
+    service = DashboardService(db_session)
+    stats = service.get_daily_stats()
+
+    # 최신 날짜가 가장 먼저 오도록 정렬되었는지 확인
+    assert len(stats) == 3
+    assert stats[0]["date"] == datetime.date(2024, 1, 3)
+    assert stats[1]["date"] == datetime.date(2024, 1, 2)
+    assert stats[2]["date"] == datetime.date(2024, 1, 1)
+
+    # 2024-01-03 검증 (최신)
+    s03 = stats[0]
+    assert s03["assets"] == 3700.0
+    assert s03["contribution"] == 0.0
+    assert s03["increase"] == -300.0
+    assert s03["profit"] == -300.0
+    assert s03["roi"] == -7.50
+
+    # 2024-01-02 검증
+    s02 = stats[1]
+    assert s02["assets"] == 4000.0
+    assert s02["contribution"] == 500.0
+    assert s02["increase"] == 1000.0
+    assert s02["profit"] == 500.0
+    assert s02["roi"] == 14.29
+
+    # 2024-01-01 검증 (최초)
+    s01 = stats[2]
+    assert s01["assets"] == 3000.0
+    assert s01["contribution"] == 3000.0
+    assert s01["increase"] == 3000.0
+    assert s01["profit"] == 0.0
+    assert s01["roi"] == 0.0
+

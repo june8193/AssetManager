@@ -107,6 +107,72 @@ class DashboardService:
         results.reverse()
         return results
 
+    def get_daily_stats(self) -> List[Dict[str, Any]]:
+        """일자별 자산 현황 통계를 계산하여 최신순으로 반환합니다.
+        
+        역사적 통계 데이터이므로 현재 계좌의 활성 여부와 관계없이 모든 데이터를 포함합니다.
+        결과는 최신 일자가 가장 앞에 오도록(내림차순) 정렬되어 반환됩니다.
+        """
+        snapshots = (
+            self.db.query(AccountSnapshot)
+            .order_by(AccountSnapshot.snapshot_date.asc())
+            .all()
+        )
+        
+        if not snapshots:
+            return []
+
+        # 날짜별 평가액 및 추가액 합산
+        date_valuations = {} # snapshot_date -> total_valuation
+        date_deposits = {} # snapshot_date -> total_period_deposit
+        
+        for s in snapshots:
+            d = s.snapshot_date
+            if d not in date_valuations:
+                date_valuations[d] = 0.0
+                date_deposits[d] = 0.0
+            
+            date_valuations[d] += s.total_valuation
+            date_deposits[d] += s.period_deposit
+
+        sorted_dates = sorted(list(date_valuations.keys()))
+        results = []
+        
+        prev_assets = 0.0
+        
+        for i, d in enumerate(sorted_dates):
+            assets = date_valuations[d]
+            contribution = date_deposits.get(d, 0.0)
+            
+            # 기초 자산(prev_assets) 결정
+            if i == 0:
+                # 최초 기록 일자인 경우
+                prev_assets = assets - contribution
+            else:
+                # 이후 일자는 직전 스냅샷 일자의 자산 평가액을 기초 자산으로 사용
+                prev_assets = sorted_dates_assets
+                
+            increase = assets - prev_assets
+            profit = increase - contribution
+            
+            # ROI = 수익 / (기초 자산 + 추가액)
+            base = prev_assets + contribution
+            roi = (profit / base * 100) if base != 0 else 0.0
+            
+            results.append({
+                "date": d,
+                "contribution": contribution,
+                "profit": profit,
+                "roi": round(roi, 2),
+                "assets": assets,
+                "increase": increase
+            })
+            
+            sorted_dates_assets = assets
+            
+        results.reverse()
+        return results
+
     def get_holdings(self) -> List[Dict[str, Any]]:
         """모든 활성 계좌의 자산별 보유량을 계산합니다.
         

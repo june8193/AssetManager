@@ -3,6 +3,7 @@ import { useDashboard } from '../hooks/useDashboard';
 import { Wallet, PieChart, TrendingUp, RefreshCw, AlertCircle, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 import YearlyStatusTable from '../components/YearlyStatusTable';
+import DailyStatusTable from '../components/DailyStatusTable';
 import AssetChart from '../components/Dashboard/AssetChart';
 
 /**
@@ -91,7 +92,7 @@ const DashboardPage = () => {
     );
   }
 
-  const { categories, total_valuation_krw, exchange_rate, yearly, snapshots } = data;
+  const { categories, total_valuation_krw, exchange_rate, yearly, daily, snapshots } = data;
   const lastSnapshotDate = snapshots?.history?.length > 0 
     ? snapshots.history[snapshots.history.length - 1].date 
     : null;
@@ -380,6 +381,11 @@ const DashboardPage = () => {
       <YearlyStatusTable 
         data={yearly} 
         lastSnapshotDate={lastSnapshotDate}
+      />
+
+      {/* Daily Performance Table */}
+      <DailyStatusTable 
+        data={daily} 
       />
     </main>
   );
