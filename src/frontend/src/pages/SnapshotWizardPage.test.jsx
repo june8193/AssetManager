@@ -256,4 +256,128 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     fireEvent.change(krwInput, { target: { value: '1000000' } });
     expect(krwInput.value).toBe('1,000,000');
   });
+
+  it('증권사 상세 입력 단계에서 정산 확정 시 입력 폼이 숨겨지고 요약 정보와 수정하기 버튼이 나타나며, 수정하기 클릭 시 다시 폼이 나타난다', async () => {
+    global.fetch.mockImplementation((url) => {
+      if (url.includes('/accounts') && !url.includes('/transactions/period')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      }
+      if (url.includes('/transactions/period')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      if (url.includes('/brokerage/calculate')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ 
+          diff_krw: 10000, 
+          diff_usd: 10, 
+          existing_transactions: [],
+          asset_profits: []
+        }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderWithRouter(<SnapshotWizardPage />);
+    
+    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    fireEvent.change(screen.getByPlaceholderText(/예: 1350.5/), { target: { value: '1350' } });
+    fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
+
+    // 잔고 입력 필드가 화면에 보이는지 확인
+    expect(screen.getByLabelText(/원화 잔액/i)).toBeInTheDocument();
+    
+    // 계산 실행
+    fireEvent.click(screen.getByText('정산 결과 계산하기'));
+    await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeInTheDocument());
+    
+    // 확정 클릭
+    fireEvent.click(screen.getByText('이 결과로 확정'));
+
+    // 확정 후: 입력 폼이 숨겨져야 함
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/원화 잔액/i)).toBeNull();
+      expect(screen.queryByText('정산 결과 계산하기')).toBeNull();
+      // 대신 요약 카드와 수정하기 버튼이 보여야 함
+      expect(screen.getByText('정산 결과 확정 완료')).toBeInTheDocument();
+      expect(screen.getByText('수정하기')).toBeInTheDocument();
+    });
+
+    // 수정하기 클릭
+    fireEvent.click(screen.getByText('수정하기'));
+
+    // 다시 입력 폼이 보여야 함
+    await waitFor(() => {
+      expect(screen.getByLabelText(/원화 잔액/i)).toBeInTheDocument();
+      expect(screen.getByText('정산 결과 계산하기')).toBeInTheDocument();
+      expect(screen.queryByText('정산 결과 확정 완료')).toBeNull();
+    });
+  });
+
+  it('은행 상세 입력 단계에서 정산 확정 시 입력 폼이 숨겨지고 요약 정보와 수정하기 버튼이 나타나며, 수정하기 클릭 시 다시 폼이 나타난다', async () => {
+    global.fetch.mockImplementation((url) => {
+      if (url.includes('/accounts') && !url.includes('/transactions/period')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      }
+      if (url.includes('/transactions/period')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      if (url.includes('/bank/calculate')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({
+          theoretical_krw: 500000,
+          total_deposit: 500000,
+          total_withdraw: 0,
+          total_interest: 0,
+          total_tax: 0,
+          total_fee: 0,
+          total_adjustment: 0
+        }) });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderWithRouter(<SnapshotWizardPage />);
+    
+    // Step 1
+    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    fireEvent.change(screen.getByPlaceholderText(/예: 1350.5/), { target: { value: '1350' } });
+    // 은행 계좌만 선택하고 증권은 건너뜀
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+    // confirm 모킹 때문에 증권 건너뛰기가 승인됨
+    
+    // Step 3 (은행 선택)
+    await waitFor(() => expect(screen.getByRole('heading', { name: '은행 계좌 선택', level: 2 })).toBeDefined());
+    fireEvent.click(screen.getByText('은행 계좌 1 (국민은행별칭)'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 4 (은행 상세)
+    await waitFor(() => expect(screen.getByText('은행 상세 정보 입력')).toBeDefined());
+
+    // 예상 잔액 계산 전: 실제 최종 잔액 필드가 보임
+    expect(screen.getByLabelText(/실제 최종 잔액/i)).toBeInTheDocument();
+
+    // 계산 및 확정
+    fireEvent.click(screen.getByText('예상 잔액 계산하기'));
+    await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeInTheDocument());
+    fireEvent.click(screen.getByText('이 결과로 확정'));
+
+    // 확정 후: 입력 폼이 숨겨져야 함
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/실제 최종 잔액/i)).toBeNull();
+      expect(screen.queryByText('예상 잔액 계산하기')).toBeNull();
+      expect(screen.getByText('정산 결과 확정 완료')).toBeInTheDocument();
+      expect(screen.getByText('수정하기')).toBeInTheDocument();
+    });
+
+    // 수정하기 클릭
+    fireEvent.click(screen.getByText('수정하기'));
+
+    // 다시 입력 폼이 보여야 함
+    await waitFor(() => {
+      expect(screen.getByLabelText(/실제 최종 잔액/i)).toBeInTheDocument();
+      expect(screen.getByText('예상 잔액 계산하기')).toBeInTheDocument();
+      expect(screen.queryByText('정산 결과 확정 완료')).toBeNull();
+    });
+  });
 });

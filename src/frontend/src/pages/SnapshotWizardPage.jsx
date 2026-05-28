@@ -912,138 +912,186 @@ const SnapshotWizardPage = () => {
         </div>
 
         <div className="space-y-8">
-          {/* 통합 거래 내역 테이블 */}
-          <div className="space-y-4">
-            {renderUnifiedTransactions(accId, true)}
-          </div>
-
-          {/* 잔고 입력 및 결과 */}
-          <div className="space-y-6">
-            <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 space-y-6">
-              <h4 className="font-bold text-blue-900 flex items-center gap-2">
-                <Wallet size={18} /> 현재 예수금 잔액 입력
-              </h4>
-              
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor={`krw-balance-${accId}`} className="text-xs font-bold text-blue-700 uppercase tracking-wider">원화 잔액 (KRW)</label>
-                  <div className="relative">
-                    <input 
-                      id={`krw-balance-${accId}`}
-                      type="text"
-                      value={formatWithCommas(data.currentKrw)}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/[^0-9.]/g, '');
-                        updateAccData(accId, { currentKrw: raw });
-                      }}
-                      className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
+          {data.isConfirmed ? (
+            /* 확정 완료 상태 UI */
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 space-y-6 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                    <Check size={20} className="stroke-[3]" />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-emerald-900 text-lg">정산 결과 확정 완료</h4>
+                    <p className="text-emerald-700 text-xs mt-0.5">이 계좌의 정산 결과가 성공적으로 확정되었습니다.</p>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <label htmlFor={`usd-balance-${accId}`} className="text-xs font-bold text-blue-700 uppercase tracking-wider">달러 잔액 (USD)</label>
-                  <div className="relative">
-                    <input 
-                      id={`usd-balance-${accId}`}
-                      type="text"
-                      value={formatWithCommas(data.currentUsd)}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/[^0-9.]/g, '');
-                        updateAccData(accId, { currentUsd: raw });
-                      }}
-                      className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
-                  </div>
-                </div>
-              </div>
-
-              <button 
-                onClick={() => calculateAccountDiff(accId)}
-                disabled={processing}
-                className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:bg-blue-300"
-              >
-                {processing ? <RefreshCw className="animate-spin" size={20} /> : <RefreshCw size={20} />}
-                정산 결과 계산하기
-              </button>
-            </div>
-
-            {calc && calc.need_last_exchange_rate && (
-              <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4 animate-in slide-in-from-top-2 duration-300">
-                <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
-                  <HelpCircle size={18} className="text-amber-600" />
-                  이전 스냅샷 일자({calc.last_snapshot_date})의 환율 정보가 없습니다.
-                </div>
-                <p className="text-xs text-amber-700 leading-relaxed font-medium">
-                  정확한 정산 계산(해외 자산의 이전 평가액 계산)을 위해 이전 스냅샷 일자의 환율 정보가 필요합니다. 
-                  <br />
-                  <strong>[DB 관리 &gt; 마스터 관리 &gt; 환율 관리]</strong> 메뉴에서 <strong>{calc.last_snapshot_date}</strong> 일자의 환율(USD/KRW)을 등록한 후 다시 정산 계산을 시도해 주세요.
-                </p>
-                <div className="flex gap-3">
-                  <a 
-                    href="/db" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="flex-1 py-3 bg-white border border-amber-200 hover:bg-amber-100 text-amber-800 rounded-xl font-bold text-center text-xs transition-all shadow-sm"
-                  >
-                    DB 관리 바로가기 (새창)
-                  </a>
-                  <button 
-                    onClick={() => calculateAccountDiff(accId)}
-                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1 shadow-md shadow-amber-100"
-                  >
-                    <RefreshCw size={14} /> 다시 계산하기
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {calc && !calc.need_last_exchange_rate && (
-              <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-bold text-slate-800 flex items-center gap-2">
-                    <CheckCircle2 size={18} className="text-emerald-500" /> 계산 결과
-                  </h4>
-                  <div className="relative group/tooltip">
-                    <HelpCircle size={16} className="text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
-                    <div className="absolute right-0 bottom-full mb-2 w-72 p-3 bg-slate-800 text-white text-xs rounded-xl shadow-xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 transition-opacity z-50 normal-case font-normal leading-relaxed">
-                      입력하신 현재 잔고와 거래 내역을 바탕으로 산출된 정산 결과입니다. 원화/달러 예수금의 보정액은 하단 '종목별 기간수익 상세'의 예수금 항목 기간 수익에 자동으로 반영됩니다.
-                    </div>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">기간 입금액</p>
-                    <p className="text-lg font-mono font-bold text-slate-700">
-                      {Math.round(calc.period_deposit).toLocaleString()}원
-                    </p>
-                  </div>
-                  <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">기간 수익</p>
-                    <p className={`text-lg font-mono font-bold ${calc.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                      {calc.period_profit > 0 ? '+' : ''}{Math.round(calc.period_profit).toLocaleString()}원
-                    </p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => handleConfirmAccount(accId)}
-                  className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                <button
+                  onClick={() => updateAccData(accId, {})}
+                  className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
                 >
-                  <Check size={20} /> 이 결과로 확정
+                  수정하기
                 </button>
               </div>
-            )}
-            
-            {data.isConfirmed && !calc && (
-               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-3">
-                 <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
-                    <Check size={24} />
-                 </div>
-                 <p className="font-bold text-emerald-900">확인 완료</p>
-               </div>
-            )}
-          </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-emerald-100">
+                <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                  <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">원화 잔액</p>
+                  <p className="text-lg font-mono font-bold text-slate-800">
+                    {Math.round(parseFloat(data.currentKrw || 0)).toLocaleString()}원
+                  </p>
+                </div>
+                <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                  <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">달러 잔액</p>
+                  <p className="text-lg font-mono font-bold text-slate-800">
+                    {parseFloat(data.currentUsd || 0).toLocaleString()}$
+                  </p>
+                </div>
+                {calc && (
+                  <>
+                    <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                      <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">기간 입금액</p>
+                      <p className="text-lg font-mono font-bold text-slate-800">
+                        {Math.round(calc.period_deposit || 0).toLocaleString()}원
+                      </p>
+                    </div>
+                    <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                      <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">기간 수익</p>
+                      <p className={`text-lg font-mono font-bold ${calc.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {calc.period_profit > 0 ? '+' : ''}{Math.round(calc.period_profit || 0).toLocaleString()}원
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            /* 미확정 상태 UI (기존 입력 폼 및 테이블) */
+            <>
+              {/* 통합 거래 내역 테이블 */}
+              <div className="space-y-4">
+                {renderUnifiedTransactions(accId, true)}
+              </div>
+
+              {/* 잔고 입력 및 결과 */}
+              <div className="space-y-6">
+                <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 space-y-6">
+                  <h4 className="font-bold text-blue-900 flex items-center gap-2">
+                    <Wallet size={18} /> 현재 예수금 잔액 입력
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label htmlFor={`krw-balance-${accId}`} className="text-xs font-bold text-blue-700 uppercase tracking-wider">원화 잔액 (KRW)</label>
+                      <div className="relative">
+                        <input 
+                          id={`krw-balance-${accId}`}
+                          type="text"
+                          value={formatWithCommas(data.currentKrw)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.]/g, '');
+                            updateAccData(accId, { currentKrw: raw });
+                          }}
+                          className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <label htmlFor={`usd-balance-${accId}`} className="text-xs font-bold text-blue-700 uppercase tracking-wider">달러 잔액 (USD)</label>
+                      <div className="relative">
+                        <input 
+                          id={`usd-balance-${accId}`}
+                          type="text"
+                          value={formatWithCommas(data.currentUsd)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.]/g, '');
+                            updateAccData(accId, { currentUsd: raw });
+                          }}
+                          className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => calculateAccountDiff(accId)}
+                    disabled={processing}
+                    className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 disabled:bg-blue-300"
+                  >
+                    {processing ? <RefreshCw className="animate-spin" size={20} /> : <RefreshCw size={20} />}
+                    정산 결과 계산하기
+                  </button>
+                </div>
+
+                {calc && calc.need_last_exchange_rate && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 space-y-4 animate-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center gap-2 text-amber-800 font-bold text-sm">
+                      <HelpCircle size={18} className="text-amber-600" />
+                      이전 스냅샷 일자({calc.last_snapshot_date})의 환율 정보가 없습니다.
+                    </div>
+                    <p className="text-xs text-amber-700 leading-relaxed font-medium">
+                      정확한 정산 계산(해외 자산의 이전 평가액 계산)을 위해 이전 스냅샷 일자의 환율 정보가 필요합니다. 
+                      <br />
+                      <strong>[DB 관리 &gt; 마스터 관리 &gt; 환율 관리]</strong> 메뉴에서 <strong>{calc.last_snapshot_date}</strong> 일자의 환율(USD/KRW)을 등록한 후 다시 정산 계산을 시도해 주세요.
+                    </p>
+                    <div className="flex gap-3">
+                      <a 
+                        href="/db" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="flex-1 py-3 bg-white border border-amber-200 hover:bg-amber-100 text-amber-800 rounded-xl font-bold text-center text-xs transition-all shadow-sm"
+                      >
+                        DB 관리 바로가기 (새창)
+                      </a>
+                      <button 
+                        onClick={() => calculateAccountDiff(accId)}
+                        className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold text-xs transition-all flex items-center justify-center gap-1 shadow-md shadow-amber-100"
+                      >
+                        <RefreshCw size={14} /> 다시 계산하기
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {calc && !calc.need_last_exchange_rate && (
+                  <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-bold text-slate-800 flex items-center gap-2">
+                        <CheckCircle2 size={18} className="text-emerald-500" /> 계산 결과
+                      </h4>
+                      <div className="relative group/tooltip">
+                        <HelpCircle size={16} className="text-slate-400 hover:text-slate-600 cursor-help transition-colors" />
+                        <div className="absolute right-0 bottom-full mb-2 w-72 p-3 bg-slate-800 text-white text-xs rounded-xl shadow-xl opacity-0 pointer-events-none group-hover/tooltip:opacity-100 transition-opacity z-50 normal-case font-normal leading-relaxed">
+                          입력하신 현재 잔고와 거래 내역을 바탕으로 산출된 정산 결과입니다. 원화/달러 예수금의 보정액은 하단 '종목별 기간수익 상세'의 예수금 항목 기간 수익에 자동으로 반영됩니다.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">기간 입금액</p>
+                        <p className="text-lg font-mono font-bold text-slate-700">
+                          {Math.round(calc.period_deposit).toLocaleString()}원
+                        </p>
+                      </div>
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">기간 수익</p>
+                        <p className={`text-lg font-mono font-bold ${calc.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                          {calc.period_profit > 0 ? '+' : ''}{Math.round(calc.period_profit).toLocaleString()}원
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => handleConfirmAccount(accId)}
+                      className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                    >
+                      <Check size={20} /> 이 결과로 확정
+                    </button>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
         {/* 종목별 기간수익 상세 테이블 하단 표시 */}
@@ -1097,114 +1145,162 @@ const SnapshotWizardPage = () => {
         </div>
 
         <div className="space-y-8">
-          {/* 통합 거래 내역 테이블 */}
-          <div className="space-y-4">
-            {renderUnifiedTransactions(accId, false)}
-          </div>
-
-          {/* 최종 잔액 입력 */}
-          <div className="space-y-6">
-            <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100 space-y-6">
-              <h4 className="font-bold text-amber-900 flex items-center gap-2">
-                <Landmark size={18} /> 최종 잔액(평가액) 입력
-              </h4>
-              
-              <div className="space-y-4">
-                <button 
-                  onClick={() => calculateBankDiff(accId)}
-                  disabled={processing}
-                  className="w-full py-3 bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {processing ? <RefreshCw className="animate-spin" size={18} /> : <RefreshCw size={18} />}
-                  예상 잔액 계산하기
-                </button>
-
-                {calc && (
-                  <div className="space-y-4">
-                    <div className="bg-white/60 p-4 rounded-xl border border-amber-200">
-                      <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">시스템 계산 예상 잔액</p>
-                      <p className="text-xl font-mono font-bold text-slate-700">
-                        {Math.round(calc.theoretical_krw).toLocaleString()}원
-                      </p>
-                      <button 
-                        onClick={() => updateAccData(accId, { totalValuation: Math.round(calc.theoretical_krw).toString() })}
-                        className="mt-2 text-xs text-blue-600 font-bold hover:underline"
-                      >
-                        이 금액 적용하기
-                      </button>
-                    </div>
-
-                    {/* 은행 계좌 거래 유형별 상세 집계 카드 */}
-                    <div className="grid grid-cols-2 gap-3 mt-2 animate-in slide-in-from-top-2 duration-300">
-                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-amber-800">기간 총 입금</span>
-                        <span className="text-sm font-mono font-bold text-slate-700 mt-1">{(calc.total_deposit || 0).toLocaleString()}원</span>
-                      </div>
-                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-amber-800">기간 총 출금</span>
-                        <span className="text-sm font-mono font-bold text-slate-700 mt-1">{(calc.total_withdraw || 0).toLocaleString()}원</span>
-                      </div>
-                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-amber-800">이자 합계</span>
-                        <span className="text-sm font-mono font-bold text-emerald-600 mt-1">+{(calc.total_interest || 0).toLocaleString()}원</span>
-                      </div>
-                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
-                        <span className="text-[10px] font-bold text-amber-800">세금 합계</span>
-                        <span className="text-sm font-mono font-bold text-rose-600 mt-1">-{(calc.total_tax || 0).toLocaleString()}원</span>
-                      </div>
-                      {calc.total_fee > 0 && (
-                        <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
-                          <span className="text-[10px] font-bold text-amber-800">수수료 합계</span>
-                          <span className="text-sm font-mono font-bold text-rose-500 mt-1">-{(calc.total_fee || 0).toLocaleString()}원</span>
-                        </div>
-                      )}
-                      {Math.abs(calc.total_adjustment || 0) > 0.01 && (
-                        <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
-                          <span className="text-[10px] font-bold text-amber-800">현금보정 합계</span>
-                          <span className={`text-sm font-mono font-bold mt-1 ${calc.total_adjustment >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
-                            {calc.total_adjustment > 0 ? '+' : ''}{(calc.total_adjustment || 0).toLocaleString()}원
-                          </span>
-                        </div>
-                      )}
-                    </div>
+          {data.isConfirmed ? (
+            /* 확정 완료 상태 UI */
+            <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 space-y-6 animate-in slide-in-from-top-2 duration-300">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
+                    <Check size={20} className="stroke-[3]" />
                   </div>
-                )}
-
-                <div className="space-y-2">
-                  <label htmlFor={`total-valuation-${accId}`} className="text-xs font-bold text-amber-700 uppercase tracking-wider">실제 최종 잔액 (KRW)</label>
-                  <div className="relative">
-                    <input 
-                      id={`total-valuation-${accId}`}
-                      type="text"
-                      value={formatWithCommas(data.totalValuation)}
-                      onChange={(e) => {
-                        const raw = e.target.value.replace(/[^0-9.]/g, '');
-                        updateAccData(accId, { totalValuation: raw });
-                      }}
-                      className="w-full pl-4 pr-12 py-3 bg-white border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent font-mono font-bold text-lg"
-                    />
-                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
+                  <div>
+                    <h4 className="font-bold text-emerald-900 text-lg">정산 결과 확정 완료</h4>
+                    <p className="text-emerald-700 text-xs mt-0.5">이 계좌의 정산 결과가 성공적으로 확정되었습니다.</p>
                   </div>
                 </div>
+                <button
+                  onClick={() => updateAccData(accId, {})}
+                  className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold transition-all shadow-sm flex items-center gap-1.5"
+                >
+                  수정하기
+                </button>
               </div>
 
-              <button 
-                onClick={() => handleConfirmAccount(accId)}
-                className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
-              >
-                <Check size={20} /> 이 결과로 확정
-              </button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-emerald-100">
+                <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                  <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">최종 잔액</p>
+                  <p className="text-lg font-mono font-bold text-slate-800">
+                    {Math.round(parseFloat(data.totalValuation || (calc?.theoretical_krw || 0))).toLocaleString()}원
+                  </p>
+                </div>
+                {calc && (
+                  <>
+                    <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                      <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wider mb-1">시스템 계산 예상 잔액</p>
+                      <p className="text-lg font-mono font-bold text-slate-800">
+                        {Math.round(calc.theoretical_krw || 0).toLocaleString()}원
+                      </p>
+                    </div>
+                    <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                      <p className="text-[10px] font-bold text-emerald-800 tracking-wider mb-1">기간 총 입금 / 출금</p>
+                      <p className="text-sm font-mono font-bold text-slate-700">
+                        입금: {(calc.total_deposit || 0).toLocaleString()}원 / 출금: {(calc.total_withdraw || 0).toLocaleString()}원
+                      </p>
+                    </div>
+                    <div className="bg-white/60 p-4 rounded-xl border border-emerald-100/50">
+                      <p className="text-[10px] font-bold text-emerald-800 tracking-wider mb-1">이자 / 세금 합계</p>
+                      <p className="text-sm font-mono font-bold text-slate-700">
+                        이자: +{(calc.total_interest || 0).toLocaleString()}원 / 세금: -{(calc.total_tax || 0).toLocaleString()}원
+                      </p>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
-            
-            {data.isConfirmed && (
-               <div className="bg-emerald-50 border border-emerald-100 rounded-2xl p-6 flex flex-col items-center justify-center text-center space-y-3">
-                 <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center">
-                    <Check size={24} />
-                 </div>
-                 <p className="font-bold text-emerald-900">확인 완료</p>
-               </div>
-            )}
-          </div>
+          ) : (
+            /* 미확정 상태 UI (기존 입력 폼 및 테이블) */
+            <>
+              {/* 통합 거래 내역 테이블 */}
+              <div className="space-y-4">
+                {renderUnifiedTransactions(accId, false)}
+              </div>
+
+              {/* 최종 잔액 입력 */}
+              <div className="space-y-6">
+                <div className="bg-amber-50 rounded-2xl p-6 border border-amber-100 space-y-6">
+                  <h4 className="font-bold text-amber-900 flex items-center gap-2">
+                    <Landmark size={18} /> 최종 잔액(평가액) 입력
+                  </h4>
+                  
+                  <div className="space-y-4">
+                    <button 
+                      onClick={() => calculateBankDiff(accId)}
+                      disabled={processing}
+                      className="w-full py-3 bg-white border border-amber-200 hover:bg-amber-100 text-amber-700 rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+                    >
+                      {processing ? <RefreshCw className="animate-spin" size={18} /> : <RefreshCw size={18} />}
+                      예상 잔액 계산하기
+                    </button>
+
+                    {calc && (
+                      <div className="space-y-4">
+                        <div className="bg-white/60 p-4 rounded-xl border border-amber-200">
+                          <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">시스템 계산 예상 잔액</p>
+                          <p className="text-xl font-mono font-bold text-slate-700">
+                            {Math.round(calc.theoretical_krw).toLocaleString()}원
+                          </p>
+                          <button 
+                            onClick={() => updateAccData(accId, { totalValuation: Math.round(calc.theoretical_krw).toString() })}
+                            className="mt-2 text-xs text-blue-600 font-bold hover:underline"
+                          >
+                            이 금액 적용하기
+                          </button>
+                        </div>
+
+                        {/* 은행 계좌 거래 유형별 상세 집계 카드 */}
+                        <div className="grid grid-cols-2 gap-3 mt-2 animate-in slide-in-from-top-2 duration-300">
+                          <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                            <span className="text-[10px] font-bold text-amber-800">기간 총 입금</span>
+                            <span className="text-sm font-mono font-bold text-slate-700 mt-1">{(calc.total_deposit || 0).toLocaleString()}원</span>
+                          </div>
+                          <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                            <span className="text-[10px] font-bold text-amber-800">기간 총 출금</span>
+                            <span className="text-sm font-mono font-bold text-slate-700 mt-1">{(calc.total_withdraw || 0).toLocaleString()}원</span>
+                          </div>
+                          <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                            <span className="text-[10px] font-bold text-amber-800">이자 합계</span>
+                            <span className="text-sm font-mono font-bold text-emerald-600 mt-1">+{(calc.total_interest || 0).toLocaleString()}원</span>
+                          </div>
+                          <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                            <span className="text-[10px] font-bold text-amber-800">세금 합계</span>
+                            <span className="text-sm font-mono font-bold text-rose-600 mt-1">-{(calc.total_tax || 0).toLocaleString()}원</span>
+                          </div>
+                          {calc.total_fee > 0 && (
+                            <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                              <span className="text-[10px] font-bold text-amber-800">수수료 합계</span>
+                              <span className="text-sm font-mono font-bold text-rose-500 mt-1">-{(calc.total_fee || 0).toLocaleString()}원</span>
+                            </div>
+                          )}
+                          {Math.abs(calc.total_adjustment || 0) > 0.01 && (
+                            <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                              <span className="text-[10px] font-bold text-amber-800">현금보정 합계</span>
+                              <span className={`text-sm font-mono font-bold mt-1 ${calc.total_adjustment >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                                {calc.total_adjustment > 0 ? '+' : ''}{(calc.total_adjustment || 0).toLocaleString()}원
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2">
+                      <label htmlFor={`total-valuation-${accId}`} className="text-xs font-bold text-amber-700 uppercase tracking-wider">실제 최종 잔액 (KRW)</label>
+                      <div className="relative">
+                        <input 
+                          id={`total-valuation-${accId}`}
+                          type="text"
+                          value={formatWithCommas(data.totalValuation)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.]/g, '');
+                            updateAccData(accId, { totalValuation: raw });
+                          }}
+                          className="w-full pl-4 pr-12 py-3 bg-white border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent font-mono font-bold text-lg"
+                        />
+                        <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => handleConfirmAccount(accId)}
+                    className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
+                  >
+                    <Check size={20} /> 이 결과로 확정
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     );
