@@ -196,6 +196,13 @@ class BankCalculateResponse(BaseModel):
     """은행계좌 잔액 계산 결과 스키마입니다."""
     theoretical_krw: float
     existing_transactions: List[TransactionSchema] = []
+    total_deposit: float = 0.0
+    total_withdraw: float = 0.0
+    total_interest: float = 0.0
+    total_tax: float = 0.0
+    total_fee: float = 0.0
+    total_adjustment: float = 0.0
+
 
 # Bank Snapshot Wizard Schemas
 class BankSaveAccountRequest(BaseModel):
@@ -1143,10 +1150,43 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
         Transaction.transaction_date <= req.snapshot_date
     ).order_by(Transaction.transaction_date.desc()).all()
     
+    # 4. 거래 유형별 합계 계산 (TDD 요구사항 반영)
+    total_deposit = 0.0
+    total_withdraw = 0.0
+    total_interest = 0.0
+    total_tax = 0.0
+    total_fee = 0.0
+    total_adjustment = 0.0
+
+    all_txs = list(existing_transactions) + req.new_transactions
+    for tx in all_txs:
+        t_type = tx.type
+        amount = tx.total_amount
+        
+        if t_type in ['DEPOSIT', 'INITIAL_BALANCE']:
+            total_deposit += amount
+        elif t_type == 'WITHDRAW':
+            total_withdraw += amount
+        elif t_type == 'INTEREST':
+            total_interest += amount
+        elif t_type == 'TAX':
+            total_tax += amount
+        elif t_type == 'FEE':
+            total_fee += amount
+        elif t_type == 'CASH_ADJUSTMENT':
+            total_adjustment += amount
+            
     return BankCalculateResponse(
         theoretical_krw=final_balance,
-        existing_transactions=existing_transactions
+        existing_transactions=existing_transactions,
+        total_deposit=total_deposit,
+        total_withdraw=total_withdraw,
+        total_interest=total_interest,
+        total_tax=total_tax,
+        total_fee=total_fee,
+        total_adjustment=total_adjustment
     )
+
 
 @router.post("/snapshots/brokerage/save", response_model=List[SnapshotSchema])
 async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depends(get_db)):

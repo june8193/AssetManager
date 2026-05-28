@@ -139,7 +139,15 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
       if (url.includes('/accounts') && !url.includes('/transactions/period')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
       if (url.includes('/transactions/period')) return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
       if (url.includes('/brokerage/calculate')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ diff_krw: 500, diff_usd: 0, asset_profits: [] }) });
-      if (url.includes('/bank/calculate')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ theoretical_krw: 2000000 }) });
+      if (url.includes('/bank/calculate')) return Promise.resolve({ ok: true, json: () => Promise.resolve({
+        theoretical_krw: 2000000,
+        total_deposit: 2000000,
+        total_withdraw: 100000,
+        total_interest: 5000,
+        total_tax: 700,
+        total_fee: 0,
+        total_adjustment: 0
+      }) });
       if (url.includes('/unified/save')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: 'success' }) });
       return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
     });
@@ -166,7 +174,16 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     // Step 4
     expect(screen.getByText('은행 상세 정보 입력')).toBeDefined();
     fireEvent.click(screen.getByText('예상 잔액 계산하기'));
-    await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeDefined());
+    
+    await waitFor(() => {
+      expect(screen.getByText('이 결과로 확정')).toBeDefined();
+      // 은행 집계 데이터 렌더링 검증 (시스템 예상 잔액 및 기간 총 입금 둘 다 2,000,000원 표시됨)
+      expect(screen.getAllByText('2,000,000원').length).toBe(2);
+      expect(screen.getByText('100,000원')).toBeDefined();
+      expect(screen.getByText('+5,000원')).toBeDefined();
+      expect(screen.getByText('-700원')).toBeDefined();
+    });
+    
     fireEvent.click(screen.getByText('이 결과로 확정'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
@@ -212,5 +229,31 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     
     const gridDiv = container.querySelector('.grid-cols-3');
     expect(gridDiv).toBeNull();
+  });
+
+  it('금액 입력 필드에 숫자를 입력하면 천단위 쉼표가 자동으로 적용된다', async () => {
+    global.fetch.mockImplementation((url) => {
+      if (url.includes('/accounts') && !url.includes('/transactions/period')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.includes('/transactions/period')) return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    });
+
+    renderWithRouter(<SnapshotWizardPage />);
+    
+    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    fireEvent.change(screen.getByPlaceholderText(/예: 1350.5/), { target: { value: '1350' } });
+    fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
+
+    // 원화 잔액 입력 필드 조회 (id="current-krw"로 수정될 예정이므로 getById 등으로 찾거나, element가 렌더링되는 div를 탐색)
+    // 여기서는 getByLabelText로 찾을 수 있도록 돕기 위해 label에 htmlFor가 달릴 것을 가정하고 getByLabelText(/원화 잔액/i)를 유지합니다.
+    const krwInput = screen.getByLabelText(/원화 잔액/i);
+    expect(krwInput).toBeDefined();
+
+    // 1000000 입력 시 1,000,000으로 포맷팅되는지 검증
+    fireEvent.change(krwInput, { target: { value: '1000000' } });
+    expect(krwInput.value).toBe('1,000,000');
   });
 });

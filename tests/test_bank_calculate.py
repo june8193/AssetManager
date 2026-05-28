@@ -36,12 +36,14 @@ def setup_bank_account(db_session):
 def test_calculate_bank_snapshot(setup_bank_account, db_session):
     acc, krw = setup_bank_account
     
-    # 새로운 트랜잭션 시뮬레이션: 입금 5000, 출금 2000, 이자 100, 세금 15
+    # 새로운 트랜잭션 시뮬레이션: 입금 5000, 출금 2000, 이자 100, 세금 15, 수수료 50, 현금보정 200
     new_transactions = [
         {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-15", "type": "DEPOSIT", "total_amount": 5000, "currency": "KRW"},
         {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-16", "type": "WITHDRAW", "total_amount": 2000, "currency": "KRW"},
         {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-17", "type": "INTEREST", "total_amount": 100, "currency": "KRW"},
         {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-17", "type": "TAX", "total_amount": 15, "currency": "KRW"},
+        {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-18", "type": "FEE", "total_amount": 50, "currency": "KRW"},
+        {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-19", "type": "CASH_ADJUSTMENT", "total_amount": 200, "currency": "KRW"},
     ]
     
     response = client.post("/api/db/snapshots/bank/calculate", json={
@@ -52,5 +54,15 @@ def test_calculate_bank_snapshot(setup_bank_account, db_session):
     
     assert response.status_code == 200
     data = response.json()
-    # 계산: 10000 + 5000 - 2000 + 100 - 15 = 13085
-    assert data["theoretical_krw"] == 13085.0
+    # 계산: 10000 (초기) + 5000 (입금) - 2000 (출금) + 100 (이자) - 15 (세금) - 50 (수수료) + 200 (보정) = 13235
+    assert data["theoretical_krw"] == 13235.0
+    
+    # 거래 유형별 합계 검증
+    # 초기 잔액(INITIAL_BALANCE: 10000)은 입금(total_deposit)에 포함되어야 함
+    assert data["total_deposit"] == 15000.0
+    assert data["total_withdraw"] == 2000.0
+    assert data["total_interest"] == 100.0
+    assert data["total_tax"] == 15.0
+    assert data["total_fee"] == 50.0
+    assert data["total_adjustment"] == 200.0
+

@@ -7,6 +7,21 @@ import { DB_API_BASE } from '../config';
  * 신규 스냅샷 생성을 위한 통합 위저드 페이지 컴포넌트입니다.
  * 5단계의 과정을 통해 증권사와 은행의 자산 상태를 한 번에 기록합니다.
  */
+// 천단위 쉼표 포맷터 함수
+const formatWithCommas = (val) => {
+  if (val === undefined || val === null || val === '') return '';
+  const str = val.toString().replace(/,/g, '');
+  if (isNaN(str)) return val;
+  const parts = str.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+};
+
+const parseCommas = (val) => {
+  if (val === undefined || val === null || val === '') return 0;
+  return parseFloat(val.toString().replace(/,/g, '')) || 0;
+};
+
 const SnapshotWizardPage = () => {
   const navigate = useNavigate();
   const [step, setStep] = useState(1);
@@ -285,14 +300,14 @@ const SnapshotWizardPage = () => {
             asset_id: 0, 
             transaction_date: tx.date || inputDate,
             type: tx.type,
-            total_amount: parseFloat(tx.amount) || 0,
+            total_amount: parseCommas(tx.amount),
             currency: tx.currency,
-            quantity: parseFloat(tx.amount) || 0,
+            quantity: parseCommas(tx.amount),
             price: 1.0,
             memo: tx.memo || ''
           })),
-          current_krw: parseFloat(data.currentKrw) || 0,
-          current_usd: parseFloat(data.currentUsd) || 0,
+          current_krw: parseCommas(data.currentKrw),
+          current_usd: parseCommas(data.currentUsd),
           exchange_rate: parseFloat(exchangeRate) || 1.0
         })
       });
@@ -332,9 +347,9 @@ const SnapshotWizardPage = () => {
             asset_id: 0, 
             transaction_date: tx.date || inputDate,
             type: tx.type,
-            total_amount: parseFloat(tx.amount) || 0,
+            total_amount: parseCommas(tx.amount),
             currency: 'KRW',
-            quantity: parseFloat(tx.amount) || 0,
+            quantity: parseCommas(tx.amount),
             price: 1.0,
             memo: tx.memo || ''
           }))
@@ -427,9 +442,9 @@ const SnapshotWizardPage = () => {
               asset_id: 0,
               transaction_date: tx.date || inputDate,
               type: tx.type,
-              total_amount: parseFloat(tx.amount) || 0,
+              total_amount: parseCommas(tx.amount),
               currency: tx.currency || 'KRW',
-              quantity: parseFloat(tx.amount) || 0,
+              quantity: parseCommas(tx.amount),
               price: 1.0,
               memo: tx.memo || ''
             })),
@@ -446,13 +461,13 @@ const SnapshotWizardPage = () => {
               asset_id: 0,
               transaction_date: tx.date || inputDate,
               type: tx.type,
-              total_amount: parseFloat(tx.amount) || 0,
+              total_amount: parseCommas(tx.amount),
               currency: 'KRW',
-              quantity: parseFloat(tx.amount) || 0,
+              quantity: parseCommas(tx.amount),
               price: 1.0,
               memo: tx.memo || ''
             })),
-            total_valuation: parseFloat(data.totalValuation) || data.calcResult?.theoretical_krw || null
+            total_valuation: data.totalValuation ? parseCommas(data.totalValuation) : (data.calcResult?.theoretical_krw || null)
           };
         })
       };
@@ -603,10 +618,13 @@ const SnapshotWizardPage = () => {
                     <td className="px-2 py-2 text-right">
                       <div className="relative">
                         <input 
-                          type="number"
+                          type="text"
                           placeholder="금액"
-                          value={tx.amount}
-                          onChange={(e) => updateTx(accId, idx, 'amount', e.target.value)}
+                          value={formatWithCommas(tx.amount)}
+                          onChange={(e) => {
+                            const raw = e.target.value.replace(/[^0-9.]/g, '');
+                            updateTx(accId, idx, 'amount', raw);
+                          }}
                           className="w-full pl-2 pr-6 py-1 text-xs text-right border border-slate-200 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 font-mono font-medium"
                         />
                         <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-400 font-bold">
@@ -908,24 +926,32 @@ const SnapshotWizardPage = () => {
               
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">원화 잔액 (KRW)</label>
+                  <label htmlFor={`krw-balance-${accId}`} className="text-xs font-bold text-blue-700 uppercase tracking-wider">원화 잔액 (KRW)</label>
                   <div className="relative">
                     <input 
-                      type="number"
-                      value={data.currentKrw}
-                      onChange={(e) => updateAccData(accId, { currentKrw: e.target.value })}
+                      id={`krw-balance-${accId}`}
+                      type="text"
+                      value={formatWithCommas(data.currentKrw)}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9.]/g, '');
+                        updateAccData(accId, { currentKrw: raw });
+                      }}
                       className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-blue-700 uppercase tracking-wider">달러 잔액 (USD)</label>
+                  <label htmlFor={`usd-balance-${accId}`} className="text-xs font-bold text-blue-700 uppercase tracking-wider">달러 잔액 (USD)</label>
                   <div className="relative">
                     <input 
-                      type="number"
-                      value={data.currentUsd}
-                      onChange={(e) => updateAccData(accId, { currentUsd: e.target.value })}
+                      id={`usd-balance-${accId}`}
+                      type="text"
+                      value={formatWithCommas(data.currentUsd)}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9.]/g, '');
+                        updateAccData(accId, { currentUsd: raw });
+                      }}
                       className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
@@ -1094,27 +1120,67 @@ const SnapshotWizardPage = () => {
                 </button>
 
                 {calc && (
-                  <div className="bg-white/60 p-4 rounded-xl border border-amber-200">
-                    <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">시스템 계산 예상 잔액</p>
-                    <p className="text-xl font-mono font-bold text-slate-700">
-                      {Math.round(calc.theoretical_krw).toLocaleString()}원
-                    </p>
-                    <button 
-                      onClick={() => updateAccData(accId, { totalValuation: Math.round(calc.theoretical_krw).toString() })}
-                      className="mt-2 text-xs text-blue-600 font-bold hover:underline"
-                    >
-                      이 금액 적용하기
-                    </button>
+                  <div className="space-y-4">
+                    <div className="bg-white/60 p-4 rounded-xl border border-amber-200">
+                      <p className="text-xs font-bold text-amber-600 uppercase tracking-wider mb-1">시스템 계산 예상 잔액</p>
+                      <p className="text-xl font-mono font-bold text-slate-700">
+                        {Math.round(calc.theoretical_krw).toLocaleString()}원
+                      </p>
+                      <button 
+                        onClick={() => updateAccData(accId, { totalValuation: Math.round(calc.theoretical_krw).toString() })}
+                        className="mt-2 text-xs text-blue-600 font-bold hover:underline"
+                      >
+                        이 금액 적용하기
+                      </button>
+                    </div>
+
+                    {/* 은행 계좌 거래 유형별 상세 집계 카드 */}
+                    <div className="grid grid-cols-2 gap-3 mt-2 animate-in slide-in-from-top-2 duration-300">
+                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-amber-800">기간 총 입금</span>
+                        <span className="text-sm font-mono font-bold text-slate-700 mt-1">{(calc.total_deposit || 0).toLocaleString()}원</span>
+                      </div>
+                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-amber-800">기간 총 출금</span>
+                        <span className="text-sm font-mono font-bold text-slate-700 mt-1">{(calc.total_withdraw || 0).toLocaleString()}원</span>
+                      </div>
+                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-amber-800">이자 합계</span>
+                        <span className="text-sm font-mono font-bold text-emerald-600 mt-1">+{(calc.total_interest || 0).toLocaleString()}원</span>
+                      </div>
+                      <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                        <span className="text-[10px] font-bold text-amber-800">세금 합계</span>
+                        <span className="text-sm font-mono font-bold text-rose-600 mt-1">-{(calc.total_tax || 0).toLocaleString()}원</span>
+                      </div>
+                      {calc.total_fee > 0 && (
+                        <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                          <span className="text-[10px] font-bold text-amber-800">수수료 합계</span>
+                          <span className="text-sm font-mono font-bold text-rose-500 mt-1">-{(calc.total_fee || 0).toLocaleString()}원</span>
+                        </div>
+                      )}
+                      {Math.abs(calc.total_adjustment || 0) > 0.01 && (
+                        <div className="bg-white/40 p-3 rounded-lg border border-amber-100 flex flex-col justify-between">
+                          <span className="text-[10px] font-bold text-amber-800">현금보정 합계</span>
+                          <span className={`text-sm font-mono font-bold mt-1 ${calc.total_adjustment >= 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
+                            {calc.total_adjustment > 0 ? '+' : ''}{(calc.total_adjustment || 0).toLocaleString()}원
+                          </span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 
                 <div className="space-y-2">
-                  <label className="text-xs font-bold text-amber-700 uppercase tracking-wider">실제 최종 잔액 (KRW)</label>
+                  <label htmlFor={`total-valuation-${accId}`} className="text-xs font-bold text-amber-700 uppercase tracking-wider">실제 최종 잔액 (KRW)</label>
                   <div className="relative">
                     <input 
-                      type="number"
-                      value={data.totalValuation}
-                      onChange={(e) => updateAccData(accId, { totalValuation: e.target.value })}
+                      id={`total-valuation-${accId}`}
+                      type="text"
+                      value={formatWithCommas(data.totalValuation)}
+                      onChange={(e) => {
+                        const raw = e.target.value.replace(/[^0-9.]/g, '');
+                        updateAccData(accId, { totalValuation: raw });
+                      }}
                       className="w-full pl-4 pr-12 py-3 bg-white border-amber-200 rounded-xl focus:ring-2 focus:ring-amber-500 focus:border-transparent font-mono font-bold text-lg"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
@@ -1297,10 +1363,42 @@ const SnapshotWizardPage = () => {
                   }
                 } else {
                   // Bank
-                  const finalVal = parseFloat(data.totalValuation) || data.calcResult?.theoretical_krw || 0;
+                  const finalVal = data.totalValuation ? parseCommas(data.totalValuation) : (data.calcResult?.theoretical_krw || 0);
                   finalValElement = (
                     <span className="font-bold text-slate-900">{Math.round(finalVal).toLocaleString()}원</span>
                   );
+
+                  if (data.calcResult) {
+                    const pDeposit = Math.round(data.calcResult.total_deposit || 0);
+                    const pWithdraw = Math.round(data.calcResult.total_withdraw || 0);
+                    const pInterest = Math.round(data.calcResult.total_interest || 0);
+                    const pTax = Math.round(data.calcResult.total_tax || 0);
+                    const pFee = Math.round(data.calcResult.total_fee || 0);
+                    const pAdjustment = Math.round(data.calcResult.total_adjustment || 0);
+                    const pProfit = pInterest - pTax - pFee + pAdjustment;
+                    
+                    periodElement = (
+                      <div className="flex flex-col items-end">
+                        <span className="text-xs text-slate-600">입금: {pDeposit.toLocaleString()}원 / 출금: {pWithdraw.toLocaleString()}원</span>
+                        {pProfit !== 0 && (
+                          <span className={`text-xs font-bold ${pProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                            이자/기타: {pProfit > 0 ? '+' : ''}{pProfit.toLocaleString()}원
+                          </span>
+                        )}
+                      </div>
+                    );
+
+                    // 은행 잔고 보정(차액)
+                    const theoretical = data.calcResult.theoretical_krw || 0;
+                    const diff = finalVal - theoretical;
+                    if (Math.abs(diff) > 0.01) {
+                      resultElement = (
+                        <span className={diff >= 0 ? 'text-emerald-600' : 'text-rose-600'}>
+                          {diff > 0 ? '+' : ''}{Math.round(diff).toLocaleString()}원 (보정)
+                        </span>
+                      );
+                    }
+                  }
                 }
 
                 return (
