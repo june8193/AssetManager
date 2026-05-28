@@ -135,13 +135,12 @@ async def test_calculate_brokerage_snapshot_with_various_types(db_session, setup
     new_transactions = [
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="INTEREST", total_amount=10000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="CASH_ADJUSTMENT", total_amount=5000, currency="KRW"),
-        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="FEE", total_amount=2000, currency="KRW"),
-        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="TAX", total_amount=3000, currency="KRW"),
+        TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="TAX", total_amount=5000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="BUY", total_amount=100000, currency="KRW"),
         TransactionSchema(account_id=account.id, asset_id=0, transaction_date=today, type="SELL", total_amount=200000, currency="KRW"),
     ]
     
-    # 계산: 1,000,000 + 10,000(이자) + 5,000(조정) - 2,000(수수료) - 3,000(세금) - 100,000(매수) + 200,000(매도) = 1,110,000
+    # 계산: 1,000,000 + 10,000(이자) + 5,000(조정) - 5,000(세금) - 100,000(매수) + 200,000(매도) = 1,110,000
     expected_krw = 1110000
     
     req = BrokerageCalculateRequest(
@@ -235,10 +234,10 @@ def test_get_holdings_dynamic_cash_calculation(db_session, setup_assets):
         account_id=account.id, asset_id=stock.id, transaction_date=today,
         type="BUY", quantity=10.0, price=50000.0, total_amount=500000.0, currency="KRW"
     ))
-    # 3. 수수료(FEE) 2,000원 트랜잭션 추가 (주식 자산에 매칭)
+    # 3. 세금(TAX) 2,000원 트랜잭션 추가 (주식 자산에 매칭)
     db_session.add(Transaction(
         account_id=account.id, asset_id=stock.id, transaction_date=today,
-        type="FEE", quantity=0.0, price=0.0, total_amount=2000.0, currency="KRW"
+        type="TAX", quantity=0.0, price=0.0, total_amount=2000.0, currency="KRW"
     ))
     db_session.commit()
     

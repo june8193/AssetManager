@@ -2,7 +2,6 @@
 
 이 스크립트는 백엔드(FastAPI) 및 프론트엔드(Vite) 서버를 실행하고,
 사용 가능한 포트를 동적으로 찾아 할당하며 개발용 데이터베이스를 활용하도록 설정합니다.
-실행 완료 시 로컬 호스트 브라우저를 자동으로 엽니다.
 """
 import subprocess
 import os
@@ -78,10 +77,6 @@ def main():
         text=True
     )
 
-    # 3. 브라우저 자동 열기
-    import webbrowser
-    print(f"\n[3/3] Opening browser at http://localhost:{frontend_port}...")
-    webbrowser.open(f"http://localhost:{frontend_port}")
 
     print("\n" + "-"*50)
     print(" 모든 서버가 구동되었습니다. 브라우저를 닫으면 약 10초 후 서버가 자동으로 종료됩니다.")

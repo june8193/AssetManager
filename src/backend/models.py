@@ -139,7 +139,7 @@ class Transaction(Base):
         account_id (int): 계좌 식별자 (FK)
         asset_id (int): 자산 식별자 (FK)
         transaction_date (date): 거래 일자
-        type (str): 거래 유형 (DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, FEE, TAX, CASH_ADJUSTMENT)
+        type (str): 거래 유형 (INITIAL_BALANCE, DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, TAX, CASH_ADJUSTMENT)
         quantity (float): 수량
         price (float): 거래 단가
         total_amount (float): 총 거래 금액 (quantity * price)
@@ -152,7 +152,7 @@ class Transaction(Base):
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
     transaction_date = Column(Date, nullable=False)
-    type = Column(String, nullable=False)  # DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, FEE, TAX, CASH_ADJUSTMENT
+    type = Column(String, nullable=False)  # INITIAL_BALANCE, DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, TAX, CASH_ADJUSTMENT
     quantity = Column(Float, default=0.0)
     price = Column(Float, default=0.0)
     total_amount = Column(Float, nullable=False)

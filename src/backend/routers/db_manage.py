@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Literal
 from datetime import date, datetime
 
 from ..database import get_db
@@ -97,7 +97,7 @@ class TransactionSchema(BaseModel):
     account_id: int
     asset_id: int
     transaction_date: date
-    type: str
+    type: Literal["INITIAL_BALANCE", "DEPOSIT", "WITHDRAW", "BUY", "SELL", "INTEREST", "TAX", "CASH_ADJUSTMENT"]
     quantity: float = 0.0
     price: float = 0.0
     total_amount: float
@@ -200,7 +200,6 @@ class BankCalculateResponse(BaseModel):
     total_withdraw: float = 0.0
     total_interest: float = 0.0
     total_tax: float = 0.0
-    total_fee: float = 0.0
     total_adjustment: float = 0.0
 
 
@@ -709,12 +708,12 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
         if tx.currency == 'KRW':
             if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
                 new_krw_net += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
+            elif tx.type in ['WITHDRAW', 'TAX', 'BUY']:
                 new_krw_net -= tx.total_amount
         elif tx.currency == 'USD':
             if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
                 new_usd_net += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'FEE', 'TAX', 'BUY']:
+            elif tx.type in ['WITHDRAW', 'TAX', 'BUY']:
                 new_usd_net -= tx.total_amount
     
     theoretical_krw = theoretical['KRW'] + new_krw_net
@@ -878,7 +877,7 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
             continue
         if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
             last_qtys[tx.asset_id] = last_qtys.get(tx.asset_id, 0.0) + tx.quantity
-        elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
+        elif tx.type in ['SELL', 'WITHDRAW', 'TAX']:
             last_qtys[tx.asset_id] = last_qtys.get(tx.asset_id, 0.0) - tx.quantity
             
     past_active_asset_ids = [aid for aid, qty in last_qtys.items() if abs(qty) > 0.001]
@@ -954,14 +953,14 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
                     if tx.asset_id == asset_id:
                         if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
                             c_qty += tx.quantity
-                        elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
+                        elif tx.type in ['SELL', 'WITHDRAW', 'TAX']:
                             c_qty -= tx.quantity
                             
                 for tx in req.new_transactions:
                     if tx.asset_id == asset_id:
                         if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
                             c_qty += tx.quantity
-                        elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
+                        elif tx.type in ['SELL', 'WITHDRAW', 'TAX']:
                             c_qty -= tx.quantity
                 
                 p_buy = 0.0
@@ -1127,7 +1126,7 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
     for tx in req.new_transactions:
         if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
             new_krw_net += tx.total_amount
-        elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
+        elif tx.type in ['WITHDRAW', 'TAX']:
             new_krw_net -= tx.total_amount
         elif tx.type == 'BUY':
             new_krw_net -= tx.total_amount
@@ -1155,7 +1154,6 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
     total_withdraw = 0.0
     total_interest = 0.0
     total_tax = 0.0
-    total_fee = 0.0
     total_adjustment = 0.0
 
     all_txs = list(existing_transactions) + req.new_transactions
@@ -1171,8 +1169,6 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
             total_interest += amount
         elif t_type == 'TAX':
             total_tax += amount
-        elif t_type == 'FEE':
-            total_fee += amount
         elif t_type == 'CASH_ADJUSTMENT':
             total_adjustment += amount
             
@@ -1183,7 +1179,6 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
         total_withdraw=total_withdraw,
         total_interest=total_interest,
         total_tax=total_tax,
-        total_fee=total_fee,
         total_adjustment=total_adjustment
     )
 

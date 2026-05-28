@@ -200,7 +200,7 @@ class DashboardService:
             
             if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
                 holdings[key] += tx.quantity
-            elif tx.type in ['SELL', 'WITHDRAW', 'FEE', 'TAX']:
+            elif tx.type in ['SELL', 'WITHDRAW', 'TAX']:
                 holdings[key] -= tx.quantity
 
             # (2) 현금 자산에 대한 상대적 증감 동적 반영
@@ -210,7 +210,7 @@ class DashboardService:
                 if cash_key not in holdings:
                     holdings[cash_key] = 0.0
                 
-                if tx.type in ['BUY', 'FEE', 'TAX']:
+                if tx.type in ['BUY', 'TAX']:
                     holdings[cash_key] -= tx.total_amount
                 elif tx.type in ['SELL', 'INTEREST']:
                     holdings[cash_key] += tx.total_amount
@@ -587,7 +587,7 @@ class DashboardService:
                 # INITIAL_BALANCE는 자산이 현금(KRW, USD)인 경우에만 더합니다.
                 if tx.asset and tx.asset.ticker in ['KRW', 'USD']:
                     theoretical[currency] += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'FEE', 'TAX']:
+            elif tx.type in ['WITHDRAW', 'TAX']:
                 theoretical[currency] -= tx.total_amount
             elif tx.type == 'BUY':
                 # 주식 매수는 해당 통화 현금 감소

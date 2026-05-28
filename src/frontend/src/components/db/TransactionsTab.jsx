@@ -255,9 +255,8 @@ const TransactionsTab = () => {
               <option value="SELL">매도 (SELL)</option>
               <option value="DEPOSIT">입금 (DEPOSIT)</option>
               <option value="WITHDRAW">출금 (WITHDRAW)</option>
-              <option value="DIVIDEND">배당 (DIVIDEND)</option>
+              <option value="INITIAL_BALANCE">초기 잔고 (INITIAL_BALANCE)</option>
               <option value="INTEREST">이자 (INTEREST)</option>
-              <option value="FEE">수수료 (FEE)</option>
               <option value="TAX">세금 (TAX)</option>
               <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
             </select>
@@ -362,7 +361,7 @@ const TransactionsTab = () => {
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    ['BUY', 'DEPOSIT'].includes(tx.type) ? 'bg-blue-50 text-blue-600' : 
+                    ['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type) ? 'bg-blue-50 text-blue-600' : 
                     ['SELL', 'WITHDRAW'].includes(tx.type) ? 'bg-red-50 text-red-600' :
                     'bg-emerald-50 text-emerald-600'
                   }`}>
