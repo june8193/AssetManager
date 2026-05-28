@@ -354,3 +354,78 @@ async def test_preview_snapshots_excludes_initial_balance(db_session, test_user)
     # period_deposit는 INITIAL_BALANCE가 제외된 200,000원이어야 합니다.
     assert target_preview.period_deposit == 200000.0
 
+
+@pytest.mark.asyncio
+async def test_save_unified_snapshots_saves_exchange_rate(db_session, test_user):
+    """Unified 스냅샷 저장 시 입력받은 환율이 exchange_rates 테이블에 저장되는지 검증합니다."""
+    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest
+    from src.backend.models import ExchangeRate
+    import datetime
+
+    today = datetime.date.today()
+
+    # 기초 자산 생성
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    db_session.add_all([krw, usd])
+    db_session.flush()
+
+    req = UnifiedSaveRequest(
+        snapshot_date=today,
+        exchange_rate=1420.5,
+        brokerage_accounts=[],
+        bank_accounts=[]
+    )
+
+    # 기존 exchange_rates 데이터가 없는 상태에서 호출
+    await save_unified_snapshots(req, db_session)
+
+    # exchange_rates 조회
+    saved_rate = db_session.query(ExchangeRate).filter(
+        ExchangeRate.date == today,
+        ExchangeRate.currency == "USD"
+    ).first()
+
+    assert saved_rate is not None
+    assert saved_rate.rate == 1420.5
+
+
+@pytest.mark.asyncio
+async def test_save_unified_snapshots_updates_existing_exchange_rate(db_session, test_user):
+    """Unified 스냅샷 저장 시 이미 동일 날짜/통화의 환율이 존재할 경우 업데이트되는지 검증합니다."""
+    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest
+    from src.backend.models import ExchangeRate
+    import datetime
+
+    today = datetime.date.today()
+
+    # 기존 환율 미리 삽입
+    old_rate = ExchangeRate(date=today, currency="USD", rate=1350.0)
+    db_session.add(old_rate)
+    db_session.commit()
+
+    # 기초 자산 생성
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    db_session.add_all([krw, usd])
+    db_session.flush()
+
+    req = UnifiedSaveRequest(
+        snapshot_date=today,
+        exchange_rate=1390.0,
+        brokerage_accounts=[],
+        bank_accounts=[]
+    )
+
+    await save_unified_snapshots(req, db_session)
+
+    # exchange_rates 조회 (동일 날짜 데이터가 업데이트 되었는지 검증)
+    saved_rate = db_session.query(ExchangeRate).filter(
+        ExchangeRate.date == today,
+        ExchangeRate.currency == "USD"
+    ).first()
+
+    assert saved_rate is not None
+    assert saved_rate.rate == 1390.0
+
+

@@ -537,6 +537,29 @@ async def save_snapshots(previews: List[SnapshotPreviewSchema], db: Session = De
 
 # --- Helper Functions for Snapshot Saving ---
 
+def _save_exchange_rate_logic(db: Session, target_date: date, rate: float):
+    """입력받은 환율 정보를 exchange_rates 테이블에 저장하거나 업데이트합니다.
+
+    Args:
+        db (Session): 데이터베이스 세션
+        target_date (date): 환율을 적용할 날짜
+        rate (float): 환율 (USD/KRW)
+    """
+    existing_rate = db.query(ExchangeRate).filter(
+        ExchangeRate.date == target_date,
+        ExchangeRate.currency == "USD"
+    ).first()
+    
+    if existing_rate:
+        existing_rate.rate = rate
+    else:
+        new_rate = ExchangeRate(
+            date=target_date,
+            currency="USD",
+            rate=rate
+        )
+        db.add(new_rate)
+
 def _process_brokerage_accounts_logic(
     db: Session, 
     snapshot_date: date, 
@@ -1143,6 +1166,7 @@ async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depe
         raise HTTPException(status_code=500, detail="KRW or USD asset not found in database")
 
     try:
+        _save_exchange_rate_logic(db, req.snapshot_date, req.exchange_rate)
         _process_brokerage_accounts_logic(db, req.snapshot_date, req.accounts, krw_asset.id, usd_asset.id)
         
         db.flush() 
@@ -1216,6 +1240,7 @@ async def save_unified_snapshots(req: UnifiedSaveRequest, db: Session = Depends(
         raise HTTPException(status_code=500, detail="KRW or USD asset not found in database")
 
     try:
+        _save_exchange_rate_logic(db, req.snapshot_date, req.exchange_rate)
         _process_brokerage_accounts_logic(db, req.snapshot_date, req.brokerage_accounts, krw_asset.id, usd_asset.id)
         _process_bank_accounts_logic(db, req.bank_accounts, krw_asset.id)
         
