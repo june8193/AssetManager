@@ -1,3 +1,8 @@
+"""운영 환경에서 백엔드 및 프론트엔드 서버를 구동하고 관리하는 스크립트.
+
+이 스크립트는 실제 운영 데이터베이스(src/assets.db)를 사용하도록 설정을 강제하며,
+백엔드(FastAPI) 및 프론트엔드(Vite) 서버를 실행하고 브라우저를 엽니다.
+"""
 import subprocess
 import os
 import sys

@@ -1,3 +1,8 @@
+"""자산 스냅샷 테이블의 총입금액(total_deposit) 컬럼을 기간입금액(period_deposit)으로 변경하는 마이그레이션 스크립트.
+
+이 스크립트는 account_snapshots 테이블에서 컬럼명을 변경(ALTER TABLE)하여,
+누적 총입금액 대신 개별 스냅샷 기간의 순입금액을 기록하는 구조로 전환합니다.
+"""
 import sqlite3
 import os
 

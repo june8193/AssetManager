@@ -1,3 +1,8 @@
+"""yfinance 라이브러리를 사용하여 주식 정보 조회 및 검색 API를 테스트하는 스크립트.
+
+이 스크립트는 AAPL, NVDA 등의 심볼을 사용하여 검색(Search), 티커 기본 정보(fast_info),
+그리고 실시간 분 단위 시세 데이터를 가져오는 동작을 테스트합니다.
+"""
 import yfinance as yf
 import json
 
