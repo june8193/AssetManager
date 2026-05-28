@@ -1,5 +1,6 @@
 import pytest
 import datetime
+import asyncio
 from src.backend.models import User, Account, AccountSnapshot, Transaction, Asset
 from src.backend.services.dashboard_service import DashboardService
 
@@ -264,4 +265,110 @@ def test_get_daily_stats(db_session):
     assert s01["increase"] == 3000.0
     assert s01["profit"] == 0.0
     assert s01["roi"] == 0.0
+
+
+def test_get_dashboard_summary_cumulative_stats(db_session, monkeypatch):
+    """대시보드 요약 정보 조회 시 실시간 누적 성과 통계가 올바르게 계산되는지 검증합니다."""
+    # 1. 기본 데이터 설정
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+
+    acc = Account(user_id=user.id, name="Test Account", provider="Test Bank", is_active=True)
+    db_session.add(acc)
+    db_session.commit()
+
+    # 2. 연도별 스냅샷 생성 (과거 원금 및 기초자산 수립 목적)
+    # 2021년 1월 1일: 원금 1000, 평가액 1100 (최초 기초자산 = 1100 - 1000 = 100)
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2021, 1, 1),
+        period_deposit=1000.0,
+        total_valuation=1100.0,
+        total_profit=100.0
+    ))
+    # 2021년 12월 31일: 추가 원금 0, 평가액 1200
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2021, 12, 31),
+        period_deposit=0.0,
+        total_valuation=1200.0,
+        total_profit=200.0
+    ))
+    # 2022년 말: 추가 원금 500, 평가액 1800 (당해수익 = 100)
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2022, 12, 31),
+        period_deposit=500.0,
+        total_valuation=1800.0,
+        total_profit=300.0
+    ))
+    db_session.commit()
+
+    # 3. 실시간 주가 조회를 가상화 (2000 KRW 평가액을 만들도록 설정)
+    # 자산 및 트랜잭션 추가하여 실시간 평가 자산을 2000.0으로 만듦
+    asset = Asset(ticker="TEST", name="Test Asset", country="KR", major_category="주식", sub_category="국내주식")
+    db_session.add(asset)
+    db_session.commit()
+
+    # TEST 주식 10주 매수 (평가액 2000 KRW을 만들기 위해 1주당 200 KRW으로 가정)
+    db_session.add(Transaction(
+        account_id=acc.id,
+        asset_id=asset.id,
+        transaction_date=datetime.date(2023, 1, 1),
+        type="BUY",
+        quantity=10.0,
+        total_amount=2000.0,
+        currency="KRW"
+    ))
+    # 현금 잔고를 맞추기 위해 입금 2000.0 추가
+    cash_asset = db_session.query(Asset).filter(Asset.ticker == "KRW").first()
+    if not cash_asset:
+        cash_asset = Asset(ticker="KRW", name="Won", country="KR", major_category="현금", sub_category="현금")
+        db_session.add(cash_asset)
+        db_session.commit()
+
+    db_session.add(Transaction(
+        account_id=acc.id,
+        asset_id=cash_asset.id,
+        transaction_date=datetime.date(2023, 1, 1),
+        type="DEPOSIT",
+        quantity=2000.0,
+        total_amount=2000.0,
+        currency="KRW"
+    ))
+    db_session.commit()
+
+    service = DashboardService(db_session)
+
+    # get_current_prices 모킹하여 TEST 주식 단가를 200.0으로 설정 -> 평가액 2000.0
+    async def mock_get_current_prices(self, tickers):
+        return {"TEST": 200.0, "KRW": 1.0}
+    
+    monkeypatch.setattr(DashboardService, "get_current_prices", mock_get_current_prices)
+
+    # 4. 검증
+    summary = asyncio.run(service.get_dashboard_summary())
+
+    # 실시간 총 자산 (주식 10 * 200 = 2000원, 현금 2000 - BUY(2000) = 0원 => 총 2000원)
+    assert summary["total_valuation_krw"] == 2000.0
+
+    # 총 추가액 (1000 + 500 = 1500)
+    assert summary["total_contribution"] == 1500.0
+    
+    # 최초 기초 자산 (1100 - 1000 = 100)
+    assert summary["initial_base_asset"] == 100.0
+
+    # 누적 수익금 (2000 - 1500 - 100 = 400)
+    assert summary["total_profit"] == 400.0
+
+    # 누적 수익률 (400 / 1600 * 100 = 25.0)
+    assert summary["cumulative_roi"] == 25.0
+
+    # 원금 비율 (1600 / 2000 * 100 = 80.0)
+    assert summary["contribution_ratio"] == 80.0
+
+    # 수익 비율 (400 / 2000 * 100 = 20.0)
+    assert summary["profit_ratio"] == 20.0
+
 

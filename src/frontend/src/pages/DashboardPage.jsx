@@ -92,7 +92,20 @@ const DashboardPage = () => {
     );
   }
 
-  const { categories, total_valuation_krw, exchange_rate, yearly, daily, snapshots } = data;
+  const { 
+    categories, 
+    total_valuation_krw, 
+    exchange_rate, 
+    yearly, 
+    daily, 
+    snapshots,
+    total_contribution = 0,
+    initial_base_asset = 0,
+    total_profit = 0,
+    cumulative_roi = 0,
+    contribution_ratio = 100,
+    profit_ratio = 0
+  } = data;
   const lastSnapshotDate = snapshots?.history?.length > 0 
     ? snapshots.history[snapshots.history.length - 1].date 
     : null;
@@ -139,6 +152,53 @@ const DashboardPage = () => {
                 <Clock size={12} />
                 <span>입력일: <span className="text-white font-medium">{new Date(exchange_rate.created_at).toLocaleString()}</span></span>
               </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 누적 성과 대시보드 요약 섹션 */}
+        <div className="relative z-10 mt-8 pt-8 border-t border-white/10 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
+          {/* 수치 데이터 그리드 */}
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <div className="text-xs text-blue-200/60 font-bold mb-1.5 antialiased">총 투자 원금</div>
+              <div className="text-xl font-black text-white leading-none">
+                {maskValue(Math.round(total_contribution + initial_base_asset).toLocaleString())}
+                <span className="text-xs font-bold text-blue-300 ml-1">원</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-blue-200/60 font-bold mb-1.5 antialiased">누적 투자 수익</div>
+              <div className="text-xl font-black leading-none">
+                <span className={total_profit >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                  {total_profit >= 0 ? "+" : ""}{maskValue(Math.round(total_profit).toLocaleString())}
+                </span>
+                <span className="text-xs font-bold text-blue-300 ml-1">원</span>
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-blue-200/60 font-bold mb-1.5 antialiased">누적 수익률</div>
+              <div className={`text-xl font-black leading-none ${total_profit >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                {total_profit >= 0 ? "+" : ""}{cumulative_roi.toFixed(2)}%
+              </div>
+            </div>
+          </div>
+
+          {/* 비율 프로그레스 바 */}
+          <div>
+            <div className="flex justify-between text-xs text-blue-200/70 font-bold mb-2.5 antialiased">
+              <span>투자 원금 {contribution_ratio.toFixed(1)}%</span>
+              <span>투자 수익 {profit_ratio.toFixed(1)}%</span>
+            </div>
+            <div className="h-3 bg-white/10 rounded-full overflow-hidden flex">
+              <div 
+                className="bg-blue-400 h-full rounded-l-full transition-all duration-1000"
+                style={{ width: `${Math.max(0, Math.min(100, contribution_ratio))}%` }}
+              ></div>
+              <div 
+                className="bg-emerald-400 h-full rounded-r-full transition-all duration-1000"
+                style={{ width: `${Math.max(0, Math.min(100, profit_ratio))}%` }}
+              ></div>
             </div>
           </div>
         </div>

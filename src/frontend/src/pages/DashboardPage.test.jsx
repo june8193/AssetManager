@@ -28,7 +28,13 @@ const mockData = {
     created_at: '2024-03-20T10:00:00Z'
   },
   yearly: [],
-  snapshots: []
+  snapshots: [],
+  total_contribution: 800000,
+  initial_base_asset: 100000,
+  total_profit: 100000,
+  cumulative_roi: 11.11,
+  contribution_ratio: 90.0,
+  profit_ratio: 10.0
 };
 
 describe('DashboardPage', () => {
@@ -166,5 +172,36 @@ describe('DashboardPage', () => {
     // 따라서 '주식'인 자산B가 첫 번째, '현금'인 자산A가 두 번째여야 함.
     expect(sortedAssetNames[0]).toBe('자산B');
     expect(sortedAssetNames[1]).toBe('자산A');
+  });
+
+  it('누적 투자 원금, 누적 투자 수익, 누적 수익률 및 프로그레스 바가 정상적으로 렌더링된다', () => {
+    vi.mocked(useDashboard).mockReturnValue({
+      data: mockData,
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    });
+
+    render(
+      <MaskingProvider>
+        <DashboardPage />
+      </MaskingProvider>
+    );
+
+    // 총 투자 원금 확인 (800,000 + 100,000 = 900,000)
+    expect(screen.getByText('총 투자 원금')).toBeDefined();
+    expect(screen.getByText('900,000')).toBeDefined();
+
+    // 누적 투자 수익 확인 (+100,000)
+    expect(screen.getByText('누적 투자 수익')).toBeDefined();
+    expect(screen.getByText('+100,000')).toBeDefined();
+
+    // 누적 수익률 확인 (+11.11%)
+    expect(screen.getByText('누적 수익률')).toBeDefined();
+    expect(screen.getByText('+11.11%')).toBeDefined();
+
+    // 비율 텍스트 확인
+    expect(screen.getByText('투자 원금 90.0%')).toBeDefined();
+    expect(screen.getByText('투자 수익 10.0%')).toBeDefined();
   });
 });

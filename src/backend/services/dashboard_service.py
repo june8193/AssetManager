@@ -453,11 +453,56 @@ class DashboardService:
         # 대분류 평가액 순 정렬
         formatted_categories.sort(key=lambda x: x["value_krw"], reverse=True)
 
+        # 누적 성과 통계 계산
+        yearly_stats = self.get_yearly_stats()
+        
+        total_contribution = 0.0
+        initial_base_asset = 0.0
+        total_profit = 0.0
+        cumulative_roi = 0.0
+        contribution_ratio = 100.0
+        profit_ratio = 0.0
+        
+        if yearly_stats:
+            # 1) 총 추가액 (스냅샷 상의 입금 합계)
+            total_contribution = sum(y['contribution'] for y in yearly_stats)
+            
+            # 2) 최초 기초 자산 (가장 과거 연도의 prev_assets)
+            # prev_assets = assets - contribution - profit
+            oldest_year_stat = yearly_stats[-1] # 내림차순 정렬이므로 마지막 요소가 가장 과거
+            initial_base_asset = oldest_year_stat['assets'] - oldest_year_stat['contribution'] - oldest_year_stat['profit']
+            
+            # 3) 실시간 누적 수익금 = 실시간 평가자산 - 누적 추가액 - 최초 기초 자산
+            total_profit = total_valuation_krw - total_contribution - initial_base_asset
+            
+            # 4) 누적 수익률 = (누적 수익금 / (최초 기초 자산 + 누적 추가액) * 100)
+            denominator = initial_base_asset + total_contribution
+            if denominator != 0:
+                cumulative_roi = (total_profit / denominator) * 100
+                
+            # 5) 원금 비율 / 수익 비율 계산 (손실 시 방어 로직 적용)
+            if total_valuation_krw > 0:
+                if total_profit >= 0:
+                    contribution_ratio = (initial_base_asset + total_contribution) / total_valuation_krw * 100
+                    profit_ratio = total_profit / total_valuation_krw * 100
+                else:
+                    contribution_ratio = 100.0
+                    profit_ratio = 0.0
+            else:
+                contribution_ratio = 100.0
+                profit_ratio = 0.0
+
         return {
             "accounts": sorted(list(account_summaries.values()), key=lambda x: x['total_valuation_krw'], reverse=True),
             "categories": formatted_categories,
             "total_valuation_krw": total_valuation_krw,
-            "exchange_rate": exchange_info
+            "exchange_rate": exchange_info,
+            "total_contribution": total_contribution,
+            "initial_base_asset": initial_base_asset,
+            "total_profit": total_profit,
+            "cumulative_roi": round(cumulative_roi, 2),
+            "contribution_ratio": round(contribution_ratio, 2),
+            "profit_ratio": round(profit_ratio, 2)
         }
 
     def get_snapshots(self) -> Dict[str, Any]:
