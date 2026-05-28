@@ -30,3 +30,6 @@ superpowers/
 
 # playwright 관련 파일
 .playwright-mcp/
+
+# E2E 테스트 스크린샷 폴더
+screenshots/
