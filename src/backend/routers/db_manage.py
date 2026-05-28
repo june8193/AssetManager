@@ -465,7 +465,7 @@ async def preview_snapshots(req: SaveSnapshotRequest, db: Session = Depends(get_
             
             # 특정 기간 순 입금액 (스냅샷 기록용)
             if tx.transaction_date > last_date:
-                if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+                if tx.type == 'DEPOSIT':
                     period_deposit_krw += amount_krw
                 elif tx.type == 'WITHDRAW':
                     period_deposit_krw -= amount_krw
@@ -738,16 +738,14 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
         amount_krw = tx.total_amount * tx_rate if tx.currency == 'USD' else tx.total_amount
         
         # 입출금 집계
-        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+        if tx.type == 'DEPOSIT':
             period_deposit += amount_krw
             if tx.currency == 'KRW':
                 period_deposit_krw += amount_krw
-                if tx.type == 'DEPOSIT':
-                    deposit_krw += tx.total_amount
+                deposit_krw += tx.total_amount
             elif tx.currency == 'USD':
                 period_deposit_usd_krw += amount_krw
-                if tx.type == 'DEPOSIT':
-                    deposit_usd += tx.total_amount
+                deposit_usd += tx.total_amount
         elif tx.type == 'WITHDRAW':
             period_deposit -= amount_krw
             if tx.currency == 'KRW':
@@ -778,16 +776,14 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
         amount_krw = tx.total_amount * tx_rate if tx.currency == 'USD' else tx.total_amount
         
         # 입출금 집계
-        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
+        if tx.type == 'DEPOSIT':
             period_deposit += amount_krw
             if tx.currency == 'KRW':
                 period_deposit_krw += amount_krw
-                if tx.type == 'DEPOSIT':
-                    deposit_krw += tx.total_amount
+                deposit_krw += tx.total_amount
             elif tx.currency == 'USD':
                 period_deposit_usd_krw += amount_krw
-                if tx.type == 'DEPOSIT':
-                    deposit_usd += tx.total_amount
+                deposit_usd += tx.total_amount
         elif tx.type == 'WITHDRAW':
             period_deposit -= amount_krw
             if tx.currency == 'KRW':

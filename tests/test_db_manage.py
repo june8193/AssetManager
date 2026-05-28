@@ -313,3 +313,44 @@ async def test_save_unified_snapshots_bank_none_valuation(db_session, test_user)
     ).first()
     
     assert bank_snap.total_valuation == 300000
+
+
+@pytest.mark.asyncio
+async def test_preview_snapshots_excludes_initial_balance(db_session, test_user):
+    """INITIAL_BALANCE 트랜잭션이 스냅샷의 period_deposit에 포함되지 않음을 검증합니다."""
+    from src.backend.routers.db_manage import preview_snapshots, SaveSnapshotRequest
+    
+    # 1. 기초 자산 생성
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
+    db_session.add(krw)
+    db_session.flush()
+
+    # 2. 계좌 생성
+    acc = Account(user_id=test_user.id, name="테스트계좌", provider="테스트", account_type="BROKERAGE", is_active=True)
+    db_session.add(acc)
+    db_session.flush()
+
+    # 3. INITIAL_BALANCE(초기 잔고) 및 DEPOSIT(추가 입금) 트랜잭션 생성
+    db_session.add(Transaction(
+        account_id=acc.id, asset_id=krw.id, transaction_date=date(2026, 5, 27),
+        type="INITIAL_BALANCE", quantity=1000000.0, total_amount=1000000.0, currency="KRW"
+    ))
+    db_session.add(Transaction(
+        account_id=acc.id, asset_id=krw.id, transaction_date=date(2026, 5, 28),
+        type="DEPOSIT", quantity=200000.0, total_amount=200000.0, currency="KRW"
+    ))
+    db_session.commit()
+
+    # 4. 스냅샷 미리보기 실행 (기준일 2026-05-28)
+    req = SaveSnapshotRequest(
+        snapshot_date=date(2026, 5, 28),
+        exchange_rate=1350.0
+    )
+    previews = await preview_snapshots(req, db_session)
+
+    # 5. 검증
+    target_preview = next((p for p in previews if p.account_id == acc.id), None)
+    assert target_preview is not None
+    # period_deposit는 INITIAL_BALANCE가 제외된 200,000원이어야 합니다.
+    assert target_preview.period_deposit == 200000.0
+
