@@ -338,7 +338,8 @@ const TransactionsTab = () => {
             <tr className="bg-slate-50 border-b border-slate-200">
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">날짜</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">계좌</th>
-              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">자산</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">티커</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">자산명</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">유형</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">수량</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">단가</th>
@@ -353,8 +354,11 @@ const TransactionsTab = () => {
                 <td className="px-4 py-3 text-sm text-slate-700">
                   {accounts.find(a => a.id === tx.account_id)?.name || tx.account_id}
                 </td>
-                <td className="px-4 py-3 text-sm text-slate-900 font-medium">
+                <td className="px-4 py-3 text-sm text-slate-900 font-bold">
                   {assets.find(a => a.id === tx.asset_id)?.ticker || tx.asset_id}
+                </td>
+                <td className="px-4 py-3 text-sm text-slate-700">
+                  {assets.find(a => a.id === tx.asset_id)?.name || ''}
                 </td>
                 <td className="px-4 py-3 text-sm">
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${

@@ -33,6 +33,8 @@ describe('TransactionsTab', () => {
     await waitFor(() => {
       expect(screen.getByText('2026-04-22')).toBeInTheDocument();
       expect(screen.getByText('1,000 KRW')).toBeInTheDocument();
+      expect(screen.getByText('005930')).toBeInTheDocument();
+      expect(screen.getByText('Samsung')).toBeInTheDocument();
     });
   });
 
