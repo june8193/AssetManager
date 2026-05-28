@@ -9,6 +9,12 @@ import sys
 
 def main():
     """모든 백엔드 및 프론트엔드 테스트를 실행합니다."""
+    # Windows 콘솔 등에서 유니코드(이모지 등) 출력 오류 방지
+    if sys.platform == 'win32':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except AttributeError:
+            pass
     
     root_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     frontend_dir = os.path.join(root_dir, "src", "frontend")
