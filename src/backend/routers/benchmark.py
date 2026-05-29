@@ -1,4 +1,5 @@
 import datetime
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
@@ -79,9 +80,15 @@ async def get_benchmark_dashboard(
         }
 
     # 지수 현재가 조회 (최근 저장된 캐시 정보 활용)
-    for ticker in tickers:
-        prices = await benchmark_svc.get_historical_prices(ticker, start_date, end_date)
-        current_val = prices[-1].close_price if prices else 0.0
+    # asyncio.gather를 사용하여 각 지수의 가격 정보를 비동기 병렬로 가져옵니다.
+    prices_list = await asyncio.gather(*(
+        benchmark_svc.get_historical_prices(ticker, start_date, end_date)
+        for ticker in tickers
+    ))
+    for ticker, prices in zip(tickers, prices_list):
+        # 0.0이 아닌 실질 유효 가격 중 가장 최근 가격을 현재가로 사용합니다.
+        valid_prices = [p for p in prices if p.close_price > 0.0]
+        current_val = valid_prices[-1].close_price if valid_prices else 0.0
         if ticker in index_card_data:
             index_card_data[ticker]["value"] = current_val
 
@@ -106,9 +113,13 @@ async def get_benchmark_dashboard(
             for p in us_res:
                 current_prices[p["stock_code"]] = p["current_price"]
 
-        for item in watchlist_items:
-            # YTD 수익률은 yfinance 캐시 활용
-            ytd_ret = await benchmark_svc.get_ytd_return(item.stock_code)
+        # asyncio.gather를 사용하여 모든 관심 종목의 YTD 수익률 조회를 비동기 병렬로 처리합니다.
+        ytd_returns = await asyncio.gather(*(
+            benchmark_svc.get_ytd_return(item.stock_code)
+            for item in watchlist_items
+        ))
+
+        for item, ytd_ret in zip(watchlist_items, ytd_returns):
             curr_price = current_prices.get(item.stock_code, 0.0)
 
             watchlist_data.append({

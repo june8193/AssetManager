@@ -120,12 +120,17 @@ async def test_sync_historical_prices_lazy(mock_download, benchmark_service, db_
     assert prices[0].close_price == 2500.0
     assert prices[0].price_date == datetime.date(2026, 5, 1)
 
-    # DB에 적재되었는지 확인
-    cached = db_session.query(HistoricalPrice).filter_by(ticker=ticker).all()
-    assert len(cached) == 1
-    assert cached[0].close_price == 2500.0
+    # DB에 적재되었는지 확인 (4/21 ~ 5/3 총 13일의 데이터가 Forward Fill로 빈틈없이 캐싱됨)
+    cached = db_session.query(HistoricalPrice).filter_by(ticker=ticker).order_by(HistoricalPrice.price_date.asc()).all()
+    assert len(cached) == 13
+    
+    # 주말(토요일 5/2, 일요일 5/3)에는 비영업일 마커인 0.0이 채워져 있는지 확인
+    sat_price = next(p for p in cached if p.price_date == datetime.date(2026, 5, 2))
+    sun_price = next(p for p in cached if p.price_date == datetime.date(2026, 5, 3))
+    assert sat_price.close_price == 0.0
+    assert sun_price.close_price == 0.0
 
-    # 3. 두 번째 호출 시에는 yfinance가 호출되지 않고 로컬 캐시를 사용하는지 검증
+    # 3. 두 번째 호출 시에는 yfinance가 호출되지 않고 로컬 캐시를 사용하는지 검증 (캐시 히트)
     mock_download.reset_mock()
     prices_cached = await benchmark_service.get_historical_prices(ticker, start_date, end_date)
     mock_download.assert_not_called()
@@ -189,9 +194,9 @@ async def test_get_watchlist_historical_returns(mock_download, benchmark_service
     assert result["labels"] == ["2026-05-01", "2026-05-04", "2026-05-05"]
     assert result["data"] == [0.0, 5.0, 10.0]
 
-    # DB 캐싱 확인
+    # DB 캐싱 확인 (4/21 ~ 5/7 까지 총 17일 분량의 데이터가 0.0을 포함하여 캐싱됨)
     cached = db_session.query(HistoricalPrice).filter_by(ticker="AAPL").all()
-    assert len(cached) == 3
+    assert len(cached) == 17
 
 
 

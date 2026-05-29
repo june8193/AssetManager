@@ -59,9 +59,9 @@ class BenchmarkService:
             if latest_date < effective_end - datetime.timedelta(days=3):
                 needs_fetch = True
             
-            # 최초 저장 날짜가 요청 시작일보다 늦으면 이전 기간 fetch 필요
+            # 최초 저장 날짜가 요청 시작일보다 늦되, 그 차이가 7일을 초과하는 경우에만 fetch 필요 (휴장/주말 고려)
             first_date = db_prices[0].price_date
-            if start_date < first_date:
+            if first_date - start_date > datetime.timedelta(days=7):
                 needs_fetch = True
 
         if needs_fetch:
@@ -83,6 +83,8 @@ class BenchmarkService:
     async def _fetch_and_cache(self, ticker: str, start_date: datetime.date, end_date: datetime.date):
         """yfinance에서 데이터를 다운로드하여 DB에 적재합니다.
 
+        비영업일(주말, 공휴일)은 직전 영업일의 종가를 그대로 사용하는 Forward Fill 방식으로 채웁니다.
+
         Args:
             ticker (str): 자산 티커
             start_date (date): 시작일
@@ -102,8 +104,10 @@ class BenchmarkService:
         # yfinance download는 블로킹이므로 threadpool에서 실행
         try:
             # yfinance는 시작일의 가격 변화를 제대로 계산하기 위해 며칠 앞당겨 조회
-            query_start = (start_date - datetime.timedelta(days=10)).strftime("%Y-%m-%d")
-            query_end = (end_date + datetime.timedelta(days=2)).strftime("%Y-%m-%d")
+            delta_start = start_date - datetime.timedelta(days=10)
+            delta_end = end_date + datetime.timedelta(days=2)
+            query_start = delta_start.strftime("%Y-%m-%d")
+            query_end = delta_end.strftime("%Y-%m-%d")
             
             df = await run_in_threadpool(
                 yf.download, 
@@ -122,23 +126,34 @@ class BenchmarkService:
                 if 'Close' in df.columns.levels[0]:
                     close_col = ('Close', yf_ticker)
 
+            # 다운로드된 데이터의 날짜별 맵핑 작성
+            price_map = {}
             for date_stamp, row in df.iterrows():
                 p_date = date_stamp.date()
                 try:
                     val = float(row[close_col])
-                    if pd.isna(val):
-                        continue
+                    if not pd.isna(val):
+                        price_map[p_date] = val
                 except (KeyError, ValueError):
                     continue
+
+            # query_start부터 query_end까지 하루씩 증가하며 데이터 저장 (비영업일은 0.0으로 저장)
+            curr_date = delta_start
+            while curr_date <= delta_end:
+                val_to_save = 0.0
+                if curr_date in price_map:
+                    val_to_save = price_map[curr_date]
 
                 # sqlite insert ignore 구현
                 stmt = insert(HistoricalPrice).values(
                     ticker=ticker,
-                    price_date=p_date,
-                    close_price=val
+                    price_date=curr_date,
+                    close_price=val_to_save
                 )
                 stmt = stmt.on_conflict_do_nothing(index_elements=['ticker', 'price_date'])
                 self.db.execute(stmt)
+
+                curr_date += datetime.timedelta(days=1)
             
             self.db.commit()
         except Exception as e:
@@ -163,11 +178,12 @@ class BenchmarkService:
             prices_by_ticker[t] = prices
 
         # 2. X축 날짜(영업일 labels) 생성
-        # 지수 데이터가 존재하는 날짜들의 합집합을 구한 뒤 정렬합니다.
+        # 지수 데이터가 존재하는 영업일(가격 > 0.0) 날짜들의 합집합을 구한 뒤 정렬합니다.
         dates_set = set()
         for prices in prices_by_ticker.values():
             for p in prices:
-                dates_set.add(p.price_date)
+                if p.close_price > 0.0:  # 휴장일(0.0)은 영업일 판단에서 제외
+                    dates_set.add(p.price_date)
         
         # 시작~종료 범위 내 영업일 필터링 및 정렬
         sorted_dates = sorted([d for d in dates_set if start_date <= d <= end_date])
@@ -358,9 +374,9 @@ class BenchmarkService:
         # 2. 영업일 기준 날짜 정합 (KOSPI 영업일 기준 등으로 처리하기 위해 KOSPI 데이터를 가져옴)
         # 지수의 영업일 리스트를 X축 기준으로 삼습니다.
         kospi_prices = await self.get_historical_prices("^KS11", start_date, end_date)
-        sorted_dates = sorted(list(set(p.price_date for p in kospi_prices)))
+        sorted_dates = sorted(list(set(p.price_date for p in kospi_prices if p.close_price > 0.0)))
         if not sorted_dates:
-            sorted_dates = sorted(list(price_map.keys()))
+            sorted_dates = sorted(list(k for k, v in price_map.items() if v > 0.0))
 
         # 범위 필터링
         sorted_dates = [d for d in sorted_dates if start_date <= d <= end_date]
@@ -416,9 +432,11 @@ class BenchmarkService:
         today = datetime.date.today()
         start_date = datetime.date(today.year, 1, 1)
         prices = await self.get_historical_prices(ticker, start_date, today)
-        if len(prices) >= 2:
-            base_price = prices[0].close_price
-            last_price = prices[-1].close_price
+        # 휴장일(0.0)이 아닌 실질 영업일 시세만 필터링합니다.
+        valid_prices = [p for p in prices if p.close_price > 0.0]
+        if len(valid_prices) >= 2:
+            base_price = valid_prices[0].close_price
+            last_price = valid_prices[-1].close_price
             if base_price != 0:
                 return round(((last_price - base_price) / base_price) * 100, 2)
         return 0.0
