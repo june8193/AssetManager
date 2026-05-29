@@ -200,3 +200,56 @@ async def test_get_watchlist_historical_returns(mock_download, benchmark_service
 
 
 
+@pytest.mark.asyncio
+async def test_calculate_cumulative_returns_with_weekend_deposit(benchmark_service, db_session):
+    """주말(비영업일)에 발생한 입금액과 자산 스냅샷이 누락되지 않고 누적 수익률에 반영되는지 검증하는 테스트"""
+    # 2026-05-01 ~ 2026-05-05 일자별 평가액 및 입출금
+    # 5/1(금) 자산: 1,000,000, 입금: 0
+    # 5/2(토) 자산: 1,050,000, 입금: 50,000 (주말 입금 발생)
+    # 5/4(월) 자산: 1,100,000, 입금: 0
+    # 5/5(화) 자산: 1,120,000, 입금: 0
+    snapshots = [
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 1), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 2), period_deposit=50000.0, total_valuation=1050000.0, total_profit=0.0), # 토요일
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 4), period_deposit=0.0, total_valuation=1100000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 5), period_deposit=0.0, total_valuation=1120000.0, total_profit=0.0),
+    ]
+    for s in snapshots:
+        db_session.add(s)
+        
+    # KOSPI (^KS11) 일별 가격 (영업일 기준: 5/1, 5/4, 5/5)
+    kospi_prices = [
+        (datetime.date(2026, 5, 1), 2500.0),
+        (datetime.date(2026, 5, 4), 2550.0),
+        (datetime.date(2026, 5, 5), 2600.0),
+    ]
+    for d, price in kospi_prices:
+        p = HistoricalPrice(ticker="^KS11", price_date=d, close_price=price)
+        db_session.add(p)
+        
+    db_session.commit()
+
+    # 3. 비즈니스 로직 호출
+    result = await benchmark_service.calculate_cumulative_returns(
+        start_date=datetime.date(2026, 5, 1),
+        end_date=datetime.date(2026, 5, 5),
+        tickers=["^KS11"]
+    )
+
+    # 4. 검증
+    # labels는 영업일인 5/1, 5/4, 5/5만 존재
+    assert result["labels"] == ["2026-05-01", "2026-05-04", "2026-05-05"]
+    
+    # 5/1: base_val = 1,000,000. 누적입금 = 0. ROI = 0.0%
+    # 5/4: val = 1,100,000. 누적입금 = 50,000.
+    #      ROI = (1,100,000 - 50,000 - 1,000,000) / (1,000,000 + 50,000) * 100
+    #          = 50,000 / 1,050,000 * 100 = 4.76%
+    # 5/5: val = 1,120,000. 누적입금 = 50,000.
+    #      ROI = (1,120,000 - 50,000 - 1,000,000) / (1,000,000 + 50,000) * 100
+    #          = 70,000 / 1,050,000 * 100 = 6.67%
+    
+    portfolio_dataset = next(ds for ds in result["datasets"] if ds["label"] == "내 포트폴리오")
+    assert portfolio_dataset["data"] == [0.0, 4.76, 6.67]
+    
+    # 5. 최종 반환 자산 평가액 검증 (2026-05-05 기말 자산은 1,120,000원)
+    assert result["portfolio_final_valuation"] == 1120000.0

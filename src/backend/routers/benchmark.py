@@ -64,7 +64,12 @@ async def get_benchmark_dashboard(
     # 2. 내 포트폴리오 실시간 요약 (평가자산 및 누적 ROI)
     dashboard_svc = DashboardService(db)
     summary = await dashboard_svc.get_dashboard_summary(force_update=force_update)
-    total_valuation_krw = summary.get("total_valuation_krw", 0.0)
+    
+    # 성과비교 수익률과 일치하도록 최신 스냅샷 자산액을 우선 적용합니다.
+    total_valuation_krw = chart_data.get("portfolio_final_valuation")
+    if total_valuation_krw is None or total_valuation_krw <= 0.0:
+        total_valuation_krw = summary.get("total_valuation_krw", 0.0)
+        
     portfolio_roi = summary.get("cumulative_roi", 0.0)
 
     # 3. 상단 지수 카드 정보 가공

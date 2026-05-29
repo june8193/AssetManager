@@ -9,7 +9,7 @@ import sqlite3
 import datetime
 from playwright.sync_api import sync_playwright
 
-SCREENSHOT_DIR = "screenshots/20260529_091600_benchmark_dashboard"
+SCREENSHOT_DIR = "screenshots/20260529_201500_benchmark_snapshot_alignment"
 
 # 가상 테스트 데이터 ID 정의
 TEST_ACCOUNT_ID = 999

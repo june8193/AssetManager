@@ -202,55 +202,76 @@ class BenchmarkService:
             .all()
         )
 
+        # 분석 기간 내의 모든 일자(비영업일 포함) 생성
+        all_dates = []
+        curr = start_date
+        while curr <= end_date:
+            all_dates.append(curr)
+            curr += datetime.timedelta(days=1)
+
         # 날짜별 포트폴리오 총 평가액 및 입금액 계산
-        portfolio_vals = {}
-        portfolio_deposits = {}
+        snapshot_vals = {}
+        snapshot_deposits = {}
         for s in snapshots:
             d = s.snapshot_date
-            portfolio_vals[d] = portfolio_vals.get(d, 0.0) + s.total_valuation
-            portfolio_deposits[d] = portfolio_deposits.get(d, 0.0) + s.period_deposit
+            snapshot_vals[d] = snapshot_vals.get(d, 0.0) + s.total_valuation
+            snapshot_deposits[d] = snapshot_deposits.get(d, 0.0) + s.period_deposit
 
-        # 영업일 기준 포트폴리오 가격 보간(Forward fill)
-        # 스냅샷 기록이 비어있는 영업일은 직전 일자의 평가액을 채워넣습니다.
-        portfolio_history = []
-        portfolio_deposits_history = []
-        
-        # 초기값 검색 (시작 영업일 직전의 스냅샷 찾기)
+        # 시작 영업일 직전의 초기 자산 찾기
         last_known_val = 0.0
-        if sorted_dates[0] in portfolio_vals:
-            last_known_val = portfolio_vals[sorted_dates[0]]
-        else:
-            prev_snap = (
-                self.db.query(AccountSnapshot)
-                .filter(AccountSnapshot.snapshot_date < sorted_dates[0])
-                .order_by(AccountSnapshot.snapshot_date.desc())
-                .first()
+        prev_snap = (
+            self.db.query(AccountSnapshot)
+            .filter(AccountSnapshot.snapshot_date < sorted_dates[0])
+            .order_by(AccountSnapshot.snapshot_date.desc())
+            .first()
+        )
+        if prev_snap:
+            prev_date = prev_snap.snapshot_date
+            last_known_val = sum(
+                snap.total_valuation for snap in self.db.query(AccountSnapshot).filter_by(snapshot_date=prev_date).all()
             )
-            if prev_snap:
-                # 시작일 직전 날짜의 모든 계좌 평가액 합산
-                prev_date = prev_snap.snapshot_date
-                last_known_val = sum(
-                    snap.total_valuation for snap in self.db.query(AccountSnapshot).filter_by(snapshot_date=prev_date).all()
-                )
+
+        daily_vals = {}
+        daily_deposits = {}
+        for d in all_dates:
+            if d in snapshot_vals:
+                last_known_val = snapshot_vals[d]
+            daily_vals[d] = last_known_val
+            daily_deposits[d] = snapshot_deposits.get(d, 0.0)
+
+        # 일자별 누적 입금액 사전 빌드
+        cumulative_deposits_map = {}
+        running_dep = 0.0
+        for d in all_dates:
+            running_dep += daily_deposits[d]
+            cumulative_deposits_map[d] = running_dep
+
+        # 시작 영업일 직전까지의 누적 입금액 기준값 구하기
+        cum_dep_start = 0.0
+        prev_day = sorted_dates[0] - datetime.timedelta(days=1)
+        if prev_day in cumulative_deposits_map:
+            cum_dep_start = cumulative_deposits_map[prev_day]
+        elif sorted_dates[0] in cumulative_deposits_map:
+            cum_dep_start = cumulative_deposits_map[sorted_dates[0]] - daily_deposits[sorted_dates[0]]
+
+        # 각 영업일별 누적 입금액(순입금액) 계산
+        portfolio_history = []
+        portfolio_net_deposits = []
 
         for d in sorted_dates:
-            if d in portfolio_vals:
-                last_known_val = portfolio_vals[d]
-            portfolio_history.append(last_known_val)
-            portfolio_deposits_history.append(portfolio_deposits.get(d, 0.0))
+            net_dep = cumulative_deposits_map.get(d, 0.0) - cum_dep_start
+            portfolio_history.append(daily_vals[d])
+            portfolio_net_deposits.append(net_dep)
 
         # 4. 포트폴리오 누적 수익률 정규화 계산
-        # 순입출금액 변동에 대한 ROI 계산
         portfolio_returns = []
         base_val = portfolio_history[0]
-        net_deposit = 0.0
 
         for i, val in enumerate(portfolio_history):
             if i == 0:
                 portfolio_returns.append(0.0)
             else:
-                # 시작일 이후 발생한 추가 입금액 누적
-                net_deposit += portfolio_deposits_history[i]
+                net_deposit = portfolio_net_deposits[i]
                 denominator = base_val + net_deposit
                 if denominator != 0:
                     roi = ((val - net_deposit - base_val) / denominator) * 100
@@ -350,10 +371,12 @@ class BenchmarkService:
                 "judgment": judgment
             })
 
+        portfolio_final_valuation = portfolio_history[-1] if portfolio_history else 0.0
         return {
             "labels": labels,
             "datasets": datasets,
-            "alpha_summaries": alpha_summaries
+            "alpha_summaries": alpha_summaries,
+            "portfolio_final_valuation": portfolio_final_valuation
         }
 
     async def get_watchlist_returns(self, ticker: str, start_date: datetime.date, end_date: datetime.date) -> Dict[str, Any]:
