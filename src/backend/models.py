@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, ForeignKey, Float, Date, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, ForeignKey, Float, Date, Enum, UniqueConstraint
 from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
@@ -212,3 +212,18 @@ class ExchangeRate(Base):
     currency = Column(String, default="USD", nullable=False)
     rate = Column(Float, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.now)
+
+
+class HistoricalPrice(Base):
+    """주요 지수 및 관심 종목의 일별 역사적 종가 정보를 캐싱하는 모델입니다."""
+    __tablename__ = "historical_prices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, index=True, nullable=False)
+    price_date = Column(Date, index=True, nullable=False)
+    close_price = Column(Float, nullable=False)
+
+    # 동일한 티커의 동일 날짜 데이터는 유일해야 합니다.
+    __table_args__ = (
+        UniqueConstraint('ticker', 'price_date', name='_ticker_date_uc'),
+    )

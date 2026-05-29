@@ -4,6 +4,7 @@ import { MaskingProvider } from './contexts/MaskingContext';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import WatchlistPage from './pages/WatchlistPage';
+import BenchmarkPage from './pages/BenchmarkPage';
 import ConnectionPage from './pages/ConnectionPage';
 import DbManagementPage from './pages/DbManagementPage';
 import RatioCalculatorPage from './pages/RatioCalculatorPage';
@@ -66,6 +67,7 @@ function App() {
             <Routes>
               <Route path="/" element={<DashboardPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
+              <Route path="/benchmark" element={<BenchmarkPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/watchlist/:country" element={<WatchlistPage />} />
               <Route path="/ratios" element={<RatioCalculatorPage />} />

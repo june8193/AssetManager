@@ -1,0 +1,183 @@
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import BenchmarkPage from './BenchmarkPage';
+import { useBenchmark } from '../hooks/useBenchmark';
+import { MaskingProvider } from '../contexts/MaskingContext';
+
+// useBenchmark 훅 모킹
+vi.mock('../hooks/useBenchmark');
+
+const mockBenchmarkData = {
+  portfolio: {
+    total_valuation: 124500000,
+    ytd_return: 15.2
+  },
+  indices: {
+    "^KS11": {
+      name: "KOSPI",
+      value: 2650.42,
+      return: 5.4,
+      alpha: 9.8,
+      judgment: "시장 상회"
+    },
+    "^GSPC": {
+      name: "S&P 500",
+      value: 5210.3,
+      return: 12.1,
+      alpha: 3.1,
+      judgment: "시장 상회"
+    },
+    "^IXIC": {
+      name: "NASDAQ",
+      value: 16840.15,
+      return: 18.5,
+      alpha: -3.3,
+      judgment: "시장 하회"
+    }
+  },
+  chart: {
+    labels: ["2026-05-01", "2026-05-04", "2026-05-05"],
+    datasets: [
+      {
+        label: "내 포트폴리오",
+        data: [0.0, 5.0, 7.0]
+      },
+      {
+        label: "KOSPI",
+        data: [0.0, 2.0, 4.0]
+      }
+    ]
+  },
+  alpha_analysis: [
+    {
+      benchmark: "KOSPI",
+      ticker: "^KS11",
+      benchmark_return: 5.4,
+      portfolio_return: 15.2,
+      alpha: 9.8,
+      judgment: "시장 상회"
+    }
+  ],
+  watchlist: [
+    {
+      id: 1,
+      stock_code: "005930",
+      stock_name: "삼성전자",
+      country: "KR",
+      current_price: 78200.0,
+      ytd_return: 2.1
+    }
+  ]
+};
+
+describe('BenchmarkPage', () => {
+  it('로딩 중일 때 로딩 스피너와 메시지를 렌더링한다', () => {
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: null,
+      loading: true,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    expect(screen.getByText(/성과 데이터를 분석 중입니다/i)).toBeDefined();
+  });
+
+  it('에러 발생 시 에러 메시지와 재시도 버튼을 렌더링한다', () => {
+    const refreshMock = vi.fn();
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: null,
+      loading: false,
+      error: "API 연결 실패",
+      period: "YTD",
+      setPeriod: vi.fn(),
+      refresh: refreshMock,
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    expect(screen.getByText(/API 연결 실패/i)).toBeDefined();
+    const retryButton = screen.getByRole('button', { name: /다시 시도/i });
+    expect(retryButton).toBeDefined();
+
+    fireEvent.click(retryButton);
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('정상 데이터 로드 시 요약 카드, 차트, 초과수익률 및 관심종목 테이블을 렌더링한다', () => {
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: mockBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    // 내 총자산 카드 렌더링 확인
+    expect(screen.getByText('내 총자산')).toBeDefined();
+    expect(screen.getByText('₩ 124,500,000')).toBeDefined();
+    expect(screen.getByText('YTD +15.2%')).toBeDefined();
+
+    // 코스피 지수 카드 렌더링 확인
+    expect(screen.getAllByText(/KOSPI/i)[0]).toBeDefined();
+    expect(screen.getByText('2,650.42')).toBeDefined();
+    expect(screen.getByText('YTD +5.4%')).toBeDefined();
+
+    // 벤치마크 초과수익률 테이블 확인
+    expect(screen.getByText('vs KOSPI')).toBeDefined();
+    expect(screen.getByText('+9.8%p')).toBeDefined();
+
+    // 관심 종목 테이블 확인
+    expect(screen.getByText('삼성전자')).toBeDefined();
+    expect(screen.getByText('78,200원')).toBeDefined();
+    expect(screen.getByText('+2.1%')).toBeDefined();
+  });
+
+  it('관심 종목 차트 비교 토글 체크박스를 클릭하면 toggleWatchlistStock 함수를 호출한다', async () => {
+    const toggleMock = vi.fn();
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: mockBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      toggleWatchlistStock: toggleMock,
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    const checkbox = screen.getByRole('checkbox');
+    expect(checkbox).toBeDefined();
+    expect(checkbox.checked).toBe(false);
+
+    fireEvent.click(checkbox);
+    expect(toggleMock).toHaveBeenCalledWith("005930");
+  });
+});

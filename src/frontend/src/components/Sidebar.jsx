@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -8,6 +8,7 @@ import { useMasking } from '../contexts/MaskingContext';
  */
 const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
+  { path: '/benchmark', label: '성과 비교', icon: TrendingUp },
   { path: '/watchlist', label: '관심종목', icon: Activity },
   { path: '/ratios', label: '비율 계산기', icon: Calculator },
   { 
@@ -37,6 +38,9 @@ const Sidebar = () => {
     }
     if (path === '/watchlist') {
       return location.pathname.startsWith('/watchlist');
+    }
+    if (path === '/benchmark') {
+      return location.pathname === '/benchmark';
     }
     return location.pathname === path;
   };
