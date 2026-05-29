@@ -10,11 +10,11 @@ router = APIRouter(
 )
 
 @router.get("/summary", response_model=Dict[str, Any])
-async def get_dashboard_summary(db: Session = Depends(get_db)):
+async def get_dashboard_summary(force_update: bool = False, db: Session = Depends(get_db)):
     """대시보드 요약 정보를 조회합니다."""
     try:
         service = DashboardService(db)
-        summary = await service.get_dashboard_summary()
+        summary = await service.get_dashboard_summary(force_update=force_update)
         return summary
     except Exception as e:
         print(f"대시보드 요약 조회 중 오류: {e}")

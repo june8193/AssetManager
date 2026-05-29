@@ -342,7 +342,7 @@ def test_get_dashboard_summary_cumulative_stats(db_session, monkeypatch):
     service = DashboardService(db_session)
 
     # get_current_prices 모킹하여 TEST 주식 단가를 200.0으로 설정 -> 평가액 2000.0
-    async def mock_get_current_prices(self, tickers):
+    async def mock_get_current_prices(self, tickers, *args, **kwargs):
         return {"TEST": 200.0, "KRW": 1.0}
     
     monkeypatch.setattr(DashboardService, "get_current_prices", mock_get_current_prices)

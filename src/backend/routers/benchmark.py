@@ -42,6 +42,7 @@ def get_date_range(period: str) -> tuple[datetime.date, datetime.date]:
 @router.get("")
 async def get_benchmark_dashboard(
     period: str = Query("YTD", regex="^(YTD|1M|3M|1Y)$"),
+    force_update: bool = Query(False),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """벤치마크 비교 대시보드 조회를 위한 통합 데이터를 반환합니다.
@@ -62,7 +63,7 @@ async def get_benchmark_dashboard(
 
     # 2. 내 포트폴리오 실시간 요약 (평가자산 및 누적 ROI)
     dashboard_svc = DashboardService(db)
-    summary = await dashboard_svc.get_dashboard_summary()
+    summary = await dashboard_svc.get_dashboard_summary(force_update=force_update)
     total_valuation_krw = summary.get("total_valuation_krw", 0.0)
     portfolio_roi = summary.get("cumulative_roi", 0.0)
 
@@ -105,11 +106,11 @@ async def get_benchmark_dashboard(
         # 실시간 현재가 구하기
         current_prices = {}
         if kr_codes:
-            kr_res = await price_service.get_kr_prices(kr_codes)
+            kr_res = await price_service.get_kr_prices(kr_codes, force_update=force_update)
             for p in kr_res:
                 current_prices[p["stock_code"]] = p["current_price"]
         if us_codes:
-            us_res = await price_service.get_us_prices(us_codes)
+            us_res = await price_service.get_us_prices(us_codes, force_update=force_update)
             for p in us_res:
                 current_prices[p["stock_code"]] = p["current_price"]
 

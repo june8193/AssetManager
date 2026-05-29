@@ -1,10 +1,13 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from ..models import Account, Asset, Transaction, ExchangeRate, AccountSnapshot
+from ..models import Account, Asset, Transaction, ExchangeRate, AccountSnapshot, HistoricalPrice
 import yfinance as yf
 from typing import Dict, List, Any
 import datetime
 import asyncio
+import pytz
+import time
+from fastapi.concurrency import run_in_threadpool
 from ...kiwoom.api import KiwoomAPI
 from ...kiwoom.auth import KiwoomAuthManager
 
@@ -15,6 +18,32 @@ class DashboardService:
         self.db = db
         self.kiwoom_api = KiwoomAPI()
         self.kiwoom_auth = KiwoomAuthManager()
+
+    def is_us_market_open(self) -> bool:
+        """현재 뉴욕 현지 시각을 기준으로 미국 주식 시장이 개장 중인지 판별합니다.
+
+        뉴욕 동부 표준시(US/Eastern)를 기준으로 평일(월~금) 09:30 ~ 16:00 사이인 경우 장중으로 봅니다.
+        """
+        eastern_tz = pytz.timezone('US/Eastern')
+        now_est = datetime.datetime.now(eastern_tz)
+        if now_est.weekday() >= 5:
+            return False
+        market_open = now_est.replace(hour=9, minute=30, second=0, microsecond=0)
+        market_close = now_est.replace(hour=16, minute=0, second=0, microsecond=0)
+        return market_open <= now_est <= market_close
+
+    def is_kr_market_open(self) -> bool:
+        """현재 한국 시각을 기준으로 한국 주식 시장이 개장 중인지 판별합니다.
+
+        한국 표준시(Asia/Seoul)를 기준으로 평일(월~금) 09:00 ~ 15:30 사이인 경우 장중으로 봅니다.
+        """
+        seoul_tz = pytz.timezone('Asia/Seoul')
+        now_kst = datetime.datetime.now(seoul_tz)
+        if now_kst.weekday() >= 5:
+            return False
+        market_open = now_kst.replace(hour=9, minute=0, second=0, microsecond=0)
+        market_close = now_kst.replace(hour=15, minute=30, second=0, microsecond=0)
+        return market_open <= now_kst <= market_close
 
     def get_yearly_stats(self) -> List[Dict[str, Any]]:
         """연도별 자산 현황 통계를 계산하여 최신순으로 반환합니다.
@@ -254,8 +283,9 @@ class DashboardService:
             "currency": "USD"
         }
 
-    async def get_current_prices(self, tickers: List[str]) -> Dict[str, float]:
+    async def get_current_prices(self, tickers: List[str], force_update: bool = False) -> Dict[str, float]:
         """주어진 티커 리스트의 현재가를 조회합니다."""
+        t_start = time.time()
         if not tickers:
             return {}
             
@@ -280,70 +310,151 @@ class DashboardService:
                 kr_tickers.append(t)
             else:
                 other_tickers.append(t)
+        
+        t_classify = time.time()
                 
         # 2. 국내 주식 가격 조회 (키움 API Bulk 요청)
         if kr_tickers:
-            try:
-                token = await self.kiwoom_auth.get_valid_token()
-                # 한 번에 최대 몇개까지 가능한지 테스트가 필요하지만 일단 50개 단위로 끊어서 요청 (보수적 접근)
-                batch_size = 50 
-                for i in range(0, len(kr_tickers), batch_size):
-                    batch = kr_tickers[i:i + batch_size]
-                    res = self.kiwoom_api.get_bulk_stock_info(token, batch)
-                    
-                    if res and res.get("return_code") == 0:
-                        outputs = res.get("atn_stk_infr", [])
-                        for out in outputs:
-                            t = out.get("stk_cd")
-                            # 현재가 필드명: cur_prc (부호 포함 문자열로 옴)
-                            price_val = out.get("cur_prc", "0")
-                            if isinstance(price_val, str):
-                                # 부호(+, -) 제거 후 숫자로 변환
-                                price_val = price_val.strip("+-")
-                            prices[t] = float(price_val)
-                    else:
-                        print(f"키움 API Bulk 조회 실패 (batch {i}): {res.get('return_msg') if res else '응답 없음'}")
+            kr_market_open = self.is_kr_market_open()
+            kr_tickers_to_fetch = []
 
-            except Exception as e:
-                print(f"국내 주식 주가 조회 중 오류 발생: {e}")
+            for t in kr_tickers:
+                db_price = (
+                    self.db.query(HistoricalPrice)
+                    .filter(HistoricalPrice.ticker == t)
+                    .order_by(HistoricalPrice.price_date.desc())
+                    .first()
+                )
 
+                if not force_update and not kr_market_open and db_price:
+                    prices[t] = db_price.close_price
+                else:
+                    kr_tickers_to_fetch.append(t)
+
+            if kr_tickers_to_fetch:
+                try:
+                    token = await self.kiwoom_auth.get_valid_token()
+                    batch_size = 50 
+                    for i in range(0, len(kr_tickers_to_fetch), batch_size):
+                        batch = kr_tickers_to_fetch[i:i + batch_size]
+                        res = self.kiwoom_api.get_bulk_stock_info(token, batch)
+                        
+                        if res and res.get("return_code") == 0:
+                            outputs = res.get("atn_stk_infr", [])
+                            for out in outputs:
+                                t = out.get("stk_cd")
+                                price_val = out.get("cur_prc", "0")
+                                if isinstance(price_val, str):
+                                    price_val = price_val.strip("+-")
+                                price_float = float(price_val)
+                                prices[t] = price_float
+
+                                # 장외 시간(장마감 이후 최종 종가)인 경우에만 DB 캐시에 저장
+                                if not kr_market_open and price_float > 0.0:
+                                    today = datetime.date.today()
+                                    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+                                    stmt = sqlite_insert(HistoricalPrice).values(
+                                        ticker=t,
+                                        price_date=today,
+                                        close_price=price_float
+                                    )
+                                    stmt = stmt.on_conflict_do_update(
+                                        index_elements=['ticker', 'price_date'],
+                                        set_={'close_price': price_float}
+                                    )
+                                    self.db.execute(stmt)
+                            
+                            if not kr_market_open:
+                                self.db.commit()
+                        else:
+                            print(f"[WARNING] 키움 API Bulk 조회 실패 (batch {i}): {res.get('return_msg') if res else '응답 없음'}")
+
+                except Exception as e:
+                    print(f"[WARNING] 국내 주식 주가 조회 중 오류 발생: {e}")
+
+        t_fetch_us_start = time.time()
         # 3. 해외 주식 가격 조회 (yfinance)
         if other_tickers:
-            formatted_other = []
-            ticker_map = {} # formatted -> original
-            
-            for t in other_tickers:
-                # yfinance 용 포맷 변환 (국내 주식이 여기에 포함될 수 있으므로 다시 체크)
-                if t.isdigit() and len(t) == 6:
-                    ft = f"{t}.KS" # yfinance 보조용
-                    formatted_other.append(ft)
-                    ticker_map[ft] = t
-                else:
-                    formatted_other.append(t)
-                    ticker_map[t] = t
+            market_open = self.is_us_market_open()
+            tickers_to_fetch = []
 
-            try:
-                # 비동기 환경에서 yfinance download는 블로킹이 발생할 수 있으므로 thread pool 사용 권장
-                # 여기서는 일단 직접 호출
-                data = yf.download(formatted_other, period="1d", interval="1m", progress=False)
+            for t in other_tickers:
+                # DB 캐시에서 가장 최신의 가격 정보 조회
+                db_price = (
+                    self.db.query(HistoricalPrice)
+                    .filter(HistoricalPrice.ticker == t)
+                    .order_by(HistoricalPrice.price_date.desc())
+                    .first()
+                )
+
+                # 장외 시간(market_open == False)이고 강제 업데이트가 아니며 DB 캐시가 존재하면 즉시 재사용
+                if not force_update and not market_open and db_price:
+                    prices[t] = db_price.close_price
+                else:
+                    tickers_to_fetch.append(t)
+
+            if tickers_to_fetch:
+                formatted_other = []
+                ticker_map = {} # formatted -> original
                 
-                if not data.empty:
-                    if len(formatted_other) == 1:
-                        last_price = data['Close'].iloc[-1]
-                        prices[ticker_map[formatted_other[0]]] = float(last_price)
+                for t in tickers_to_fetch:
+                    if t.isdigit() and len(t) == 6:
+                        ft = f"{t}.KS"
+                        formatted_other.append(ft)
+                        ticker_map[ft] = t
                     else:
+                        formatted_other.append(t)
+                        ticker_map[t] = t
+
+                try:
+                    # yfinance download는 블로킹이므로 threadpool에서 실행
+                    data = await run_in_threadpool(
+                        yf.download,
+                        formatted_other,
+                        period="1d",
+                        interval="1m",
+                        progress=False
+                    )
+                    
+                    if not data.empty:
                         for ft in formatted_other:
+                            orig_t = ticker_map[ft]
                             try:
-                                last_price = data['Close'][ft].dropna().iloc[-1]
-                                prices[ticker_map[ft]] = float(last_price)
+                                if len(formatted_other) == 1:
+                                    last_price = float(data['Close'].dropna().iloc[-1])
+                                else:
+                                    last_price = float(data['Close'][ft].dropna().iloc[-1])
+                                
+                                prices[orig_t] = last_price
+                                
+                                # 장외 시간(장마감 이후 최종 종가)인 경우에만 DB 캐시에 저장
+                                if not market_open:
+                                    today = datetime.date.today()
+                                    from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+                                    stmt = sqlite_insert(HistoricalPrice).values(
+                                        ticker=orig_t,
+                                        price_date=today,
+                                        close_price=last_price
+                                    )
+                                    stmt = stmt.on_conflict_do_update(
+                                        index_elements=['ticker', 'price_date'],
+                                        set_={'close_price': last_price}
+                                    )
+                                    self.db.execute(stmt)
                             except Exception:
-                                if ticker_map[ft] not in prices:
-                                    prices[ticker_map[ft]] = 0.0
-            except Exception as e:
-                print(f"yfinance 가격 조회 중 오류 발생: {e}")
-                for t in other_tickers:
-                    if t not in prices:
-                        prices[t] = 0.0
+                                if orig_t not in prices:
+                                    prices[orig_t] = 0.0
+                        
+                        if not market_open:
+                            self.db.commit()
+                except Exception as e:
+                    print(f"yfinance 가격 조회 및 캐싱 중 오류 발생: {e}")
+                    for t in tickers_to_fetch:
+                        if t not in prices:
+                            prices[t] = 0.0
+        
+        t_end = time.time()
+        print(f"[TIMER] [get_current_prices] classification: {t_classify-t_start:.4f}s, domestic(kiwoom): {t_fetch_us_start-t_classify:.4f}s, foreign(yfinance): {t_end-t_fetch_us_start:.4f}s")
         
         # 모든 쿼리 티커에 대해 가격 보장 (조회 실패 시 0.0)
         for t in query_tickers:
@@ -353,7 +464,7 @@ class DashboardService:
         return prices
 
 
-    async def get_dashboard_summary(self) -> Dict[str, Any]:
+    async def get_dashboard_summary(self, force_update: bool = False) -> Dict[str, Any]:
         """대시보드 요약 데이터를 생성합니다.
 
         모든 활성 계좌의 보유 자산을 합산하고, 실시간 가격 및 환율을 적용하여
@@ -376,7 +487,7 @@ class DashboardService:
         
         # 보유 자산들의 유니크 티커 목록
         tickers = list(set([h['asset'].ticker for h in holdings]))
-        prices = await self.get_current_prices(tickers)
+        prices = await self.get_current_prices(tickers, force_update=force_update)
         
         account_summaries = {} # account_id -> {account_info, total_valuation_krw}
         category_summaries = {} # major_category -> {"value_krw": float, "sub_categories": {sub_category: float}}

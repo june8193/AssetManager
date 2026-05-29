@@ -33,6 +33,7 @@ def main():
 
     # 환경 변수 설정
     env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
     env["ASSET_MANAGER_BACKEND_PORT"] = str(backend_port)
     env["ASSET_MANAGER_FRONTEND_PORT"] = str(frontend_port)
     env["DEBUG"] = "true"  # 하트비트 활성화를 위해 설정
