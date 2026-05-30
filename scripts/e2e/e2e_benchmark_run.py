@@ -9,7 +9,9 @@ import sqlite3
 import datetime
 from playwright.sync_api import sync_playwright
 
-SCREENSHOT_DIR = "screenshots/20260529_195800_benchmark_dashboard"
+# 현재 일시를 기준으로 폴더명 동적 생성
+now_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+SCREENSHOT_DIR = f"screenshots/{now_str}_benchmark_fix"
 
 # 가상 테스트 데이터 ID 정의
 TEST_ACCOUNT_ID = 999

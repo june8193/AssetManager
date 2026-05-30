@@ -253,3 +253,56 @@ async def test_calculate_cumulative_returns_with_weekend_deposit(benchmark_servi
     
     # 5. 최종 반환 자산 평가액 검증 (2026-05-05 기말 자산은 1,120,000원)
     assert result["portfolio_final_valuation"] == 1120000.0
+
+
+@pytest.mark.asyncio
+async def test_calculate_cumulative_returns_with_holiday_zero_price(benchmark_service, db_session):
+    """공휴일 등의 이유로 특정 지수의 가격이 0.0으로 저장되어 있을 때, 이전 영업일 가격으로 보간되는지 검증"""
+    # 1. 포트폴리오 스냅샷 생성
+    snapshots = [
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 1), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 4), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 5), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+    ]
+    for s in snapshots:
+        db_session.add(s)
+
+    # 2. 두 가지 지수 가격 주입 (KOSPI ^KS11, S&P500 ^GSPC)
+    # 5/4에 KOSPI는 공휴일이라 0.0 가격을 가짐
+    # S&P500은 정상적으로 4100.0 가격을 가짐 -> 이로 인해 5/4가 전체 영업일 sorted_dates에 포함됨
+    kospi_prices = [
+        (datetime.date(2026, 5, 1), 2500.0),
+        (datetime.date(2026, 5, 4), 0.0),
+        (datetime.date(2026, 5, 5), 2600.0),
+    ]
+    gspc_prices = [
+        (datetime.date(2026, 5, 1), 4000.0),
+        (datetime.date(2026, 5, 4), 4100.0),
+        (datetime.date(2026, 5, 5), 4200.0),
+    ]
+
+    for d, price in kospi_prices:
+        db_session.add(HistoricalPrice(ticker="^KS11", price_date=d, close_price=price))
+    for d, price in gspc_prices:
+        db_session.add(HistoricalPrice(ticker="^GSPC", price_date=d, close_price=price))
+
+    db_session.commit()
+
+    # 3. 누적 수익률 계산 실행
+    result = await benchmark_service.calculate_cumulative_returns(
+        start_date=datetime.date(2026, 5, 1),
+        end_date=datetime.date(2026, 5, 5),
+        tickers=["^KS11", "^GSPC"]
+    )
+
+    # 4. 검증
+    # labels는 5/1, 5/4, 5/5 모두 있어야 함
+    assert result["labels"] == ["2026-05-01", "2026-05-04", "2026-05-05"]
+
+    # KOSPI의 5/4 가격이 0.0으로 덮어씌워지지 않고, 5/1 가격인 2500.0으로 보간되어 수익률이 0.0%가 되어야 함 (-100%가 아님)
+    # 5/1: (2500 - 2500)/2500 * 100 = 0.0%
+    # 5/4: (2500 - 2500)/2500 * 100 = 0.0% (보간된 가격 사용)
+    # 5/5: (2600 - 2500)/2500 * 100 = 4.0%
+    kospi_dataset = next(ds for ds in result["datasets"] if ds["label"] == "KOSPI")
+    assert kospi_dataset["data"] == [0.0, 0.0, 4.0]
+

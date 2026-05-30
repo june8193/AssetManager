@@ -331,7 +331,7 @@ class BenchmarkService:
                     last_price = prev_price.close_price
 
             for d in sorted_dates:
-                if d in price_map:
+                if d in price_map and price_map[d] > 0.0:
                     last_price = price_map[d]
                 ticker_prices.append(last_price)
 
@@ -424,7 +424,7 @@ class BenchmarkService:
                 last_price = prev_price.close_price
 
         for d in sorted_dates:
-            if d in price_map:
+            if d in price_map and price_map[d] > 0.0:
                 last_price = price_map[d]
             ticker_prices.append(last_price)
 

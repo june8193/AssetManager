@@ -64,6 +64,12 @@ const BenchmarkPage = () => {
     });
   }, [data, activeWatchlistDataset]);
 
+  // 최신 스냅샷 날짜 추출 (YYYY-MM-DD 포맷)
+  const latestSnapshotDate = useMemo(() => {
+    if (!data?.chart?.labels || data.chart.labels.length === 0) return '';
+    return data.chart.labels[data.chart.labels.length - 1];
+  }, [data]);
+
   // 관심종목 차트 라인들 동적 생성
   const watchlistLines = useMemo(() => {
     return Object.keys(activeWatchlistDataset).map((stockCode, idx) => {
@@ -170,7 +176,7 @@ const BenchmarkPage = () => {
           </div>
           <p className="text-slate-400 text-xs mt-2 flex items-center gap-1">
             <Wallet size={12} />
-            실시간 계좌 평가액 반영
+            최신 스냅샷 {latestSnapshotDate} 기준
           </p>
         </div>
 
@@ -198,9 +204,9 @@ const BenchmarkPage = () => {
                 {info.value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </div>
               <div className="text-xs font-bold mt-2">
-                포트폴리오 대비{" "}
+                지수 대비{" "}
                 <span className={isSuperior ? "text-emerald-500" : "text-rose-500"}>
-                  {isSuperior ? "+" : ""}{info.alpha}%p {isSuperior ? "우위" : "열위"}
+                  {isSuperior ? "+" : ""}{info.alpha}%p {isSuperior ? "상회" : "하회"}
                 </span>
               </div>
             </div>
