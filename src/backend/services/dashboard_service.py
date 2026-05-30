@@ -321,7 +321,11 @@ class DashboardService:
             for t in kr_tickers:
                 db_price = (
                     self.db.query(HistoricalPrice)
-                    .filter(HistoricalPrice.ticker == t)
+                    .filter(
+                        HistoricalPrice.ticker == t,
+                        HistoricalPrice.close_price > 0.0,
+                        HistoricalPrice.price_date <= datetime.date.today()
+                    )
                     .order_by(HistoricalPrice.price_date.desc())
                     .first()
                 )
@@ -382,7 +386,11 @@ class DashboardService:
                 # DB 캐시에서 가장 최신의 가격 정보 조회
                 db_price = (
                     self.db.query(HistoricalPrice)
-                    .filter(HistoricalPrice.ticker == t)
+                    .filter(
+                        HistoricalPrice.ticker == t,
+                        HistoricalPrice.close_price > 0.0,
+                        HistoricalPrice.price_date <= datetime.date.today()
+                    )
                     .order_by(HistoricalPrice.price_date.desc())
                     .first()
                 )

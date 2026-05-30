@@ -62,7 +62,11 @@ class PriceService:
                 if not force_update and not market_open:
                     db_price = (
                         db.query(HistoricalPrice)
-                        .filter(HistoricalPrice.ticker == code)
+                        .filter(
+                            HistoricalPrice.ticker == code,
+                            HistoricalPrice.close_price > 0.0,
+                            HistoricalPrice.price_date <= datetime.date.today()
+                        )
                         .order_by(HistoricalPrice.price_date.desc())
                         .first()
                     )
@@ -160,7 +164,11 @@ class PriceService:
                 if not force_update and not market_open:
                     db_price = (
                         db.query(HistoricalPrice)
-                        .filter(HistoricalPrice.ticker == symbol)
+                        .filter(
+                            HistoricalPrice.ticker == symbol,
+                            HistoricalPrice.close_price > 0.0,
+                            HistoricalPrice.price_date <= datetime.date.today()
+                        )
                         .order_by(HistoricalPrice.price_date.desc())
                         .first()
                     )

@@ -137,21 +137,23 @@ class BenchmarkService:
                 except (KeyError, ValueError):
                     continue
 
-            # query_start부터 query_end까지 하루씩 증가하며 데이터 저장 (비영업일은 0.0으로 저장)
+            # query_start부터 query_end까지 하루씩 증가하며 데이터 저장 (오늘 이전인 경우만 저장하며, 비영업일은 0.0으로 저장)
             curr_date = delta_start
+            today = datetime.date.today()
             while curr_date <= delta_end:
                 val_to_save = 0.0
                 if curr_date in price_map:
                     val_to_save = price_map[curr_date]
 
-                # sqlite insert ignore 구현
-                stmt = insert(HistoricalPrice).values(
-                    ticker=ticker,
-                    price_date=curr_date,
-                    close_price=val_to_save
-                )
-                stmt = stmt.on_conflict_do_nothing(index_elements=['ticker', 'price_date'])
-                self.db.execute(stmt)
+                if curr_date <= today:
+                    # sqlite insert ignore 구현
+                    stmt = insert(HistoricalPrice).values(
+                        ticker=ticker,
+                        price_date=curr_date,
+                        close_price=val_to_save
+                    )
+                    stmt = stmt.on_conflict_do_nothing(index_elements=['ticker', 'price_date'])
+                    self.db.execute(stmt)
 
                 curr_date += datetime.timedelta(days=1)
             
