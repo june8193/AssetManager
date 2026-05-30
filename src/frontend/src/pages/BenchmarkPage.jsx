@@ -27,6 +27,8 @@ const BenchmarkPage = () => {
 
   const { maskValue } = useMasking();
 
+  const { portfolio, indices, alpha_analysis, watchlist } = data || {};
+
   // Recharts 형식에 맞게 데이터셋 가공
   const chartData = useMemo(() => {
     if (!data?.chart?.labels) return [];
@@ -46,15 +48,22 @@ const BenchmarkPage = () => {
         const hist = activeWatchlistDataset[stockCode];
         if (hist && hist.labels) {
           const histIdx = hist.labels.indexOf(label);
+          const dataKey = `watchlist_${hist.ticker}`;
           if (histIdx !== -1) {
-            row[hist.ticker] = hist.data[histIdx];
+            row[dataKey] = hist.data[histIdx];
           } else {
             // 날짜가 일치하지 않으면 직전 영업일 값을 찾아 채워넣음 (Forward Fill)
-            const prevLabelIdx = hist.labels.findLastIndex(l => l < label);
+            let prevLabelIdx = -1;
+            for (let i = hist.labels.length - 1; i >= 0; i--) {
+              if (hist.labels[i] < label) {
+                prevLabelIdx = i;
+                break;
+              }
+            }
             if (prevLabelIdx !== -1) {
-              row[hist.ticker] = hist.data[prevLabelIdx];
+              row[dataKey] = hist.data[prevLabelIdx];
             } else {
-              row[hist.ticker] = null;
+              row[dataKey] = null;
             }
           }
         }
@@ -76,6 +85,10 @@ const BenchmarkPage = () => {
       const hist = activeWatchlistDataset[stockCode];
       if (!hist) return null;
 
+      // 관심종목 목록(watchlist)에서 실제 종목이름 매칭
+      const watchlistInfo = watchlist?.find(w => w.stock_code === stockCode);
+      const displayName = watchlistInfo ? watchlistInfo.stock_name : hist.ticker;
+
       // 관심 종목별로 개별적인 파스텔톤 색상 지정
       const colors = ["#eab308", "#f43f5e", "#60a5fa", "#22c55e", "#ec4899"];
       const color = colors[idx % colors.length];
@@ -84,8 +97,8 @@ const BenchmarkPage = () => {
         <Line
           key={stockCode}
           type="monotone"
-          dataKey={hist.ticker}
-          name={`관심: ${hist.ticker}`}
+          dataKey={`watchlist_${hist.ticker}`}
+          name={`관심: ${displayName}`}
           stroke={color}
           strokeWidth={2}
           strokeDasharray="4 4"
@@ -95,7 +108,7 @@ const BenchmarkPage = () => {
         />
       );
     });
-  }, [activeWatchlistDataset]);
+  }, [activeWatchlistDataset, watchlist]);
 
   if (loading) {
     return (
@@ -123,8 +136,6 @@ const BenchmarkPage = () => {
       </div>
     );
   }
-
-  const { portfolio, indices, alpha_analysis, watchlist } = data || {};
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
@@ -385,8 +396,11 @@ const BenchmarkPage = () => {
                             <input
                               type="checkbox"
                               checked={isChecked}
-                              onChange={() => toggleWatchlistStock(item.stock_code)}
-                              className="sr-only peer"
+                              onChange={(e) => {
+                                e.target.blur();
+                                toggleWatchlistStock(item.stock_code);
+                              }}
+                              className="absolute opacity-0 w-0 h-0 pointer-events-none peer"
                             />
                             <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 relative"></div>
                           </label>

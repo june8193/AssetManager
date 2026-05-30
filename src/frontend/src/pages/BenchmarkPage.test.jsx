@@ -65,7 +65,8 @@ const mockBenchmarkData = {
       stock_name: "삼성전자",
       country: "KR",
       current_price: 78200.0,
-      ytd_return: 2.1
+      ytd_return: 2.1,
+      period_return: 2.1
     }
   ]
 };
