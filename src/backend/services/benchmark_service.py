@@ -318,12 +318,16 @@ class BenchmarkService:
             last_price = 0.0
             
             # 시작일 직전의 가격 찾기
-            if sorted_dates[0] in price_map:
+            if sorted_dates[0] in price_map and price_map[sorted_dates[0]] > 0.0:
                 last_price = price_map[sorted_dates[0]]
             else:
                 prev_price = (
                     self.db.query(HistoricalPrice)
-                    .filter(HistoricalPrice.ticker == ticker, HistoricalPrice.price_date < sorted_dates[0])
+                    .filter(
+                        HistoricalPrice.ticker == ticker,
+                        HistoricalPrice.price_date < sorted_dates[0],
+                        HistoricalPrice.close_price > 0.0
+                    )
                     .order_by(HistoricalPrice.price_date.desc())
                     .first()
                 )
@@ -411,12 +415,16 @@ class BenchmarkService:
         ticker_prices = []
         last_price = 0.0
 
-        if sorted_dates[0] in price_map:
+        if sorted_dates[0] in price_map and price_map[sorted_dates[0]] > 0.0:
             last_price = price_map[sorted_dates[0]]
         else:
             prev_price = (
                 self.db.query(HistoricalPrice)
-                .filter(HistoricalPrice.ticker == ticker, HistoricalPrice.price_date < sorted_dates[0])
+                .filter(
+                    HistoricalPrice.ticker == ticker,
+                    HistoricalPrice.price_date < sorted_dates[0],
+                    HistoricalPrice.close_price > 0.0
+                )
                 .order_by(HistoricalPrice.price_date.desc())
                 .first()
             )
@@ -452,8 +460,30 @@ class BenchmarkService:
         Returns:
             float: YTD 수익률 (%)
         """
+        return await self.get_period_return(ticker, "YTD")
+
+    async def get_period_return(self, ticker: str, period: str) -> float:
+        """지정된 기간 동안의 수익률(%)을 계산합니다.
+
+        Args:
+            ticker (str): 자산 티커
+            period (str): 기간 ('YTD', '1M', '3M', '1Y')
+
+        Returns:
+            float: 기간별 수익률 (%)
+        """
         today = datetime.date.today()
-        start_date = datetime.date(today.year, 1, 1)
+        if period == "YTD":
+            start_date = datetime.date(today.year, 1, 1)
+        elif period == "1M":
+            start_date = today - datetime.timedelta(days=30)
+        elif period == "3M":
+            start_date = today - datetime.timedelta(days=90)
+        elif period == "1Y":
+            start_date = today - datetime.timedelta(days=365)
+        else:
+            start_date = datetime.date(today.year, 1, 1)
+
         prices = await self.get_historical_prices(ticker, start_date, today)
         # 휴장일(0.0)이 아닌 실질 영업일 시세만 필터링합니다.
         valid_prices = [p for p in prices if p.close_price > 0.0]

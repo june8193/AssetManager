@@ -119,13 +119,19 @@ async def get_benchmark_dashboard(
             for p in us_res:
                 current_prices[p["stock_code"]] = p["current_price"]
 
-        # asyncio.gather를 사용하여 모든 관심 종목의 YTD 수익률 조회를 비동기 병렬로 처리합니다.
+        # asyncio.gather를 사용하여 모든 관심 종목의 기간별 수익률 조회를 비동기 병렬로 처리합니다.
+        period_returns = await asyncio.gather(*(
+            benchmark_svc.get_period_return(item.stock_code, period)
+            for item in watchlist_items
+        ))
+
+        # 하위 호환성을 위해 YTD 수익률도 병렬 조회합니다.
         ytd_returns = await asyncio.gather(*(
             benchmark_svc.get_ytd_return(item.stock_code)
             for item in watchlist_items
         ))
 
-        for item, ytd_ret in zip(watchlist_items, ytd_returns):
+        for item, period_ret, ytd_ret in zip(watchlist_items, period_returns, ytd_returns):
             curr_price = current_prices.get(item.stock_code, 0.0)
 
             watchlist_data.append({
@@ -134,7 +140,8 @@ async def get_benchmark_dashboard(
                 "stock_name": item.stock_name,
                 "country": item.country,
                 "current_price": curr_price,
-                "ytd_return": ytd_ret
+                "ytd_return": ytd_ret,
+                "period_return": period_ret
             })
 
     # 5. 응답 데이터 구성

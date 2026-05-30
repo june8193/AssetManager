@@ -226,7 +226,7 @@ const BenchmarkPage = () => {
           </div>
         </div>
 
-        <div className="h-[400px] w-full">
+        <div className="h-[400px] w-full overflow-hidden">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
@@ -354,20 +354,20 @@ const BenchmarkPage = () => {
               </div>
             </div>
 
-            <div className="overflow-x-auto max-h-[250px] overflow-y-auto">
+            <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 text-xs font-bold tracking-wider">
                   <tr>
                     <th className="px-4 py-3.5 rounded-l-2xl">종목명 (티커)</th>
                     <th className="px-4 py-3.5 text-right">현재가</th>
-                    <th className="px-4 py-3.5 text-right">YTD 수익률</th>
+                    <th className="px-4 py-3.5 text-right">{period} 수익률</th>
                     <th className="px-4 py-3.5 text-center rounded-r-2xl">차트 비교</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {watchlist?.map((item) => {
                     const isChecked = !!activeWatchlistDataset[item.stock_code];
-                    const isUp = item.ytd_return >= 0;
+                    const isUp = item.period_return >= 0;
                     return (
                       <tr key={item.stock_code} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-4 py-3.5">
@@ -378,7 +378,7 @@ const BenchmarkPage = () => {
                           {item.current_price?.toLocaleString()}{item.country === "US" ? "$" : "원"}
                         </td>
                         <td className={`px-4 py-3.5 text-right font-semibold ${isUp ? "text-emerald-500" : "text-rose-500"}`}>
-                          {isUp ? "+" : ""}{item.ytd_return}%
+                          {isUp ? "+" : ""}{item.period_return}%
                         </td>
                         <td className="px-4 py-3.5 text-center">
                           <label className="inline-flex items-center justify-center cursor-pointer">

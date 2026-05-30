@@ -124,8 +124,8 @@ async def test_get_benchmark_dashboard_api(
 
     # 포트폴리오
     assert res_data["portfolio"]["total_valuation"] == 1100000
-    # YTD 수익률: 5/1(100만) 대비 5/5(110만) -> 10.0%
-    assert res_data["portfolio"]["ytd_return"] == 10.0
+    # 선택된 1M 기간(5/1~5/5)의 정규화 누적 수익률: -47.62%
+    assert res_data["portfolio"]["ytd_return"] == -47.62
 
     # 지수 카드 정보 검증
     indices = res_data["indices"]
