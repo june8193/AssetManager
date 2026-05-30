@@ -127,9 +127,9 @@ const BenchmarkPage = () => {
         <div>
           <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
             <TrendingUp className="text-blue-600" size={32} />
-            성과 비교 대시보드
+            시장분석 대시보드
           </h1>
-          <p className="text-slate-500 text-sm font-medium mt-1">시장 주요 지수 및 관심 종목과 성과를 비교 분석합니다.</p>
+          <p className="text-slate-500 text-sm font-medium mt-1">시장 주요 지수 및 관심 종목과 성과를 분석합니다.</p>
         </div>
 
         <div className="flex items-center gap-3">

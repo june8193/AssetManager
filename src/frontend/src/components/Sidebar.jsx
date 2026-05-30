@@ -8,7 +8,7 @@ import { useMasking } from '../contexts/MaskingContext';
  */
 const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
-  { path: '/benchmark', label: '성과 비교', icon: TrendingUp },
+  { path: '/benchmark', label: '시장분석', icon: TrendingUp },
   { path: '/watchlist', label: '관심종목', icon: Activity },
   { path: '/ratios', label: '비율 계산기', icon: Calculator },
   { 
