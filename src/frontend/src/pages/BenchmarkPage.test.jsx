@@ -156,7 +156,7 @@ describe('BenchmarkPage', () => {
     expect(screen.getByText('+2.1%')).toBeDefined();
   });
 
-  it('관심 종목 차트 비교 토글 체크박스를 클릭하면 toggleWatchlistStock 함수를 호출한다', async () => {
+  it('관심 종목 차트 비교 토글 버튼을 클릭하면 toggleWatchlistStock 함수를 호출한다', async () => {
     const toggleMock = vi.fn();
     vi.mocked(useBenchmark).mockReturnValue({
       data: mockBenchmarkData,
@@ -174,11 +174,10 @@ describe('BenchmarkPage', () => {
       </MaskingProvider>
     );
 
-    const checkbox = screen.getByRole('checkbox');
-    expect(checkbox).toBeDefined();
-    expect(checkbox.checked).toBe(false);
+    const toggleButton = screen.getByRole('button', { name: /관심: 삼성전자/i });
+    expect(toggleButton).toBeDefined();
 
-    fireEvent.click(checkbox);
+    fireEvent.click(toggleButton);
     expect(toggleMock).toHaveBeenCalledWith("005930");
   });
 });

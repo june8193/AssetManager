@@ -141,3 +141,63 @@ async def test_get_benchmark_dashboard_api(
     assert samsung["current_price"] == 72000.0
     # YTD return: 5/1(70000) 대비 5/5(72000) -> ((72000 - 70000) / 70000) * 100 = 2.86%
     assert samsung["ytd_return"] == 2.86
+
+
+@pytest.mark.asyncio
+@patch("yfinance.download")
+@patch("src.backend.services.price_service.price_service.get_kr_prices")
+@patch("src.backend.services.price_service.price_service.get_us_prices")
+async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
+    mock_get_us_prices,
+    mock_get_kr_prices,
+    mock_yf_download,
+    db_session
+):
+    """최종일에 포트폴리오 스냅샷이 누락된 경우, API 응답의 portfolio.ytd_return이 None이 아니라 최근 유효값을 반환하는지 테스트합니다."""
+    # User, Account, Cash Asset 셋업
+    user = User(name="Test User 2")
+    db_session.add(user)
+    db_session.commit()
+
+    account = Account(user_id=user.id, name="Test Account 2", provider="Test Bank", is_active=True)
+    db_session.add(account)
+    db_session.commit()
+
+    cash_asset = Asset(ticker="KRW", name="Won", country="KR", major_category="현금", sub_category="현금")
+    db_session.add(cash_asset)
+    db_session.commit()
+
+    # 5/1: 스냅샷 존재 (val = 1,000,000)
+    # 5/4: 스냅샷 존재 (val = 1,100,000 -> 10%)
+    # 5/5: 스냅샷 누락 (None)
+    snapshots = [
+        AccountSnapshot(account_id=account.id, snapshot_date=datetime.date(2026, 5, 1), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+        AccountSnapshot(account_id=account.id, snapshot_date=datetime.date(2026, 5, 4), period_deposit=0.0, total_valuation=1100000.0, total_profit=0.0),
+    ]
+    for s in snapshots:
+        db_session.add(s)
+
+    # 지수 데이터 주입 (5/1, 5/4, 5/5 모두 존재)
+    dates = [datetime.date(2026, 5, 1), datetime.date(2026, 5, 4), datetime.date(2026, 5, 5)]
+    tickers = ["^KS11"]
+    for t in tickers:
+        for i, d in enumerate(dates):
+            p = HistoricalPrice(ticker=t, price_date=d, close_price=2000.0 + i * 100)
+            db_session.add(p)
+
+    db_session.commit()
+
+    # yfinance / 실시간 가격 모킹
+    mock_df = pd.DataFrame(data={"Close": [70000.0, 71000.0, 72000.0]}, index=pd.DatetimeIndex(dates))
+    mock_df.index.name = "Date"
+    mock_yf_download.return_value = mock_df
+    mock_get_kr_prices.return_value = []
+    mock_get_us_prices.return_value = []
+
+    response = client.get("/api/benchmark?period=1M")
+    assert response.status_code == 200
+    res_data = response.json()
+
+    # 5/5에는 스냅샷이 없었으므로 portfolio.ytd_return은 5/4의 유효값인 10.0이어야 함
+    assert res_data["portfolio"]["ytd_return"] == 10.0
+

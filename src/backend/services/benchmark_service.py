@@ -259,11 +259,13 @@ class BenchmarkService:
         # 각 영업일별 누적 입금액(순입금액) 계산
         portfolio_history = []
         portfolio_net_deposits = []
+        portfolio_has_snapshot = []
 
         for d in sorted_dates:
             net_dep = cumulative_deposits_map.get(d, 0.0) - cum_dep_start
             portfolio_history.append(daily_vals[d])
             portfolio_net_deposits.append(net_dep)
+            portfolio_has_snapshot.append(d in snapshot_vals)
 
         # 4. 포트폴리오 누적 수익률 정규화 계산
         portfolio_returns = []
@@ -273,6 +275,11 @@ class BenchmarkService:
             if i == 0:
                 portfolio_returns.append(0.0)
             else:
+                # 해당 날짜에 스냅샷 데이터가 없으면 None을 채워 차트에서 연결선이 수평 평탄화되지 않도록 함
+                if not portfolio_has_snapshot[i]:
+                    portfolio_returns.append(None)
+                    continue
+
                 net_deposit = portfolio_net_deposits[i]
                 denominator = base_val + net_deposit
                 if denominator != 0:
@@ -280,6 +287,7 @@ class BenchmarkService:
                 else:
                     roi = 0.0
                 portfolio_returns.append(round(roi, 2))
+
 
         datasets = [
             {
@@ -363,7 +371,13 @@ class BenchmarkService:
             })
 
             # 초과수익률 요약 정보 계산 (최종일 기준)
-            p_final = portfolio_returns[-1] if portfolio_returns else 0.0
+            # 최종일에 포트폴리오 스냅샷이 누락된 경우를 고려하여 가장 최근의 유효한(None이 아닌) 수익률을 사용합니다.
+            p_final = 0.0
+            if portfolio_returns:
+                for val in reversed(portfolio_returns):
+                    if val is not None:
+                        p_final = val
+                        break
             i_final = index_returns[-1] if index_returns else 0.0
             alpha = round(p_final - i_final, 2)
             judgment = "시장 상회" if alpha >= 0 else "시장 하회"

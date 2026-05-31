@@ -306,3 +306,48 @@ async def test_calculate_cumulative_returns_with_holiday_zero_price(benchmark_se
     kospi_dataset = next(ds for ds in result["datasets"] if ds["label"] == "KOSPI")
     assert kospi_dataset["data"] == [0.0, 0.0, 4.0]
 
+
+@pytest.mark.asyncio
+async def test_calculate_cumulative_returns_with_missing_snapshots(benchmark_service, db_session):
+    """중간 및 최종 날짜에 포트폴리오 스냅샷이 누락된 경우 해당 날짜의 포트폴리오 수익률이 None이 되며, 초과수익률은 가장 최근 유효 값으로 정상 계산되는지 검증하는 테스트"""
+    # 5/1(금) 스냅샷 존재
+    # 5/4(월) 스냅샷 존재 (val=1100000 -> 10%)
+    # 5/5(화) 스냅샷 누락 (None)
+    snapshots = [
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 1), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 4), period_deposit=0.0, total_valuation=1100000.0, total_profit=0.0),
+    ]
+    for s in snapshots:
+        db_session.add(s)
+
+    kospi_prices = [
+        (datetime.date(2026, 5, 1), 2500.0),
+        (datetime.date(2026, 5, 4), 2550.0),
+        (datetime.date(2026, 5, 5), 2600.0),
+    ]
+    for d, price in kospi_prices:
+        db_session.add(HistoricalPrice(ticker="^KS11", price_date=d, close_price=price))
+
+    db_session.commit()
+
+    result = await benchmark_service.calculate_cumulative_returns(
+        start_date=datetime.date(2026, 5, 1),
+        end_date=datetime.date(2026, 5, 5),
+        tickers=["^KS11"]
+    )
+
+    portfolio_dataset = next(ds for ds in result["datasets"] if ds["label"] == "내 포트폴리오")
+    # 5/1: 스냅샷 있음 -> 0.0
+    # 5/4: 스냅샷 있음 -> 10.0
+    # 5/5: 스냅샷 없음 -> None
+    assert portfolio_dataset["data"] == [0.0, 10.0, None]
+
+    # 초과수익률(Alpha) 검증: 마지막 날인 5/5 기준 p_final은 5/4의 유효값인 10.0이어야 하고, KOSPI의 i_final은 5/5의 4.0이어야 함
+    # alpha = 10.0 - 4.0 = 6.0%p
+    alpha_kospi = next(summary for summary in result["alpha_summaries"] if summary["benchmark"] == "KOSPI")
+    assert alpha_kospi["benchmark_return"] == 4.0
+    assert alpha_kospi["portfolio_return"] == 10.0
+    assert alpha_kospi["alpha"] == 6.0
+
+
+

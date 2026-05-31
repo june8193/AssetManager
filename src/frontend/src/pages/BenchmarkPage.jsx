@@ -1,6 +1,6 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useBenchmark } from '../hooks/useBenchmark';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { TrendingUp, Wallet, Activity, RefreshCw, AlertCircle, Calendar, Plus, Check } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
@@ -26,6 +26,15 @@ const BenchmarkPage = () => {
   } = useBenchmark();
 
   const { maskValue } = useMasking();
+
+  // 차트 렌더링 여부를 관리하는 통합 상태 (기본값 모두 True)
+  const [activeSeries, setActiveSeries] = useState({
+    "내 포트폴리오": true,
+    "KOSPI": true,
+    "KOSDAQ": true,
+    "S&P 500": true,
+    "NASDAQ": true,
+  });
 
   const { portfolio, indices, alpha_analysis, watchlist } = data || {};
 
@@ -79,19 +88,25 @@ const BenchmarkPage = () => {
     return data.chart.labels[data.chart.labels.length - 1];
   }, [data]);
 
+  // 관심종목의 고유 색상 매칭 함수
+  const getWatchlistColor = useMemo(() => {
+    return (stockCode) => {
+      const idx = watchlist?.findIndex(w => w.stock_code === stockCode) || 0;
+      const colors = ["#eab308", "#f43f5e", "#60a5fa", "#22c55e", "#ec4899"];
+      return colors[idx % colors.length];
+    };
+  }, [watchlist]);
+
   // 관심종목 차트 라인들 동적 생성
   const watchlistLines = useMemo(() => {
-    return Object.keys(activeWatchlistDataset).map((stockCode, idx) => {
+    return Object.keys(activeWatchlistDataset).map((stockCode) => {
       const hist = activeWatchlistDataset[stockCode];
       if (!hist) return null;
 
       // 관심종목 목록(watchlist)에서 실제 종목이름 매칭
       const watchlistInfo = watchlist?.find(w => w.stock_code === stockCode);
       const displayName = watchlistInfo ? watchlistInfo.stock_name : hist.ticker;
-
-      // 관심 종목별로 개별적인 파스텔톤 색상 지정
-      const colors = ["#eab308", "#f43f5e", "#60a5fa", "#22c55e", "#ec4899"];
-      const color = colors[idx % colors.length];
+      const color = getWatchlistColor(stockCode);
 
       return (
         <Line
@@ -108,7 +123,8 @@ const BenchmarkPage = () => {
         />
       );
     });
-  }, [activeWatchlistDataset, watchlist]);
+  }, [activeWatchlistDataset, watchlist, getWatchlistColor]);
+
 
   if (loading) {
     return (
@@ -257,7 +273,7 @@ const BenchmarkPage = () => {
                 tickLine={false}
                 tick={{ fill: '#94a3b8', fontSize: 11, fontWeight: 500 }}
                 tickFormatter={(val) => `${val}%`}
-                width={50}
+                width={65}
               />
               <Tooltip
                 contentStyle={{
@@ -270,37 +286,95 @@ const BenchmarkPage = () => {
                 formatter={(value, name) => [`${parseFloat(value).toFixed(2)}%`, name]}
                 labelFormatter={(label) => new Date(label).toLocaleDateString()}
               />
-              <Legend
-                verticalAlign="top"
-                height={36}
-                iconType="circle"
-                iconSize={8}
-                wrapperStyle={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}
-              />
               
               {/* 내 포트폴리오 라인 */}
-              <Line
-                type="monotone"
-                dataKey="내 포트폴리오"
-                stroke="#38bdf8"
-                strokeWidth={3.5}
-                dot={{ r: 2 }}
-                activeDot={{ r: 5 }}
-                animationDuration={1000}
-              />
+              {activeSeries["내 포트폴리오"] && (
+                <Line
+                  type="monotone"
+                  dataKey="내 포트폴리오"
+                  stroke="#38bdf8"
+                  strokeWidth={3.5}
+                  dot={{ r: 2 }}
+                  activeDot={{ r: 5 }}
+                  animationDuration={1000}
+                  connectNulls={true}
+                />
+              )}
 
               {/* 4대 지수 라인 */}
-              <Line type="monotone" dataKey="KOSPI" stroke="#fb7185" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="KOSDAQ" stroke="#f472b6" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="S&P 500" stroke="#34d399" strokeWidth={1.5} dot={false} />
-              <Line type="monotone" dataKey="NASDAQ" stroke="#a78bfa" strokeWidth={1.5} dot={false} />
+              {activeSeries["KOSPI"] && <Line type="monotone" dataKey="KOSPI" stroke="#fb7185" strokeWidth={1.5} dot={false} />}
+              {activeSeries["KOSDAQ"] && <Line type="monotone" dataKey="KOSDAQ" stroke="#f472b6" strokeWidth={1.5} dot={false} />}
+              {activeSeries["S&P 500"] && <Line type="monotone" dataKey="S&P 500" stroke="#34d399" strokeWidth={1.5} dot={false} />}
+              {activeSeries["NASDAQ"] && <Line type="monotone" dataKey="NASDAQ" stroke="#a78bfa" strokeWidth={1.5} dot={false} />}
 
               {/* 관심 종목 라인들 (Lazy Loading) */}
               {watchlistLines}
             </LineChart>
           </ResponsiveContainer>
         </div>
+
+        {/* 차트 하단 통합 ON/OFF 토글 컨트롤러 영역 */}
+        <div className="flex flex-wrap items-center justify-center gap-3 mt-6 pt-6 border-t border-slate-50 select-none">
+          {/* 내 포트폴리오 토글 */}
+          <button
+            onClick={() => setActiveSeries(prev => ({ ...prev, "내 포트폴리오": !prev["내 포트폴리오"] }))}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+              activeSeries["내 포트폴리오"]
+                ? "bg-[#38bdf8] text-white shadow-sm shadow-[#38bdf8]/30 scale-105"
+                : "bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100"
+            }`}
+          >
+            <div className={`w-2 h-2 rounded-full ${activeSeries["내 포트폴리오"] ? "bg-white" : "bg-slate-300"}`}></div>
+            내 포트폴리오
+          </button>
+
+          {/* 4대 시장 지수 토글 */}
+          {[
+            { key: "KOSPI", bg: "bg-[#fb7185]" },
+            { key: "KOSDAQ", bg: "bg-[#f472b6]" },
+            { key: "S&P 500", bg: "bg-[#34d399]" },
+            { key: "NASDAQ", bg: "bg-[#a78bfa]" }
+          ].map((item) => {
+            const isActive = activeSeries[item.key];
+            return (
+              <button
+                key={item.key}
+                onClick={() => setActiveSeries(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  isActive
+                    ? `${item.bg} text-white shadow-sm shadow-black/10 scale-105`
+                    : "bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <div className={`w-2 h-2 rounded-full ${isActive ? "bg-white" : "bg-slate-300"}`}></div>
+                {item.key}
+              </button>
+            );
+          })}
+
+          {/* 관심 종목 토글 */}
+          {watchlist?.map((item) => {
+            const isChecked = !!activeWatchlistDataset[item.stock_code];
+            const color = getWatchlistColor(item.stock_code);
+            return (
+              <button
+                key={item.stock_code}
+                onClick={() => toggleWatchlistStock(item.stock_code)}
+                style={isChecked ? { backgroundColor: color, borderColor: color, color: '#fff' } : {}}
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
+                  isChecked
+                    ? "shadow-sm shadow-black/10 scale-105 border border-transparent"
+                    : "bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <div className={`w-2 h-2 rounded-full ${isChecked ? "bg-white" : "bg-slate-300"}`}></div>
+                관심: {item.stock_name}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
 
       {/* 3. 하단 상세 분석 & 관심 종목 그리드 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -371,13 +445,11 @@ const BenchmarkPage = () => {
                   <tr>
                     <th className="px-4 py-3.5 rounded-l-2xl">종목명 (티커)</th>
                     <th className="px-4 py-3.5 text-right">현재가</th>
-                    <th className="px-4 py-3.5 text-right">{period} 수익률</th>
-                    <th className="px-4 py-3.5 text-center rounded-r-2xl">차트 비교</th>
+                    <th className="px-4 py-3.5 text-right rounded-r-2xl">{period} 수익률</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {watchlist?.map((item) => {
-                    const isChecked = !!activeWatchlistDataset[item.stock_code];
                     const isUp = item.period_return >= 0;
                     return (
                       <tr key={item.stock_code} className="hover:bg-slate-50/50 transition-colors">
@@ -388,29 +460,15 @@ const BenchmarkPage = () => {
                         <td className="px-4 py-3.5 text-right font-medium text-slate-600">
                           {item.current_price?.toLocaleString()}{item.country === "US" ? "$" : "원"}
                         </td>
-                        <td className={`px-4 py-3.5 text-right font-semibold ${isUp ? "text-emerald-500" : "text-rose-500"}`}>
+                        <td className={`px-4 py-3.5 text-right font-semibold rounded-r-2xl ${isUp ? "text-emerald-500" : "text-rose-500"}`}>
                           {isUp ? "+" : ""}{item.period_return}%
-                        </td>
-                        <td className="px-4 py-3.5 text-center">
-                          <label className="inline-flex items-center justify-center cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={isChecked}
-                              onChange={(e) => {
-                                e.target.blur();
-                                toggleWatchlistStock(item.stock_code);
-                              }}
-                              className="absolute opacity-0 w-0 h-0 pointer-events-none peer"
-                            />
-                            <div className="w-9 h-5 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600 relative"></div>
-                          </label>
                         </td>
                       </tr>
                     );
                   })}
                   {(!watchlist || watchlist.length === 0) && (
                     <tr>
-                      <td colSpan="4" className="px-4 py-8 text-center text-slate-400 font-medium">
+                      <td colSpan="3" className="px-4 py-8 text-center text-slate-400 font-medium">
                         등록된 관심 종목이 없습니다.
                       </td>
                     </tr>

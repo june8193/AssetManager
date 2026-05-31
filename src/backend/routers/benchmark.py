@@ -150,7 +150,11 @@ async def get_benchmark_dashboard(
     if chart_data.get("datasets") and len(chart_data["datasets"]) > 0:
         portfolio_returns = chart_data["datasets"][0]["data"]
         if portfolio_returns:
-            portfolio_period_return = portfolio_returns[-1]
+            # 최종일에 포트폴리오 스냅샷이 없어 None일 수 있으므로, 역순 순회하여 최근 유효값을 찾음
+            for val in reversed(portfolio_returns):
+                if val is not None:
+                    portfolio_period_return = val
+                    break
 
     return {
         "portfolio": {
