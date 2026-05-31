@@ -510,3 +510,160 @@ class BenchmarkService:
                 return round(((last_price - base_price) / base_price) * 100, 2)
         return 0.0
 
+
+    async def get_comparison_tables(self) -> Dict[str, Any]:
+        """포트폴리오와 4대 시장 지수의 연간 및 일간 수익률 비교 데이터를 계산합니다.
+
+        대시보드와 동일한 표 구성을 지원하기 위해 포트폴리오의 연간/일간 성과 통계를 기반으로
+        지수의 수익률을 매핑합니다.
+
+        Returns:
+            Dict[str, Any]: 연간 및 일간 비교 테이블 데이터
+                - yearly (List[Dict]): 연간 비교 리스트 (최신 연도 순)
+                - daily (List[Dict]): 일간 비교 리스트 (최신 일자 순)
+        """
+        from .dashboard_service import DashboardService
+        dash_svc = DashboardService(self.db)
+        
+        # 1. 포트폴리오의 연도별, 일자별 데이터 로딩 (내림차순 정렬되어 반환됨)
+        yearly_stats = dash_svc.get_yearly_stats()
+        daily_stats = dash_svc.get_daily_stats()
+        
+        tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
+        ticker_names = {
+            "^KS11": "kospi",
+            "^KQ11": "kosdaq",
+            "^GSPC": "sp500",
+            "^IXIC": "nasdaq"
+        }
+        
+        # 2. 일간 수익률 비교 계산
+        daily_comparison = []
+        if daily_stats:
+            # 날짜 정렬 (오름차순)
+            sorted_daily = sorted(daily_stats, key=lambda x: x["date"])
+            sorted_dates = [item["date"] for item in sorted_daily]
+            
+            min_date = sorted_dates[0]
+            max_date = sorted_dates[-1]
+            
+            # 4대 지수 전체 구간 시세 일괄 수집/캐싱 보장
+            for ticker in tickers:
+                await self.get_historical_prices(ticker, min_date, max_date)
+                
+            # DB 쿼리 부하 최소화를 위해 메모리에 가격 리스트 로드
+            prices_cache = {}
+            for ticker in tickers:
+                # 시작일 이전 보간을 고려하여 여유있게 조회
+                db_prices = (
+                    self.db.query(HistoricalPrice)
+                    .filter(
+                        HistoricalPrice.ticker == ticker,
+                        HistoricalPrice.price_date >= min_date - datetime.timedelta(days=10),
+                        HistoricalPrice.price_date <= max_date,
+                        HistoricalPrice.close_price > 0.0
+                    )
+                    .order_by(HistoricalPrice.price_date.asc())
+                    .all()
+                )
+                prices_cache[ticker] = db_prices
+
+            # 특정 날짜 이하의 가장 최근 유효 종가를 구하는 헬퍼 함수
+            def get_cached_price_at_date(ticker: str, target_date: datetime.date) -> float:
+                plist = prices_cache.get(ticker, [])
+                last_val = 0.0
+                for p in plist:
+                    if p.price_date <= target_date:
+                        last_val = p.close_price
+                    else:
+                        break
+                return last_val
+
+            # 일간 비교 데이터 매핑
+            for i, item in enumerate(sorted_daily):
+                curr_date = item["date"]
+                row = {
+                    "date": curr_date.isoformat(),
+                    "assets": item["assets"],
+                    "roi": item["roi"],
+                    "kospi": 0.0,
+                    "kosdaq": 0.0,
+                    "sp500": 0.0,
+                    "nasdaq": 0.0
+                }
+                
+                if i > 0:
+                    prev_date = sorted_dates[i-1]
+                    for ticker in tickers:
+                        p_prev = get_cached_price_at_date(ticker, prev_date)
+                        p_curr = get_cached_price_at_date(ticker, curr_date)
+                        name = ticker_names[ticker]
+                        
+                        if p_prev > 0.0:
+                            ret = ((p_curr - p_prev) / p_prev) * 100
+                            row[name] = round(ret, 2)
+                        else:
+                            row[name] = 0.0
+                else:
+                    # 최초 날짜는 변동률 0.0
+                    for ticker in tickers:
+                        name = ticker_names[ticker]
+                        row[name] = 0.0
+                        
+                daily_comparison.append(row)
+                
+            # 최신순(내림차순) 정렬
+            daily_comparison.reverse()
+
+        # 3. 연간 수익률 비교 계산 (달력 기준)
+        yearly_comparison = []
+        if yearly_stats:
+            # 연도별 정렬 (오름차순)
+            sorted_yearly = sorted(yearly_stats, key=lambda x: x["year"])
+            
+            for item in sorted_yearly:
+                year = item["year"]
+                start_date = datetime.date(year, 1, 1)
+                
+                today = datetime.date.today()
+                if year == today.year:
+                    end_date = today
+                else:
+                    end_date = datetime.date(year, 12, 31)
+                    
+                row = {
+                    "year": year,
+                    "assets": item["assets"],
+                    "roi": item["roi"],
+                    "kospi": 0.0,
+                    "kosdaq": 0.0,
+                    "sp500": 0.0,
+                    "nasdaq": 0.0
+                }
+                
+                for ticker in tickers:
+                    # 지수 가격 수집 및 로컬 캐시 갱신 보장
+                    prices = await self.get_historical_prices(ticker, start_date, end_date)
+                    valid_prices = [p for p in prices if p.close_price > 0.0]
+                    name = ticker_names[ticker]
+                    
+                    if len(valid_prices) >= 2:
+                        base_price = valid_prices[0].close_price
+                        last_price = valid_prices[-1].close_price
+                        if base_price > 0.0:
+                            ret = ((last_price - base_price) / base_price) * 100
+                            row[name] = round(ret, 2)
+                    else:
+                        row[name] = 0.0
+                        
+                yearly_comparison.append(row)
+                
+            # 최신순(내림차순) 정렬
+            yearly_comparison.reverse()
+            
+        return {
+            "yearly": yearly_comparison,
+            "daily": daily_comparison
+        }
+
+

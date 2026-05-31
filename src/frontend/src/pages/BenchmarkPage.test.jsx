@@ -68,6 +68,28 @@ const mockBenchmarkData = {
       ytd_return: 2.1,
       period_return: 2.1
     }
+  ],
+  yearly_comparison: [
+    {
+      year: 2026,
+      assets: 150000000,
+      roi: 15.2,
+      kospi: 5.4,
+      kosdaq: 3.2,
+      sp500: 12.1,
+      nasdaq: 18.5
+    }
+  ],
+  daily_comparison: [
+    {
+      date: "2026-05-05",
+      assets: 150000000,
+      roi: 15.2,
+      kospi: 5.4,
+      kosdaq: 3.2,
+      sp500: 12.1,
+      nasdaq: 18.5
+    }
   ]
 };
 
@@ -154,6 +176,10 @@ describe('BenchmarkPage', () => {
     expect(screen.getByText('삼성전자')).toBeDefined();
     expect(screen.getByText('78,200원')).toBeDefined();
     expect(screen.getByText('+2.1%')).toBeDefined();
+
+    // 연간 및 일간 비교 테이블 렌더링 확인
+    expect(screen.getByText('연간 수익률 비교')).toBeDefined();
+    expect(screen.getByText('일간 수익률 비교')).toBeDefined();
   });
 
   it('관심 종목 차트 비교 토글 버튼을 클릭하면 toggleWatchlistStock 함수를 호출한다', async () => {

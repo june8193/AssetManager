@@ -25,7 +25,7 @@ async function main() {
   }
 
   // 스크린샷 폴더 생성 (GEMINI.md 규칙 준수)
-  const dirName = "20260530_213200_market_analysis_refactor";
+  const dirName = "20260531_142600_comparison_tables";
   const screenshotsDir = path.join(__dirname, "..", "..", "screenshots", dirName);
   if (!fs.existsSync(screenshotsDir)) {
     fs.mkdirSync(screenshotsDir, { recursive: true });
@@ -35,6 +35,13 @@ async function main() {
   const initialScreenshotPath = path.join(screenshotsDir, "1_initial_page.png");
   await page.screenshot({ path: initialScreenshotPath, fullPage: true });
   console.log(`Initial screenshot saved to ${initialScreenshotPath}`);
+
+  // 비교표 렌더링 확인
+  console.log("Checking if Yearly and Daily comparison tables are rendered...");
+  const yearlyTitle = page.locator('h2:has-text("연간 수익률 비교")');
+  const dailyTitle = page.locator('h2:has-text("일간 수익률 비교")');
+  console.log(`Yearly Table Rendered: ${await yearlyTitle.count() > 0}`);
+  console.log(`Daily Table Rendered: ${await dailyTitle.count() > 0}`);
 
   // 차트 하단 통합 토글 컨트롤에서 KOSPI 지수와 KOSDAQ 지수 OFF 해보기
   console.log("Toggling off KOSPI and KOSDAQ indexes in bottom controller...");
@@ -56,6 +63,17 @@ async function main() {
   const afterScreenshotPath = path.join(screenshotsDir, "2_after_toggled.png");
   await page.screenshot({ path: afterScreenshotPath, fullPage: true });
   console.log(`Toggled screenshot saved to ${afterScreenshotPath}`);
+
+  // 일간 비교표 2페이지 클릭해보기
+  console.log("Navigating to page 2 of Daily Comparison Table...");
+  const page2Btn = page.locator('button:has-text("2")');
+  if (await page2Btn.count() > 0) {
+    await page2Btn.click();
+    await page.waitForTimeout(1000);
+    const page2ScreenshotPath = path.join(screenshotsDir, "3_daily_page2.png");
+    await page.screenshot({ path: page2ScreenshotPath, fullPage: true });
+    console.log(`Daily page 2 screenshot saved to ${page2ScreenshotPath}`);
+  }
 
   await browser.close();
   console.log("E2E verification completed successfully!");

@@ -350,4 +350,82 @@ async def test_calculate_cumulative_returns_with_missing_snapshots(benchmark_ser
     assert alpha_kospi["alpha"] == 6.0
 
 
+@pytest.mark.asyncio
+@patch('yfinance.download')
+async def test_get_comparison_tables(mock_download, benchmark_service, db_session):
+    """연간 및 일간 수익률 비교표 데이터 생성 로직 검증"""
+    mock_download.return_value = pd.DataFrame()
+    # 1. 스냅샷 데이터 주입 (2025, 2026)
+    # 2025년 2개 스냅샷
+    # 2025-05-01: assets=1,000,000, deposit=0
+    # 2025-12-31: assets=1,200,000, deposit=0
+    # 2026년 2개 스냅샷
+    # 2026-05-01: assets=1,300,000, deposit=100,000
+    # 2026-05-05: assets=1,500,000, deposit=0
+    snapshots = [
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2025, 5, 1), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2025, 12, 31), period_deposit=0.0, total_valuation=1200000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 1), period_deposit=100000.0, total_valuation=1300000.0, total_profit=0.0),
+        AccountSnapshot(account_id=2, snapshot_date=datetime.date(2026, 5, 5), period_deposit=0.0, total_valuation=1500000.0, total_profit=0.0),
+    ]
+    for s in snapshots:
+        db_session.add(s)
 
+    # 2. 지수 가격 데이터 주입
+    # 2025년 달력 기준 (1/1 ~ 12/31) 변동률 검증용 가격
+    # 2025-01-02: 2000.0 (연초 시가)
+    # 2025-12-30: 2200.0 (연말 종가) -> 2025년 변동률 = 10%
+    # 2026년 달력 기준 (1/1 ~ 12/31) 변동률 검증용 가격
+    # 2026-01-02: 2200.0 (연초 시가)
+    # 2026-05-05: 2420.0 (종가) -> 2026년 변동률 = 10%
+    
+    # 일간 비교용 가격
+    # 2025-05-01 (최초 스냅샷): KOSPI = 2050.0
+    # 2025-12-31 (두 번째 스냅샷): KOSPI = 2200.0 -> 일간 변동률 = (2200 - 2050)/2050 * 100 = 7.32%
+    # 2026-05-01 (세 번째 스냅샷): KOSPI = 2300.0 -> 일간 변동률 = (2300 - 2200)/2200 * 100 = 4.55%
+    # 2026-05-05 (네 번째 스냅샷): KOSPI = 2420.0 -> 일간 변동률 = (2420 - 2300)/2300 * 100 = 5.22%
+    
+    kospi_prices = [
+        (datetime.date(2025, 1, 2), 2000.0),
+        (datetime.date(2025, 5, 1), 2050.0),
+        (datetime.date(2025, 12, 30), 2200.0),
+        (datetime.date(2025, 12, 31), 2200.0),
+        (datetime.date(2026, 1, 2), 2200.0),
+        (datetime.date(2026, 5, 1), 2300.0),
+        (datetime.date(2026, 5, 5), 2420.0),
+    ]
+    for d, price in kospi_prices:
+        for ticker in ["^KS11", "^KQ11", "^GSPC", "^IXIC"]:
+            db_session.add(HistoricalPrice(ticker=ticker, price_date=d, close_price=price))
+
+    db_session.commit()
+
+    # 3. 비즈니스 로직 호출
+    result = await benchmark_service.get_comparison_tables()
+
+    # 4. 검증
+    # yearly 검증
+    assert "yearly" in result
+    yearly = result["yearly"]
+    assert len(yearly) == 2
+    
+    assert yearly[0]["year"] == 2026
+    assert yearly[1]["year"] == 2025
+    
+    assert yearly[1]["kospi"] == 10.0
+    assert yearly[0]["kospi"] == 10.0
+    
+    # daily 검증
+    assert "daily" in result
+    daily = result["daily"]
+    assert len(daily) == 4
+    
+    assert daily[0]["date"] == "2026-05-05"
+    assert daily[1]["date"] == "2026-05-01"
+    assert daily[2]["date"] == "2025-12-31"
+    assert daily[3]["date"] == "2025-05-01"
+    
+    assert daily[3]["kospi"] == 0.0
+    assert daily[2]["kospi"] == 7.32
+    assert daily[1]["kospi"] == 4.55
+    assert daily[0]["kospi"] == 5.22

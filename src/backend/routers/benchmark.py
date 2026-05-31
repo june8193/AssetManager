@@ -156,6 +156,9 @@ async def get_benchmark_dashboard(
                     portfolio_period_return = val
                     break
 
+    # 5. 비교 테이블 데이터 연산 및 응답에 병합
+    comparison_tables = await benchmark_svc.get_comparison_tables()
+
     return {
         "portfolio": {
             "total_valuation": total_valuation_krw,
@@ -167,7 +170,9 @@ async def get_benchmark_dashboard(
             "datasets": chart_data.get("datasets", [])
         },
         "alpha_analysis": chart_data.get("alpha_summaries", []),
-        "watchlist": watchlist_data
+        "watchlist": watchlist_data,
+        "yearly_comparison": comparison_tables["yearly"],
+        "daily_comparison": comparison_tables["daily"]
     }
 
 
