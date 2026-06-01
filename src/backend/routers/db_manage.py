@@ -305,6 +305,29 @@ def get_assets(db: Session = Depends(get_db)):
     """전체 자산 마스터 목록을 조회합니다."""
     return db.query(Asset).order_by(Asset.id.desc()).all()
 
+@router.get("/assets/categories")
+def get_categories():
+    """자산 대분류 및 중분류 목록을 조회합니다."""
+    return VALID_CATEGORIES
+
+@router.get("/assets/verify")
+async def verify_asset(ticker: str, country: str, major_category: str):
+    """티커와 국가를 기반으로 종목의 실시간 존재 여부를 검증하고 공식 자산명을 반환합니다."""
+    if major_category == "현금":
+        if ticker == "KRW":
+            return {"name": "원화예수금"}
+        elif ticker == "USD":
+            return {"name": "달러예수금"}
+        else:
+            raise HTTPException(status_code=400, detail="지원하지 않는 현금 티커입니다.")
+            
+    name = await price_service.get_stock_name(ticker, country)
+    if not name:
+        raise HTTPException(status_code=404, detail="해당 국가의 주식시장에서 종목을 찾을 수 없습니다.")
+        
+    return {"name": name}
+
+
 @router.post("/assets", response_model=AssetSchema)
 def create_asset(asset: AssetSchema, db: Session = Depends(get_db)):
     """새로운 자산 마스터를 생성합니다."""

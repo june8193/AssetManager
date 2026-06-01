@@ -1,6 +1,6 @@
 import asyncio
 import yfinance as yf
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from fastapi.concurrency import run_in_threadpool
 import datetime
 import pytz
@@ -296,6 +296,38 @@ class PriceService:
         except Exception as e:
             print(f"[WARNING] 미국 주식 일별 주가 조회 중 예외 발생 ({symbol}): {e}")
         return 0.0
+
+    async def get_stock_name(self, ticker: str, country: str) -> Optional[str]:
+        """국가 및 티커를 기준으로 공식 종목명을 조회합니다.
+        
+        Args:
+            ticker (str): 종목 코드 또는 티커
+            country (str): 국가 ('KR' 또는 'US')
+            
+        Returns:
+            Optional[str]: 종목명 (조회 실패 시 None)
+        """
+        if country == "KR":
+            try:
+                token = await self.kiwoom_auth.get_valid_token()
+                res = await run_in_threadpool(self.kiwoom_api.get_stock_info, token, ticker)
+                if res and res.get("return_code") == 0:
+                    name = res.get("stk_nm") or res.get("nm") or res.get("name") or res.get("hname")
+                    if name:
+                        return name.strip()
+            except Exception as e:
+                print(f"[WARNING] 국내 종목명 조회 실패: {e}")
+        elif country == "US":
+            try:
+                stock = await run_in_threadpool(yf.Ticker, ticker)
+                info = await run_in_threadpool(getattr, stock, "info")
+                name = info.get("longName") or info.get("shortName")
+                if name:
+                    return name.strip()
+            except Exception as e:
+                print(f"[WARNING] 미국 종목명 조회 실패 ({ticker}): {e}")
+        return None
+
 
 
 # 싱글톤 인스턴스
