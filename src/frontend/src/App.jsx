@@ -7,7 +7,6 @@ import WatchlistPage from './pages/WatchlistPage';
 import BenchmarkPage from './pages/BenchmarkPage';
 import ConnectionPage from './pages/ConnectionPage';
 import DbManagementPage from './pages/DbManagementPage';
-import RatioCalculatorPage from './pages/RatioCalculatorPage';
 import RatioCheckPage from './pages/RatioCheckPage';
 import SnapshotWizardPage from './pages/SnapshotWizardPage';
 
@@ -71,7 +70,6 @@ function App() {
               <Route path="/benchmark" element={<BenchmarkPage />} />
               <Route path="/watchlist" element={<WatchlistPage />} />
               <Route path="/watchlist/:country" element={<WatchlistPage />} />
-              <Route path="/ratios" element={<RatioCalculatorPage />} />
               <Route path="/ratios/check" element={<RatioCheckPage />} />
               <Route path="/connection" element={<ConnectionPage />} />
               <Route path="/db" element={<DbManagementPage />} />

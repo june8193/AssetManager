@@ -446,4 +446,82 @@ describe('RatioCheckPage', () => {
     const comparisonResult = elementHigh.compareDocumentPosition(elementLow);
     expect(comparisonResult & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
+
+  it('투자 계산기 탭으로 전환 시 계산기 UI가 렌더링되고 비중 계산이 정상 작동한다', async () => {
+    const mockUpdateTargets = vi.fn();
+    vi.mocked(useRatios).mockReturnValue({
+      hierarchy: mockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn(),
+      updateTargets: mockUpdateTargets
+    });
+
+    renderComponent();
+
+    // 1. 투자 계산기 탭 클릭
+    const calcTab = screen.getByText('투자 계산기');
+    fireEvent.click(calcTab);
+
+    // 투자금 입력창과 목표 설정이 나타나는지 확인
+    expect(screen.getByText('포트폴리오 추가 투자금 입력')).toBeDefined();
+    expect(screen.getByText('전체 자산 목표 비중 설정')).toBeDefined();
+
+    // 2. 추가 투자금 입력 (예: 50,000,000원 추가)
+    const cashInput = screen.getByTestId('additional-cash-input');
+    fireEvent.change(cashInput, { target: { value: '50000000' } });
+
+    // 3. 목표 비중 수정 (주식을 60%, 현금을 40%로 설정)
+    const inputs = screen.getAllByRole('spinbutton');
+    // inputs[0]은 투자금 입력창, inputs[1]은 주식 목표 비중, inputs[2]는 현금 목표 비중
+    fireEvent.change(inputs[1], { target: { value: '60' } });
+    fireEvent.change(inputs[2], { target: { value: '40' } });
+
+    // 4. 리밸런싱 가이드 텍스트 업데이트 검증
+    // 전체 자산: 1억 + 5천만 = 1억 5천만
+    // 주식 목표 (60%): 9천만 -> 현재 5천만 대비 4천만 추가 매수 필요
+    // 현금 목표 (40%): 6천만 -> 현재 5천만 대비 1천만 추가 매수 필요
+    expect(screen.getByText(/추가 매수: \+40,000,000원/i)).toBeDefined();
+    expect(screen.getByText(/추가 매수: \+10,000,000원/i)).toBeDefined();
+
+    // 5. 비중의 합이 100%이므로 저장 버튼이 활성화되어 있어야 함
+    const saveButton = screen.getByRole('button', { name: /목표 비중 저장/i });
+    expect(saveButton.disabled).toBe(false);
+
+    // 6. 저장 버튼 클릭 시 updateTargets API 호출 형태 검증
+    fireEvent.click(saveButton);
+    expect(mockUpdateTargets).toHaveBeenCalled();
+  });
+
+  it('비중 합계가 100%가 아니면 저장이 불활성화되고, 자동채우기 시 비중이 100%로 보정된다', () => {
+    vi.mocked(useRatios).mockReturnValue({
+      hierarchy: mockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn(),
+      updateTargets: vi.fn()
+    });
+
+    renderComponent();
+
+    const calcTab = screen.getByText('투자 계산기');
+    fireEvent.click(calcTab);
+
+    const inputs = screen.getAllByRole('spinbutton');
+    // 주식을 70%로 설정하고 현금은 그대로 둔다 (기존 mockHierarchy의 target_percentage가 50일 것임)
+    fireEvent.change(inputs[1], { target: { value: '70' } });
+    
+    const saveButton = screen.getByRole('button', { name: /목표 비중 저장/i });
+    
+    // 비중 합이 100%가 아니면(70 + 50 = 120%) 저장 버튼 비활성화 및 경고 노출
+    expect(saveButton.disabled).toBe(true);
+    expect(screen.getByText(/비중 합계가 정확히 100%여야 저장이 활성화됩니다/i)).toBeDefined();
+
+    // '현금' 항목의 자동채우기 버튼 클릭 (현금의 목표 비중을 100 - 70 = 30%로 강제 보정)
+    const autoFillButtons = screen.getAllByText('자동채우기');
+    fireEvent.click(autoFillButtons[1]);
+
+    // 이제 비중의 합이 100%이므로 저장 버튼 활성화
+    expect(saveButton.disabled).toBe(false);
+  });
 });
