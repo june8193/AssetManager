@@ -29,11 +29,16 @@ def setup_benchmark_data(db_session):
     db_session.add(cash_asset)
     db_session.commit()
 
+    today = datetime.date.today()
+    d1 = today - datetime.timedelta(days=4)
+    d2 = today - datetime.timedelta(days=1)
+    d3 = today
+
     # 실시간 자산 평가액을 1,100,000으로 만들기 위한 원화 입금 추가
     db_session.add(Transaction(
         account_id=account.id,
         asset_id=cash_asset.id,
-        transaction_date=datetime.date(2026, 5, 1),
+        transaction_date=d1,
         type="DEPOSIT",
         quantity=1100000.0,
         total_amount=1100000.0,
@@ -42,11 +47,7 @@ def setup_benchmark_data(db_session):
     db_session.commit()
 
     # 1. 포트폴리오 스냅샷 생성
-    dates = [
-        datetime.date(2026, 5, 1),
-        datetime.date(2026, 5, 4),
-        datetime.date(2026, 5, 5),
-    ]
+    dates = [d1, d2, d3]
     for i, d in enumerate(dates):
         # 5/1: 평가액 100만, 추가액 110만
         snapshot = AccountSnapshot(
@@ -89,14 +90,15 @@ async def test_get_benchmark_dashboard_api(
 ):
     """대시보드 API 엔드포인트(/api/benchmark)가 정상 데이터를 반환하는지 테스트합니다."""
     
+    today = datetime.date.today()
+    d1 = datetime.datetime.combine(today - datetime.timedelta(days=4), datetime.time.min)
+    d2 = datetime.datetime.combine(today - datetime.timedelta(days=1), datetime.time.min)
+    d3 = datetime.datetime.combine(today, datetime.time.min)
+
     # yfinance download 모킹
     mock_df = pd.DataFrame(
         data={"Close": [70000.0, 71000.0, 72000.0]},
-        index=pd.DatetimeIndex([
-            datetime.datetime(2026, 5, 1),
-            datetime.datetime(2026, 5, 4),
-            datetime.datetime(2026, 5, 5),
-        ])
+        index=pd.DatetimeIndex([d1, d2, d3])
     )
     mock_df.index.name = "Date"
     mock_yf_download.return_value = mock_df
@@ -169,18 +171,23 @@ async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
     db_session.add(cash_asset)
     db_session.commit()
 
+    today = datetime.date.today()
+    d1 = today - datetime.timedelta(days=4)
+    d2 = today - datetime.timedelta(days=1)
+    d3 = today
+
     # 5/1: 스냅샷 존재 (val = 1,000,000)
     # 5/4: 스냅샷 존재 (val = 1,100,000 -> 10%)
     # 5/5: 스냅샷 누락 (None)
     snapshots = [
-        AccountSnapshot(account_id=account.id, snapshot_date=datetime.date(2026, 5, 1), period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
-        AccountSnapshot(account_id=account.id, snapshot_date=datetime.date(2026, 5, 4), period_deposit=0.0, total_valuation=1100000.0, total_profit=0.0),
+        AccountSnapshot(account_id=account.id, snapshot_date=d1, period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
+        AccountSnapshot(account_id=account.id, snapshot_date=d2, period_deposit=0.0, total_valuation=1100000.0, total_profit=0.0),
     ]
     for s in snapshots:
         db_session.add(s)
 
     # 지수 데이터 주입 (5/1, 5/4, 5/5 모두 존재)
-    dates = [datetime.date(2026, 5, 1), datetime.date(2026, 5, 4), datetime.date(2026, 5, 5)]
+    dates = [d1, d2, d3]
     tickers = ["^KS11"]
     for t in tickers:
         for i, d in enumerate(dates):
