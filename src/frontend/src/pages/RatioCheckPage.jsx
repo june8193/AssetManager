@@ -14,6 +14,21 @@ const MAJOR_COLORS = {
 
 const DEFAULT_COLOR = { main: '#64748b', hover: '#475569', light: '#94a3b8', sub: ['#475569', '#64748b', '#94a3b8', '#cbd5e1', '#e2e8f0'] };
 
+// 하위 레벨(중분류 및 종목)용 고대비 멀티컬러 팔레트
+const SUB_LEVEL_COLORS = [
+  '#3b82f6', // Blue
+  '#10b981', // Emerald
+  '#f59e0b', // Amber
+  '#ef4444', // Rose
+  '#8b5cf6', // Violet
+  '#ec4899', // Pink
+  '#06b6d4', // Cyan
+  '#f97316', // Orange
+  '#14b8a6', // Teal
+  '#6366f1', // Indigo
+];
+
+
 /**
  * 실시간 리밸런싱 계산 로직
  */
@@ -217,7 +232,7 @@ const RatioCheckPage = () => {
       const majorTargetTotal = majorNode.target_amt || 0;
 
       const data = (majorNode.children || []).map((item, idx) => {
-        const color = getSubColor(selectedMajorName, idx);
+        const color = SUB_LEVEL_COLORS[idx % SUB_LEVEL_COLORS.length];
         return {
           name: item.category_name,
           value: item.current_value || 0,
@@ -261,7 +276,7 @@ const RatioCheckPage = () => {
       const subTargetTotal = subNode.target_amt || 0;
 
       const data = (subNode.children || []).map((item, idx) => {
-        const color = getSubColor(selectedMajorName, idx + 2);
+        const color = SUB_LEVEL_COLORS[(idx + 3) % SUB_LEVEL_COLORS.length];
         return {
           name: item.name,
           ticker: item.ticker,
@@ -565,106 +580,193 @@ const RatioCheckPage = () => {
           </div>
 
           {/* Recharts 파이차트 영역 */}
-          <div className="relative flex-1 flex items-center justify-center min-h-[350px]">
+          <div className="relative flex-1 flex flex-col justify-center min-h-[350px]">
             {chartData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={380}>
-                <ReChartsPieChart>
-                  {/* 안쪽 도넛: 현재 비중 */}
-                  <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={activeTab === 'calc' ? 65 : 90}
-                    outerRadius={activeTab === 'calc' ? 90 : 120}
-                    paddingAngle={3}
-                    dataKey="value"
-                    onClick={handlePieClick}
-                    cursor="pointer"
-                    animationDuration={600}
-                    label={activeTab === 'calc' ? null : renderCustomizedLabel}
-                  >
-                    {chartData.map((entry, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={entry.color}
-                        style={{ outline: 'none' }}
-                      />
-                    ))}
-                  </Pie>
+              activeTab === 'calc' ? (
+                /* 투자 계산기 활성화 시 가로 2분할 레이아웃 */
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full py-4">
+                  {/* 왼쪽: 현재 자산 비중 차트 */}
+                  <div className="flex flex-col items-center">
+                    <h4 className="text-xs font-bold text-slate-500 mb-2 tracking-wide uppercase">현재 자산 비중</h4>
+                    <div className="relative w-full flex items-center justify-center" style={{ height: 280 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ReChartsPieChart>
+                          <Pie
+                            data={chartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={55}
+                            outerRadius={80}
+                            paddingAngle={3}
+                            dataKey="value"
+                            onClick={handlePieClick}
+                            cursor="pointer"
+                            animationDuration={600}
+                            label={renderCustomizedLabel}
+                          >
+                            {chartData.map((entry, index) => (
+                              <Cell
+                                key={`current-cell-${index}`}
+                                fill={entry.color}
+                                style={{ outline: 'none' }}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-800 text-xs flex flex-col gap-1 z-50">
+                                    <div className="font-bold flex items-center gap-2">
+                                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.color }}></span>
+                                      {data.name} {data.ticker ? `(${data.ticker})` : ''}
+                                    </div>
+                                    <div>현재 비중: {formatPercent(data.ratio)} ({formatCurrency(data.currentVal || data.value)})</div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                        </ReChartsPieChart>
+                      </ResponsiveContainer>
+                      
+                      {/* 차트 중심 텍스트 */}
+                      <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">현재 총자산</span>
+                        <span className="text-xs md:text-sm font-black text-slate-800 font-headline mt-0.5">
+                          {formatCurrency(currentValuation)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
 
-                  {/* 바깥쪽 도넛: 목표 비중 */}
-                  {activeTab === 'calc' && targetChartData.length > 0 && (
-                    <Pie
-                      data={targetChartData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={100}
-                      outerRadius={125}
-                      paddingAngle={3}
-                      dataKey="value"
-                      cursor="pointer"
-                      animationDuration={600}
-                      label={renderCustomizedLabel}
-                    >
-                      {targetChartData.map((entry, index) => (
-                        <Cell
-                          key={`target-cell-${index}`}
-                          fill={entry.color}
-                          opacity={0.65}
-                          style={{ outline: 'none' }}
-                        />
-                      ))}
-                    </Pie>
-                  )}
-                  
-                  <Tooltip
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const data = payload[0].payload;
-                        return (
-                          <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-800 text-xs flex flex-col gap-1">
-                            <div className="font-bold flex items-center gap-2">
-                              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.color }}></span>
-                              {data.name} {data.ticker ? `(${data.ticker})` : ''}
-                            </div>
-                            <div>현재 비중: {formatPercent(data.ratio)} ({formatCurrency(data.currentVal || data.value)})</div>
-                            {activeTab === 'calc' && (
-                              <>
-                                <div>목표 비중: {formatPercent(data.targetRatio)} ({formatCurrency(data.targetVal || 0)})</div>
-                                <div className={`font-bold ${data.diffAmt >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                  조정 금액: {data.diffAmt > 0 ? '+' : ''}{formatCurrency(data.diffAmt)}
+                  {/* 오른쪽: 목표 자산 비중 차트 */}
+                  <div className="flex flex-col items-center">
+                    <h4 className="text-xs font-bold text-indigo-600 mb-2 tracking-wide uppercase">목표 자산 비중</h4>
+                    <div className="relative w-full flex items-center justify-center" style={{ height: 280 }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ReChartsPieChart>
+                          <Pie
+                            data={targetChartData}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={55}
+                            outerRadius={80}
+                            paddingAngle={3}
+                            dataKey="value"
+                            cursor="pointer"
+                            animationDuration={600}
+                            label={renderCustomizedLabel}
+                          >
+                            {targetChartData.map((entry, index) => (
+                              <Cell
+                                key={`target-cell-${index}`}
+                                fill={entry.color}
+                                style={{ outline: 'none' }}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-800 text-xs flex flex-col gap-1 z-50">
+                                    <div className="font-bold flex items-center gap-2">
+                                      <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.color }}></span>
+                                      {data.name} {data.ticker ? `(${data.ticker})` : ''}
+                                    </div>
+                                    <div>목표 비중: {formatPercent(data.targetRatio)} ({formatCurrency(data.targetVal || 0)})</div>
+                                    <div className={`font-bold ${data.diffAmt >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                      조정 금액: {data.diffAmt > 0 ? '+' : ''}{formatCurrency(data.diffAmt)}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                        </ReChartsPieChart>
+                      </ResponsiveContainer>
+
+                      {/* 차트 중심 텍스트 */}
+                      <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-indigo-400">목표 총자산</span>
+                        <span className="text-xs md:text-sm font-black text-indigo-600 font-headline mt-0.5">
+                          {formatCurrency(targetValuation)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* 기존 단일 차트 레이아웃 */
+                <div className="relative w-full flex items-center justify-center" style={{ height: 380 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ReChartsPieChart>
+                      <Pie
+                        data={chartData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={90}
+                        outerRadius={120}
+                        paddingAngle={3}
+                        dataKey="value"
+                        onClick={handlePieClick}
+                        cursor="pointer"
+                        animationDuration={600}
+                        label={renderCustomizedLabel}
+                      >
+                        {chartData.map((entry, index) => (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={entry.color}
+                            style={{ outline: 'none' }}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const data = payload[0].payload;
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl shadow-lg border border-slate-800 text-xs flex flex-col gap-1 z-50">
+                                <div className="font-bold flex items-center gap-2">
+                                  <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: data.color }}></span>
+                                  {data.name} {data.ticker ? `(${data.ticker})` : ''}
                                 </div>
-                              </>
-                            )}
-                          </div>
-                        );
-                      }
-                      return null;
-                    }}
-                  />
-                </ReChartsPieChart>
-              </ResponsiveContainer>
+                                <div>현재 비중: {formatPercent(data.ratio)} ({formatCurrency(data.currentVal || data.value)})</div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                    </ReChartsPieChart>
+                  </ResponsiveContainer>
+
+                  {/* 차트 중심 텍스트 */}
+                  <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">현재 총 자산</span>
+                    <span className="text-lg md:text-xl font-black text-slate-800 font-headline mt-1">
+                      {formatCurrency(currentValuation)}
+                    </span>
+                  </div>
+                </div>
+              )
             ) : (
               <div className="py-20 flex flex-col items-center justify-center text-slate-400">
                 <PieChart className="w-12 h-12 mb-3 opacity-10 text-slate-400" />
                 <p className="text-sm">자산 데이터가 존재하지 않습니다.</p>
               </div>
             )}
-
-            {/* 도넛 차트 내부 텍스트 뱃지 */}
-            <div className="absolute flex flex-col items-center justify-center pointer-events-none text-center">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                {activeTab === 'calc' ? '목표 총 자산' : '현재 총 자산'}
-              </span>
-              <span className="text-lg md:text-xl font-black text-slate-800 font-headline mt-1">
-                {formatCurrency(activeTab === 'calc' ? targetValuation : currentValuation)}
-              </span>
-            </div>
           </div>
 
           <div className="text-center text-[10px] text-slate-400 bg-slate-50/50 py-2.5 rounded-xl border border-slate-100">
             {activeTab === 'calc' 
-              ? '💡 바깥쪽 반투명 도넛은 설정하신 목표 비중을 실시간으로 반영합니다.'
+              ? '💡 가로로 나란히 제공되는 두 개의 차트를 통해 현재 비중과 목표 비중을 직관적으로 비교할 수 있습니다.'
               : '💡 차트 조각을 클릭하면 하위 카테고리 비중으로 깊게 탐색할 수 있습니다.'}
           </div>
         </div>

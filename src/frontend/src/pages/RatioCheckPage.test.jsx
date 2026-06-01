@@ -524,4 +524,54 @@ describe('RatioCheckPage', () => {
     // 이제 비중의 합이 100%이므로 저장 버튼 활성화
     expect(saveButton.disabled).toBe(false);
   });
+
+  it('투자 계산기 탭 전환 시 가로 2분할 레이아웃이 적용되어 두 개의 독립된 차트(현재 비중, 목표 비중)가 각각 렌더링된다', () => {
+    vi.mocked(useRatios).mockReturnValue({
+      hierarchy: mockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn(),
+      updateTargets: vi.fn()
+    });
+
+    renderComponent();
+
+    // 투자 계산기 탭 클릭
+    const calcTab = screen.getByText('투자 계산기');
+    fireEvent.click(calcTab);
+
+    // 개선 후 추가할 현재/목표 자산 비중 안내 라벨이 노출되는지 검증
+    expect(screen.getByText(/현재 자산 비중/i)).toBeDefined();
+    expect(screen.getByText(/목표 자산 비중/i)).toBeDefined();
+  });
+
+  it('하위 레벨(대분류 클릭 후 중분류) 진입 시 고대비 멀티컬러 팔레트가 적용되어 색상들이 구분 가능하게 지정된다', () => {
+    vi.mocked(useRatios).mockReturnValue({
+      hierarchy: mockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn(),
+      updateTargets: vi.fn()
+    });
+
+    renderComponent();
+
+    // '주식' 클릭 -> 중분류 진입
+    fireEvent.click(screen.getByText('주식'));
+
+    // listData에서 국내주식과 해외주식의 색상을 찾기 위해 data-testid="ratio-row" 내의 색상 표시 원을 검증
+    const rowColors = screen.getAllByTestId('ratio-row');
+    
+    const firstColorSpan = rowColors[0].querySelector('span');
+    const secondColorSpan = rowColors[1].querySelector('span');
+    
+    expect(firstColorSpan).not.toBeNull();
+    expect(secondColorSpan).not.toBeNull();
+
+    // 두 색상은 대분류 브랜드 톤과 다른 고대비 색상으로 각각 할당되어 서로 달라야 함
+    const firstColor = firstColorSpan.style.backgroundColor;
+    const secondColor = secondColorSpan.style.backgroundColor;
+    
+    expect(firstColor).not.toBe(secondColor);
+  });
 });
