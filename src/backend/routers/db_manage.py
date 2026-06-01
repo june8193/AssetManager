@@ -1,11 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import List, Optional, Literal
 from datetime import date, datetime
 
 from ..database import get_db
-from ..models import Account, Asset, Transaction, AccountSnapshot, User, ExchangeRate
+from ..models import Account, Asset, Transaction, AccountSnapshot, User, ExchangeRate, VALID_CATEGORIES
 from ..services.dashboard_service import DashboardService
 from ..services.price_service import price_service
 
@@ -71,6 +71,25 @@ class AssetSchema(BaseModel):
     major_category: str
     sub_category: str
     country: str = "KR"
+
+    @model_validator(mode='after')
+    def validate_categories(self) -> 'AssetSchema':
+        """대분류와 중분류의 조합이 유효한 범위 내에 있는지 검증합니다.
+        
+        Raises:
+            ValueError: 유효하지 않은 카테고리 조합인 경우.
+        """
+        major = self.major_category
+        sub = self.sub_category
+        
+        if major not in VALID_CATEGORIES:
+            raise ValueError(f"유효하지 않은 대분류입니다: '{major}'. 허용 범위: {list(VALID_CATEGORIES.keys())}")
+            
+        valid_subs = VALID_CATEGORIES[major]
+        if sub not in valid_subs:
+            raise ValueError(f"유효하지 않은 카테고리 조합입니다: '{sub}'. 대분류 '{major}'에 허용된 중분류: {valid_subs}")
+            
+        return self
 
     class Config:
         from_attributes = True

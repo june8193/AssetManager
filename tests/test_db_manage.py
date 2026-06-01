@@ -90,8 +90,8 @@ def test_create_and_get_asset():
     payload = {
         "ticker": "TEST_TICKER",
         "name": "Test Asset",
-        "major_category": "Stock",
-        "sub_category": "Domestic",
+        "major_category": "일반주식",
+        "sub_category": "국내주식",
         "country": "KR"
     }
     response = client.post("/api/db/assets", json=payload)
@@ -147,7 +147,7 @@ def test_get_latest_snapshot_date_empty(db_session):
 def test_calculate_returns_existing_transactions(db_session, test_user):
     """계산 API가 마지막 스냅샷 이후의 기존 트랜잭션을 반환하는지 테스트합니다."""
     # 1. KRW 자산 생성
-    krw = Asset(ticker="KRW", name="원화", major_category="CASH", sub_category="CASH", country="KR")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
     db_session.add(krw)
     db_session.flush()
     
@@ -213,8 +213,8 @@ async def test_save_unified_snapshots_integration(db_session, test_user):
     today = datetime.date.today()
 
     # 1. 기초 자산 생성
-    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
-    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="달러예수금", country="US")
     db_session.add_all([krw, usd])
     db_session.flush()
 
@@ -275,8 +275,8 @@ async def test_save_unified_snapshots_bank_none_valuation(db_session, test_user)
     today = datetime.date.today()
 
     # 1. 기초 자산 생성
-    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
-    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="달러예수금", country="US")
     db_session.add_all([krw, usd])
     db_session.flush()
 
@@ -321,7 +321,7 @@ async def test_preview_snapshots_excludes_initial_balance(db_session, test_user)
     from src.backend.routers.db_manage import preview_snapshots, SaveSnapshotRequest
     
     # 1. 기초 자산 생성
-    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
     db_session.add(krw)
     db_session.flush()
 
@@ -365,8 +365,8 @@ async def test_save_unified_snapshots_saves_exchange_rate(db_session, test_user)
     today = datetime.date.today()
 
     # 기초 자산 생성
-    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
-    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="달러예수금", country="US")
     db_session.add_all([krw, usd])
     db_session.flush()
 
@@ -405,8 +405,8 @@ async def test_save_unified_snapshots_updates_existing_exchange_rate(db_session,
     db_session.commit()
 
     # 기초 자산 생성
-    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
-    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="달러예수금", country="US")
     db_session.add_all([krw, usd])
     db_session.flush()
 

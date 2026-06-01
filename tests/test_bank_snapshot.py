@@ -5,7 +5,7 @@ from src.backend.routers.db_manage import BankSaveRequest, BankSaveAccountReques
 
 @pytest.fixture
 def setup_bank_assets(db_session):
-    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
     db_session.add(krw)
     db_session.commit()
     return krw

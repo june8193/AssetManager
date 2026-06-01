@@ -25,7 +25,7 @@ def setup_benchmark_data(db_session):
     db_session.commit()
 
     # 원화 자산 추가
-    cash_asset = Asset(ticker="KRW", name="Won", country="KR", major_category="현금", sub_category="현금")
+    cash_asset = Asset(ticker="KRW", name="Won", country="KR", major_category="현금", sub_category="원화예수금")
     db_session.add(cash_asset)
     db_session.commit()
 
@@ -165,7 +165,7 @@ async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
     db_session.add(account)
     db_session.commit()
 
-    cash_asset = Asset(ticker="KRW", name="Won", country="KR", major_category="현금", sub_category="현금")
+    cash_asset = Asset(ticker="KRW", name="Won", country="KR", major_category="현금", sub_category="원화예수금")
     db_session.add(cash_asset)
     db_session.commit()
 

@@ -9,12 +9,12 @@ from src.backend.database import SessionLocal
 from src.backend.services.asset_service import update_asset_category
 
 def main():
-    """TLT(Asset ID 16)의 카테고리를 '채권', '해외채권'으로 업데이트합니다."""
+    """TLT(Asset ID 16)의 카테고리를 '채권', '미국장기채'로 업데이트합니다."""
     db = SessionLocal()
     try:
         asset_id = 16
         major = "채권"
-        sub = "해외채권"
+        sub = "미국장기채"
         
         print(f"Asset ID {asset_id} 업데이트 시작...")
         updated_asset = update_asset_category(db, asset_id, major, sub)

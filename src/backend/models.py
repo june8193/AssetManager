@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, ForeignKey, Float, Date, Enum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, ForeignKey, Float, Date, Enum, UniqueConstraint, event
 from sqlalchemy.orm import relationship
 from .database import Base
 import datetime
@@ -130,6 +130,40 @@ class Asset(Base):
     country = Column(String, nullable=False, default="KR") # 국가 (KR, US 등)
 
     transactions = relationship("Transaction", back_populates="asset")
+
+# 자산 대분류 및 중분류 유효성 검증 규칙 정의
+VALID_CATEGORIES = {
+    "현금": ["원화예수금", "달러예수금"],
+    "일반주식": ["국내주식", "해외주식"],
+    "채권": ["미국장기채", "美國단기채", "한국장기채", "한국단기채", "미국단기채"], # 한자 오타 수정: 美國단기채 대신 미국단기채
+    "배당주": ["국내배당주", "해외배당주"]
+}
+
+# 한자 오타 제거하여 깔끔히 정리
+VALID_CATEGORIES["채권"] = ["미국장기채", "미국단기채", "한국장기채", "한국단기채"]
+
+@event.listens_for(Asset, 'before_insert')
+@event.listens_for(Asset, 'before_update')
+def validate_asset_categories(mapper, connection, target):
+    """자산의 대분류와 중분류가 유효한 조합인지 검증합니다.
+    
+    Args:
+        mapper: SQLAlchemy mapper 객체.
+        connection: DB 커넥션 객체.
+        target (Asset): 검증 대상이 되는 자산 인스턴스.
+        
+    Raises:
+        ValueError: 대분류 또는 중분류가 유효하지 않은 경우.
+    """
+    major = target.major_category
+    sub = target.sub_category
+    
+    if major not in VALID_CATEGORIES:
+        raise ValueError(f"유효하지 않은 대분류입니다: '{major}'. 허용 범위: {list(VALID_CATEGORIES.keys())}")
+        
+    valid_subs = VALID_CATEGORIES[major]
+    if sub not in valid_subs:
+        raise ValueError(f"유효하지 않은 중분류입니다: '{sub}'. 대분류 '{major}'에 허용된 중분류: {valid_subs}")
 
 class Transaction(Base):
     """거래 원장 데이터를 기록하는 핵심 모델입니다.

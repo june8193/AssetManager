@@ -20,15 +20,15 @@ async def test_get_ratio_hierarchy_api(db_session: Session):
     db_session.add(account)
     db_session.flush()
     
-    asset1 = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="국내주식", country="KR")
-    asset2 = Asset(ticker="AAPL", name="애플", major_category="주식", sub_category="해외주식", country="US")
+    asset1 = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset2 = Asset(ticker="AAPL", name="애플", major_category="일반주식", sub_category="해외주식", country="US")
     db_session.add_all([asset1, asset2])
     db_session.flush()
     
     # 목표 비중 설정
-    db_session.add(TargetRatio(category_name="주식", category_type="major", target_percentage=100.0))
-    db_session.add(TargetRatio(category_name="국내주식", category_type="sub", target_percentage=60.0, parent_category="주식"))
-    db_session.add(TargetRatio(category_name="해외주식", category_type="sub", target_percentage=40.0, parent_category="주식"))
+    db_session.add(TargetRatio(category_name="일반주식", category_type="major", target_percentage=100.0))
+    db_session.add(TargetRatio(category_name="국내주식", category_type="sub", target_percentage=60.0, parent_category="일반주식"))
+    db_session.add(TargetRatio(category_name="해외주식", category_type="sub", target_percentage=40.0, parent_category="일반주식"))
     
     # 거래 내역 (현재 잔고 구성을 위해)
     # 총 평가액: 10 * 70000 + 5 * 200000 = 700,000 + 1,000,000 = 1,700,000
@@ -54,7 +54,7 @@ async def test_get_ratio_hierarchy_api(db_session: Session):
     # 대분류 확인
     assert len(data) == 1
     major = data[0]
-    assert major["category_name"] == "주식"
+    assert major["category_name"] == "일반주식"
     assert major["category_type"] == "major"
     assert "children" in major
     assert len(major["children"]) == 2
@@ -79,7 +79,7 @@ def test_bulk_update_target_ratios(db_session: Session):
     # 2. 일괄 업데이트 요청 (하나의 업데이트, 하나의 신규, 기존 삭제 확인)
     payload = [
         {
-            "category_name": "주식",
+            "category_name": "일반주식",
             "category_type": "major",
             "target_percentage": 70.0,
             "mode": "absolute"
@@ -88,7 +88,7 @@ def test_bulk_update_target_ratios(db_session: Session):
             "category_name": "국내주식",
             "category_type": "sub",
             "target_percentage": 50.0,
-            "parent_category": "주식",
+            "parent_category": "일반주식",
             "mode": "relative"
         }
     ]
@@ -102,14 +102,14 @@ def test_bulk_update_target_ratios(db_session: Session):
     targets = db_session.query(TargetRatio).all()
     assert len(targets) == 2
     
-    major = next(t for t in targets if t.category_name == "주식")
+    major = next(t for t in targets if t.category_name == "일반주식")
     assert major.target_percentage == 70.0
     assert major.mode == "absolute"
     
     sub = next(t for t in targets if t.category_name == "국내주식")
     assert sub.target_percentage == 50.0
     assert sub.mode == "relative"
-    assert sub.parent_category == "주식"
+    assert sub.parent_category == "일반주식"
     
     # 기존 데이터가 삭제되었는지 확인
     assert not any(t.category_name == "기존" for t in targets)

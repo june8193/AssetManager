@@ -9,7 +9,7 @@ client = TestClient(app)
 @pytest.fixture
 def setup_bank_account(db_session):
     # 1. KRW 자산 생성
-    krw = Asset(ticker="KRW", name="원화", major_category="CASH", sub_category="CASH", country="KR")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
     db_session.add(krw)
     db_session.flush()
     

@@ -8,9 +8,9 @@ from src.backend.routers.db_manage import BrokerageCalculateRequest, Transaction
 
 @pytest.fixture
 def setup_assets(db_session):
-    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="현금", country="KR")
-    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="현금", country="US")
-    stock = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="국내주식", country="KR")
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
+    usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="달러예수금", country="US")
+    stock = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
     db_session.add_all([krw, usd, stock])
     db_session.commit()
     return krw, usd, stock
@@ -528,7 +528,7 @@ async def test_calculate_brokerage_snapshot_needs_last_rate(db_session, setup_as
     krw, usd, stock_kr = setup_assets
     
     # 미국 주식 생성
-    stock_us = Asset(ticker="KO", name="Coca-Cola", major_category="주식", sub_category="해외주식", country="US")
+    stock_us = Asset(ticker="KO", name="Coca-Cola", major_category="일반주식", sub_category="해외주식", country="US")
     db_session.add(stock_us)
     
     account = Account(user_id=1, name="해외주식테스트", provider="KB", account_type="BROKERAGE")
@@ -575,7 +575,7 @@ async def test_calculate_brokerage_snapshot_with_cash_assets_and_us_dollars(db_s
     krw, usd, stock_kr = setup_assets
     
     # 1. 미국 주식 생성
-    stock_us = Asset(ticker="AAPL", name="Apple", major_category="주식", sub_category="해외주식", country="US")
+    stock_us = Asset(ticker="AAPL", name="Apple", major_category="일반주식", sub_category="해외주식", country="US")
     db_session.add(stock_us)
     
     account = Account(user_id=1, name="통합정산테스트", provider="KB", account_type="BROKERAGE")

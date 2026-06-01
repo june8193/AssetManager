@@ -17,14 +17,14 @@ def test_update_asset_category(db_session):
     db_session.commit()
 
     # 2. 업데이트 실행
-    updated_asset = update_asset_category(db_session, 16, "채권", "해외채권")
+    updated_asset = update_asset_category(db_session, 16, "채권", "미국장기채")
 
     # 3. 검증
     assert updated_asset is not None
     assert updated_asset.major_category == "채권"
-    assert updated_asset.sub_category == "해외채권"
+    assert updated_asset.sub_category == "미국장기채"
     
     # DB에서 다시 조회해서 확인
     db_asset = db_session.query(Asset).filter(Asset.id == 16).first()
     assert db_asset.major_category == "채권"
-    assert db_asset.sub_category == "해외채권"
+    assert db_asset.sub_category == "미국장기채"

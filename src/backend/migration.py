@@ -157,11 +157,15 @@ class LegacyDataMigrator:
                     if ticker != "KRW":
                         country = "US"
 
+                corrected_sub_cat = sub_cat
+                if cat == "채권" and sub_cat == "해외채권":
+                    corrected_sub_cat = "미국장기채"
+
                 mapping[key] = {
                     "ticker": ticker,
                     "name": official_name,
                     "major_category": cat,
-                    "sub_category": sub_cat,
+                    "sub_category": corrected_sub_cat,
                     "country": country
                 }
         
