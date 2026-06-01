@@ -342,7 +342,13 @@ const RatioCheckPage = () => {
 
   // 실시간 목표 비중 변경 헨들러
   const handleTargetChange = (name, value) => {
-    const numValue = parseFloat(value) || 0;
+    // 소수점 한자릿수까지만 입력 허용 (소수 둘째자리 이하 절사)
+    let valStr = value.toString();
+    const dotIdx = valStr.indexOf('.');
+    if (dotIdx !== -1 && valStr.length - dotIdx - 1 > 1) {
+      valStr = valStr.substring(0, dotIdx + 2);
+    }
+    const numValue = parseFloat(valStr) || 0;
     setEditingHierarchy(prev => prev.map(major => {
       if (level === 'root' && major.category_name === name) {
         return { ...major, target_percentage: numValue };
@@ -399,7 +405,7 @@ const RatioCheckPage = () => {
       return sum + (item.target_percentage || 0);
     }, 0);
 
-    const fillValue = Math.max(0, 100 - otherSum);
+    const fillValue = Math.round(Math.max(0, 100 - otherSum) * 10) / 10;
     handleTargetChange(name, fillValue);
   };
 
@@ -856,6 +862,7 @@ const RatioCheckPage = () => {
                           <div className="relative flex-1">
                             <input
                               type="number"
+                              step="0.1"
                               value={item.targetRatio}
                               onChange={(e) => handleTargetChange(itemName, e.target.value)}
                               className="w-full pl-2 pr-6 py-1.5 border border-slate-200 rounded-lg text-right text-xs font-bold focus:ring-1 focus:ring-indigo-500 outline-none"
