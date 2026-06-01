@@ -90,6 +90,25 @@ async function main() {
   await page.screenshot({ path: errorMsgScreenshotPath });
   console.log(`Failure scenario screenshot saved to ${errorMsgScreenshotPath}`);
 
+  // 4-2. 중복 티커 에러 시나리오 (이미 등록된 TSLA 티커 다시 조회)
+  console.log("Testing duplicate ticker verification scenario...");
+  await page.fill('#ticker', 'TSLA');
+  await page.selectOption('#major_category', '일반주식');
+  await page.waitForTimeout(500);
+  await page.selectOption('#sub_category', '해외주식');
+  await page.selectOption('#country', 'US');
+
+  // 조회 버튼 클릭
+  console.log("Clicking '조회' for duplicate ticker...");
+  const verifyBtn3 = page.locator('button:has-text("조회")');
+  await verifyBtn3.click();
+  await page.waitForTimeout(4000);
+
+  // 중복 에러 메시지 확인 및 캡처
+  const duplicateMsgScreenshotPath = path.join(screenshotsDir, "4_2_verified_duplicate.png");
+  await page.screenshot({ path: duplicateMsgScreenshotPath });
+  console.log(`Duplicate scenario screenshot saved to ${duplicateMsgScreenshotPath}`);
+
   // 5. 수정 모드 제약 조건 검증
   console.log("Testing edit mode constraints...");
   // 추가 폼 초기화

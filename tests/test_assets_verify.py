@@ -55,3 +55,37 @@ def test_verify_cash_asset():
     response = client.get("/api/db/assets/verify?ticker=JPY&country=JP&major_category=현금")
     assert response.status_code == 400
     assert "지원하지 않는 현금 티커" in response.json()["detail"]
+
+def test_verify_asset_duplicate(db_session):
+    """이미 DB에 등록된 자산(티커) 조회 시 400 에러와 함께 이미 등록된 자산임을 알리는지 테스트합니다."""
+    from src.backend.models import Asset
+    # 먼저 DB에 TSLA 추가
+    asset = Asset(ticker="TSLA", name="테슬라", major_category="일반주식", sub_category="해외주식", country="US")
+    db_session.add(asset)
+    db_session.commit()
+
+    # 동일한 TSLA 티커 조회 시도
+    response = client.get("/api/db/assets/verify?ticker=TSLA&country=US&major_category=일반주식")
+    assert response.status_code == 400
+    assert "이미 등록된 자산" in response.json()["detail"]
+
+def test_create_asset_duplicate(db_session):
+    """이미 존재하는 티커로 새로운 자산을 추가하려 할 때 400 에러를 반환하는지 테스트합니다."""
+    from src.backend.models import Asset
+    # 먼저 DB에 TSLA 추가
+    asset = Asset(ticker="TSLA", name="테슬라", major_category="일반주식", sub_category="해외주식", country="US")
+    db_session.add(asset)
+    db_session.commit()
+
+    # 동일한 TSLA 티커로 POST 추가 시도
+    payload = {
+        "ticker": "TSLA",
+        "name": "테슬라2",
+        "major_category": "일반주식",
+        "sub_category": "해외주식",
+        "country": "US"
+    }
+    response = client.post("/api/db/assets", json=payload)
+    assert response.status_code == 400
+    assert "이미 등록된 자산" in response.json()["detail"]
+

@@ -311,8 +311,13 @@ def get_categories():
     return VALID_CATEGORIES
 
 @router.get("/assets/verify")
-async def verify_asset(ticker: str, country: str, major_category: str):
+async def verify_asset(ticker: str, country: str, major_category: str, db: Session = Depends(get_db)):
     """티커와 국가를 기반으로 종목의 실시간 존재 여부를 검증하고 공식 자산명을 반환합니다."""
+    # 1. DB에 이미 존재하는 티커인지 먼저 확인
+    existing = db.query(Asset).filter(Asset.ticker == ticker).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="이미 등록된 자산(티커)입니다.")
+
     if major_category == "현금":
         if ticker == "KRW":
             return {"name": "원화예수금"}
@@ -331,6 +336,11 @@ async def verify_asset(ticker: str, country: str, major_category: str):
 @router.post("/assets", response_model=AssetSchema)
 def create_asset(asset: AssetSchema, db: Session = Depends(get_db)):
     """새로운 자산 마스터를 생성합니다."""
+    # 1. 중복 티커가 이미 존재하는지 검사
+    existing = db.query(Asset).filter(Asset.ticker == asset.ticker).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="이미 등록된 자산(티커)입니다.")
+
     data = asset.model_dump(exclude={"id"})
     db_asset = Asset(**data)
     db.add(db_asset)
