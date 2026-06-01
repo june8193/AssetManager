@@ -193,7 +193,7 @@ describe('RatioCheckPage', () => {
     expect(breadcrumbMajor.textContent).toBe('주식');
   });
 
-  it('중분류 클릭 시 종목 단계로 드릴다운되어 종목 정보가 노출된다', () => {
+  it('중분류 클릭 시 종목 단계로 드릴다운되어 종목 정보가 노출되며, 자산 클릭 전에는 계좌 정보가 노출되지 않다가 클릭 후 펼쳐진다', () => {
     vi.mocked(useRatios).mockReturnValue({
       hierarchy: mockHierarchy,
       loading: false,
@@ -213,9 +213,122 @@ describe('RatioCheckPage', () => {
     expect(screen.getByText(/애플/i)).toBeDefined();
     expect(screen.getByText(/AAPL/i)).toBeDefined();
 
-    // 계좌 상세 정보 노출 확인 (증권사, 계좌이름(별칭) 포맷)
-    expect(screen.getByText(/키움, 6066-7729\(연금\)/i)).toBeDefined();
-    expect(screen.getByText(/미래, 880-8864-2912-0\(개인\)/i)).toBeDefined();
+    // 아코디언이 기본적으로 닫혀있으므로 계좌 상세 정보는 처음에는 노출되지 않음
+    expect(screen.queryByText(/6066-7729/i)).toBeNull();
+
+    // '애플' 항목 클릭하여 아코디언 펼침
+    fireEvent.click(screen.getByText(/애플/i));
+
+    // 이제 계좌 상세 정보(증권사, 계좌이름 등) 노출 확인
+    expect(screen.getByText(/6066-7729/i)).toBeDefined();
+    expect(screen.getByText(/880-8864-2912-0/i)).toBeDefined();
+    expect(screen.getAllByText(/키움/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/미래/i).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('소분류 단계에서 자산을 재클릭하면 아코디언이 다시 닫히고, 상위 레벨로 이동 시 아코디언 상태가 리셋된다', () => {
+    vi.mocked(useRatios).mockReturnValue({
+      hierarchy: mockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn()
+    });
+
+    renderComponent();
+
+    // '주식' 클릭 -> '해외주식' 클릭
+    fireEvent.click(screen.getByText('주식'));
+    fireEvent.click(screen.getByText('해외주식'));
+
+    // 1. 펼치기
+    fireEvent.click(screen.getByText(/애플/i));
+    expect(screen.getByText(/6066-7729/i)).toBeDefined();
+
+    // 2. 닫기 (재클릭)
+    fireEvent.click(screen.getByText(/애플/i));
+    expect(screen.queryByText(/6066-7729/i)).toBeNull();
+
+    // 3. 다시 펼쳐놓은 상태에서 상위 레벨로 이동 시 초기화 테스트
+    fireEvent.click(screen.getByText(/애플/i));
+    expect(screen.getByText(/6066-7729/i)).toBeDefined();
+
+    // Breadcrumb의 '주식' 클릭하여 상위(중분류)로 이동
+    const breadcrumbMajor = screen.getByTestId('breadcrumb-major');
+    fireEvent.click(breadcrumbMajor);
+
+    // 다시 '해외주식'을 클릭하여 종목 진입 시 아코디언이 초기화되어 닫혀 있어야 함
+    fireEvent.click(screen.getByText('해외주식'));
+    expect(screen.queryByText(/6066-7729/i)).toBeNull();
+  });
+
+  it('소분류 단계에서 여러 개의 자산을 클릭하면 이전 펼쳐진 자산이 닫히지 않고 동시에 모두 노출된다', () => {
+    const multiMockHierarchy = [
+      {
+        category_name: '주식',
+        category_type: 'major',
+        current_value: 50000000,
+        current_ratio: 100.0,
+        children: [
+          {
+            category_name: '해외주식',
+            category_type: 'sub',
+            current_value: 50000000,
+            current_ratio: 100.0,
+            children: [
+              { 
+                name: '애플', 
+                ticker: 'AAPL', 
+                valuation_krw: 30000000, 
+                current_ratio: 60.0, 
+                accounts: [
+                  { account_id: 3, account_name: '6066-7729', provider: '키움', alias: '연금', quantity: 50, valuation_krw: 30000000 }
+                ]
+              },
+              { 
+                name: '마이크로소프트', 
+                ticker: 'MSFT', 
+                valuation_krw: 20000000, 
+                current_ratio: 40.0, 
+                accounts: [
+                  { account_id: 4, account_name: '1234-5678', provider: '미래', alias: '일반', quantity: 20, valuation_krw: 20000000 }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ];
+
+    vi.mocked(useRatios).mockReturnValue({
+      hierarchy: multiMockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn()
+    });
+
+    renderComponent();
+
+    // '주식' 클릭 -> '해외주식' 클릭
+    fireEvent.click(screen.getByText('주식'));
+    fireEvent.click(screen.getByText('해외주식'));
+
+    // 두 종목 모두 노출 확인
+    expect(screen.getByText(/애플/i)).toBeDefined();
+    expect(screen.getByText(/마이크로소프트/i)).toBeDefined();
+
+    // 처음에 아코디언은 둘 다 닫혀 있음
+    expect(screen.queryByText(/6066-7729/i)).toBeNull();
+    expect(screen.queryByText(/1234-5678/i)).toBeNull();
+
+    // '애플' 클릭 -> '애플' 계좌 열림
+    fireEvent.click(screen.getByText(/애플/i));
+    expect(screen.getByText(/6066-7729/i)).toBeDefined();
+    expect(screen.queryByText(/1234-5678/i)).toBeNull();
+
+    // '마이크로소프트' 클릭 -> '마이크로소프트' 계좌도 함께 열림 (이전 '애플'이 닫히지 않고 둘 다 열림)
+    fireEvent.click(screen.getByText(/마이크로소프트/i));
+    expect(screen.getByText(/6066-7729/i)).toBeDefined();
+    expect(screen.getByText(/1234-5678/i)).toBeDefined();
   });
 
   it('Breadcrumb 클릭 시 상위 수준으로 정상적으로 복구된다', () => {
@@ -282,5 +395,55 @@ describe('RatioCheckPage', () => {
 
     // 1% 미만은 렌더링되지 않아야 함
     expect(screen.queryByText('소액자산')).toBeNull();
+  });
+
+  it('소분류 단계에서 계좌 정보가 렌더링될 때 계좌별 평가액이 큰 순서대로 내림차순 정렬된다', () => {
+    const sortMockHierarchy = [
+      {
+        category_name: '주식',
+        category_type: 'major',
+        current_value: 50000000,
+        children: [
+          {
+            category_name: '해외주식',
+            category_type: 'sub',
+            current_value: 50000000,
+            children: [
+              { 
+                name: '애플', 
+                ticker: 'AAPL', 
+                valuation_krw: 50000000, 
+                accounts: [
+                  { account_id: 3, account_name: '소액계좌', provider: '키움', alias: '연금', quantity: 10, valuation_krw: 10000000 },
+                  { account_id: 4, account_name: '고액계좌', provider: '미래', alias: '개인', quantity: 40, valuation_krw: 40000000 }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ];
+
+    vi.mocked(useRatios).mockReturnValue({
+      hierarchy: sortMockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn()
+    });
+
+    renderComponent();
+
+    // '주식' -> '해외주식' -> '애플' 클릭
+    fireEvent.click(screen.getByText('주식'));
+    fireEvent.click(screen.getByText('해외주식'));
+    fireEvent.click(screen.getByText(/애플/i));
+
+    // 고액계좌가 소액계좌보다 먼저 렌더링되어야 함.
+    const elementHigh = screen.getByText('고액계좌(개인)');
+    const elementLow = screen.getByText('소액계좌(연금)');
+    
+    // DOM 위치 비교 (고액계좌 다음 위치에 소액계좌가 나타나야 함)
+    const comparisonResult = elementHigh.compareDocumentPosition(elementLow);
+    expect(comparisonResult & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

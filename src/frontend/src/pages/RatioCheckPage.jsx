@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useRatios } from '../hooks/useRatios';
 import { useMasking } from '../contexts/MaskingContext';
 import { PieChart as ReChartsPieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { PieChart, ChevronRight, Home, RotateCcw, AlertCircle, Loader2 } from 'lucide-react';
+import { PieChart, ChevronRight, ChevronDown, ChevronUp, Home, RotateCcw, AlertCircle, Loader2 } from 'lucide-react';
 
 // 대분류 기본 테마 색상 정의
 const MAJOR_COLORS = {
@@ -101,6 +101,9 @@ const RatioCheckPage = () => {
   const [level, setLevel] = useState('root');
   const [selectedMajorName, setSelectedMajorName] = useState(null);
   const [selectedSubName, setSelectedSubName] = useState(null);
+  
+  // 소분류(종목) 레벨에서 아코디언 형태로 펼쳐진 자산들의 상태 관리
+  const [expandedAssets, setExpandedAssets] = useState({});
 
   // 금액 포맷 유틸
   const formatCurrency = (value) => {
@@ -214,6 +217,7 @@ const RatioCheckPage = () => {
 
   // 네비게이션 줌 제어
   const zoomTo = (targetLevel, majorName = null, subName = null) => {
+    setExpandedAssets({}); // 레벨 이동 시 아코디언 상태 초기화
     if (targetLevel === 'root') {
       setLevel('root');
       setSelectedMajorName(null);
@@ -226,6 +230,18 @@ const RatioCheckPage = () => {
       setLevel('sub');
       setSelectedMajorName(majorName);
       setSelectedSubName(subName);
+    }
+  };
+
+  // 아이템 클릭 핸들러 (상위 레벨 드릴다운 또는 소분류 아코디언 토글)
+  const handleItemClick = (item) => {
+    if (level !== 'sub') {
+      handlePieClick(item);
+    } else {
+      setExpandedAssets(prev => ({
+        ...prev,
+        [item.name]: !prev[item.name]
+      }));
     }
   };
 
@@ -434,46 +450,67 @@ const RatioCheckPage = () => {
                 <div
                   key={idx}
                   data-testid="ratio-row"
-                  role={level !== 'sub' ? 'button' : undefined}
-                  onClick={() => handlePieClick(item)}
-                  className={`flex items-center justify-between py-3 group hover:bg-slate-50/50 transition-colors px-2 rounded-xl ${
-                    level !== 'sub' ? 'cursor-pointer' : ''
-                  }`}
+                  role="button"
+                  onClick={() => handleItemClick(item)}
+                  className="flex flex-col py-3 group hover:bg-slate-50/50 transition-colors px-2 rounded-xl cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                      style={{ backgroundColor: item.color }}
-                    ></span>
-                    <div className="flex flex-col">
-                      <span className="text-xs font-semibold text-slate-700 group-hover:text-indigo-600 transition-colors">
-                        {item.name} {item.ticker ? `(${item.ticker})` : ''}
+                  {/* 자산 요약 행 */}
+                  <div className="flex items-center justify-between w-full">
+                    <div className="flex items-center gap-3">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                        style={{ backgroundColor: item.color }}
+                      ></span>
+                      <div className="flex flex-col">
+                        <span className="text-sm font-semibold text-slate-700 group-hover:text-indigo-600 transition-colors">
+                          {item.name} {item.ticker ? `(${item.ticker})` : ''}
+                        </span>
+                        <span className="text-xs font-medium text-slate-500 mt-0.5">
+                          {formatCurrency(item.value)}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold font-headline text-slate-800">
+                        {formatPercent(item.ratio)}
                       </span>
-                      <span className="text-[10px] text-slate-400 mt-0.5">
-                        {formatCurrency(item.value)}
-                      </span>
-                      {level === 'sub' && item.raw && item.raw.accounts && item.raw.accounts.length > 0 && (
-                        <div className="mt-1.5 pl-2 border-l-2 border-slate-100 flex flex-col gap-1">
-                          {item.raw.accounts.map((acc, accIdx) => {
-                            const accountLabel = acc.alias ? `${acc.account_name}(${acc.alias})` : acc.account_name;
-                            return (
-                              <span key={accIdx} className="text-[9px] text-slate-400 font-medium leading-normal">
-                                {acc.provider}, {accountLabel}: {formatCurrency(acc.valuation_krw)}
-                              </span>
-                            );
-                          })}
-                        </div>
+                      {level !== 'sub' ? (
+                        <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
+                      ) : (
+                        item.raw?.accounts?.length > 0 && (
+                          expandedAssets[item.name] ? (
+                            <ChevronUp className="w-3.5 h-3.5 text-indigo-500" />
+                          ) : (
+                            <ChevronDown className="w-3.5 h-3.5 text-slate-400 group-hover:text-indigo-400" />
+                          )
+                        )
                       )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-bold font-headline text-slate-800">
-                      {formatPercent(item.ratio)}
-                    </span>
-                    {level !== 'sub' && (
-                      <ChevronRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all" />
-                    )}
-                  </div>
+
+                  {/* 아코디언 상세 계좌 정보 카드 */}
+                  {level === 'sub' && expandedAssets[item.name] && item.raw && item.raw.accounts && item.raw.accounts.length > 0 && (
+                    <div className="mt-2.5 pl-2 flex flex-col gap-2 w-full animate-fadeIn" onClick={(e) => e.stopPropagation()}>
+                      {[...item.raw.accounts].sort((a, b) => (b.valuation_krw || 0) - (a.valuation_krw || 0)).map((acc, accIdx) => {
+                        const accountLabel = acc.alias ? `${acc.account_name}(${acc.alias})` : acc.account_name;
+                        return (
+                          <div key={accIdx} className="flex items-center justify-between bg-slate-50/70 border border-slate-100 rounded-xl p-2.5 shadow-sm hover:bg-white transition-colors">
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1.5">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                                {acc.provider}
+                              </span>
+                              <span className="text-[11px] font-semibold text-slate-600">
+                                {accountLabel}
+                              </span>
+                            </div>
+                            <span className="text-xs font-bold text-slate-800 font-headline">
+                              {formatCurrency(acc.valuation_krw)}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
               {listData.length === 0 && (

@@ -73,10 +73,41 @@ async function main() {
     process.exit(1);
   }
 
-  // 3. 종목 화면 캡처 및 계좌 정보 노출 검증
-  const stockLevelScreenshotPath = path.join(screenshotsDir, "3_stock_level_accounts.png");
-  await page.screenshot({ path: stockLevelScreenshotPath, fullPage: true });
-  console.log(`Stock level accounts screenshot saved to ${stockLevelScreenshotPath}`);
+  // 3. 종목 화면 (아코디언 닫힘 상태) 캡처
+  const stockLevelClosedScreenshotPath = path.join(screenshotsDir, "3_stock_level_accordion_closed.png");
+  await page.screenshot({ path: stockLevelClosedScreenshotPath, fullPage: true });
+  console.log(`Stock level accordion closed screenshot saved to ${stockLevelClosedScreenshotPath}`);
+
+  // 첫 번째 종목을 클릭하여 아코디언 펼침
+  console.log("Clicking the first stock item to expand the accordion and show accounts...");
+  const stockRow = page.locator('div[data-testid="ratio-row"]');
+  if (await stockRow.count() > 0) {
+    await stockRow.first().click();
+    await page.waitForTimeout(1000);
+  } else {
+    console.log("Error: No stocks found!");
+    await browser.close();
+    process.exit(1);
+  }
+
+  // 여러 자산이 동시에 열려 있는지 검증하기 위해 두 번째 종목도 클릭해보기 (있을 경우)
+  const stockCount = await stockRow.count();
+  console.log(`Found ${stockCount} stock items.`);
+  if (stockCount > 1) {
+    console.log("Clicking the second stock item to verify multiple expansions (both should stay open)...");
+    await stockRow.nth(1).click();
+    await page.waitForTimeout(2000);
+
+    // 4. 종목 화면 (다중 아코디언 펼침 상태 - 계좌 정보 노출) 캡처
+    const stockLevelOpenedScreenshotPath = path.join(screenshotsDir, "4_stock_level_accordion_opened_multiple.png");
+    await page.screenshot({ path: stockLevelOpenedScreenshotPath, fullPage: true });
+    console.log(`Multiple accordions opened screenshot saved to ${stockLevelOpenedScreenshotPath}`);
+  } else {
+    // 4. 종목 화면 (아코디언 펼침 상태 - 계좌 정보 노출) 캡처
+    const stockLevelOpenedScreenshotPath = path.join(screenshotsDir, "4_stock_level_accordion_opened.png");
+    await page.screenshot({ path: stockLevelOpenedScreenshotPath, fullPage: true });
+    console.log(`Stock level accordion opened screenshot saved to ${stockLevelOpenedScreenshotPath}`);
+  }
 
   // 화면 우측 하단의 종목들이 렌더링되었는지 확인하고 계좌 상세 텍스트가 표시되는지 체크
   console.log("Verifying account listings in UI...");
@@ -99,6 +130,15 @@ async function main() {
   console.log(`- Contains '한국투자': ${hasKorea}`);
   console.log(`- Contains '토스': ${hasToss}`);
   console.log(`- Contains '신한': ${hasShinhan}`);
+
+  // 5. 다시 한 번 클릭하여 아코디언을 닫는 시나리오 검증
+  console.log("Clicking the first stock item again to collapse the accordion...");
+  await stockRow.first().click();
+  await page.waitForTimeout(1500);
+
+  const stockLevelCollapsedScreenshotPath = path.join(screenshotsDir, "5_stock_level_accordion_collapsed.png");
+  await page.screenshot({ path: stockLevelCollapsedScreenshotPath, fullPage: true });
+  console.log(`Stock level accordion collapsed screenshot saved to ${stockLevelCollapsedScreenshotPath}`);
 
   await browser.close();
   console.log("E2E Ratio accounts verification completed successfully!");
