@@ -47,6 +47,14 @@ class RatioService:
                 if existing_asset:
                     existing_asset["quantity"] += asset["quantity"]
                     existing_asset["valuation_krw"] += asset["valuation_krw"]
+                    existing_asset["accounts"].append({
+                        "account_id": acc.get("id"),
+                        "account_name": acc.get("name"),
+                        "provider": acc.get("provider"),
+                        "alias": acc.get("alias"),
+                        "quantity": asset["quantity"],
+                        "valuation_krw": asset["valuation_krw"]
+                    })
                 else:
                     asset_tree[major_cat][sub_cat].append({
                         "ticker": asset["ticker"],
@@ -55,7 +63,15 @@ class RatioService:
                         "price": asset["price"],
                         "valuation_krw": asset["valuation_krw"],
                         "category_name": asset["ticker"],
-                        "category_type": "stock"
+                        "category_type": "stock",
+                        "accounts": [{
+                            "account_id": acc.get("id"),
+                            "account_name": acc.get("name"),
+                            "provider": acc.get("provider"),
+                            "alias": acc.get("alias"),
+                            "quantity": asset["quantity"],
+                            "valuation_krw": asset["valuation_krw"]
+                        }]
                     })
 
         # 4. 최종 트리 구성

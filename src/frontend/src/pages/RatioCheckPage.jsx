@@ -452,6 +452,18 @@ const RatioCheckPage = () => {
                       <span className="text-[10px] text-slate-400 mt-0.5">
                         {formatCurrency(item.value)}
                       </span>
+                      {level === 'sub' && item.raw && item.raw.accounts && item.raw.accounts.length > 0 && (
+                        <div className="mt-1.5 pl-2 border-l-2 border-slate-100 flex flex-col gap-1">
+                          {item.raw.accounts.map((acc, accIdx) => {
+                            const accountLabel = acc.alias ? `${acc.account_name}(${acc.alias})` : acc.account_name;
+                            return (
+                              <span key={accIdx} className="text-[9px] text-slate-400 font-medium leading-normal">
+                                {acc.provider}, {accountLabel}: {formatCurrency(acc.valuation_krw)}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center gap-1">

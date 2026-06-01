@@ -35,7 +35,16 @@ const mockHierarchy = [
         current_ratio: 60.0,
         color: '#3b82f6',
         children: [
-          { name: '삼성전자', ticker: '005930', valuation_krw: 30000000, current_ratio: 100.0, color: '#60a5fa' }
+          { 
+            name: '삼성전자', 
+            ticker: '005930', 
+            valuation_krw: 30000000, 
+            current_ratio: 100.0, 
+            color: '#60a5fa',
+            accounts: [
+              { account_id: 2, account_name: '5526-9093', provider: '키움', alias: '일반 주식', quantity: 400, valuation_krw: 30000000 }
+            ]
+          }
         ]
       },
       {
@@ -45,7 +54,17 @@ const mockHierarchy = [
         current_ratio: 40.0,
         color: '#8b5cf6',
         children: [
-          { name: '애플', ticker: 'AAPL', valuation_krw: 20000000, current_ratio: 100.0, color: '#a78bfa' }
+          { 
+            name: '애플', 
+            ticker: 'AAPL', 
+            valuation_krw: 20000000, 
+            current_ratio: 100.0, 
+            color: '#a78bfa',
+            accounts: [
+              { account_id: 3, account_name: '6066-7729', provider: '키움', alias: '연금', quantity: 50, valuation_krw: 12000000 },
+              { account_id: 4, account_name: '880-8864-2912-0', provider: '미래', alias: '개인', quantity: 30, valuation_krw: 8000000 }
+            ]
+          }
         ]
       }
     ]
@@ -64,7 +83,16 @@ const mockHierarchy = [
         current_ratio: 100.0,
         color: '#06b6d4',
         children: [
-          { name: 'CMA예수금', ticker: 'CMA', valuation_krw: 50000000, current_ratio: 100.0, color: '#67e8f9' }
+          { 
+            name: 'CMA예수금', 
+            ticker: 'CMA', 
+            valuation_krw: 50000000, 
+            current_ratio: 100.0, 
+            color: '#67e8f9',
+            accounts: [
+              { account_id: 5, account_name: '014-7558-3984-0', provider: '미래', alias: 'CMA', quantity: 50000000, valuation_krw: 50000000 }
+            ]
+          }
         ]
       }
     ]
@@ -184,6 +212,10 @@ describe('RatioCheckPage', () => {
     // 종목인 '애플' 및 티커 'AAPL' 노출 확인
     expect(screen.getByText(/애플/i)).toBeDefined();
     expect(screen.getByText(/AAPL/i)).toBeDefined();
+
+    // 계좌 상세 정보 노출 확인 (증권사, 계좌이름(별칭) 포맷)
+    expect(screen.getByText(/키움, 6066-7729\(연금\)/i)).toBeDefined();
+    expect(screen.getByText(/미래, 880-8864-2912-0\(개인\)/i)).toBeDefined();
   });
 
   it('Breadcrumb 클릭 시 상위 수준으로 정상적으로 복구된다', () => {
