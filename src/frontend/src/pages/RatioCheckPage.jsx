@@ -737,7 +737,7 @@ const RatioCheckPage = () => {
                 </span>
               </div>
 
-              <div className="divide-y divide-slate-50 max-h-[350px] overflow-y-auto pr-1">
+              <div className="divide-y divide-slate-50">
                 {listData.map((item, idx) => (
                   <div
                     key={idx}
@@ -839,7 +839,7 @@ const RatioCheckPage = () => {
                   <span className="text-[10px] text-slate-400 font-medium">단위: %</span>
                 </div>
 
-                <div className="divide-y divide-slate-50 max-h-[260px] overflow-y-auto pr-1 flex flex-col gap-2">
+                <div className="divide-y divide-slate-50 flex flex-col gap-2">
                   {listData.map((item, idx) => {
                     const itemName = level === 'sub' ? (item.ticker || item.name) : item.name;
                     return (
