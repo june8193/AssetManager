@@ -194,7 +194,12 @@ class PriceService:
                             ticker = tickers.tickers[symbol]
                             info = ticker.fast_info
                             last_price = float(info.get('last_price', info.get('lastPrice', 0)))
-                            prev_close = float(info.get('previous_close', info.get('regular_market_previous_close', 0)))
+                            prev_close = float(
+                                info.get('previous_close', 
+                                info.get('previousClose', 
+                                info.get('regular_market_previous_close', 
+                                info.get('regularMarketPreviousClose', 0))))
+                            )
                             
                             change_rate = 0.0
                             if prev_close > 0:

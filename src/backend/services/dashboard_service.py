@@ -428,10 +428,17 @@ class DashboardService:
                         for ft in formatted_other:
                             orig_t = ticker_map[ft]
                             try:
-                                if len(formatted_other) == 1:
-                                    last_price = float(data['Close'].dropna().iloc[-1])
+                                import pandas as pd
+                                close_data = data['Close']
+                                if isinstance(close_data, pd.DataFrame):
+                                    if ft in close_data.columns:
+                                        series = close_data[ft]
+                                    else:
+                                        series = close_data.iloc[:, 0]
                                 else:
-                                    last_price = float(data['Close'][ft].dropna().iloc[-1])
+                                    series = close_data
+                                
+                                last_price = float(series.dropna().iloc[-1])
                                 
                                 prices[orig_t] = last_price
                                 

@@ -142,3 +142,40 @@ async def test_get_current_prices_cache_miss_under_open_market(dashboard_service
         # 검증
         assert prices["AAPL"] == 180.0
         mock_yf.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_get_current_prices_single_ticker_multiindex(dashboard_service, mock_db):
+    """yfinance.download가 단일 티커 조회 시 MultiIndex DataFrame을 반환할 때 발생하는 오류를 재현합니다."""
+    import pandas as pd
+    from src.backend.models import Asset
+
+    # Mock Asset 데이터 설정
+    mock_asset = MagicMock(spec=Asset)
+    mock_asset.country = "US"
+    mock_asset.ticker = "SGOV"
+
+    # query.filter().first() 등 체이닝 대응
+    mock_db.query.return_value.filter.return_value.order_by.return_value.first.return_value = None
+    mock_db.query.return_value.filter.return_value.first.return_value = mock_asset
+
+    # 장중 시간으로 모킹
+    dashboard_service.is_us_market_open = MagicMock(return_value=True)
+
+    # yfinance.download 반환값으로 MultiIndex DataFrame 설정
+    columns = pd.MultiIndex.from_tuples(
+        [('Close', 'SGOV'), ('High', 'SGOV'), ('Low', 'SGOV'), ('Open', 'SGOV'), ('Volume', 'SGOV')],
+        names=['Price', 'Ticker']
+    )
+    index = pd.to_datetime(['2026-06-01 19:59:00+00:00'])
+    mock_df = pd.DataFrame([[100.395, 100.40, 100.39, 100.40, 200000]], index=index, columns=columns)
+
+    with patch("yfinance.download") as mock_yf:
+        mock_yf.return_value = mock_df
+
+        # SGOV 단일 티커 주가 조회 호출
+        prices = await dashboard_service.get_current_prices(["SGOV"], force_update=True)
+
+        # 검증 (정상적으로 100.395가 파싱되어야 함)
+        assert prices["SGOV"] == 100.395
+
