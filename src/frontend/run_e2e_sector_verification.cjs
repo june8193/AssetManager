@@ -100,11 +100,25 @@ async function main() {
     console.log("Sector created.");
     
     // 새로 만든 섹터 클릭하여 활성화
-    console.log("Clicking '반도체 선도' sector to manage...");
+    console.log("Clicking '반도체 선도' sector to manage (Dropdown toggled)...");
     const newSectorRow = page.locator('tr:has-text("반도체 선도")');
     if (await newSectorRow.count() > 0) {
+      // 행 클릭하여 드롭다운 토글
       await newSectorRow.first().click();
       await page.waitForTimeout(2000);
+
+      // 드롭다운 화면 캡처
+      const dropdownScreenshotPath = path.join(screenshotsDir, "2_sector_dropdown.png");
+      await page.screenshot({ path: dropdownScreenshotPath, fullPage: true });
+      console.log(`Dropdown sector details screenshot saved to ${dropdownScreenshotPath}`);
+
+      // 종목 구성을 관리하기 위해 기어 버튼 클릭
+      console.log("Clicking gear button to open sector manager...");
+      const gearBtn = newSectorRow.locator('button[title="종목 구성 관리"]');
+      if (await gearBtn.count() > 0) {
+        await gearBtn.click();
+        await page.waitForTimeout(2000);
+      }
       
       // 5. 섹터 이름 수정 검증 ('반도체 선도' -> '반도체 선도 대장')
       console.log("Editing sector name to '반도체 선도 대장'...");

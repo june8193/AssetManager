@@ -417,6 +417,7 @@ class SectorService:
             sorted_dates = sorted(list(all_dates))
             
             ret_rate = 0.0
+            sec_stocks_data = []
             if len(sorted_dates) >= 2:
                 # 시작일과 종료일의 합산 시가총액 계산
                 d_start = sorted_dates[0]
@@ -465,22 +466,37 @@ class SectorService:
                         
                     cap_start += p_start * shares
                     cap_end += p_end * shares
+
+                    # 개별 종목 수익률 및 알파 계산
+                    stk_return = 0.0
+                    if p_start > 0.0:
+                        stk_return = round(((p_end - p_start) / p_start) * 100, 2)
+                    stk_alpha = round(stk_return - ref_return, 2)
+
+                    sec_stocks_data.append({
+                        "stock_code": stock.stock_code,
+                        "stock_name": stock.stock_name,
+                        "shares_outstanding": stock.shares_outstanding,
+                        "return_rate": stk_return,
+                        "alpha": stk_alpha
+                    })
                     
                 if cap_start > 0.0:
                     ret_rate = round(((cap_end - cap_start) / cap_start) * 100, 2)
+            else:
+                # 영업일이 부족하여 연산 불가 시 기본값 처리
+                for stock in sec.stocks:
+                    sec_stocks_data.append({
+                        "stock_code": stock.stock_code,
+                        "stock_name": stock.stock_name,
+                        "shares_outstanding": stock.shares_outstanding,
+                        "return_rate": 0.0,
+                        "alpha": round(0.0 - ref_return, 2)
+                    })
             
             alpha = round(ret_rate - ref_return, 2)
             judgment = "시장 상회" if alpha >= 0 else "시장 하회"
-            
-            # 하위 소속 종목 응답 객체 변환
-            sec_stocks_data = [
-                {
-                    "stock_code": s.stock_code,
-                    "stock_name": s.stock_name,
-                    "shares_outstanding": s.shares_outstanding
-                }
-                for s in sec.stocks
-            ]
+
             
             sector_results.append({
                 "id": sec.id,

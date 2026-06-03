@@ -149,6 +149,21 @@ async def test_calculate_weighted_returns(sector_service: SectorService, db_sess
     assert test_sec["alpha"] == -5.0
     assert test_sec["judgment"] == "시장 하회"
 
+    # 하위 구성 종목의 개별 수익률 및 알파 검증 추가
+    stocks_res = test_sec.get("stocks", [])
+    assert len(stocks_res) == 2
+    
+    # 종목 A: 100 -> 110 (+10%), KOSPI 지수 +5%이므로 알파 +5.0%p
+    stock_a = next(s for s in stocks_res if s["stock_code"] == "A")
+    assert stock_a["return_rate"] == 10.0
+    assert stock_a["alpha"] == 5.0
+    
+    # 종목 B: 200 -> 180 (-10%), KOSPI 지수 +5%이므로 알파 -15.0%p
+    stock_b = next(s for s in stocks_res if s["stock_code"] == "B")
+    assert stock_b["return_rate"] == -10.0
+    assert stock_b["alpha"] == -15.0
+
+
 
 @pytest.mark.asyncio
 async def test_update_custom_sector_name(sector_service: SectorService, db_session: Session):

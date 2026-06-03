@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  TrendingUp, Plus, Trash2, Calendar, ChevronRight, Info, 
+  TrendingUp, Plus, Trash2, Calendar, ChevronRight, ChevronDown, Info, 
   Settings, Award, RefreshCw, BarChart2, ArrowUpRight, ArrowDownRight, Users, Eye, EyeOff
 } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
@@ -42,6 +42,7 @@ const SectorPage = () => {
   const [editedSectorName, setEditedSectorName] = useState('');
   
   const [activeSector, setActiveSector] = useState(null); // 종목 관리를 위한 활성 섹터
+  const [expandedSectorId, setExpandedSectorId] = useState(null); // 구성 종목 드롭다운을 위한 섹터 ID
   const [newStockCode, setNewStockCode] = useState('');
   const [newStockName, setNewStockName] = useState('');
   const [newShares, setNewShares] = useState('');
@@ -487,7 +488,7 @@ const SectorPage = () => {
           </div>
 
           {/* 메인 대시보드 컨텐츠 */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="flex flex-col gap-6">
             
             {/* 대표 ETF 수익률 대시보드 */}
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
@@ -581,7 +582,7 @@ const SectorPage = () => {
                   </span>
                   <div>
                     <h2 className="text-lg font-bold text-slate-900">커스텀 섹터 수익률 랭킹</h2>
-                    <p className="text-xs text-slate-500">시가총액 가중 방식으로 산정된 커스텀 섹터입니다.</p>
+                    <p className="text-xs text-slate-500">시가총액 가중 방식으로 산정된 커스텀 섹터입니다. 행을 클릭하면 하위 종목의 개별 성과를 볼 수 있습니다.</p>
                   </div>
                 </div>
                 <button
@@ -600,59 +601,127 @@ const SectorPage = () => {
                       <th className="py-3 px-2">섹터명</th>
                       <th className="py-3 px-2 text-right">수익률</th>
                       <th className="py-3 px-2 text-right">초과 성과 (알파)</th>
-                      <th className="py-3 px-2 w-10"></th>
+                      <th className="py-3 px-2 w-16 text-center">작업</th>
                     </tr>
                   </thead>
                   <tbody>
                     {dashboardData.custom_sectors && dashboardData.custom_sectors.length > 0 ? (
                       dashboardData.custom_sectors.map((sec) => (
-                        <tr 
-                          key={sec.id} 
-                          onClick={() => setActiveSector(sec)}
-                          className={`border-b border-slate-50 hover:bg-blue-50/10 cursor-pointer transition-colors ${
-                            activeSector?.id === sec.id ? 'bg-blue-50/20' : ''
-                          }`}
-                        >
-                          <td className="py-4 px-2 text-center">
-                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs ${
-                              sec.rank === 1 ? 'bg-amber-100 text-amber-700' :
-                              sec.rank === 2 ? 'bg-slate-100 text-slate-700' :
-                              sec.rank === 3 ? 'bg-amber-50 text-amber-600' : 'text-slate-500'
+                        <React.Fragment key={sec.id}>
+                          <tr 
+                            onClick={() => setExpandedSectorId(prev => prev === sec.id ? null : sec.id)}
+                            className={`border-b border-slate-50 hover:bg-blue-50/10 cursor-pointer transition-colors ${
+                              activeSector?.id === sec.id ? 'bg-blue-50/20' : ''
+                            }`}
+                          >
+                            <td className="py-4 px-2 text-center">
+                              <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs ${
+                                sec.rank === 1 ? 'bg-amber-100 text-amber-700' :
+                                sec.rank === 2 ? 'bg-slate-100 text-slate-700' :
+                                sec.rank === 3 ? 'bg-amber-50 text-amber-600' : 'text-slate-500'
+                              }`}>
+                                {sec.rank}
+                              </span>
+                            </td>
+                            <td className="py-4 px-2 font-medium">
+                              <div className="font-semibold text-slate-900 flex items-center gap-1">
+                                {sec.name}
+                                {expandedSectorId === sec.id ? (
+                                  <ChevronDown size={12} className="text-blue-600 animate-in fade-in" />
+                                ) : (
+                                  <ChevronRight size={12} className="text-slate-400" />
+                                )}
+                              </div>
+                              <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
+                                <Users size={10} /> 구성종목 {sec.stock_count}개
+                              </div>
+                            </td>
+                            <td className={`py-4 px-2 text-right font-bold ${
+                              sec.return_rate >= 0 ? 'text-red-600' : 'text-blue-600'
                             }`}>
-                              {sec.rank}
-                            </span>
-                          </td>
-                          <td className="py-4 px-2 font-medium">
-                            <div className="font-semibold text-slate-900 flex items-center gap-1">
-                              {sec.name}
-                              <ChevronRight size={12} className="text-slate-400" />
-                            </div>
-                            <div className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1">
-                              <Users size={10} /> 구성종목 {sec.stock_count}개
-                            </div>
-                          </td>
-                          <td className={`py-4 px-2 text-right font-bold ${
-                            sec.return_rate >= 0 ? 'text-red-600' : 'text-blue-600'
-                          }`}>
-                            {sec.return_rate >= 0 ? '+' : ''}{sec.return_rate}%
-                          </td>
-                          <td className="py-4 px-2 text-right">
-                            <span className={`inline-block font-semibold px-2 py-0.5 rounded ${
-                              sec.alpha >= 0 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
-                            }`}>
-                              {sec.alpha >= 0 ? '+' : ''}{sec.alpha}%p
-                            </span>
-                          </td>
-                          <td className="py-4 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => handleDeleteSector(sec.id, sec.name)}
-                              className="text-slate-300 hover:text-red-500 transition-colors"
-                              title="섹터 삭제"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        </tr>
+                              {sec.return_rate >= 0 ? '+' : ''}{sec.return_rate}%
+                            </td>
+                            <td className="py-4 px-2 text-right">
+                              <span className={`inline-block font-semibold px-2 py-0.5 rounded ${
+                                sec.alpha >= 0 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+                              }`}>
+                                {sec.alpha >= 0 ? '+' : ''}{sec.alpha}%p
+                              </span>
+                            </td>
+                            <td className="py-4 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                              <div className="flex items-center justify-center gap-2">
+                                <button
+                                  onClick={() => setActiveSector(sec)}
+                                  className="text-slate-400 hover:text-blue-600 transition-colors"
+                                  title="종목 구성 관리"
+                                >
+                                  <Settings size={14} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteSector(sec.id, sec.name)}
+                                  className="text-slate-300 hover:text-red-500 transition-colors"
+                                  title="섹터 삭제"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                          {expandedSectorId === sec.id && (
+                            <tr className="bg-slate-50/50">
+                              <td colSpan="5" className="p-4 border-b border-slate-100">
+                                <div className="bg-white rounded-2xl border border-slate-150 shadow-sm p-4 space-y-3">
+                                  <h4 className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                                    <Users size={12} className="text-blue-500" />
+                                    구성 종목 개별 성과
+                                  </h4>
+                                  <table className="w-full text-left text-xs border-collapse">
+                                    <thead>
+                                      <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                                        <th className="py-2 px-2">종목명 (코드)</th>
+                                        <th className="py-2 px-2 text-right">수익률</th>
+                                        <th className="py-2 px-2 text-right">초과 성과 (알파)</th>
+                                        <th className="py-2 px-2 text-right">상장주식수</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {sec.stocks && sec.stocks.length > 0 ? (
+                                        sec.stocks.map((stock) => {
+                                          const isStockPositive = stock.return_rate >= 0;
+                                          return (
+                                            <tr key={stock.stock_code} className="border-b border-slate-50 last:border-b-0 hover:bg-slate-50/50 transition-colors">
+                                              <td className="py-2.5 px-2 font-medium">
+                                                <span className="font-semibold text-slate-800">{stock.stock_name}</span>
+                                                <span className="text-[10px] text-slate-400 ml-1.5">{stock.stock_code}</span>
+                                              </td>
+                                              <td className={`py-2.5 px-2 text-right font-bold ${isStockPositive ? 'text-red-600' : 'text-blue-600'}`}>
+                                                {isStockPositive ? '+' : ''}{stock.return_rate}%
+                                              </td>
+                                              <td className="py-2.5 px-2 text-right">
+                                                <span className={`inline-block font-semibold px-2 py-0.5 rounded ${stock.alpha >= 0 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'}`}>
+                                                  {stock.alpha >= 0 ? '+' : ''}{stock.alpha}%p
+                                                </span>
+                                              </td>
+                                              <td className={`py-2.5 px-2 text-right text-slate-500 font-mono ${isMasked ? 'blur-sm select-none' : ''}`}>
+                                                {stock.shares_outstanding ? stock.shares_outstanding.toLocaleString() : '0'} 주
+                                              </td>
+                                            </tr>
+                                          );
+                                        })
+                                      ) : (
+                                        <tr>
+                                          <td colSpan="4" className="py-4 text-center text-slate-400 font-medium">
+                                            소속된 종목이 없습니다.
+                                          </td>
+                                        </tr>
+                                      )}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))
                     ) : (
                       <tr>
