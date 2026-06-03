@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from .database import engine, Base, SessionLocal
 from .models import Watchlist
-from .routers import watchlist, stocks, exchange, dashboard, db_manage, connection, ratios, benchmark, sector
+from .routers import watchlist, stocks, exchange, dashboard, db_manage, connection, ratios, benchmark, sector, allocation
 from .services.kiwoom_service import KiwoomStockService
 from .services.backup_service import BackupService
 import datetime
@@ -78,6 +78,7 @@ app.include_router(connection.router)
 app.include_router(ratios.router)
 app.include_router(benchmark.router)
 app.include_router(sector.router)
+app.include_router(allocation.router)
 
 # 개발 모드 하트비트 및 자동 종료 로직
 class HeartbeatManager:
