@@ -42,6 +42,17 @@ const mockDashboardData = {
         { stock_code: "005930", stock_name: "삼성전자", shares_outstanding: 50000000.0 }
       ]
     }
+  ],
+  watchlist: [
+    {
+      rank: 1,
+      ticker: "000660",
+      name: "SK하이닉스",
+      current_price: 180000.0,
+      return_rate: 15.0,
+      alpha: 9.5,
+      judgment: "시장 상회"
+    }
   ]
 };
 
@@ -123,6 +134,11 @@ describe('SectorPage', () => {
     expect(screen.getAllByText('IT/반도체')[0]).toBeDefined();
     expect(screen.getAllByText('+12.5%')[0]).toBeDefined();
     expect(screen.getAllByText('+7%p')[0]).toBeDefined();
+
+    // 관심종목 수익률 검증
+    expect(screen.getAllByText('SK하이닉스')[0]).toBeDefined();
+    expect(screen.getAllByText('+15%')[0]).toBeDefined();
+    expect(screen.getAllByText('+9.5%p')[0]).toBeDefined();
   });
 
   it('국가 탭 전환 버튼을 누르면 탭 상태가 변경되고 fetch가 새로 요청된다', async () => {

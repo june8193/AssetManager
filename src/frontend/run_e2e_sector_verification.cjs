@@ -10,7 +10,7 @@ function getFormattedDateTime() {
   const hh = String(now.getHours()).padStart(2, '0');
   const min = String(now.getMinutes()).padStart(2, '0');
   const ss = String(now.getSeconds()).padStart(2, '0');
-  return `${yyyy}${mm}${dd}_${hh}${min}${ss}_sector_analysis`;
+  return `${yyyy}${mm}${dd}_${hh}${min}${ss}_compare_returns`;
 }
 
 async function main() {
@@ -20,12 +20,12 @@ async function main() {
   });
   const page = await context.newPage();
 
-  console.log("Navigating to http://localhost:5173/benchmark/sector ...");
-  await page.goto("http://localhost:5173/benchmark/sector");
+  console.log("Navigating to http://localhost:5173/benchmark/compare-returns ...");
+  await page.goto("http://localhost:5173/benchmark/compare-returns");
   
   // 데이터 로딩 대기
   console.log("Waiting for backend server initialization and initial loading...");
-  await page.waitForTimeout(5000);
+  await page.waitForTimeout(6000);
 
   // 에러 화면 발생 시 '다시 시도' 자동 클릭 처리
   const retryBtn = page.locator('button:has-text("다시 시도")');
@@ -44,9 +44,9 @@ async function main() {
   console.log(`Screenshots will be saved in: ${screenshotsDir}`);
 
   // 1. 초기 화면 캡처
-  const initialScreenshotPath = path.join(screenshotsDir, "1_sector_initial.png");
+  const initialScreenshotPath = path.join(screenshotsDir, "1_compare_initial.png");
   await page.screenshot({ path: initialScreenshotPath, fullPage: true });
-  console.log(`Initial sector page screenshot saved to ${initialScreenshotPath}`);
+  console.log(`Initial page screenshot saved to ${initialScreenshotPath}`);
 
   // 2. 대표 ETF 추가 테스트
   console.log("Adding a representative ETF (KODEX 레버리지 / 122630)...");
@@ -60,13 +60,11 @@ async function main() {
     await page.fill('input[placeholder="누락 시 자동으로 조회합니다"]', 'KODEX 레버리지');
     
     // 모달 내 '추가하기' 버튼 클릭
-    const submitBtn = page.locator('button[type="submit"]:has-text("추가하기")');
+    const submitBtn = page.locator('button[type="submit"]:has-text("추가하기")').first();
     await submitBtn.click();
     await page.waitForTimeout(3000); // API 등록 대기
     
-    const addedEtfScreenshotPath = path.join(screenshotsDir, "2_etf_added.png");
-    await page.screenshot({ path: addedEtfScreenshotPath, fullPage: true });
-    console.log(`ETF added screenshot saved to ${addedEtfScreenshotPath}`);
+    console.log("ETF added successfully.");
   }
 
   // 3. 국가 탭 전환 검증
@@ -76,7 +74,7 @@ async function main() {
     await usTabBtn.click();
     await page.waitForTimeout(3000);
     
-    const usTabScreenshotPath = path.join(screenshotsDir, "3_us_tab.png");
+    const usTabScreenshotPath = path.join(screenshotsDir, "2_us_tab.png");
     await page.screenshot({ path: usTabScreenshotPath, fullPage: true });
     console.log(`US tab screenshot saved to ${usTabScreenshotPath}`);
     
@@ -99,16 +97,29 @@ async function main() {
     await submitSectorBtn.click();
     await page.waitForTimeout(3000); // 생성 완료 대기
     
-    const sectorCreatedScreenshotPath = path.join(screenshotsDir, "4_sector_created.png");
-    await page.screenshot({ path: sectorCreatedScreenshotPath, fullPage: true });
-    console.log(`Sector created screenshot saved to ${sectorCreatedScreenshotPath}`);
-
+    console.log("Sector created.");
+    
     // 새로 만든 섹터 클릭하여 활성화
     console.log("Clicking '반도체 선도' sector to manage...");
     const newSectorRow = page.locator('tr:has-text("반도체 선도")');
     if (await newSectorRow.count() > 0) {
       await newSectorRow.first().click();
       await page.waitForTimeout(2000);
+      
+      // 5. 섹터 이름 수정 검증 ('반도체 선도' -> '반도체 선도 대장')
+      console.log("Editing sector name to '반도체 선도 대장'...");
+      const editNameBtn = page.locator('button[title="이름 수정"]');
+      if (await editNameBtn.count() > 0) {
+        await editNameBtn.click();
+        await page.waitForTimeout(1000);
+        
+        // 인라인 폼 채우기 및 저장
+        await page.fill('input#sector-name-edit-input', '반도체 선도 대장');
+        const saveNameBtn = page.locator('button:has-text("저장")');
+        await saveNameBtn.click();
+        await page.waitForTimeout(3000);
+        console.log("Sector name updated successfully.");
+      }
       
       // 종목 추가
       console.log("Adding stock to custom sector (삼성전자 / 005930)...");
@@ -119,15 +130,34 @@ async function main() {
       const addStockBtn = page.locator('button:has-text("종목 추가")');
       await addStockBtn.click();
       await page.waitForTimeout(4000); // 종목 추가 API 연동 대기
-
-      const stockAddedScreenshotPath = path.join(screenshotsDir, "5_stock_added.png");
-      await page.screenshot({ path: stockAddedScreenshotPath, fullPage: true });
-      console.log(`Stock added screenshot saved to ${stockAddedScreenshotPath}`);
+      console.log("Stock added to custom sector.");
     }
   }
 
+  // 6. 관심종목 추가 검증
+  console.log("Adding a watchlist item (SK하이닉스 / 000660)...");
+  // 두 번째 '추가' 버튼(인덱스 1)이 관심종목 테이블의 추가 버튼입니다.
+  const addWatchlistBtn = page.locator('button:has-text("추가")').nth(1);
+  if (await addWatchlistBtn.count() > 0) {
+    await addWatchlistBtn.click();
+    await page.waitForTimeout(1000);
+    
+    await page.fill('input[placeholder="예: 005930"]', '000660');
+    await page.fill('input[placeholder="누락 시 자동으로 조회합니다"]', 'SK하이닉스');
+    
+    const submitWatchlistBtn = page.locator('button[type="submit"]:has-text("추가하기")').last();
+    await submitWatchlistBtn.click();
+    await page.waitForTimeout(4000); // API 등록 대기
+    console.log("Watchlist item added successfully.");
+  }
+
+  // 7. 최종 대시보드 화면 캡처
+  const finalScreenshotPath = path.join(screenshotsDir, "3_final_dashboard.png");
+  await page.screenshot({ path: finalScreenshotPath, fullPage: true });
+  console.log(`Final dashboard screenshot saved to ${finalScreenshotPath}`);
+
   await browser.close();
-  console.log("E2E verification for Sector Analysis completed successfully!");
+  console.log("E2E verification for Compare Returns Dashboard completed successfully!");
 }
 
 main().catch(err => {

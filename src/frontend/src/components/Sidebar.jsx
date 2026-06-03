@@ -13,10 +13,9 @@ const MENU_ITEMS = [
     icon: TrendingUp,
     subItems: [
       { path: '/benchmark', label: '벤치마크 비교' },
-      { path: '/benchmark/sector', label: '섹터 분석' }
+      { path: '/benchmark/compare-returns', label: '수익률 비교 분석' }
     ]
   },
-  { path: '/watchlist', label: '관심종목', icon: Activity },
   { path: '/ratios/check', label: '비중 점검', icon: PieChart },
   { 
     label: 'DB 관리', 
@@ -43,9 +42,7 @@ const Sidebar = () => {
     if (path === '/') {
       return location.pathname === '/' || location.pathname === '/dashboard';
     }
-    if (path === '/watchlist') {
-      return location.pathname.startsWith('/watchlist');
-    }
+
     if (path === '/benchmark') {
       return location.pathname === '/benchmark';
     }

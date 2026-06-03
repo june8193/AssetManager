@@ -33,6 +33,13 @@ const SectorPage = () => {
   
   const [isSectorModalOpen, setIsSectorModalOpen] = useState(false);
   const [newSectorName, setNewSectorName] = useState('');
+
+  const [isWatchlistModalOpen, setIsWatchlistModalOpen] = useState(false);
+  const [newWatchlistTicker, setNewWatchlistTicker] = useState('');
+  const [newWatchlistName, setNewWatchlistName] = useState('');
+  
+  const [isEditingSectorName, setIsEditingSectorName] = useState(false);
+  const [editedSectorName, setEditedSectorName] = useState('');
   
   const [activeSector, setActiveSector] = useState(null); // 종목 관리를 위한 활성 섹터
   const [newStockCode, setNewStockCode] = useState('');
@@ -131,6 +138,74 @@ const SectorPage = () => {
       if (!response.ok) {
         throw new Error('ETF 삭제에 실패했습니다.');
       }
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // 관심종목 추가
+  const handleAddWatchlist = async (e) => {
+    e.preventDefault();
+    if (!newWatchlistTicker) return;
+    try {
+      const response = await fetch(`/api/watchlist`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stock_code: newWatchlistTicker.trim(),
+          stock_name: newWatchlistName.trim() || null,
+          country: country
+        })
+      });
+      if (!response.ok) {
+        throw new Error('관심종목 등록에 실패했습니다. 올바른 종목코드인지 확인해 주세요.');
+      }
+      setNewWatchlistTicker('');
+      setNewWatchlistName('');
+      setIsWatchlistModalOpen(false);
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // 관심종목 삭제
+  const handleDeleteWatchlist = async (ticker) => {
+    if (!window.confirm(`선택한 관심종목(${ticker})을 삭제하시겠습니까?`)) return;
+    try {
+      const response = await fetch(`/api/watchlist/${ticker}`, {
+        method: 'DELETE'
+      });
+      if (!response.ok) {
+        throw new Error('관심종목 삭제에 실패했습니다.');
+      }
+      fetchDashboardData();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+
+  // 커스텀 섹터 이름 수정
+  const handleUpdateSectorName = async (e) => {
+    e.preventDefault();
+    if (!activeSector || !editedSectorName.trim()) return;
+    try {
+      const response = await fetch(`/api/sector/custom/${activeSector.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: editedSectorName.trim()
+        })
+      });
+      if (!response.ok) {
+        throw new Error('섹터 이름 수정에 실패했습니다.');
+      }
+      const updated = await response.json();
+      
+      // 상태 동기화
+      setActiveSector(prev => ({ ...prev, name: updated.name }));
+      setIsEditingSectorName(false);
       fetchDashboardData();
     } catch (err) {
       alert(err.message);
@@ -412,7 +487,7 @@ const SectorPage = () => {
           </div>
 
           {/* 메인 대시보드 컨텐츠 */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* 대표 ETF 수익률 대시보드 */}
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
@@ -591,6 +666,89 @@ const SectorPage = () => {
               </div>
             </div>
 
+            {/* 관심종목 수익률 대시보드 */}
+            <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="p-2 bg-rose-50 text-rose-600 rounded-xl">
+                    <TrendingUp size={20} />
+                  </span>
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900">관심종목 수익률 랭킹</h2>
+                    <p className="text-xs text-slate-500">개별 관심주식의 단순 종가 수익률입니다.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsWatchlistModalOpen(true)}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold transition-colors"
+                >
+                  <Plus size={14} /> 추가
+                </button>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 font-semibold">
+                      <th className="py-3 px-2 w-12 text-center">순위</th>
+                      <th className="py-3 px-2">종목</th>
+                      <th className="py-3 px-2 text-right">수익률</th>
+                      <th className="py-3 px-2 text-right">초과 성과 (알파)</th>
+                      <th className="py-3 px-2 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dashboardData.watchlist && dashboardData.watchlist.length > 0 ? (
+                      dashboardData.watchlist.map((item) => (
+                        <tr key={item.ticker} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
+                          <td className="py-4 px-2 text-center">
+                            <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs ${
+                              item.rank === 1 ? 'bg-amber-100 text-amber-700' :
+                              item.rank === 2 ? 'bg-slate-100 text-slate-700' :
+                              item.rank === 3 ? 'bg-amber-50 text-amber-600' : 'text-slate-500'
+                            }`}>
+                              {item.rank}
+                            </span>
+                          </td>
+                          <td className="py-4 px-2 font-medium">
+                            <div className="font-semibold text-slate-900">{item.name}</div>
+                            <div className="text-[10px] text-slate-400 mt-0.5">{item.ticker}</div>
+                          </td>
+                          <td className={`py-4 px-2 text-right font-bold ${
+                            item.return_rate >= 0 ? 'text-red-600' : 'text-blue-600'
+                          }`}>
+                            {item.return_rate >= 0 ? '+' : ''}{item.return_rate}%
+                          </td>
+                          <td className="py-4 px-2 text-right">
+                            <span className={`inline-block font-semibold px-2 py-0.5 rounded ${
+                              item.alpha >= 0 ? 'bg-red-50 text-red-700' : 'bg-blue-50 text-blue-700'
+                            }`}>
+                              {item.alpha >= 0 ? '+' : ''}{item.alpha}%p
+                            </span>
+                          </td>
+                          <td className="py-4 px-2 text-center">
+                            <button
+                              onClick={() => handleDeleteWatchlist(item.ticker)}
+                              className="text-slate-300 hover:text-red-500 transition-colors"
+                              title="삭제"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan="5" className="py-12 text-center text-slate-400 font-medium">
+                          등록된 관심종목이 없습니다.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
 
           {/* 초과수익률(알파) 시각화 분석 패널 */}
@@ -599,7 +757,7 @@ const SectorPage = () => {
               <BarChart2 size={18} className="text-blue-600" />
               기준 지수 대비 초과 성과 (알파) 요약
             </h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
               {/* ETF 알파 순위 차트 */}
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-slate-500">대표 ETF 성과 차이</h4>
@@ -683,6 +841,48 @@ const SectorPage = () => {
                   )}
                 </div>
               </div>
+
+              {/* 관심종목 알파 순위 차트 */}
+              <div className="space-y-3">
+                <h4 className="text-xs font-bold text-slate-500">관심종목 성과 차이</h4>
+                <div className="space-y-2">
+                  {dashboardData.watchlist && dashboardData.watchlist.length > 0 ? (
+                    dashboardData.watchlist.map((item) => (
+                      <div key={item.ticker} className="space-y-1">
+                        <div className="flex justify-between text-xs font-semibold">
+                          <span className="text-slate-700">{item.name}</span>
+                          <span className={item.alpha >= 0 ? 'text-red-600' : 'text-blue-600'}>
+                            {item.alpha >= 0 ? '+' : ''}{item.alpha}%p
+                          </span>
+                        </div>
+                        <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden flex">
+                          {item.alpha >= 0 ? (
+                            <>
+                              <div className="w-1/2"></div>
+                              <div 
+                                className="bg-red-500 h-full rounded-r-full transition-all"
+                                style={{ width: `${Math.min(item.alpha * 3, 50)}%` }}
+                              ></div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="w-1/2 flex justify-end">
+                                <div 
+                                  className="bg-blue-500 h-full rounded-l-full transition-all"
+                                  style={{ width: `${Math.min(Math.abs(item.alpha) * 3, 50)}%` }}
+                                ></div>
+                              </div>
+                              <div className="w-1/2"></div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-slate-400 py-6 text-center">데이터가 없습니다.</p>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -695,7 +895,34 @@ const SectorPage = () => {
                     <Settings size={20} />
                   </span>
                   <div>
-                    <h3 className="text-lg font-bold">'{activeSector.name}' 섹터 소속 종목 관리</h3>
+                    {isEditingSectorName ? (
+                      <form onSubmit={handleUpdateSectorName} className="flex items-center gap-2 mt-0.5">
+                        <input
+                          id="sector-name-edit-input"
+                          type="text"
+                          required
+                          value={editedSectorName}
+                          onChange={(e) => setEditedSectorName(e.target.value)}
+                          className="bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500"
+                        />
+                        <button type="submit" className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white text-[10px] rounded-lg font-semibold transition-colors">저장</button>
+                        <button type="button" onClick={() => setIsEditingSectorName(false)} className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 text-[10px] rounded-lg font-semibold transition-colors">취소</button>
+                      </form>
+                    ) : (
+                      <h3 className="text-lg font-bold flex items-center gap-2">
+                        '{activeSector.name}' 섹터 소속 종목 관리
+                        <button 
+                          onClick={() => {
+                            setEditedSectorName(activeSector.name);
+                            setIsEditingSectorName(true);
+                          }}
+                          className="text-slate-500 hover:text-white transition-colors"
+                          title="이름 수정"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="lucide lucide-pencil"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                        </button>
+                      </h3>
+                    )}
                     <p className="text-xs text-slate-400 mt-0.5">이 커스텀 섹터에 속한 주식 및 발행주식수를 수집/관리합니다.</p>
                   </div>
                 </div>
@@ -877,6 +1104,53 @@ const SectorPage = () => {
                   className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-2.5 font-semibold transition-colors"
                 >
                   섹터 생성
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 관심종목 추가 모달 */}
+      {isWatchlistModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-3xl p-6 max-w-sm w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <h3 className="text-base font-bold text-slate-900">관심종목 추가 ({country})</h3>
+            <form onSubmit={handleAddWatchlist} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">종목코드 / 티커</label>
+                <input
+                  type="text"
+                  required
+                  placeholder={country === 'KR' ? '예: 005930' : '예: AAPL'}
+                  value={newWatchlistTicker}
+                  onChange={(e) => setNewWatchlistTicker(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">종목명 (선택)</label>
+                <input
+                  type="text"
+                  placeholder="누락 시 자동으로 조회합니다"
+                  value={newWatchlistName}
+                  onChange={(e) => setNewWatchlistName(e.target.value)}
+                  className="w-full border border-slate-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-blue-500"
+                />
+              </div>
+              <div className="flex gap-2 pt-2 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setIsWatchlistModalOpen(false)}
+                  className="flex-1 border border-slate-200 hover:bg-slate-50 rounded-xl py-2.5 font-semibold text-slate-600 transition-colors"
+                >
+                  취소
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white rounded-xl py-2.5 font-semibold transition-colors"
+                >
+                  추가하기
                 </button>
               </div>
             </form>

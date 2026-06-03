@@ -32,6 +32,9 @@ class SectorCreate(BaseModel):
     name: str
     country: str = "KR"
 
+class SectorUpdate(BaseModel):
+    name: str
+
 class SectorStockCreate(BaseModel):
     stock_code: str
     stock_name: Optional[str] = None
@@ -166,6 +169,27 @@ async def remove_sector(sector_id: int, db: Session = Depends(get_db)):
             detail="해당 커스텀 섹터를 찾을 수 없습니다."
         )
     return
+
+@router.put("/custom/{sector_id}", response_model=SectorResponse)
+async def update_sector_name(sector_id: int, item: SectorUpdate, db: Session = Depends(get_db)):
+    """커스텀 섹터의 이름을 변경합니다.
+    
+    Args:
+        sector_id (int): 대상 섹터 ID
+        item (SectorUpdate): 변경할 새 섹터명 스펙
+        db (Session): 데이터베이스 세션
+        
+    Returns:
+        SectorResponse: 수정된 커스텀 섹터 정보
+    """
+    svc = SectorService(db)
+    updated_sector = await svc.update_custom_sector(sector_id=sector_id, name=item.name.strip())
+    if not updated_sector:
+        raise HTTPException(
+            status_code=404,
+            detail="해당 커스텀 섹터를 찾을 수 없습니다."
+        )
+    return updated_sector
 
 @router.post("/custom/{sector_id}/stock", response_model=SectorStockResponse, status_code=status.HTTP_201_CREATED)
 async def add_stock_to_sector(sector_id: int, item: SectorStockCreate, db: Session = Depends(get_db)):

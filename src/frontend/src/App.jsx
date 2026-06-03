@@ -3,7 +3,6 @@ import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import { MaskingProvider } from './contexts/MaskingContext';
 import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
-import WatchlistPage from './pages/WatchlistPage';
 import BenchmarkPage from './pages/BenchmarkPage';
 import SectorPage from './pages/SectorPage';
 import ConnectionPage from './pages/ConnectionPage';
@@ -69,9 +68,7 @@ function App() {
               <Route path="/" element={<DashboardPage />} />
               <Route path="/dashboard" element={<DashboardPage />} />
               <Route path="/benchmark" element={<BenchmarkPage />} />
-              <Route path="/benchmark/sector" element={<SectorPage />} />
-              <Route path="/watchlist" element={<WatchlistPage />} />
-              <Route path="/watchlist/:country" element={<WatchlistPage />} />
+              <Route path="/benchmark/compare-returns" element={<SectorPage />} />
               <Route path="/ratios/check" element={<RatioCheckPage />} />
               <Route path="/connection" element={<ConnectionPage />} />
               <Route path="/db" element={<DbManagementPage />} />

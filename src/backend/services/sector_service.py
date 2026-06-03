@@ -4,7 +4,7 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session, joinedload
 from fastapi.concurrency import run_in_threadpool
 
-from src.backend.models import SectorETF, CustomSector, CustomSectorStock, HistoricalPrice
+from src.backend.models import SectorETF, CustomSector, CustomSectorStock, HistoricalPrice, Watchlist
 from src.backend.services.price_service import price_service
 from src.backend.services.benchmark_service import BenchmarkService
 
@@ -125,6 +125,24 @@ class SectorService:
             self.db.commit()
             return True
         return False
+
+    async def update_custom_sector(self, sector_id: int, name: str) -> Optional[CustomSector]:
+        """커스텀 섹터의 이름을 변경합니다.
+        
+        Args:
+            sector_id (int): 변경할 섹터 ID
+            name (str): 변경할 새 이름
+            
+        Returns:
+            Optional[CustomSector]: 수정된 커스텀 섹터 객체 (없을 경우 None)
+        """
+        sector = self.db.query(CustomSector).filter(CustomSector.id == sector_id).first()
+        if sector:
+            sector.name = name
+            self.db.commit()
+            self.db.refresh(sector)
+            return sector
+        return None
 
     # --- 커스텀 섹터 소속 종목 관리 기능 ---
 
@@ -479,6 +497,40 @@ class SectorService:
         for i, item in enumerate(sector_results, 1):
             item["rank"] = i
 
+        # 5. 관심종목 단순 종가 수익률 및 랭킹 연산
+        watchlist_items = self.db.query(Watchlist).filter(Watchlist.country == country).all()
+        watchlist_results = []
+        
+        for item in watchlist_items:
+            prices = await self.benchmark_svc.get_historical_prices(item.stock_code, start, end)
+            valid = [p for p in prices if p.close_price > 0.0]
+            
+            ret_rate = 0.0
+            current_price = 0.0
+            if len(valid) >= 2:
+                base = valid[0].close_price
+                current_price = valid[-1].close_price
+                ret_rate = round(((current_price - base) / base) * 100, 2)
+            elif len(valid) == 1:
+                current_price = valid[0].close_price
+                
+            alpha = round(ret_rate - ref_return, 2)
+            judgment = "시장 상회" if alpha >= 0 else "시장 하회"
+            
+            watchlist_results.append({
+                "ticker": item.stock_code,
+                "name": item.stock_name,
+                "current_price": current_price,
+                "return_rate": ret_rate,
+                "alpha": alpha,
+                "judgment": judgment
+            })
+            
+        # 수익률 내림차순 정렬 및 랭킹 부여
+        watchlist_results.sort(key=lambda x: x["return_rate"], reverse=True)
+        for i, item in enumerate(watchlist_results, 1):
+            item["rank"] = i
+
         return {
             "period": period,
             "start_date": start.isoformat(),
@@ -486,5 +538,6 @@ class SectorService:
             "compare_index": compare_index,
             "index_returns": index_returns,
             "etfs": etf_results,
-            "custom_sectors": sector_results
+            "custom_sectors": sector_results,
+            "watchlist": watchlist_results
         }

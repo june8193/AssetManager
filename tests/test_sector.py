@@ -148,3 +148,66 @@ async def test_calculate_weighted_returns(sector_service: SectorService, db_sess
     # 알파(초과 수익률) = 테스트섹터 수익률(0.0) - 지수 수익률(5.0) = -5.0%
     assert test_sec["alpha"] == -5.0
     assert test_sec["judgment"] == "시장 하회"
+
+
+@pytest.mark.asyncio
+async def test_update_custom_sector_name(sector_service: SectorService, db_session: Session):
+    """커스텀 섹터의 이름을 변경하는 기능을 테스트합니다."""
+    # 1. 섹터 생성
+    sector = await sector_service.create_custom_sector(name="반도체", country="KR")
+    
+    # 2. 이름 변경 실행
+    updated = await sector_service.update_custom_sector(sector_id=sector.id, name="반도체 대장")
+    assert updated is not None
+    assert updated.name == "반도체 대장"
+    
+    # 3. DB 재조회하여 검증
+    sectors = await sector_service.get_custom_sectors(country="KR")
+    assert len(sectors) == 1
+    assert sectors[0].name == "반도체 대장"
+
+
+@pytest.mark.asyncio
+async def test_watchlist_returns_in_dashboard(sector_service: SectorService, db_session: Session):
+    """대시보드 조회 시 관심종목(Watchlist)의 단순 수익률 및 알파가 올바르게 포함되어 연산되는지 검증합니다."""
+    # 1. 관심종목 데이터 직접 적재
+    from src.backend.models import Watchlist
+    item = Watchlist(stock_code="005930", stock_name="삼성전자", country="KR")
+    db_session.add(item)
+    db_session.commit()
+    
+    # 2. 역사적 가격 데이터 적재
+    start_date = datetime.date(2026, 6, 1)
+    end_date = datetime.date(2026, 6, 2)
+    
+    prices = [
+        # 삼성전자 주가 (10% 상승)
+        HistoricalPrice(ticker="005930", price_date=start_date, close_price=50000.0),
+        HistoricalPrice(ticker="005930", price_date=end_date, close_price=55000.0),
+        # 비교 지수 KOSPI (5% 상승)
+        HistoricalPrice(ticker="^KS11", price_date=start_date, close_price=2000.0),
+        HistoricalPrice(ticker="^KS11", price_date=end_date, close_price=2100.0)
+    ]
+    db_session.add_all(prices)
+    db_session.commit()
+    
+    # 3. 대시보드 API 서비스 호출
+    dashboard_data = await sector_service.get_sector_dashboard_data(
+        country="KR",
+        period="Custom",
+        compare_index="^KS11",
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    # 4. 관심종목 반환 데이터 검증
+    watchlist_data = dashboard_data.get("watchlist", [])
+    assert len(watchlist_data) == 1
+    
+    stock_res = watchlist_data[0]
+    assert stock_res["ticker"] == "005930"
+    assert stock_res["name"] == "삼성전자"
+    assert stock_res["return_rate"] == 10.0 # 50000 -> 55000 (+10.0%)
+    assert stock_res["alpha"] == 5.0 # 10.0 - 5.0 = 5.0%
+    assert stock_res["judgment"] == "시장 상회"
+
