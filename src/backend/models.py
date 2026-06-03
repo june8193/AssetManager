@@ -261,3 +261,42 @@ class HistoricalPrice(Base):
     __table_args__ = (
         UniqueConstraint('ticker', 'price_date', name='_ticker_date_uc'),
     )
+
+
+class SectorETF(Base):
+    """섹터별 대표 ETF 정보를 저장하는 모델입니다."""
+    __tablename__ = "sector_etfs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticker = Column(String, unique=True, index=True, nullable=False)
+    name = Column(String, nullable=False)
+    country = Column(String, nullable=False, default="KR")  # 'KR' 또는 'US'
+
+
+class CustomSector(Base):
+    """사용자가 직접 구성하는 커스텀 섹터 마스터 모델입니다."""
+    __tablename__ = "custom_sectors"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, index=True, nullable=False)
+    country = Column(String, nullable=False, default="KR")  # 'KR' 또는 'US'
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    stocks = relationship("CustomSectorStock", back_populates="sector", cascade="all, delete-orphan")
+
+
+class CustomSectorStock(Base):
+    """커스텀 섹터에 포함된 종목 정보를 저장하는 모델입니다."""
+    __tablename__ = "custom_sector_stocks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    sector_id = Column(Integer, ForeignKey("custom_sectors.id", ondelete="CASCADE"), nullable=False)
+    stock_code = Column(String, index=True, nullable=False)  # '005930' 혹은 'NVDA' 등
+    stock_name = Column(String, nullable=False)
+    shares_outstanding = Column(Float, default=0.0)  # 발행주식수 (시총가중 계산용)
+
+    sector = relationship("CustomSector", back_populates="stocks")
+
+    __table_args__ = (
+        UniqueConstraint('sector_id', 'stock_code', name='_sector_stock_uc'),
+    )

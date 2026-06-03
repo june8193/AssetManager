@@ -8,7 +8,14 @@ import { useMasking } from '../contexts/MaskingContext';
  */
 const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
-  { path: '/benchmark', label: '시장분석', icon: TrendingUp },
+  { 
+    label: '시장분석', 
+    icon: TrendingUp,
+    subItems: [
+      { path: '/benchmark', label: '벤치마크 비교' },
+      { path: '/benchmark/sector', label: '섹터 분석' }
+    ]
+  },
   { path: '/watchlist', label: '관심종목', icon: Activity },
   { path: '/ratios/check', label: '비중 점검', icon: PieChart },
   { 
