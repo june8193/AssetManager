@@ -169,4 +169,108 @@ describe('TransactionsTab', () => {
     expect(dateInput.value).toBe('2026-05-28');
     expect(typeSelect.value).toBe('SELL');
   });
+
+  it('수량, 단가, 총금액 입력 시 천 단위 구분 쉼표가 렌더링에 표시되어야 한다', async () => {
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const quantityInput = container.querySelector('input[name="quantity"]');
+    const priceInput = container.querySelector('input[name="price"]');
+    const totalInput = container.querySelector('input[name="total_amount"]');
+
+    // 쉼표가 포함된 값을 입력했을 때 정상적으로 쉼표 포맷이 노출되는지 확인
+    fireEvent.change(quantityInput, { target: { value: '1,250.5' } });
+    expect(quantityInput.value).toBe('1,250.5');
+
+    fireEvent.change(priceInput, { target: { value: '5,000' } });
+    expect(priceInput.value).toBe('5,000');
+
+    // 수량(1250.5) * 단가(5000) = 6252500 이므로 쉼표 포맷으로 자동 계산 및 노출되는지 검증
+    expect(totalInput.value).toBe('6,252,500');
+  });
+
+  it('예수금 자산 선택 시 유형이 입금/출금으로 제한되고 단가가 1로 고정되어야 한다', async () => {
+    const customAssets = [
+      { id: 1, ticker: '005930', name: 'Samsung', country: 'KR' },
+      { id: 2, ticker: 'KRW', name: 'Won Cash', country: 'KR' }
+    ];
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(customAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const assetSelect = container.querySelector('select[name="asset_id"]');
+    const typeSelect = container.querySelector('select[name="type"]');
+    const priceInput = container.querySelector('input[name="price"]');
+
+    // 원화예수금(id: 2)으로 자산 변경
+    fireEvent.change(assetSelect, { target: { value: '2' } });
+
+    // 유형 옵션이 DEPOSIT, WITHDRAW 만 있는지 확인
+    const typeOptions = Array.from(typeSelect.options).map(o => o.value);
+    expect(typeOptions).toContain('DEPOSIT');
+    expect(typeOptions).toContain('WITHDRAW');
+    expect(typeOptions).not.toContain('BUY');
+    expect(typeOptions).not.toContain('SELL');
+
+    // 단가 필드가 1로 고정되고 readOnly 상태인지 확인
+    expect(priceInput.value).toBe('1');
+    expect(priceInput.readOnly).toBe(true);
+  });
+
+  it('자산 국가에 따라 통화(Currency)가 자동 매핑되고 비활성화되어야 한다', async () => {
+    const customAssets = [
+      { id: 1, ticker: '005930', name: 'Samsung', country: 'KR' },
+      { id: 2, ticker: 'KO', name: 'CocaCola', country: 'US' }
+    ];
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(customAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const assetSelect = container.querySelector('select[name="asset_id"]');
+    const currencySelect = container.querySelector('select[name="currency"]');
+
+    // 기본적으로 id: 1(한국 자산)이 세팅되어 있으므로 통화가 KRW이고 disabled여야 함
+    expect(currencySelect.value).toBe('KRW');
+    expect(currencySelect.disabled).toBe(true);
+
+    // 미국 주식(id: 2)으로 자산 변경
+    fireEvent.change(assetSelect, { target: { value: '2' } });
+
+    // 통화가 USD로 자동 변경되고 disabled여야 함
+    expect(currencySelect.value).toBe('USD');
+    expect(currencySelect.disabled).toBe(true);
+  });
 });

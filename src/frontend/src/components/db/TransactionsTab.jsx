@@ -4,6 +4,18 @@ import { DB_API_BASE } from '../../config';
 import { useMasking } from '../../contexts/MaskingContext';
 
 /**
+ * 숫자를 3자리마다 쉼표가 들어간 포맷으로 변환합니다.
+ * 소수점 이하 자리수도 그대로 유지합니다.
+ */
+const formatInputNumber = (value) => {
+  if (value === undefined || value === null || value === '') return '';
+  const str = value.toString();
+  const parts = str.split('.');
+  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return parts.join('.');
+};
+
+/**
  * 거래 내역 관리 탭 컴포넌트입니다.
  * 계좌별 거래(매수, 매도, 입출금 등) 내역을 조회하고 편집합니다.
  */
@@ -22,9 +34,9 @@ const TransactionsTab = () => {
     asset_id: '',
     transaction_date: new Date().toISOString().split('T')[0],
     type: 'BUY',
-    quantity: 0,
-    price: 0,
-    total_amount: 0,
+    quantity: '0',
+    price: '0',
+    total_amount: '0',
     currency: 'KRW',
     exchange_rate: null
   });
@@ -48,13 +60,41 @@ const TransactionsTab = () => {
       setAccounts(accData);
       setAssets(assetData);
 
-      // 초기 폼 데이터 설정
-      if (accData.length > 0 && !formData.account_id) {
-        setFormData(prev => ({ ...prev, account_id: accData[0].id }));
+      // 초기 폼 데이터 설정 및 자산별 기본 제약사항/통화 매핑 자동 적용
+      let initialAccountId = formData.account_id;
+      let initialAssetId = formData.asset_id;
+      if (accData.length > 0 && !initialAccountId) {
+        initialAccountId = accData[0].id;
       }
-      if (assetData.length > 0 && !formData.asset_id) {
-        setFormData(prev => ({ ...prev, asset_id: assetData[0].id }));
+      if (assetData.length > 0 && !initialAssetId) {
+        initialAssetId = assetData[0].id;
       }
+
+      setFormData(prev => {
+        const updated = {
+          ...prev,
+          account_id: initialAccountId,
+          asset_id: initialAssetId
+        };
+        const firstAsset = assetData.find(a => a.id.toString() === initialAssetId.toString());
+        if (firstAsset) {
+          let newCurrency = 'KRW';
+          if (firstAsset.ticker === 'USD' || firstAsset.country === 'US') {
+            newCurrency = 'USD';
+          }
+          updated.currency = newCurrency;
+
+          if (firstAsset.ticker === 'USD' || firstAsset.ticker === 'KRW') {
+            if (updated.type !== 'DEPOSIT' && updated.type !== 'WITHDRAW') {
+              updated.type = 'DEPOSIT';
+            }
+            updated.price = '1';
+            const q = parseFloat(updated.quantity.toString().replace(/,/g, '')) || 0;
+            updated.total_amount = q.toString();
+          }
+        }
+        return updated;
+      });
     } catch (error) {
       console.error('거래 데이터 로딩 오류:', error);
     } finally {
@@ -67,17 +107,52 @@ const TransactionsTab = () => {
   }, []);
 
   /**
-   * 입력 필드 변경 핸들러 (수량/단가 변경 시 총액 자동 계산)
+   * 입력 필드 변경 핸들러
    */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    let newFormData = { ...formData, [name]: value };
+    let newFormData = { ...formData };
 
-    // 수량이나 단가가 변경되면 총 금액(total_amount) 자동 계산
-    if (name === 'quantity' || name === 'price') {
-      const q = name === 'quantity' ? parseFloat(value) || 0 : parseFloat(formData.quantity) || 0;
-      const p = name === 'price' ? parseFloat(value) || 0 : parseFloat(formData.price) || 0;
-      newFormData.total_amount = q * p;
+    if (name === 'quantity' || name === 'price' || name === 'total_amount') {
+      // 쉼표 제거
+      const cleanedValue = value.replace(/,/g, '');
+      if (cleanedValue === '' || cleanedValue === '-') {
+        newFormData[name] = cleanedValue;
+      } else if (!isNaN(cleanedValue) || cleanedValue.endsWith('.')) {
+        newFormData[name] = cleanedValue;
+      } else {
+        return; // 올바르지 않은 입력 무시
+      }
+
+      // 수량이나 단가가 변경되면 총 금액 자동 계산
+      if (name === 'quantity' || name === 'price') {
+        const q = name === 'quantity' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
+        const p = name === 'price' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.price.toString().replace(/,/g, '')) || 0;
+        newFormData.total_amount = (q * p).toString();
+      }
+    } else if (name === 'asset_id') {
+      newFormData.asset_id = value;
+      const selectedAsset = assets.find(a => a.id.toString() === value.toString());
+      if (selectedAsset) {
+        // 통화 자동 매핑
+        let newCurrency = 'KRW';
+        if (selectedAsset.ticker === 'USD' || selectedAsset.country === 'US') {
+          newCurrency = 'USD';
+        }
+        newFormData.currency = newCurrency;
+
+        // 예수금 자산 선택 시
+        if (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') {
+          if (newFormData.type !== 'DEPOSIT' && newFormData.type !== 'WITHDRAW') {
+            newFormData.type = 'DEPOSIT';
+          }
+          newFormData.price = '1';
+          const q = parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
+          newFormData.total_amount = q.toString();
+        }
+      }
+    } else {
+      newFormData[name] = value;
     }
 
     setFormData(newFormData);
@@ -91,11 +166,19 @@ const TransactionsTab = () => {
     const url = editingId ? `${DB_API_BASE}/transactions/${editingId}` : `${DB_API_BASE}/transactions`;
     const method = editingId ? 'PUT' : 'POST';
 
+    const payload = {
+      ...formData,
+      quantity: parseFloat(formData.quantity.toString().replace(/,/g, '')) || 0,
+      price: parseFloat(formData.price.toString().replace(/,/g, '')) || 0,
+      total_amount: parseFloat(formData.total_amount.toString().replace(/,/g, '')) || 0,
+      exchange_rate: formData.exchange_rate ? parseFloat(formData.exchange_rate) : null
+    };
+
     try {
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (response.ok) {
@@ -103,11 +186,13 @@ const TransactionsTab = () => {
         if (editingId) {
           resetForm();
         } else {
+          const currentAsset = assets.find(a => a.id.toString() === formData.asset_id.toString());
+          const isCash = currentAsset ? (currentAsset.ticker === 'USD' || currentAsset.ticker === 'KRW') : false;
           setFormData(prev => ({
             ...prev,
-            quantity: 0,
-            price: 0,
-            total_amount: 0
+            quantity: '0',
+            price: isCash ? '1' : '0',
+            total_amount: '0'
           }));
         }
       }
@@ -126,9 +211,9 @@ const TransactionsTab = () => {
       asset_id: tx.asset_id,
       transaction_date: tx.transaction_date,
       type: tx.type,
-      quantity: tx.quantity,
-      price: tx.price,
-      total_amount: tx.total_amount,
+      quantity: tx.quantity.toString(),
+      price: tx.price.toString(),
+      total_amount: tx.total_amount.toString(),
       currency: tx.currency,
       exchange_rate: tx.exchange_rate !== undefined ? tx.exchange_rate : null
     });
@@ -152,15 +237,32 @@ const TransactionsTab = () => {
    */
   const resetForm = () => {
     setEditingId(null);
+    const defaultAssetId = assets.length > 0 ? assets[0].id : '';
+    const defaultAsset = assets.find(a => a.id.toString() === defaultAssetId.toString());
+
+    let defaultCurrency = 'KRW';
+    let defaultType = 'BUY';
+    let defaultPrice = '0';
+
+    if (defaultAsset) {
+      if (defaultAsset.ticker === 'USD' || defaultAsset.country === 'US') {
+        defaultCurrency = 'USD';
+      }
+      if (defaultAsset.ticker === 'USD' || defaultAsset.ticker === 'KRW') {
+        defaultType = 'DEPOSIT';
+        defaultPrice = '1';
+      }
+    }
+
     setFormData({
       account_id: accounts.length > 0 ? accounts[0].id : '',
-      asset_id: assets.length > 0 ? assets[0].id : '',
+      asset_id: defaultAssetId,
       transaction_date: new Date().toISOString().split('T')[0],
-      type: 'BUY',
-      quantity: 0,
-      price: 0,
-      total_amount: 0,
-      currency: 'KRW',
+      type: defaultType,
+      quantity: '0',
+      price: defaultPrice,
+      total_amount: '0',
+      currency: defaultCurrency,
       exchange_rate: null
     });
   };
@@ -171,6 +273,10 @@ const TransactionsTab = () => {
   const filteredTransactions = accountFilter === 'all' 
     ? transactions 
     : transactions.filter(tx => tx.account_id.toString() === accountFilter);
+
+  // 현재 선택된 자산 및 예수금 여부 판단
+  const selectedAsset = assets.find(a => a.id.toString() === formData.asset_id.toString());
+  const isCashAsset = selectedAsset ? (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') : false;
 
   return (
     <div className="p-6">
@@ -251,23 +357,34 @@ const TransactionsTab = () => {
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
             >
-              <option value="BUY">매수 (BUY)</option>
-              <option value="SELL">매도 (SELL)</option>
-              <option value="DEPOSIT">입금 (DEPOSIT)</option>
-              <option value="WITHDRAW">출금 (WITHDRAW)</option>
-              <option value="INITIAL_BALANCE">초기 잔고 (INITIAL_BALANCE)</option>
-              <option value="INTEREST">이자 (INTEREST)</option>
-              <option value="TAX">세금 (TAX)</option>
-              <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
+              {isCashAsset ? (
+                <>
+                  <option value="DEPOSIT">입금 (DEPOSIT)</option>
+                  <option value="WITHDRAW">출금 (WITHDRAW)</option>
+                  {editingId && !['DEPOSIT', 'WITHDRAW'].includes(formData.type) && (
+                    <option value={formData.type}>{formData.type}</option>
+                  )}
+                </>
+              ) : (
+                <>
+                  <option value="BUY">매수 (BUY)</option>
+                  <option value="SELL">매도 (SELL)</option>
+                  <option value="DEPOSIT">입금 (DEPOSIT)</option>
+                  <option value="WITHDRAW">출금 (WITHDRAW)</option>
+                  <option value="INITIAL_BALANCE">초기 잔고 (INITIAL_BALANCE)</option>
+                  <option value="INTEREST">이자 (INTEREST)</option>
+                  <option value="TAX">세금 (TAX)</option>
+                  <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
+                </>
+              )}
             </select>
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">수량</label>
             <input
-              type="number"
-              step="any"
+              type="text"
               name="quantity"
-              value={formData.quantity}
+              value={formatInputNumber(formData.quantity)}
               onChange={handleInputChange}
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
@@ -276,22 +393,23 @@ const TransactionsTab = () => {
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">단가</label>
             <input
-              type="number"
-              step="any"
+              type="text"
               name="price"
-              value={formData.price}
+              value={formatInputNumber(formData.price)}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              readOnly={isCashAsset}
+              className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
+                isCashAsset ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+              }`}
               required
             />
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">총 금액</label>
             <input
-              type="number"
-              step="any"
+              type="text"
               name="total_amount"
-              value={formData.total_amount}
+              value={formatInputNumber(formData.total_amount)}
               onChange={handleInputChange}
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
@@ -303,7 +421,10 @@ const TransactionsTab = () => {
               name="currency"
               value={formData.currency}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              disabled={selectedAsset !== undefined}
+              className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
+                selectedAsset ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+              }`}
             >
               <option value="KRW">KRW</option>
               <option value="USD">USD</option>
