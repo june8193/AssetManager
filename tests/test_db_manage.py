@@ -429,3 +429,74 @@ async def test_save_unified_snapshots_updates_existing_exchange_rate(db_session,
     assert saved_rate.rate == 1390.0
 
 
+def test_delete_snapshots_by_date(db_session, test_user):
+    """특정 날짜의 스냅샷 및 관련 CASH_ADJUSTMENT 거래를 일괄 삭제하는 API를 검증합니다."""
+    # 1. 계좌 생성
+    acc = Account(user_id=test_user.id, name="테스트계좌", provider="테스트", account_type="BROKERAGE", is_active=True)
+    db_session.add(acc)
+    db_session.flush()
+    
+    # 2. 기초 자산 생성
+    krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
+    db_session.add(krw)
+    db_session.flush()
+
+    # 3. 스냅샷 데이터 생성
+    target_date = date(2026, 6, 6)
+    snap = AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=target_date,
+        period_deposit=10000,
+        total_valuation=100000,
+        total_profit=5000
+    )
+    db_session.add(snap)
+
+    # 4. 동일 날짜의 CASH_ADJUSTMENT 거래 생성
+    tx_adjust = Transaction(
+        account_id=acc.id,
+        asset_id=krw.id,
+        transaction_date=target_date,
+        type="CASH_ADJUSTMENT",
+        quantity=-5000,
+        price=1.0,
+        total_amount=-5000,
+        currency="KRW"
+    )
+    # 다른 날짜의 CASH_ADJUSTMENT 거래 생성 (삭제 안 되어야 함)
+    tx_other = Transaction(
+        account_id=acc.id,
+        asset_id=krw.id,
+        transaction_date=date(2026, 6, 5),
+        type="CASH_ADJUSTMENT",
+        quantity=-3000,
+        price=1.0,
+        total_amount=-3000,
+        currency="KRW"
+    )
+    db_session.add_all([tx_adjust, tx_other])
+    db_session.commit()
+
+    # 5. 삭제 API 호출
+    tx_adjust_id = tx_adjust.id
+    tx_other_id = tx_other.id
+
+    response = client.delete(f"/api/db/snapshots/{target_date.isoformat()}")
+    assert response.status_code == 200
+    assert response.json()["message"] == f"Deleted snapshots and adjustments for {target_date.isoformat()}"
+
+    # 6. 검증: 스냅샷이 삭제되었는지 확인
+    snap_in_db = db_session.query(AccountSnapshot).filter_by(snapshot_date=target_date).first()
+    assert snap_in_db is None
+
+    # 7. 검증: 동일 날짜의 CASH_ADJUSTMENT 거래가 삭제되었는지 확인
+    tx_adjust_in_db = db_session.query(Transaction).filter(Transaction.id == tx_adjust_id).first()
+    assert tx_adjust_in_db is None
+
+    # 8. 검증: 다른 날짜의 CASH_ADJUSTMENT 거래는 유지되는지 확인
+    tx_other_in_db = db_session.query(Transaction).filter(Transaction.id == tx_other_id).first()
+    assert tx_other_in_db is not None
+
+
+
+

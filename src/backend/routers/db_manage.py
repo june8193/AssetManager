@@ -442,6 +442,27 @@ def get_latest_snapshot_date(db: Session = Depends(get_db)):
     latest_snapshot = db.query(AccountSnapshot).order_by(AccountSnapshot.snapshot_date.desc()).first()
     return LatestSnapshotDateResponse(latest_date=latest_snapshot.snapshot_date if latest_snapshot else None)
 
+@router.delete("/snapshots/{snapshot_date}")
+def delete_snapshots_by_date(snapshot_date: date, db: Session = Depends(get_db)):
+    """지정된 날짜의 모든 계좌 스냅샷 데이터 및 관련 보정 거래를 삭제합니다."""
+    # 1. 해당 날짜의 스냅샷 데이터 존재 여부 검사
+    exists = db.query(AccountSnapshot).filter(AccountSnapshot.snapshot_date == snapshot_date).first()
+    if not exists:
+        raise HTTPException(status_code=404, detail="해당 날짜의 스냅샷을 찾을 수 없습니다.")
+
+    # 2. 해당 날짜에 생성된 CASH_ADJUSTMENT 거래 내역도 함께 삭제
+    db.query(Transaction).filter(
+        Transaction.transaction_date == snapshot_date,
+        Transaction.type == "CASH_ADJUSTMENT"
+    ).delete()
+
+    # 3. 스냅샷 데이터 삭제
+    db.query(AccountSnapshot).filter(AccountSnapshot.snapshot_date == snapshot_date).delete()
+
+    db.commit()
+    return {"message": f"Deleted snapshots and adjustments for {snapshot_date}"}
+
+
 @router.post("/snapshots/preview", response_model=List[SnapshotPreviewSchema])
 async def preview_snapshots(req: SaveSnapshotRequest, db: Session = Depends(get_db)):
     """입력받은 환율을 적용하여 저장될 스냅샷 데이터를 미리 계산합니다.

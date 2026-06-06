@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DB_API_BASE } from '../../config';
-import { Camera, Calendar, Clock } from 'lucide-react';
+import { Camera, Calendar, Clock, Trash2 } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 
 /**
@@ -37,6 +37,31 @@ const SnapshotsTab = () => {
     } catch (error) {
       console.error('스냅샷 데이터 로딩 오류:', error);
     } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (snapshotDate) => {
+    if (!window.confirm(`${snapshotDate} 날짜의 모든 계좌 스냅샷과 관련 보정 거래(CASH_ADJUSTMENT)가 함께 삭제됩니다.\n정말 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await fetch(`${DB_API_BASE}/snapshots/${snapshotDate}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '삭제에 실패했습니다.');
+      }
+
+      alert(`${snapshotDate} 날짜의 스냅샷이 정상적으로 삭제되었습니다.`);
+      await fetchData();
+    } catch (error) {
+      console.error('스냅샷 삭제 오류:', error);
+      alert(`스냅샷 삭제에 실패했습니다: ${error.message}`);
       setLoading(false);
     }
   };
@@ -109,6 +134,7 @@ const SnapshotsTab = () => {
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">기간 입금액</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">총 평가액</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">기간 수익</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-center">동작</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -137,6 +163,15 @@ const SnapshotsTab = () => {
                   </td>
                   <td className="px-4 py-3 text-sm text-right font-mono text-emerald-600">
                     {maskValue(snap.total_profit.toLocaleString())}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-center">
+                    <button
+                      onClick={() => handleDelete(snap.snapshot_date)}
+                      className="text-red-600 hover:text-red-900 transition-colors p-1 rounded hover:bg-red-50"
+                      title="스냅샷 일괄 삭제"
+                    >
+                      <Trash2 size={16} className="inline" />
+                    </button>
                   </td>
                 </tr>
               );
