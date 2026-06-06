@@ -55,8 +55,8 @@ class BenchmarkService:
             today = datetime.date.today()
             effective_end = min(end_date, today)
             
-            # 마지막 저장 날짜가 요청 종료일보다 3일 이상 전이면 fetch (주말/휴장 고려)
-            if latest_date < effective_end - datetime.timedelta(days=3):
+            # 마지막 저장 날짜가 요청 종료일보다 1일 이상 전이면 fetch (목/금 시세 수집 및 캐싱 보장)
+            if latest_date < effective_end - datetime.timedelta(days=1):
                 needs_fetch = True
             
             # 최초 저장 날짜가 요청 시작일보다 늦되, 그 차이가 7일을 초과하는 경우에만 fetch 필요 (휴장/주말 고려)

@@ -201,12 +201,19 @@ const BenchmarkPage = () => {
             </span>
           </div>
           <div className="text-2xl font-black text-slate-800 tracking-tight">
-            ₩ {maskValue(Math.round(portfolio?.total_valuation || 0).toLocaleString())}
+            ₩ {maskValue(Math.round(portfolio?.actual_latest_valuation ?? portfolio?.total_valuation ?? 0).toLocaleString())}
           </div>
-          <p className="text-slate-400 text-xs mt-2 flex items-center gap-1">
-            <Wallet size={12} />
-            최신 스냅샷 {latestSnapshotDate} 기준
-          </p>
+          <div className="text-slate-400 text-[10px] mt-2 flex flex-col gap-0.5">
+            <span className="flex items-center gap-1 font-medium">
+              <Wallet size={11} className="text-blue-500" />
+              최신 스냅샷 {portfolio?.actual_latest_date || latestSnapshotDate} 기준
+            </span>
+            {latestSnapshotDate && (
+              <span className="text-slate-400/80 font-medium pl-[15px]">
+                ※ 수익률 비교 기준일: {latestSnapshotDate}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* 4대 시장 지수 요약 카드 */}

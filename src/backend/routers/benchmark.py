@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 
 from ..database import get_db
-from ..models import Watchlist
+from ..models import Watchlist, AccountSnapshot
 from ..services.benchmark_service import BenchmarkService
 from ..services.dashboard_service import DashboardService
 from ..services.price_service import price_service
@@ -156,12 +156,28 @@ async def get_benchmark_dashboard(
                     portfolio_period_return = val
                     break
 
+    # 실제 사용자의 DB상 가장 최신 스냅샷 조회
+    latest_db_snapshot = (
+        db.query(AccountSnapshot)
+        .order_by(AccountSnapshot.snapshot_date.desc())
+        .first()
+    )
+    actual_latest_date = latest_db_snapshot.snapshot_date if latest_db_snapshot else None
+    actual_latest_valuation = 0.0
+    if actual_latest_date:
+        actual_latest_valuation = sum(
+            snap.total_valuation 
+            for snap in db.query(AccountSnapshot).filter_by(snapshot_date=actual_latest_date).all()
+        )
+
     # 5. 비교 테이블 데이터 연산 및 응답에 병합
     comparison_tables = await benchmark_svc.get_comparison_tables()
 
     return {
         "portfolio": {
             "total_valuation": total_valuation_krw,
+            "actual_latest_valuation": actual_latest_valuation,
+            "actual_latest_date": actual_latest_date.isoformat() if actual_latest_date else None,
             "ytd_return": portfolio_period_return
         },
         "indices": index_card_data,

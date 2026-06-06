@@ -429,3 +429,34 @@ async def test_get_comparison_tables(mock_download, benchmark_service, db_sessio
     assert daily[2]["kospi"] == 7.32
     assert daily[1]["kospi"] == 4.55
     assert daily[0]["kospi"] == 5.22
+
+
+@pytest.mark.asyncio
+@patch('yfinance.download')
+async def test_sync_historical_prices_needs_fetch_threshold(mock_download, benchmark_service, db_session):
+    """마지막 캐시 저장 날짜가 어제 이전인 경우 시세 갱신이 트리거되는지 검증 (임계값 1일 기준)"""
+    today = datetime.date.today()
+    # 2일 전 날짜에 임시 데이터 저장
+    latest_cached_date = today - datetime.timedelta(days=2)
+    
+    p = HistoricalPrice(
+        ticker="^KS11",
+        price_date=latest_cached_date,
+        close_price=2500.0
+    )
+    db_session.add(p)
+    db_session.commit()
+    
+    # yfinance download 모킹
+    mock_df = pd.DataFrame(
+        data={"Close": [2550.0]},
+        index=pd.DatetimeIndex([datetime.datetime.combine(today, datetime.time.min)])
+    )
+    mock_df.index.name = "Date"
+    mock_download.return_value = mock_df
+    
+    # 2일 전 데이터가 있는 상태에서 오늘까지 조회
+    await benchmark_service.get_historical_prices("^KS11", latest_cached_date, today)
+    
+    # 3일 미만(2일 차이)이지만 어제 이전이므로 yfinance.download가 호출되어야 함
+    mock_download.assert_called_once()

@@ -10,6 +10,8 @@ vi.mock('../hooks/useBenchmark');
 const mockBenchmarkData = {
   portfolio: {
     total_valuation: 124500000,
+    actual_latest_valuation: 160000000,
+    actual_latest_date: "2026-06-06",
     ytd_return: 15.2
   },
   indices: {
@@ -160,8 +162,10 @@ describe('BenchmarkPage', () => {
 
     // 내 총자산 카드 렌더링 확인
     expect(screen.getByText('내 총자산')).toBeDefined();
-    expect(screen.getByText('₩ 124,500,000')).toBeDefined();
+    expect(screen.getByText('₩ 160,000,000')).toBeDefined();
     expect(screen.getByText('YTD +15.2%')).toBeDefined();
+    expect(screen.getByText(/최신 스냅샷 2026-06-06 기준/i)).toBeDefined();
+    expect(screen.getByText(/수익률 비교 기준일: 2026-05-05/i)).toBeDefined();
 
     // 코스피 지수 카드 렌더링 확인
     expect(screen.getAllByText(/KOSPI/i)[0]).toBeDefined();

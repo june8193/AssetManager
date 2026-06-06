@@ -128,6 +128,8 @@ async def test_get_benchmark_dashboard_api(
 
     # 포트폴리오
     assert res_data["portfolio"]["total_valuation"] == 1100000
+    assert res_data["portfolio"]["actual_latest_valuation"] == 1100000
+    assert res_data["portfolio"]["actual_latest_date"] == d3.strftime("%Y-%m-%d")
     # 선택된 1M 기간(5/1~5/5)의 정규화 누적 수익률: -47.62%
     assert res_data["portfolio"]["ytd_return"] == -47.62
 
@@ -209,4 +211,6 @@ async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
 
     # 5/5에는 스냅샷이 없었으므로 portfolio.ytd_return은 5/4의 유효값인 10.0이어야 함
     assert res_data["portfolio"]["ytd_return"] == 10.0
+    assert res_data["portfolio"]["actual_latest_valuation"] == 1100000.0
+    assert res_data["portfolio"]["actual_latest_date"] == d2.strftime("%Y-%m-%d")
 
