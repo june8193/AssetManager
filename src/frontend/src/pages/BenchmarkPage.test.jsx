@@ -176,38 +176,8 @@ describe('BenchmarkPage', () => {
     expect(screen.getByText('vs KOSPI')).toBeDefined();
     expect(screen.getByText('+9.8%p')).toBeDefined();
 
-    // 관심 종목 테이블 확인
-    expect(screen.getByText('삼성전자')).toBeDefined();
-    expect(screen.getByText('78,200원')).toBeDefined();
-    expect(screen.getByText('+2.1%')).toBeDefined();
-
     // 연간 및 일간 비교 테이블 렌더링 확인
     expect(screen.getByText('연간 수익률 비교')).toBeDefined();
     expect(screen.getByText('일간 수익률 비교')).toBeDefined();
-  });
-
-  it('관심 종목 차트 비교 토글 버튼을 클릭하면 toggleWatchlistStock 함수를 호출한다', async () => {
-    const toggleMock = vi.fn();
-    vi.mocked(useBenchmark).mockReturnValue({
-      data: mockBenchmarkData,
-      loading: false,
-      error: null,
-      period: "YTD",
-      setPeriod: vi.fn(),
-      toggleWatchlistStock: toggleMock,
-      activeWatchlistDataset: {}
-    });
-
-    render(
-      <MaskingProvider>
-        <BenchmarkPage />
-      </MaskingProvider>
-    );
-
-    const toggleButton = screen.getByRole('button', { name: /관심: 삼성전자/i });
-    expect(toggleButton).toBeDefined();
-
-    fireEvent.click(toggleButton);
-    expect(toggleMock).toHaveBeenCalledWith("005930");
   });
 });

@@ -22,9 +22,7 @@ const BenchmarkPage = () => {
     error,
     period,
     setPeriod,
-    refresh,
-    toggleWatchlistStock,
-    activeWatchlistDataset
+    refresh
   } = useBenchmark();
 
   const { maskValue } = useMasking();
@@ -38,7 +36,7 @@ const BenchmarkPage = () => {
     "NASDAQ": true,
   });
 
-  const { portfolio, indices, alpha_analysis, watchlist } = data || {};
+  const { portfolio, indices, alpha_analysis } = data || {};
 
   // Recharts 형식에 맞게 데이터셋 가공
   const chartData = useMemo(() => {
@@ -54,78 +52,15 @@ const BenchmarkPage = () => {
         row[ds.label] = ds.data[idx] !== undefined ? ds.data[idx] : null;
       });
 
-      // 토글된 관심 종목 데이터 매핑 (Lazy Loading)
-      Object.keys(activeWatchlistDataset).forEach(stockCode => {
-        const hist = activeWatchlistDataset[stockCode];
-        if (hist && hist.labels) {
-          const histIdx = hist.labels.indexOf(label);
-          const dataKey = `watchlist_${hist.ticker}`;
-          if (histIdx !== -1) {
-            row[dataKey] = hist.data[histIdx];
-          } else {
-            // 날짜가 일치하지 않으면 직전 영업일 값을 찾아 채워넣음 (Forward Fill)
-            let prevLabelIdx = -1;
-            for (let i = hist.labels.length - 1; i >= 0; i--) {
-              if (hist.labels[i] < label) {
-                prevLabelIdx = i;
-                break;
-              }
-            }
-            if (prevLabelIdx !== -1) {
-              row[dataKey] = hist.data[prevLabelIdx];
-            } else {
-              row[dataKey] = null;
-            }
-          }
-        }
-      });
-
       return row;
     });
-  }, [data, activeWatchlistDataset]);
+  }, [data]);
 
   // 최신 스냅샷 날짜 추출 (YYYY-MM-DD 포맷)
   const latestSnapshotDate = useMemo(() => {
     if (!data?.chart?.labels || data.chart.labels.length === 0) return '';
     return data.chart.labels[data.chart.labels.length - 1];
   }, [data]);
-
-  // 관심종목의 고유 색상 매칭 함수
-  const getWatchlistColor = useMemo(() => {
-    return (stockCode) => {
-      const idx = watchlist?.findIndex(w => w.stock_code === stockCode) || 0;
-      const colors = ["#eab308", "#f43f5e", "#60a5fa", "#22c55e", "#ec4899"];
-      return colors[idx % colors.length];
-    };
-  }, [watchlist]);
-
-  // 관심종목 차트 라인들 동적 생성
-  const watchlistLines = useMemo(() => {
-    return Object.keys(activeWatchlistDataset).map((stockCode) => {
-      const hist = activeWatchlistDataset[stockCode];
-      if (!hist) return null;
-
-      // 관심종목 목록(watchlist)에서 실제 종목이름 매칭
-      const watchlistInfo = watchlist?.find(w => w.stock_code === stockCode);
-      const displayName = watchlistInfo ? watchlistInfo.stock_name : hist.ticker;
-      const color = getWatchlistColor(stockCode);
-
-      return (
-        <Line
-          key={stockCode}
-          type="monotone"
-          dataKey={`watchlist_${hist.ticker}`}
-          name={`관심: ${displayName}`}
-          stroke={color}
-          strokeWidth={2}
-          strokeDasharray="4 4"
-          pointRadius={0}
-          dot={false}
-          animationDuration={800}
-        />
-      );
-    });
-  }, [activeWatchlistDataset, watchlist, getWatchlistColor]);
 
 
   if (loading) {
@@ -317,7 +252,6 @@ const BenchmarkPage = () => {
               {activeSeries["NASDAQ"] && <Line type="monotone" dataKey="NASDAQ" stroke="#a78bfa" strokeWidth={1.5} dot={false} />}
 
               {/* 관심 종목 라인들 (Lazy Loading) */}
-              {watchlistLines}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -360,34 +294,13 @@ const BenchmarkPage = () => {
               </button>
             );
           })}
-
-          {/* 관심 종목 토글 */}
-          {watchlist?.map((item) => {
-            const isChecked = !!activeWatchlistDataset[item.stock_code];
-            const color = getWatchlistColor(item.stock_code);
-            return (
-              <button
-                key={item.stock_code}
-                onClick={() => toggleWatchlistStock(item.stock_code)}
-                style={isChecked ? { backgroundColor: color, borderColor: color, color: '#fff' } : {}}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
-                  isChecked
-                    ? "shadow-sm shadow-black/10 scale-105 border border-transparent"
-                    : "bg-slate-50 text-slate-400 border border-slate-200 hover:bg-slate-100"
-                }`}
-              >
-                <div className={`w-2 h-2 rounded-full ${isChecked ? "bg-white" : "bg-slate-300"}`}></div>
-                관심: {item.stock_name}
-              </button>
-            );
-          })}
         </div>
       </div>
 
 
-      {/* 3. 하단 상세 분석 & 관심 종목 그리드 */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* 좌측: 초과수익률 분석 테이블 */}
+      {/* 3. 하단 상세 분석 */}
+      <div className="w-full">
+        {/* 초과수익률 분석 테이블 */}
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
           <div className="flex items-center gap-2 mb-6">
             <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
@@ -436,64 +349,6 @@ const BenchmarkPage = () => {
               </tbody>
             </table>
           </div>
-        </div>
-
-        {/* 우측: 관심 종목 트래킹 섹션 */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col justify-between">
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <div className="flex items-center gap-2">
-                <Activity className="text-indigo-500" size={20} />
-                <h3 className="text-lg font-bold text-slate-800">관심 종목 트래킹 (Watchlist)</h3>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-slate-50 text-slate-500 text-xs font-bold tracking-wider">
-                  <tr>
-                    <th className="px-4 py-3.5 rounded-l-2xl">종목명 (티커)</th>
-                    <th className="px-4 py-3.5 text-right">현재가</th>
-                    <th className="px-4 py-3.5 text-right rounded-r-2xl">{period} 수익률</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {watchlist?.map((item) => {
-                    const isUp = item.period_return >= 0;
-                    return (
-                      <tr key={item.stock_code} className="hover:bg-slate-50/50 transition-colors">
-                        <td className="px-4 py-3.5">
-                          <div className="font-bold text-slate-800">{item.stock_name}</div>
-                          <div className="text-[10px] font-mono text-slate-400">{item.stock_code}</div>
-                        </td>
-                        <td className="px-4 py-3.5 text-right font-medium text-slate-600">
-                          {item.current_price?.toLocaleString()}{item.country === "US" ? "$" : "원"}
-                        </td>
-                        <td className={`px-4 py-3.5 text-right font-semibold rounded-r-2xl ${isUp ? "text-emerald-500" : "text-rose-500"}`}>
-                          {isUp ? "+" : ""}{item.period_return}%
-                        </td>
-                      </tr>
-                    );
-                  })}
-                  {(!watchlist || watchlist.length === 0) && (
-                    <tr>
-                      <td colSpan="3" className="px-4 py-8 text-center text-slate-400 font-medium">
-                        등록된 관심 종목이 없습니다.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <button
-            onClick={() => window.location.href = '/watchlist'}
-            className="mt-6 flex items-center justify-center gap-2 py-3 bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-200 text-slate-600 hover:text-slate-800 text-sm font-semibold rounded-2xl transition-all cursor-pointer"
-          >
-            <Plus size={16} />
-            새 관심 종목 관리 페이지로 이동
-          </button>
         </div>
       </div>
 

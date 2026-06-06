@@ -10,6 +10,7 @@ import DbManagementPage from './pages/DbManagementPage';
 import RatioCheckPage from './pages/RatioCheckPage';
 import SnapshotWizardPage from './pages/SnapshotWizardPage';
 import AllocationStudioPage from './pages/AllocationStudioPage';
+import TitleManager from './components/TitleManager';
 
 function App() {
   useEffect(() => {
@@ -61,6 +62,7 @@ function App() {
 
   return (
     <Router>
+      <TitleManager />
       <MaskingProvider>
         <div className="flex h-screen bg-slate-50 text-slate-900 font-sans overflow-hidden">
           <Sidebar />
