@@ -151,7 +151,9 @@ def test_run_backtest(mock_benchmark_service_class, db_session):
         rebalancing_frequency="매일",
         vix_threshold=30.0,
         min_cash_weight=10.0,
-        max_cash_weight=40.0
+        max_cash_weight=40.0,
+        start_date="2026-05-03",
+        end_date="2026-05-08"
     )
     
     assert "cagr" in result
@@ -165,6 +167,9 @@ def test_run_backtest(mock_benchmark_service_class, db_session):
     assert isinstance(result["cagr"], float)
     assert isinstance(result["mdd"], float)
     assert len(result["dates"]) > 0
+    # 지정한 시작일과 종료일 범위 내로 결과 날짜가 필터링되었는지 검증
+    assert result["dates"][0] >= "2026-05-03"
+    assert result["dates"][-1] <= "2026-05-08"
     assert result["today_recommendation"]["recommended_stock_weight"] == 90.0
     assert result["today_recommendation"]["recommended_cash_weight"] == 10.0
 
@@ -178,7 +183,7 @@ def test_backtest_api(mock_service_class):
         "mdd": 8.2,
         "strategy_returns": [0.0, 1.2, 2.5],
         "benchmark_returns": [0.0, 0.8, 1.9],
-        "dates": ["2026-05-01", "2026-05-02", "2026-05-03"],
+        "dates": ["2026-05-03", "2026-05-04", "2026-05-05"],
         "today_recommendation": {
             "recommended_stock_weight": 90.0,
             "recommended_cash_weight": 10.0,
@@ -191,18 +196,20 @@ def test_backtest_api(mock_service_class):
                 "ma_val": 100.0,
                 "past_val": 95.0,
                 "vix_val": 15.0
-            }
+              }
         }
     }
 
-    # 올바른 파라미터로 요청
+    # 올바른 파라미터로 요청 (기간 지정 포함)
     payload = {
         "target_index": "S&P500",
         "lookback_period": 200,
         "rebalancing_frequency": "매월 말",
         "vix_threshold": 30.0,
         "min_cash_weight": 10.0,
-        "max_cash_weight": 40.0
+        "max_cash_weight": 40.0,
+        "start_date": "2026-05-01",
+        "end_date": "2026-05-10"
     }
     
     response = client.post("/api/allocation/backtest", json=payload)
@@ -218,4 +225,18 @@ def test_backtest_api(mock_service_class):
     invalid_payload["vix_threshold"] = -5.0
     response_invalid = client.post("/api/allocation/backtest", json=invalid_payload)
     assert response_invalid.status_code == 422
+
+    # 잘못된 날짜 관계 (시작일이 종료일보다 늦음)
+    invalid_date_payload = payload.copy()
+    invalid_date_payload["start_date"] = "2026-05-10"
+    invalid_date_payload["end_date"] = "2026-05-01"
+    response_invalid_date = client.post("/api/allocation/backtest", json=invalid_date_payload)
+    assert response_invalid_date.status_code == 422 or response_invalid_date.status_code == 400
+
+    # 잘못된 날짜 포맷 (YYYY-MM-DD가 아님)
+    invalid_format_payload = payload.copy()
+    invalid_format_payload["start_date"] = "20260501"
+    response_invalid_format = client.post("/api/allocation/backtest", json=invalid_format_payload)
+    assert response_invalid_format.status_code == 422 or response_invalid_format.status_code == 400
+
 

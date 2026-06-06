@@ -50,20 +50,25 @@ async function main() {
   await page.screenshot({ path: kospiScreenshotPath, fullPage: true });
   console.log(`KOSPI screenshot with VIX alert banner saved to ${kospiScreenshotPath}`);
 
-  // 3. 파라미터 조절 시나리오 테스트 (VIX 임계값을 변경해보거나, 기준 기간을 바꾼 후 시뮬레이션 실행)
+  // 3. 파라미터 조절 및 기간 설정 시나리오 테스트
+  console.log("Setting start date to '2000-01-01'...");
+  const dateInputs = page.locator('input[type="date"]');
+  await dateInputs.first().fill('2000-01-01');
+  
   // [시뮬레이션 실행] 버튼 클릭
   console.log("Clicking '시뮬레이션 실행' button...");
   const runBtn = page.locator('button:has-text("시뮬레이션 실행")');
   await runBtn.click();
   
-  // 버튼 클릭 후 6초 대기
-  console.log("Waiting for simulation recalculation (6s)...");
-  await page.waitForTimeout(6000);
-
+  // 버튼 클릭 후 8초 대기 (기간이 길어 연산시간을 넉넉히 줌)
+  console.log("Waiting for simulation recalculation (8s)...");
+  await page.waitForTimeout(8000);
+ 
   // 최종 화면 캡처
   const finalScreenshotPath = path.join(screenshotsDir, "3_final_simulation.png");
   await page.screenshot({ path: finalScreenshotPath, fullPage: true });
   console.log(`Final simulation screenshot saved to ${finalScreenshotPath}`);
+
 
   // UI 상에 핵심 텍스트 렌더링 검증
   const bodyText = await page.innerText('body');

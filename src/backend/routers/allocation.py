@@ -14,15 +14,32 @@ class BacktestRequestSchema(BaseModel):
     vix_threshold: float = Field(30.0, ge=0.0, le=100.0, description="VIX 임계값")
     min_cash_weight: float = Field(10.0, ge=0.0, le=100.0, description="최소 현금 비중 (%)")
     max_cash_weight: float = Field(40.0, ge=0.0, le=100.0, description="최대 현금 비중 (%)")
+    start_date: str = Field("1990-01-01", description="시뮬레이션 시작 날짜 (YYYY-MM-DD)")
+    end_date: str = Field(None, description="시뮬레이션 종료 날짜 (YYYY-MM-DD)")
 
     @model_validator(mode="after")
-    def validate_weights(self):
+    def validate_inputs(self):
         if self.min_cash_weight > self.max_cash_weight:
             raise ValueError("최소 현금 비중은 최대 현금 비중보다 클 수 없습니다.")
         if self.target_index not in ["KOSPI", "KOSDAQ", "S&P500", "NASDAQ"]:
             raise ValueError("지원하지 않는 대상 지수입니다. (KOSPI, KOSDAQ, S&P500, NASDAQ 중 선택)")
         if self.rebalancing_frequency not in ["매일", "매월 말", "매 분기 말"]:
             raise ValueError("지원하지 않는 리밸런싱 주기입니다. (매일, 매월 말, 매 분기 말 중 선택)")
+        
+        # 날짜 포맷 검증
+        import datetime
+        try:
+            s_date = datetime.datetime.strptime(self.start_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise ValueError("시작 날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식이어야 합니다.")
+        
+        if self.end_date:
+            try:
+                e_date = datetime.datetime.strptime(self.end_date, "%Y-%m-%d").date()
+            except ValueError:
+                raise ValueError("종료 날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식이어야 합니다.")
+            if s_date > e_date:
+                raise ValueError("시작 날짜는 종료 날짜보다 늦을 수 없습니다.")
         return self
 
 class TodayRecommendationSchema(BaseModel):
@@ -50,10 +67,13 @@ def run_backtest(payload: BacktestRequestSchema, db: Session = Depends(get_db)):
             rebalancing_frequency=payload.rebalancing_frequency,
             vix_threshold=payload.vix_threshold,
             min_cash_weight=payload.min_cash_weight,
-            max_cash_weight=payload.max_cash_weight
+            max_cash_weight=payload.max_cash_weight,
+            start_date=payload.start_date,
+            end_date=payload.end_date
         )
         return result
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"시뮬레이션 실행 중 서버 에러 발생: {str(e)}")
+

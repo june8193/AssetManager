@@ -92,7 +92,9 @@ class AllocationService:
         rebalancing_frequency: str = "매월 말",
         vix_threshold: float = 30.0,
         min_cash_weight: float = 10.0,
-        max_cash_weight: float = 40.0
+        max_cash_weight: float = 40.0,
+        start_date: str = "1990-01-01",
+        end_date: str = None
     ) -> Dict[str, Any]:
         """과거 데이터를 수집하여 동적 자산배분 백테스트를 수행합니다.
 
@@ -103,6 +105,8 @@ class AllocationService:
             vix_threshold (float): VIX 지수 공포 임계값 (기본 30)
             min_cash_weight (float): 최소 현금 비중 (%)
             max_cash_weight (float): 최대 현금 비중 (%)
+            start_date (str): 시작 날짜 (YYYY-MM-DD)
+            end_date (str): 종료 날짜 (YYYY-MM-DD)
 
         Returns:
             Dict[str, Any]: 백테스트 성과 지표 및 차트 데이터 시계열
@@ -114,16 +118,26 @@ class AllocationService:
         
         vix_ticker = "^VIX"
         
-        # 백테스트 기간 설정 (최근 10년)
-        today = datetime.date.today()
-        # lookback 데이터 연산을 위해 시작일을 10년보다 약간 더 여유있게 (약 1년 더 전) 잡음
-        start_date = today - datetime.timedelta(days=365 * 11)
+        # 날짜 파싱
+        try:
+            start_date_parsed = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        except ValueError:
+            start_date_parsed = datetime.date(1990, 1, 1)
+            
+        if end_date:
+            try:
+                end_date_parsed = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+            except ValueError:
+                end_date_parsed = datetime.date.today()
+        else:
+            end_date_parsed = datetime.date.today()
+        
+        # lookback 데이터 연산을 위해 시작일을 사용자가 지정한 날짜보다 여유있게 (룩백 기간의 약 1.5배) 더 전으로 잡음
+        db_lookback_days = int(lookback_period * 1.5 + 30)
+        db_start_date = start_date_parsed - datetime.timedelta(days=db_lookback_days)
         
         # 2. 가격 데이터 수집 (db 캐싱 지원)
-        # 만약 db 세션이 없으면 (단위 테스트 mock 등), mock 데이터를 미리 주입받아 처리해야 할 수 있음.
         if self.benchmark_service:
-            # 동기적 실행을 위해 event_loop가 있는 비동기를 run_in_threadpool 또는 asyncio.run 등으로 호출
-            # 테스트 시 mock patch 또는 conftest async loop 사용을 위해 run_coroutine_threadsafe 또는 asyncio.run 사용
             import asyncio
             try:
                 loop = asyncio.get_event_loop()
@@ -132,14 +146,12 @@ class AllocationService:
                 asyncio.set_event_loop(loop)
                 
             if loop.is_running():
-                # 이미 실행중인 루프가 있으면 futures 형태로 대기
-                prices_index = loop.run_until_complete(self.benchmark_service.get_historical_prices(index_ticker, start_date, today))
-                prices_vix = loop.run_until_complete(self.benchmark_service.get_historical_prices(vix_ticker, start_date, today))
+                prices_index = loop.run_until_complete(self.benchmark_service.get_historical_prices(index_ticker, db_start_date, end_date_parsed))
+                prices_vix = loop.run_until_complete(self.benchmark_service.get_historical_prices(vix_ticker, db_start_date, end_date_parsed))
             else:
-                prices_index = asyncio.run(self.benchmark_service.get_historical_prices(index_ticker, start_date, today))
-                prices_vix = asyncio.run(self.benchmark_service.get_historical_prices(vix_ticker, start_date, today))
+                prices_index = asyncio.run(self.benchmark_service.get_historical_prices(index_ticker, db_start_date, end_date_parsed))
+                prices_vix = asyncio.run(self.benchmark_service.get_historical_prices(vix_ticker, db_start_date, end_date_parsed))
         else:
-            # db가 없는 mock 모드에서는 빈 값 처리 (단위 테스트에서 side_effect 등으로 mocking 됨)
             prices_index = []
             prices_vix = []
 
@@ -175,6 +187,9 @@ class AllocationService:
         # lookback 기간 동안은 지표 계산이 불가능하므로 dropna
         df.dropna(subset=["ma", "past_close"], inplace=True)
 
+        # 실제 시뮬레이션 기간으로 필터링
+        df = df[(df.index >= start_date_parsed) & (df.index <= end_date_parsed)]
+
         if df.empty:
             return {
                 "cagr": 0.0,
@@ -203,7 +218,6 @@ class AllocationService:
             # 3, 6, 9, 12월의 마지막 영업일 찾기
             ym = df.index.to_series().apply(lambda d: f"{d.year}-{d.month:02d}")
             quarter_months = [3, 6, 9, 12]
-            # 분기월 필터
             df_q = df[df.index.to_series().apply(lambda d: d.month in quarter_months)]
             if not df_q.empty:
                 ym_q = df_q.index.to_series().apply(lambda d: f"{d.year}-{d.month:02d}")
@@ -214,6 +228,7 @@ class AllocationService:
             ym = df.index.to_series().apply(lambda d: f"{d.year}-{d.month:02d}")
             last_days = df.groupby(ym).apply(lambda g: g.index.max())
             df.loc[last_days, "rebalance"] = True
+
 
         # 6. 시뮬레이션 루프 수행
         # 초기화
