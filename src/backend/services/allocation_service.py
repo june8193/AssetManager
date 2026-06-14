@@ -301,6 +301,25 @@ class AllocationService:
         drawdowns = (strategy_series - peaks) / peaks * 100.0
         mdd = abs(drawdowns.min())
         mdd = round(mdd, 2)
+
+        # 벤치마크 지수의 CAGR 및 MDD 계산
+        benchmark_cagr = 0.0
+        if years > 0 and benchmark_history[-1] > 0:
+            benchmark_cagr = ((benchmark_history[-1] / 100.0) ** (1.0 / years) - 1.0) * 100.0
+            benchmark_cagr = round(benchmark_cagr, 2)
+            
+        benchmark_series = pd.Series(benchmark_history)
+        bench_peaks = benchmark_series.cummax()
+        bench_drawdowns = (benchmark_series - bench_peaks) / bench_peaks * 100.0
+        benchmark_mdd = abs(bench_drawdowns.min())
+        benchmark_mdd = round(benchmark_mdd, 2)
+
+        # 연간/월간 수익률 계산을 위해 데이터프레임에 임시 가치 매핑
+        df["strategy_val"] = strategy_history
+        df["benchmark_val"] = benchmark_history
+
+        annual_returns = self._calculate_annual_returns(df)
+        monthly_returns = self._calculate_monthly_returns(df)
         
         # 오늘 자 추천 비중 계산 (최종일 데이터 기준)
         last_row = df.iloc[-1]
@@ -337,8 +356,143 @@ class AllocationService:
         return {
             "cagr": cagr,
             "mdd": mdd,
+            "benchmark_cagr": benchmark_cagr,
+            "benchmark_mdd": benchmark_mdd,
             "strategy_returns": strategy_returns,
             "benchmark_returns": benchmark_returns,
             "dates": dates_list,
-            "today_recommendation": today_recommendation
+            "today_recommendation": today_recommendation,
+            "annual_returns": annual_returns,
+            "monthly_returns": monthly_returns
         }
+
+    def _calculate_annual_returns(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """시뮬레이션 기간 동안 연간 수익률을 전략과 지수로 나누어 계산합니다."""
+        if df.empty:
+            return []
+        df_temp = df.copy()
+        df_temp["year"] = df_temp.index.map(lambda d: d.year)
+        
+        # 연도별 마지막 영업일
+        year_ends = df_temp.groupby("year").apply(lambda g: g.index.max())
+        
+        annual_data = []
+        prev_strategy = 100.0
+        prev_benchmark = 100.0
+        
+        for y in sorted(year_ends.index):
+            date_idx = year_ends[y]
+            row = df_temp.loc[date_idx]
+            strat_val = row["strategy_val"]
+            bench_val = row["benchmark_val"]
+            
+            strat_ret = (strat_val / prev_strategy - 1.0) * 100.0
+            bench_ret = (bench_val / prev_benchmark - 1.0) * 100.0
+            
+            annual_data.append({
+                "year": int(y),
+                "strategy": round(strat_ret, 2),
+                "benchmark": round(bench_ret, 2)
+            })
+            
+            prev_strategy = strat_val
+            prev_benchmark = bench_val
+            
+        return annual_data
+
+    def _calculate_monthly_returns(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
+        """시뮬레이션 기간 동안 월간 수익률을 전략과 지수로 나누어 계산합니다."""
+        if df.empty:
+            return []
+        df_temp = df.copy()
+        df_temp["year"] = df_temp.index.map(lambda d: d.year)
+        df_temp["month"] = df_temp.index.map(lambda d: d.month)
+        df_temp["ym"] = df_temp.index.map(lambda d: f"{d.year}-{d.month:02d}")
+        
+        month_ends = df_temp.groupby("ym").apply(lambda g: g.index.max())
+        
+        monthly_data = []
+        prev_strategy = 100.0
+        prev_benchmark = 100.0
+        
+        for ym in sorted(month_ends.index):
+            date_idx = month_ends[ym]
+            row = df_temp.loc[date_idx]
+            strat_val = row["strategy_val"]
+            bench_val = row["benchmark_val"]
+            
+            strat_ret = (strat_val / prev_strategy - 1.0) * 100.0
+            bench_ret = (bench_val / prev_benchmark - 1.0) * 100.0
+            
+            year, month = map(int, ym.split("-"))
+            monthly_data.append({
+                "year": year,
+                "month": month,
+                "strategy": round(strat_ret, 2),
+                "benchmark": round(bench_ret, 2)
+            })
+            
+            prev_strategy = strat_val
+            prev_benchmark = bench_val
+            
+        return monthly_data
+
+    def save_setting(self, data: Dict[str, Any]) -> Any:
+        """자산배분 파라미터 설정을 DB에 저장합니다."""
+        from src.backend.models import AllocationSetting
+        
+        is_favorite = data.get("is_favorite", False)
+        
+        # 만약 저장하려는 설정이 즐겨찾기로 지정되었다면 다른 설정의 즐겨찾기는 해제합니다.
+        if is_favorite:
+            self.db.query(AllocationSetting).update({AllocationSetting.is_favorite: False})
+        
+        setting = AllocationSetting(
+            name=data["name"],
+            description=data.get("description"),
+            target_index=data["target_index"],
+            lookback_period=data["lookback_period"],
+            rebalancing_frequency=data["rebalancing_frequency"],
+            vix_threshold=data["vix_threshold"],
+            min_cash_weight=data["min_cash_weight"],
+            max_cash_weight=data["max_cash_weight"],
+            start_date=data["start_date"],
+            end_date=data.get("end_date"),
+            is_favorite=is_favorite,
+            simulation_result=data.get("simulation_result")
+        )
+        self.db.add(setting)
+        self.db.commit()
+        self.db.refresh(setting)
+        return setting
+
+    def get_settings(self) -> List[Any]:
+        """저장된 모든 파라미터 설정을 조회합니다."""
+        from src.backend.models import AllocationSetting
+        return self.db.query(AllocationSetting).order_by(AllocationSetting.created_at.desc()).all()
+
+    def delete_setting(self, setting_id: int) -> bool:
+        """파라미터 설정을 삭제합니다."""
+        from src.backend.models import AllocationSetting
+        setting = self.db.query(AllocationSetting).filter(AllocationSetting.id == setting_id).first()
+        if setting:
+            self.db.delete(setting)
+            self.db.commit()
+            return True
+        return False
+
+    def toggle_favorite(self, setting_id: int) -> Any:
+        """특정 설정을 주로 참고할 설정(즐겨찾기)으로 지정하고 나머지는 해제합니다."""
+        from src.backend.models import AllocationSetting
+        
+        # 다른 모든 설정의 즐겨찾기 플래그를 해제
+        self.db.query(AllocationSetting).update({AllocationSetting.is_favorite: False})
+        
+        setting = self.db.query(AllocationSetting).filter(AllocationSetting.id == setting_id).first()
+        if setting:
+            setting.is_favorite = True
+            self.db.commit()
+            self.db.refresh(setting)
+            return setting
+        return None
+

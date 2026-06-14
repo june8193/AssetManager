@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
+import datetime
 from pydantic import BaseModel, Field, model_validator
 from ..database import get_db
 from ..services.allocation_service import AllocationService
@@ -51,10 +52,47 @@ class TodayRecommendationSchema(BaseModel):
 class BacktestResponseSchema(BaseModel):
     cagr: float
     mdd: float
+    benchmark_cagr: float
+    benchmark_mdd: float
     strategy_returns: List[float]
     benchmark_returns: List[float]
     dates: List[str]
     today_recommendation: TodayRecommendationSchema
+    annual_returns: List[Dict[str, Any]]
+    monthly_returns: List[Dict[str, Any]]
+
+class AllocationSettingCreateSchema(BaseModel):
+    name: str = Field(..., description="설정 이름")
+    description: str = Field(None, description="설정 설명")
+    target_index: str = Field("S&P500")
+    lookback_period: int = Field(200)
+    rebalancing_frequency: str = Field("매월 말")
+    vix_threshold: float = Field(30.0)
+    min_cash_weight: float = Field(10.0)
+    max_cash_weight: float = Field(40.0)
+    start_date: str = Field("1990-01-01")
+    end_date: str = Field(None)
+    simulation_result: str = Field(None, description="시뮬레이션 결과 JSON 문자열")
+
+class AllocationSettingResponseSchema(BaseModel):
+    id: int
+    name: str
+    description: str = None
+    target_index: str
+    lookback_period: int
+    rebalancing_frequency: str
+    vix_threshold: float
+    min_cash_weight: float
+    max_cash_weight: float
+    start_date: str
+    end_date: str = None
+    is_favorite: bool
+    simulation_result: str = None
+    created_at: datetime.datetime
+    updated_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
 
 @router.post("/backtest", response_model=BacktestResponseSchema)
 def run_backtest(payload: BacktestRequestSchema, db: Session = Depends(get_db)):
@@ -76,4 +114,38 @@ def run_backtest(payload: BacktestRequestSchema, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"시뮬레이션 실행 중 서버 에러 발생: {str(e)}")
+
+@router.get("/settings", response_model=List[AllocationSettingResponseSchema])
+def get_settings(db: Session = Depends(get_db)):
+    """저장된 모든 자산배분 파라미터 설정을 조회합니다."""
+    service = AllocationService(db)
+    return service.get_settings()
+
+@router.post("/settings", response_model=AllocationSettingResponseSchema)
+def save_setting(payload: AllocationSettingCreateSchema, db: Session = Depends(get_db)):
+    """자산배분 파라미터 설정을 신규 저장합니다."""
+    service = AllocationService(db)
+    try:
+        return service.save_setting(payload.model_dump())
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"설정 저장 중 에러 발생: {str(e)}")
+
+@router.delete("/settings/{setting_id}")
+def delete_setting(setting_id: int, db: Session = Depends(get_db)):
+    """파라미터 설정을 삭제합니다."""
+    service = AllocationService(db)
+    success = service.delete_setting(setting_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="해당 설정을 찾을 수 없습니다.")
+    return {"status": "success", "message": "설정이 성공적으로 삭제되었습니다."}
+
+@router.post("/settings/{setting_id}/favorite", response_model=AllocationSettingResponseSchema)
+def toggle_favorite(setting_id: int, db: Session = Depends(get_db)):
+    """특정 설정을 주로 참고할 설정으로 지정합니다."""
+    service = AllocationService(db)
+    setting = service.toggle_favorite(setting_id)
+    if not setting:
+        raise HTTPException(status_code=404, detail="해당 설정을 찾을 수 없습니다.")
+    return setting
+
 

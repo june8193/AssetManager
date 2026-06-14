@@ -181,6 +181,8 @@ def test_backtest_api(mock_service_class):
     mock_instance.run_backtest.return_value = {
         "cagr": 12.5,
         "mdd": 8.2,
+        "benchmark_cagr": 10.1,
+        "benchmark_mdd": 9.5,
         "strategy_returns": [0.0, 1.2, 2.5],
         "benchmark_returns": [0.0, 0.8, 1.9],
         "dates": ["2026-05-03", "2026-05-04", "2026-05-05"],
@@ -197,7 +199,9 @@ def test_backtest_api(mock_service_class):
                 "past_val": 95.0,
                 "vix_val": 15.0
               }
-        }
+        },
+        "annual_returns": [{"year": 2026, "strategy": 2.5, "benchmark": 1.9}],
+        "monthly_returns": [{"year": 2026, "month": 5, "strategy": 2.5, "benchmark": 1.9}]
     }
 
     # 올바른 파라미터로 요청 (기간 지정 포함)
@@ -238,5 +242,119 @@ def test_backtest_api(mock_service_class):
     invalid_format_payload["start_date"] = "20260501"
     response_invalid_format = client.post("/api/allocation/backtest", json=invalid_format_payload)
     assert response_invalid_format.status_code == 422 or response_invalid_format.status_code == 400
+
+
+@patch('src.backend.services.allocation_service.BenchmarkService')
+def test_run_backtest_extended_metrics(mock_benchmark_service_class, db_session):
+    """지수 CAGR, MDD 및 연간/월간 수익률 추가 검증"""
+    mock_instance = MagicMock()
+    mock_benchmark_service_class.return_value = mock_instance
+    
+    dates = [
+        datetime.date(2025, 12, 30),
+        datetime.date(2025, 12, 31),
+        datetime.date(2026, 1, 2),
+        datetime.date(2026, 1, 5),
+    ]
+    
+    mock_prices_index = []
+    mock_prices_vix = []
+    
+    # 지수와 VIX 모의 데이터 생성
+    for d, p in zip(dates, [100.0, 101.0, 102.0, 103.0]):
+        price_obj = MagicMock()
+        price_obj.price_date = d
+        price_obj.close_price = p
+        mock_prices_index.append(price_obj)
+        
+        vix_obj = MagicMock()
+        vix_obj.price_date = d
+        vix_obj.close_price = 15.0
+        mock_prices_vix.append(vix_obj)
+
+    async def side_effect(ticker, start_date, end_date):
+        if ticker == "^VIX":
+            return mock_prices_vix
+        return mock_prices_index
+
+    mock_instance.get_historical_prices.side_effect = side_effect
+    
+    service = AllocationService(db=db_session)
+    service.benchmark_service = mock_instance
+    
+    result = service.run_backtest(
+        target_index="S&P500",
+        lookback_period=2,
+        rebalancing_frequency="매일",
+        vix_threshold=30.0,
+        min_cash_weight=10.0,
+        max_cash_weight=40.0,
+        start_date="2025-12-31",
+        end_date="2026-01-05"
+    )
+    
+    # 신규 메트릭 필드 유무 및 타입 검증
+    assert "benchmark_cagr" in result
+    assert "benchmark_mdd" in result
+    assert "annual_returns" in result
+    assert "monthly_returns" in result
+    
+    assert isinstance(result["benchmark_cagr"], float)
+    assert isinstance(result["benchmark_mdd"], float)
+    assert isinstance(result["annual_returns"], list)
+    assert isinstance(result["monthly_returns"], list)
+
+
+def test_allocation_settings_crud(db_session):
+    """자산배분 파라미터 설정 저장/조회/삭제/즐겨찾기 API 연동 테스트"""
+    # 1. 목록 조회 (비어있어야 함)
+    response = client.get("/api/allocation/settings")
+    assert response.status_code == 200
+    assert len(response.json()) == 0
+
+    # 2. 신규 설정 저장
+    payload = {
+        "name": "성장형 기본설정",
+        "description": "200일 이평선 기준 성장 전략",
+        "target_index": "S&P500",
+        "lookback_period": 200,
+        "rebalancing_frequency": "매월 말",
+        "vix_threshold": 30.0,
+        "min_cash_weight": 10.0,
+        "max_cash_weight": 40.0,
+        "start_date": "1990-01-01",
+        "end_date": "2026-06-01",
+        "simulation_result": '{"cagr": 12.5, "mdd": 8.0}'
+    }
+    response_create = client.post("/api/allocation/settings", json=payload)
+    assert response_create.status_code == 200
+    created_data = response_create.json()
+    assert created_data["name"] == "성장형 기본설정"
+    assert created_data["is_favorite"] is False
+    assert created_data["id"] is not None
+    setting_id = created_data["id"]
+
+    # 3. 다시 목록 조회 (1개 존재 확인)
+    response_list = client.get("/api/allocation/settings")
+    assert response_list.status_code == 200
+    list_data = response_list.json()
+    assert len(list_data) == 1
+    assert list_data[0]["id"] == setting_id
+
+    # 4. 즐겨찾기(주 사용 설정) 토글 설정
+    response_fav = client.post(f"/api/allocation/settings/{setting_id}/favorite")
+    assert response_fav.status_code == 200
+    fav_data = response_fav.json()
+    assert fav_data["is_favorite"] is True
+
+    # 5. 삭제 검증
+    response_del = client.delete(f"/api/allocation/settings/{setting_id}")
+    assert response_del.status_code == 200
+
+    # 6. 삭제 후 목록 재조회 (비어있어야 함)
+    response_list_after = client.get("/api/allocation/settings")
+    assert response_list_after.status_code == 200
+    assert len(response_list_after.json()) == 0
+
 
 
