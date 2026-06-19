@@ -36,7 +36,6 @@ def main():
     env["ASSET_MANAGER_BACKEND_PORT"] = str(backend_port)
     env["ASSET_MANAGER_FRONTEND_PORT"] = str(frontend_port)
     env["APP_ENV"] = "production"  # 운영 DB(src/assets.db) 사용 강제
-    env["DEBUG"] = "false"         # 운영 모드에서는 디버그 비활성화
 
     print("\n" + "="*50)
     print("   AssetManager PRODUCTION Server")
@@ -65,11 +64,6 @@ def main():
         shell=True,
         text=True
     )
-
-    # 3. 브라우저 자동 열기
-    import webbrowser
-    print(f"\n[3/3] Opening browser at http://localhost:{frontend_port}...")
-    webbrowser.open(f"http://localhost:{frontend_port}")
 
     print("\n" + "-"*50)
     print(" 운영 서버가 구동되었습니다. 종료하려면 이 창을 닫거나 Ctrl+C를 누르세요.")
