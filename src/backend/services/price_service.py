@@ -291,13 +291,14 @@ class PriceService:
             
             import datetime
             dt = datetime.datetime.strptime(formatted_date, "%Y-%m-%d")
-            start_date = dt.strftime("%Y-%m-%d")
-            end_date = (dt + datetime.timedelta(days=5)).strftime("%Y-%m-%d")
+            # 조회일 기준 5일 전부터 조회일 당일(까지 포함되도록 +1일) 조회
+            start_date = (dt - datetime.timedelta(days=5)).strftime("%Y-%m-%d")
+            end_date = (dt + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
             
             ticker = await run_in_threadpool(yf.Ticker, symbol)
             hist = await run_in_threadpool(ticker.history, start=start_date, end=end_date)
             if not hist.empty:
-                return float(hist['Close'].iloc[0])
+                return float(hist['Close'].iloc[-1])
         except Exception as e:
             print(f"[WARNING] 미국 주식 일별 주가 조회 중 예외 발생 ({symbol}): {e}")
         return 0.0

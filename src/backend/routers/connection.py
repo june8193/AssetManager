@@ -21,8 +21,8 @@ async def test_api_connection():
         HTTPException: API 호출 중 오류가 발생한 경우 500 에러를 반환합니다.
     """
     try:
-        # settings.json 경로가 루트라고 가정 (uv run 실행 시)
-        api = KiwoomAPI(settings_path="settings.json")
+        # settings.toml 경로가 루트라고 가정 (uv run 실행 시)
+        api = KiwoomAPI(settings_path="settings.toml")
         results = api.check_all_connections()
         return {"status": "success", "data": results}
     except Exception as e:

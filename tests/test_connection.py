@@ -29,6 +29,9 @@ def test_api_connection_success():
         
         response = client.get("/api/connection/test")
         
+        # settings.toml 경로로 초기화되었는지 검증 (TDD 규칙에 따라 실패 유도)
+        MockAPI.assert_called_once_with(settings_path="settings.toml")
+        
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "success"
@@ -41,6 +44,9 @@ def test_api_connection_failure():
         instance.check_all_connections.side_effect = Exception("API 서버 오류")
         
         response = client.get("/api/connection/test")
+        
+        # settings.toml 경로로 초기화되었는지 검증 (TDD 규칙에 따라 실패 유도)
+        MockAPI.assert_called_once_with(settings_path="settings.toml")
         
         assert response.status_code == 500
         data = response.json()
