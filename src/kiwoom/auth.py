@@ -1,5 +1,6 @@
 import os
 import json
+import tomllib
 import httpx
 import logging
 from datetime import datetime, timedelta
@@ -41,17 +42,17 @@ class KiwoomAuthManager:
         instance._load_credentials()
 
     def _load_credentials(self):
-        """settings.json 파일로부터 모든 인증 및 설정 정보를 로드합니다."""
+        """settings.toml 파일로부터 모든 인증 및 설정 정보를 로드합니다."""
         project_root = Path(__file__).parent.parent.parent
-        settings_path = project_root / "settings.json"
+        settings_path = project_root / "settings.toml"
         
         if not settings_path.exists():
             self.logger.error(f"설정 파일({settings_path})을 찾을 수 없습니다.")
-            raise FileNotFoundError("settings.json 파일이 필요합니다.")
+            raise FileNotFoundError("settings.toml 파일이 필요합니다.")
             
         try:
-            with open(settings_path, "r", encoding="utf-8") as f:
-                settings = json.load(f)
+            with open(settings_path, "rb") as f:
+                settings = tomllib.load(f)
                 
             self.base_url = settings.get("base_url")
             

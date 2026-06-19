@@ -1,5 +1,6 @@
 import os
 import json
+import tomllib
 import requests
 
 class KiwoomAPI:
@@ -9,7 +10,7 @@ class KiwoomAPI:
     기본적인 API 연동 기능을 제공합니다.
     """
 
-    def __init__(self, settings_path="settings.json"):
+    def __init__(self, settings_path="settings.toml"):
         """KiwoomAPI 초기화
 
         Args:
@@ -31,8 +32,8 @@ class KiwoomAPI:
         """
         if not os.path.exists(path):
             raise FileNotFoundError(f"{path} 파일을 찾을 수 없습니다.")
-        with open(path, "r", encoding="utf-8") as f:
-            return json.load(f)
+        with open(path, "rb") as f:
+            return tomllib.load(f)
 
     def get_access_token(self, app_key, secret_key):
         """접근 토큰을 발급받습니다 (au10001).

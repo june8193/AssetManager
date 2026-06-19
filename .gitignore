@@ -3,6 +3,11 @@ work
 
 # 비밀 정보 및 설정 (계좌번호, 앱키, 시크릿키 등)
 settings.json
+settings.toml
+
+# macOS 시스템 숨김 파일 무시 설정
+.DS_Store
+**/.DS_Store
 
 # Python 및 DB 연관 캐시/가상환경 무시 설정
 __pycache__/
@@ -16,6 +21,7 @@ venv/
 assets.db
 test_*.db
 dev_assets.db
+backups/
 
 
 # 에이전트 내부 메모리/로그 디렉토리

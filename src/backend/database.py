@@ -3,15 +3,16 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import os
 import json
+import tomllib
 import sys
 from pathlib import Path
 
 # 프로젝트 루트 디렉토리 및 설정 파일 경로 계산
 BASE_DIR = Path(__file__).parent.parent.parent
-SETTINGS_PATH = BASE_DIR / "settings.json"
+SETTINGS_PATH = BASE_DIR / "settings.toml"
 
 def load_database_url():
-    """settings.json 파일에서 데이터베이스 URL을 로드합니다."""
+    """settings.toml 파일에서 데이터베이스 URL을 로드합니다."""
     # 1. 테스트 환경(pytest)인 경우 격리된 테스트용 DB 사용
     if "pytest" in sys.modules:
         return "sqlite:///./test_pytest.db"
@@ -29,8 +30,8 @@ def load_database_url():
         return default_url
         
     try:
-        with open(SETTINGS_PATH, "r", encoding="utf-8") as f:
-            settings = json.load(f)
+        with open(SETTINGS_PATH, "rb") as f:
+            settings = tomllib.load(f)
             return settings.get("database", {}).get("url", default_url)
     except Exception as e:
         print(f"⚠️ 설정 파일 로드 중 오류 발생, 기본 DB 사용: {e}")

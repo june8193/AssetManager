@@ -27,8 +27,8 @@ app.add_middleware(
 async def test_api_connection():
     """키움증권 모든 계정의 연결 상태를 테스트하고 결과를 반환합니다."""
     try:
-        # settings.json 경로가 루트라고 가정 (uv run 실행 시)
-        api = KiwoomAPI(settings_path="settings.json")
+        # settings.toml 경로가 루트라고 가정 (uv run 실행 시)
+        api = KiwoomAPI(settings_path="settings.toml")
         results = api.check_all_connections()
         return {"status": "success", "data": results}
     except Exception as e:

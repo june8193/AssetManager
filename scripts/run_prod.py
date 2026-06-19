@@ -59,7 +59,7 @@ def main():
     # 2. 프론트엔드 실행
     print(f"\n[2/2] Starting Frontend Server (Vite) on port {frontend_port}...")
     frontend_process = subprocess.Popen(
-        ["pnpm", "run", "dev"],
+        "pnpm run dev",
         cwd=str(frontend_dir),
         env=env,
         shell=True,

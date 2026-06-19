@@ -1,13 +1,14 @@
 import pytest
 import asyncio
 import json
+import tomllib
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, patch, Mock, mock_open
 from src.kiwoom.auth import KiwoomAuthManager
 
 @pytest.fixture(autouse=True)
 def mock_settings_json():
-    """테스트 중에 settings.json 파일을 읽지 않도록 Mocking합니다."""
+    """테스트 중에 settings.toml 파일을 읽지 않도록 Mocking합니다."""
     # KiwoomAuthManager는 싱글톤이므로 테스트마다 인스턴스를 초기화해야 할 수 있습니다.
     KiwoomAuthManager._instance = None
     
@@ -23,8 +24,8 @@ def mock_settings_json():
     
     # mock_open을 사용하여 context manager 프로토콜 지원
     with patch("pathlib.Path.exists", return_value=True), \
-         patch("builtins.open", mock_open(read_data=json.dumps(mock_data))), \
-         patch("json.load", return_value=mock_data):
+         patch("builtins.open", mock_open()), \
+         patch("tomllib.load", return_value=mock_data):
         yield
 
 @pytest.mark.asyncio

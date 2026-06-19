@@ -1,5 +1,6 @@
 import os
 import json
+import tomllib
 import shutil
 import datetime
 import glob
@@ -9,7 +10,7 @@ from src.kiwoom.api import KiwoomAPI
 class BackupService:
     """데이터베이스 파일의 주기적인 백업을 관리하는 서비스 클래스입니다."""
 
-    def __init__(self, settings_path="settings.json"):
+    def __init__(self, settings_path="settings.toml"):
         """BackupService를 초기화하고 설정을 로드합니다.
 
         Args:
@@ -17,8 +18,8 @@ class BackupService:
         """
         # 설정 파일 직접 로드
         try:
-            with open(settings_path, "r", encoding="utf-8") as f:
-                full_settings = json.load(f)
+            with open(settings_path, "rb") as f:
+                full_settings = tomllib.load(f)
         except Exception:
             full_settings = {}
 

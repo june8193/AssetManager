@@ -74,7 +74,7 @@ class LegacyDataMigrator:
         
         accounts_list = self.kiwoom.settings.get("accounts", [])
         if not accounts_list:
-            raise RuntimeError("키움 API 계정 정보가 settings.json에 없습니다.")
+            raise RuntimeError("키움 API 계정 정보가 settings.toml에 없습니다.")
         
         acc = accounts_list[0] # 첫 번째 계정 사용
         token = self.kiwoom.get_access_token(acc["app_key"], acc["secret_key"])

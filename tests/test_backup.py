@@ -1,5 +1,6 @@
 import pytest
 import json
+import tomllib
 import os
 import shutil
 import datetime
@@ -32,8 +33,8 @@ def backup_service(temp_backup_dir, mock_db_file):
         }
     }
     
-    with patch("builtins.open", mock_open(read_data=json.dumps(settings))), \
-         patch("json.load", return_value=settings):
+    with patch("builtins.open", mock_open()), \
+         patch("tomllib.load", return_value=settings):
         service = BackupService()
         # 테스트를 위해 DB 경로를 임시 경로로 변경
         service.db_path = str(mock_db_file)
