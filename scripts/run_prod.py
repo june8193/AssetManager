@@ -49,7 +49,7 @@ def main():
     env["ASSET_MANAGER_BACKEND_PORT"] = str(backend_port)
     env["ASSET_MANAGER_FRONTEND_PORT"] = str(frontend_port)
     env["VITE_API_PORT"] = str(backend_port)
-    env["VITE_API_URL"] = f"http://localhost:{backend_port}/api"
+    env["VITE_API_URL"] = "/api"
     env["VITE_APP_VERSION"] = get_version(root_dir)
     env["APP_ENV"] = "production"  # 운영 DB(src/assets.db) 사용 강제
 

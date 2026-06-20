@@ -24,7 +24,7 @@ export default function ExchangeRateForm() {
   // 최근 환율 목록 가져오기
   const fetchRates = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/exchange/rates?limit=10');
+      const response = await fetch('/api/exchange/rates?limit=10');
       if (response.ok) {
         const data = await response.json();
         setRates(data);
@@ -50,7 +50,7 @@ export default function ExchangeRateForm() {
     setMessage('');
 
     try {
-      const response = await fetch(`http://localhost:8000/api/exchange/rates?force=${force}`, {
+      const response = await fetch(`/api/exchange/rates?force=${force}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -65,7 +65,7 @@ export default function ExchangeRateForm() {
         if (confirmUpdate) {
           // force=true로 재요청
           setLoading(true);
-          const forceResponse = await fetch(`http://localhost:8000/api/exchange/rates?force=true`, {
+          const forceResponse = await fetch(`/api/exchange/rates?force=true`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
