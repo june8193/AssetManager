@@ -39,3 +39,6 @@ superpowers/
 
 # E2E 테스트 스크린샷 폴더
 screenshots/
+
+# GitHub Self-hosted Runner
+actions-runner/

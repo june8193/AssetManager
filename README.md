@@ -73,6 +73,28 @@ pm2 start ecosystem.config.js
 * **서버 재기동:** `pm2 restart asset-manager-prod`
 * **서버 종료 및 등록 해제:** `pm2 delete asset-manager-prod`
 
+### 4. PM2를 이용한 GitHub Self-hosted Runner 구동 (GitHub Runner with PM2)
+GitHub Actions Self-hosted Runner를 PM2를 사용하여 백그라운드에서 상시 안정적으로 실행하고 관리할 수 있습니다. `ecosystem.config.js`에 설정이 함께 등록되어 있으므로 간단하게 제어가 가능합니다.
+
+```bash
+# GitHub Runner 개별 기동
+pm2 start ecosystem.config.js --only asset-manager-gh-runner
+
+# 또는, 애플리케이션 서버와 GitHub Runner를 동시에 기동
+pm2 start ecosystem.config.js
+```
+
+**러너 관리를 위한 유용한 PM2 명령어:**
+* **실시간 로그 조회:** `pm2 logs asset-manager-gh-runner`
+* **러너 재기동:** `pm2 restart asset-manager-gh-runner`
+* **러너 종료 및 등록 해제:** `pm2 delete asset-manager-gh-runner`
+
+설정 파일 없이 직접 명령어로 구동하려는 경우 다음과 같이 실행할 수도 있습니다:
+```bash
+pm2 start actions-runner/run.sh --name "asset-manager-gh-runner"
+```
+
+
 ## 🧪 Running Tests
 
 백엔드와 프론트엔드 전체 테스트를 실행하려면 다음 명령어를 사용하세요:
