@@ -45,7 +45,7 @@ def main():
     print("="*50)
 
     # 1. 백엔드 서버 실행
-    print(f"\n[1/2] Starting Backend Server (FastAPI) on port {backend_port}...")
+    print(f"\n[1/3] Starting Backend Server (FastAPI) on port {backend_port}...")
     backend_process = subprocess.Popen(
         ["uv", "run", "python", "-m", "src.backend.main"],
         cwd=str(root_dir),
@@ -55,10 +55,24 @@ def main():
 
     time.sleep(2)
 
-    # 2. 프론트엔드 실행
-    print(f"\n[2/2] Starting Frontend Server (Vite) on port {frontend_port}...")
+    # 2. 프론트엔드 빌드
+    print(f"\n[2/3] Building Frontend...")
+    build_result = subprocess.run(
+        "pnpm run build",
+        cwd=str(frontend_dir),
+        env=env,
+        shell=True
+    )
+    if build_result.returncode != 0:
+        print("❌ 프론트엔드 빌드에 실패했습니다. 서버 구동을 중단합니다.")
+        if backend_process.poll() is None:
+            backend_process.terminate()
+        sys.exit(1)
+
+    # 3. 프론트엔드 Preview 실행 (배포 모드)
+    print(f"\n[3/3] Starting Frontend Server (Vite Preview) on port {frontend_port}...")
     frontend_process = subprocess.Popen(
-        "pnpm run dev",
+        f"pnpm run preview --port {frontend_port} --host localhost",
         cwd=str(frontend_dir),
         env=env,
         shell=True,

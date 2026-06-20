@@ -58,6 +58,21 @@ uv run scripts/run_prod.py
 ```
 *주의: 실제 데이터가 변경될 수 있으므로 E2E 테스트 등을 진행할 때는 이 명령어를 사용하지 마십시오.*
 
+### 3. PM2를 이용한 운영 환경 상시 구동 (Production with PM2)
+운영 서버가 백그라운드에서 중단 없이 상시 구동되도록 PM2(Process Manager 2)를 사용할 수 있습니다. PM2 설정 파일(`ecosystem.config.js`)을 통해 구동 시 자동으로 프론트엔드 최적화 빌드 후 배포용 preview 서버가 구동됩니다.
+
+PM2가 설치되어 있는지 확인한 후 실행합니다 (미설치 시 `npm install -g pm2`로 설치):
+```bash
+# PM2로 서버 기동
+pm2 start ecosystem.config.js
+```
+
+**유용한 PM2 명령어:**
+* **상태 모니터링:** `pm2 status`
+* **실시간 로그 조회:** `pm2 logs asset-manager-prod`
+* **서버 재기동:** `pm2 restart asset-manager-prod`
+* **서버 종료 및 등록 해제:** `pm2 delete asset-manager-prod`
+
 ## 🧪 Running Tests
 
 백엔드와 프론트엔드 전체 테스트를 실행하려면 다음 명령어를 사용하세요:
