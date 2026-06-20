@@ -21,6 +21,19 @@ def find_available_port(start_port, max_attempts=10):
                 continue
     raise IOError(f"Could not find an available port starting from {start_port}")
 
+def get_version(root_dir):
+    """pyproject.toml 파일에서 버전을 추출합니다."""
+    try:
+        pyproject_path = Path(root_dir) / "pyproject.toml"
+        if pyproject_path.exists():
+            with open(pyproject_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if line.strip().startswith("version ="):
+                        return line.split("=")[1].strip().strip('"').strip("'")
+    except Exception as e:
+        print(f"⚠️ 버전 정보 읽기 실패: {e}")
+    return "0.0.0"
+
 def main():
     """운영용 데이터베이스(src/assets.db)를 사용하여 서버를 실행합니다."""
     # 프로젝트 루트 경로 설정
@@ -35,6 +48,9 @@ def main():
     env = os.environ.copy()
     env["ASSET_MANAGER_BACKEND_PORT"] = str(backend_port)
     env["ASSET_MANAGER_FRONTEND_PORT"] = str(frontend_port)
+    env["VITE_API_PORT"] = str(backend_port)
+    env["VITE_API_URL"] = f"http://localhost:{backend_port}/api"
+    env["VITE_APP_VERSION"] = get_version(root_dir)
     env["APP_ENV"] = "production"  # 운영 DB(src/assets.db) 사용 강제
 
     print("\n" + "="*50)

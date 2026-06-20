@@ -87,9 +87,14 @@ const Sidebar = () => {
         <Link to="/" className="flex items-center gap-2 hover:opacity-80 transition-opacity whitespace-nowrap">
           <Activity className="text-blue-600 flex-shrink-0" size={24} />
           {isOpen && (
-            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 font-headline tracking-tight">
-              AssetManager
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-700 to-indigo-700 font-headline tracking-tight">
+                AssetManager
+              </span>
+              <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 border border-slate-200/60 px-1.5 py-0.5 rounded-md font-mono self-center">
+                v{import.meta.env.VITE_APP_VERSION || '0.0.0'}
+              </span>
+            </div>
           )}
         </Link>
       </div>

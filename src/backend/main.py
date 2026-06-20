@@ -51,20 +51,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="AssetManager Backend API", lifespan=lifespan)
 
-# CORS 활성화 (Vite 개발 서버의 로컬 접속을 허용)
-frontend_port = os.environ.get("ASSET_MANAGER_FRONTEND_PORT", "5173")
-allow_origins = [
-    f"http://localhost:{frontend_port}",
-    f"http://127.0.0.1:{frontend_port}"
-]
+# CORS 활성화 (Vite 개발 서버 및 사설 IP 대역 접속을 유연하게 허용)
+allow_origin_regex = r"https?://(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2[0-9]|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?"
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allow_origins,
+    allow_origin_regex=allow_origin_regex,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # 모듈화된 라우터 연결
 app.include_router(watchlist.router)
