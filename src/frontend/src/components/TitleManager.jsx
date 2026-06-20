@@ -9,7 +9,6 @@ const TITLE_MAP = {
   '/dashboard': '대시보드',
   '/benchmark': '벤치마크 비교',
   '/benchmark/compare-returns': '수익률 비교 분석',
-  '/allocation/studio': '자산배분 스튜디오',
   '/ratios/check': '비중 점검',
   '/db': '마스터 관리',
   '/db/snapshots/new': '스냅샷 생성',

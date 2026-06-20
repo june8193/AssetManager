@@ -8,7 +8,6 @@ import ConnectionPage from './pages/ConnectionPage';
 import DbManagementPage from './pages/DbManagementPage';
 import RatioCheckPage from './pages/RatioCheckPage';
 import SnapshotWizardPage from './pages/SnapshotWizardPage';
-import AllocationStudioPage from './pages/AllocationStudioPage';
 import TitleManager from './components/TitleManager';
 
 function App() {
@@ -29,7 +28,6 @@ function App() {
               <Route path="/connection" element={<ConnectionPage />} />
               <Route path="/db" element={<DbManagementPage />} />
               <Route path="/db/snapshots/new" element={<SnapshotWizardPage />} />
-              <Route path="/allocation/studio" element={<AllocationStudioPage />} />
             </Routes>
           </div>
         </div>
