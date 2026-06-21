@@ -29,17 +29,41 @@ def mock_yfinance():
             "last_price": 850.20,
             "previous_close": 854.04  # (850.20 / 854.04 - 1) * 100 = -0.45%
         }
+
+        # S&P 500 (^GSPC) mock
+        mock_sp500 = MagicMock()
+        mock_sp500.fast_info = {
+            "last_price": 5000.00,
+            "previous_close": 4950.00  # (5000 / 4950 - 1) * 100 = 1.01%
+        }
+
+        # NASDAQ (^IXIC) mock
+        mock_nasdaq = MagicMock()
+        mock_nasdaq.fast_info = {
+            "last_price": 16000.00,
+            "previous_close": 16100.00  # (16000 / 16100 - 1) * 100 = -0.62%
+        }
+
+        # DOW JONES (^DJI) mock
+        mock_dow = MagicMock()
+        mock_dow.fast_info = {
+            "last_price": 39000.00,
+            "previous_close": 39000.00  # (39000 / 39000 - 1) * 100 = 0.0%
+        }
         
         # Tickers 인스턴스의 tickers 딕셔너리 모킹
         mock_instance.tickers = {
             "^KS11": mock_kospi,
-            "^KQ11": mock_kosdaq
+            "^KQ11": mock_kosdaq,
+            "^GSPC": mock_sp500,
+            "^IXIC": mock_nasdaq,
+            "^DJI": mock_dow
         }
         
         yield mock_instance
 
-def test_get_market_indices_success(mock_yfinance):
-    """코스피 및 코스닥 지수가 모킹된 값을 기준으로 정상적으로 반환되는지 확인합니다."""
+def test_get_market_indices_kr_success(mock_yfinance):
+    """한국 지수가 모킹된 값을 기준으로 정상적으로 반환되는지 확인합니다."""
     response = client.get("/api/market/indices")
     assert response.status_code == 200
     
@@ -56,10 +80,33 @@ def test_get_market_indices_success(mock_yfinance):
     assert data[1]["current_price"] == 850.20
     assert data[1]["change_rate"] == -0.45
 
-def test_get_market_indices_failure():
-    """yfinance 호출 시 예외가 발생하는 경우 기본값이 정상적으로 반환되는지 확인합니다."""
+def test_get_market_indices_us_success(mock_yfinance):
+    """미국 지수가 모킹된 값을 기준으로 정상적으로 반환되는지 확인합니다."""
+    response = client.get("/api/market/indices?country=US")
+    assert response.status_code == 200
+    
+    data = response.json()
+    assert len(data) == 3
+    
+    # S&P 500 검증
+    assert data[0]["index_name"] == "S&P 500"
+    assert data[0]["current_price"] == 5000.00
+    assert data[0]["change_rate"] == 1.01
+    
+    # NASDAQ 검증
+    assert data[1]["index_name"] == "NASDAQ"
+    assert data[1]["current_price"] == 16000.00
+    assert data[1]["change_rate"] == -0.62
+    
+    # DOW JONES 검증
+    assert data[2]["index_name"] == "DOW JONES"
+    assert data[2]["current_price"] == 39000.00
+    assert data[2]["change_rate"] == 0.0
+
+def test_get_market_indices_failure_kr():
+    """KR 지수 호출 실패 시 KOSPI/KOSDAQ 기본값이 정상적으로 반환되는지 확인합니다."""
     with patch("src.backend.routers.market.yf.Tickers", side_effect=Exception("API Error")):
-        response = client.get("/api/market/indices")
+        response = client.get("/api/market/indices?country=KR")
         assert response.status_code == 200
         
         data = response.json()
@@ -70,6 +117,30 @@ def test_get_market_indices_failure():
         assert data[1]["index_name"] == "KOSDAQ"
         assert data[1]["current_price"] == 0.0
         assert data[1]["change_rate"] == 0.0
+
+def test_get_market_indices_failure_us():
+    """US 지수 호출 실패 시 미국 3대 지수 기본값이 정상적으로 반환되는지 확인합니다."""
+    with patch("src.backend.routers.market.yf.Tickers", side_effect=Exception("API Error")):
+        response = client.get("/api/market/indices?country=US")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert len(data) == 3
+        assert data[0]["index_name"] == "S&P 500"
+        assert data[0]["current_price"] == 0.0
+        assert data[0]["change_rate"] == 0.0
+        assert data[1]["index_name"] == "NASDAQ"
+        assert data[1]["current_price"] == 0.0
+        assert data[1]["change_rate"] == 0.0
+        assert data[2]["index_name"] == "DOW JONES"
+        assert data[2]["current_price"] == 0.0
+        assert data[2]["change_rate"] == 0.0
+
+def test_get_market_indices_invalid_country():
+    """지원하지 않는 국가 코드가 입력된 경우 400 에러를 반환하는지 확인합니다."""
+    response = client.get("/api/market/indices?country=JP")
+    assert response.status_code == 400
+    assert "지원하지 않는 국가 코드" in response.json()["detail"]
 
 @pytest.mark.parametrize(
     "date_str, country, expected_holiday, expected_desc",

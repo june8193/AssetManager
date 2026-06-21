@@ -19,11 +19,11 @@ class MarketIndexItem(BaseModel):
     """시장 지수 정보를 나타내는 Pydantic 모델입니다.
 
     Attributes:
-        index_name: 지수 명칭 (KOSPI 또는 KOSDAQ)
+        index_name: 지수 명칭 (KOSPI, KOSDAQ, S&P 500, NASDAQ, DOW JONES 등)
         current_price: 현재 지수 값
         change_rate: 전일 대비 등락률 (%)
     """
-    index_name: str = Field(..., description="지수 명칭 (KOSPI 또는 KOSDAQ)")
+    index_name: str = Field(..., description="지수 명칭 (KOSPI, KOSDAQ, S&P 500, NASDAQ, DOW JONES 등)")
     current_price: float = Field(..., description="현재 지수 값")
     change_rate: float = Field(..., description="전일 대비 등락률 (%)")
 
@@ -110,18 +110,39 @@ def is_krx_year_end_holiday(d: datetime.date) -> bool:
     return d == target_date
 
 @router.get("/indices", response_model=List[MarketIndexItem])
-async def get_market_indices():
-    """코스피(KOSPI) 및 코스닥(KOSDAQ)의 현재 지수와 전일 대비 등락률을 조회합니다.
+async def get_market_indices(
+    country: str = Query("KR", description="국가 코드 (KR 또는 US)")
+):
+    """지정된 국가의 주요 시장 지수와 전일 대비 등락률을 조회합니다.
+
+    Args:
+        country (str): 국가 코드 ('KR' 또는 'US', 대소문자 구분 없음).
 
     Returns:
-        List[MarketIndexItem]: 코스피, 코스닥 지수 데이터 리스트
+        List[MarketIndexItem]: 시장 지수 데이터 리스트
     """
+    # 1. 국가 코드 정규화 및 검증
+    country_upper = country.upper()
+    if country_upper not in ["KR", "US"]:
+        raise HTTPException(
+            status_code=400,
+            detail="지원하지 않는 국가 코드입니다. KR 또는 US를 입력해 주세요."
+        )
+
+    # 2. 국가별 조회 대상 심볼 및 매핑 정의
+    if country_upper == "KR":
+        symbols_str = "^KS11 ^KQ11"
+        index_mapping = [("KOSPI", "^KS11"), ("KOSDAQ", "^KQ11")]
+    else:  # US
+        symbols_str = "^GSPC ^IXIC ^DJI"
+        index_mapping = [("S&P 500", "^GSPC"), ("NASDAQ", "^IXIC"), ("DOW JONES", "^DJI")]
+
     try:
         # yfinance 호출은 스레드풀에서 수행하여 비동기 블로킹 방지
-        tickers = await run_in_threadpool(yf.Tickers, "^KS11 ^KQ11")
+        tickers = await run_in_threadpool(yf.Tickers, symbols_str)
         
         results = []
-        for name, ticker_symbol in [("KOSPI", "^KS11"), ("KOSDAQ", "^KQ11")]:
+        for name, ticker_symbol in index_mapping:
             try:
                 ticker = tickers.tickers[ticker_symbol]
                 info = ticker.fast_info
@@ -144,7 +165,7 @@ async def get_market_indices():
                     change_rate=change_rate
                 ))
             except Exception as e:
-                print(f"[WARNING] {name} 지수 상세 파싱 실패: {e}")
+                print(f"[WARNING] {name} ({ticker_symbol}) 지수 상세 파싱 실패: {e}")
                 results.append(MarketIndexItem(
                     index_name=name,
                     current_price=0.0,
@@ -153,10 +174,10 @@ async def get_market_indices():
         return results
     except Exception as e:
         print(f"[ERROR] 지수 데이터 가져오기 실패: {e}")
-        # 오류 발생 시 기본값 반환
+        # 오류 발생 시 국가별 기본값 반환
         return [
-            MarketIndexItem(index_name="KOSPI", current_price=0.0, change_rate=0.0),
-            MarketIndexItem(index_name="KOSDAQ", current_price=0.0, change_rate=0.0)
+            MarketIndexItem(index_name=name, current_price=0.0, change_rate=0.0)
+            for name, _ in index_mapping
         ]
 
 @router.get("/holiday", response_model=MarketHolidayResponse)
