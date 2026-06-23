@@ -18,6 +18,13 @@ const MENU_ITEMS = [
   },
   { path: '/ratios/check', label: '비중 점검', icon: PieChart },
   { 
+    label: '시뮬레이션', 
+    icon: Calculator,
+    subItems: [
+      { path: '/simulation/asset-allocation', label: '자산배분 시뮬레이션' }
+    ]
+  },
+  { 
     label: 'DB 관리', 
     icon: Database,
     subItems: [

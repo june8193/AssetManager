@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 
 from .database import engine, Base, SessionLocal
 from .models import Watchlist
-from .routers import watchlist, stocks, exchange, dashboard, db_manage, connection, ratios, benchmark, sector, market
+from .routers import watchlist, stocks, exchange, dashboard, db_manage, connection, ratios, benchmark, sector, market, simulation
 from .services.kiwoom_service import KiwoomStockService
 from .services.backup_service import BackupService
 import datetime
@@ -74,6 +74,7 @@ app.include_router(ratios.router)
 app.include_router(benchmark.router)
 app.include_router(sector.router)
 app.include_router(market.router)
+app.include_router(simulation.router)
 
 if __name__ == "__main__":
     import uvicorn
