@@ -603,49 +603,49 @@ const CompoundInterestPage = () => {
             </div>
           </div>
 
-          {/* 연도별 상세 데이터 표 */}
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-5 py-4 border-b border-slate-100">
-              <h3 className="font-semibold text-slate-800 text-sm">연도별 상세 추이표</h3>
-            </div>
-            <div className="overflow-x-auto max-h-60 overflow-y-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead className="bg-slate-50 text-slate-500 font-semibold sticky top-0">
-                  <tr>
-                    <th className="px-4 py-3">경과 연수</th>
+        </div>
+
+        {/* 연도별 상세 데이터 표 */}
+        <div className="lg:col-span-12 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-5 py-4 border-b border-slate-100">
+            <h3 className="font-semibold text-slate-800 text-sm">연도별 상세 추이표</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="bg-slate-50 text-slate-500 font-semibold sticky top-0">
+                <tr>
+                  <th className="px-4 py-3">경과 연수</th>
+                  {activeTab === 'current-asset' && (
+                    <>
+                      <th className="px-4 py-3">연도</th>
+                      <th className="px-4 py-3">나이</th>
+                    </>
+                  )}
+                  <th className="px-4 py-3 text-right">누적 원금</th>
+                  <th className="px-4 py-3 text-right">당해 이자</th>
+                  <th className="px-4 py-3 text-right">누적 이자</th>
+                  <th className="px-4 py-3 text-right font-bold text-slate-700">기말 자산</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-slate-600 font-mono">
+                {simulationData.map((row) => (
+                  <tr key={row.yearIndex} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-4 py-2.5">{row.yearIndex === 0 ? '시작' : `${row.yearIndex}년차`}</td>
                     {activeTab === 'current-asset' && (
                       <>
-                        <th className="px-4 py-3">연도</th>
-                        <th className="px-4 py-3">나이</th>
+                        <td className="px-4 py-2.5">{row.year}년</td>
+                        <td className="px-4 py-2.5">{row.age}세</td>
                       </>
                     )}
-                    <th className="px-4 py-3 text-right">누적 원금</th>
-                    <th className="px-4 py-3 text-right">당해 이자</th>
-                    <th className="px-4 py-3 text-right">누적 이자</th>
-                    <th className="px-4 py-3 text-right font-bold text-slate-700">기말 자산</th>
+                    <td className="px-4 py-2.5 text-right text-slate-500">{row.formattedInvested}</td>
+                    <td className="px-4 py-2.5 text-right text-emerald-500">{row.formattedAnnualInterest}</td>
+                    <td className="px-4 py-2.5 text-right text-indigo-500">{row.formattedInterest}</td>
+                    <td className="px-4 py-2.5 text-right font-bold text-slate-800">{row.formattedValuation}</td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 text-slate-600 font-mono">
-                  {simulationData.map((row) => (
-                    <tr key={row.yearIndex} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-2.5">{row.yearIndex === 0 ? '시작' : `${row.yearIndex}년차`}</td>
-                      {activeTab === 'current-asset' && (
-                        <>
-                          <td className="px-4 py-2.5">{row.year}년</td>
-                          <td className="px-4 py-2.5">{row.age}세</td>
-                        </>
-                      )}
-                      <td className="px-4 py-2.5 text-right text-slate-500">{row.formattedInvested}</td>
-                      <td className="px-4 py-2.5 text-right text-emerald-500">{row.formattedAnnualInterest}</td>
-                      <td className="px-4 py-2.5 text-right text-indigo-500">{row.formattedInterest}</td>
-                      <td className="px-4 py-2.5 text-right font-bold text-slate-800">{row.formattedValuation}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
-
         </div>
 
       </div>
