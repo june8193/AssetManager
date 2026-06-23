@@ -115,4 +115,67 @@ describe('CompoundInterestPage - Unit Test', () => {
       expect(screen.getAllByText('0 원').length).toBeGreaterThan(0);
     });
   });
+
+  it('출생 연도 및 목표 연도 입력 필드에 정상적인 값을 입력하고 포커스를 잃으면(onBlur) 정상 반영된다', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ has_enough_data: false })
+    });
+
+    render(
+      <MaskingProvider>
+        <CompoundInterestPage />
+      </MaskingProvider>
+    );
+
+    const birthYearInput = screen.getByLabelText('출생 연도');
+    const targetYearInput = screen.getByLabelText('목표 연도');
+
+    // 1. 정상 값 입력 및 포커스 아웃 (출생 연도: 1990)
+    fireEvent.change(birthYearInput, { target: { value: '1990' } });
+    // 아직 반영 안 됨 (포커스 아웃 전)
+    expect(screen.queryByText('현재 나이 (2026년)')).toBeDefined();
+    // 포커스 아웃 트리거
+    fireEvent.blur(birthYearInput);
+    
+    // 현재 나이가 2026 - 1990 = 36 세로 바뀜을 확인
+    await waitFor(() => {
+      expect(screen.getByText('36 세')).toBeDefined();
+    });
+
+    // 2. 정상 값 입력 및 포커스 아웃 (목표 연도: 2080)
+    fireEvent.change(targetYearInput, { target: { value: '2080' } });
+    fireEvent.blur(targetYearInput);
+
+    // 총 시뮬레이션 기간이 2080 - 2026 = 54 년으로 바뀜을 확인
+    await waitFor(() => {
+      expect(screen.getByText('54 년')).toBeDefined();
+    });
+  });
+
+  it('출생 연도 및 목표 연도에 범위 밖의 비정상 값(예: 20000년)을 입력하고 포커스를 잃으면 이전 값으로 원복된다', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ has_enough_data: false })
+    });
+
+    render(
+      <MaskingProvider>
+        <CompoundInterestPage />
+      </MaskingProvider>
+    );
+
+    const targetYearInput = screen.getByLabelText('목표 연도');
+
+    // 비정상적인 목표 연도 입력 (20000년)
+    fireEvent.change(targetYearInput, { target: { value: '20000' } });
+    fireEvent.blur(targetYearInput);
+
+    // 20000년은 상한선인 2126년을 초과하므로 적용되지 않고 기본값인 2056년으로 원복되어야 함
+    await waitFor(() => {
+      expect(targetYearInput.value).toBe('2056');
+      expect(screen.getByText('30 년')).toBeDefined(); // 2056 - 2026 = 30년
+    });
+  });
 });
+

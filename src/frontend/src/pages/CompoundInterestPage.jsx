@@ -38,6 +38,59 @@ const CompoundInterestPage = () => {
   // 탭 2 (자유 계산) 전용 상태
   const [investmentPeriod, setInvestmentPeriod] = useState(30); // 투자 기간 (30년)
 
+  // 임시 입력을 위한 로컬 문자열 상태
+  const [birthYearInput, setBirthYearInput] = useState(birthYear.toString());
+  const [targetYearInput, setTargetYearInput] = useState(targetYear.toString());
+  const [investmentPeriodInput, setInvestmentPeriodInput] = useState(investmentPeriod.toString());
+
+  // 메인 계산용 상태가 변경될 때 임시 입력 상태 동기화 (예: 스냅샷 자동 적용, 탭 전환 리셋)
+  useEffect(() => {
+    setBirthYearInput(birthYear.toString());
+  }, [birthYear]);
+
+  useEffect(() => {
+    setTargetYearInput(targetYear.toString());
+  }, [targetYear]);
+
+  useEffect(() => {
+    setInvestmentPeriodInput(investmentPeriod.toString());
+  }, [investmentPeriod]);
+
+  // 최종 값 검증 및 반영 핸들러
+  const applyBirthYear = () => {
+    const val = parseInt(birthYearInput, 10);
+    if (isNaN(val) || val < 1900 || val > currentYear) {
+      setBirthYearInput(birthYear.toString());
+    } else {
+      setBirthYear(val);
+    }
+  };
+
+  const applyTargetYear = () => {
+    const val = parseInt(targetYearInput, 10);
+    if (isNaN(val) || val < currentYear + 1 || val > currentYear + 100) {
+      setTargetYearInput(targetYear.toString());
+    } else {
+      setTargetYear(val);
+    }
+  };
+
+  const applyInvestmentPeriod = () => {
+    const val = parseInt(investmentPeriodInput, 10);
+    if (isNaN(val) || val < 1 || val > 100) {
+      setInvestmentPeriodInput(investmentPeriod.toString());
+    } else {
+      setInvestmentPeriod(val);
+    }
+  };
+
+  const handleKeyDown = (e, applyFn) => {
+    if (e.key === 'Enter') {
+      applyFn();
+      e.target.blur();
+    }
+  };
+
   // 스냅샷 데이터 기반 통계 상태
   const [snapshotStats, setSnapshotStats] = useState(null);
   const [loadingStats, setLoadingStats] = useState(true);
@@ -335,8 +388,10 @@ const CompoundInterestPage = () => {
                       type="number"
                       min="1900"
                       max={currentYear}
-                      value={birthYear}
-                      onChange={(e) => setBirthYear(Math.min(currentYear, Math.max(1900, Number(e.target.value))))}
+                      value={birthYearInput}
+                      onChange={(e) => setBirthYearInput(e.target.value)}
+                      onBlur={applyBirthYear}
+                      onKeyDown={(e) => handleKeyDown(e, applyBirthYear)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                     />
                   </div>
@@ -347,8 +402,10 @@ const CompoundInterestPage = () => {
                       type="number"
                       min={currentYear + 1}
                       max={currentYear + 100}
-                      value={targetYear}
-                      onChange={(e) => setTargetYear(Math.max(currentYear + 1, Number(e.target.value)))}
+                      value={targetYearInput}
+                      onChange={(e) => setTargetYearInput(e.target.value)}
+                      onBlur={applyTargetYear}
+                      onKeyDown={(e) => handleKeyDown(e, applyTargetYear)}
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono"
                     />
                   </div>
@@ -390,8 +447,10 @@ const CompoundInterestPage = () => {
                   type="number"
                   min="1"
                   max="100"
-                  value={investmentPeriod}
-                  onChange={(e) => setInvestmentPeriod(Math.max(1, Number(e.target.value)))}
+                  value={investmentPeriodInput}
+                  onChange={(e) => setInvestmentPeriodInput(e.target.value)}
+                  onBlur={applyInvestmentPeriod}
+                  onKeyDown={(e) => handleKeyDown(e, applyInvestmentPeriod)}
                   className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 text-right font-mono"
                 />
               </div>
