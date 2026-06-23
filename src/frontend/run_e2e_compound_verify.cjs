@@ -17,7 +17,7 @@ async function main() {
   await page.waitForTimeout(5000);
 
   // 스크린샷 폴더 생성 (GEMINI.md 규칙 준수: YYYYMMDD_HHMMSS_간단한작업이름)
-  const dirName = "20260623_205700_compound_interest";
+  const dirName = "20260623_211700_compound_interest_add_annual_interest";
   const screenshotsDir = path.join(__dirname, "..", "..", "screenshots", dirName);
   if (!fs.existsSync(screenshotsDir)) {
     fs.mkdirSync(screenshotsDir, { recursive: true });
@@ -59,6 +59,16 @@ async function main() {
   const freeCalcTabScreenshotPath = path.join(screenshotsDir, "4_free_calc_tab_view.png");
   await page.screenshot({ path: freeCalcTabScreenshotPath, fullPage: true });
   console.log(`Screenshot saved to ${freeCalcTabScreenshotPath}`);
+
+  // 5. '당해 이자' 컬럼 존재 여부 체크
+  console.log("Checking if '당해 이자' column is present in the table...");
+  const tableHeaderTexts = await page.locator('table thead th').allInnerTexts();
+  console.log("Table Headers found:", tableHeaderTexts);
+  if (!tableHeaderTexts.includes("당해 이자")) {
+    throw new Error("E2E Validation Failed: '당해 이자' column header not found in the table.");
+  } else {
+    console.log("- '당해 이자' column header found successfully!");
+  }
 
   await browser.close();
   console.log("E2E Compound interest calculator verification completed successfully!");

@@ -123,9 +123,11 @@ const CompoundInterestPage = () => {
       valuation: currentValuation,
       invested: totalInvested,
       interest: totalInterest,
+      annualInterest: 0,
       formattedValuation: formatKRW(currentValuation),
       formattedInvested: formatKRW(totalInvested),
-      formattedInterest: formatKRW(totalInterest)
+      formattedInterest: formatKRW(totalInterest),
+      formattedAnnualInterest: formatKRW(0)
     });
 
     for (let i = 1; i <= years; i++) {
@@ -145,9 +147,11 @@ const CompoundInterestPage = () => {
         valuation: Math.round(currentValuation),
         invested: Math.round(totalInvested),
         interest: Math.round(totalInterest),
+        annualInterest: Math.round(interestEarned),
         formattedValuation: formatKRW(Math.round(currentValuation)),
         formattedInvested: formatKRW(Math.round(totalInvested)),
-        formattedInterest: formatKRW(Math.round(totalInterest))
+        formattedInterest: formatKRW(Math.round(totalInterest)),
+        formattedAnnualInterest: formatKRW(Math.round(interestEarned))
       });
     }
 
@@ -550,7 +554,7 @@ const CompoundInterestPage = () => {
                     />
                     <ChartTooltip 
                       formatter={(value, name) => {
-                        const labelName = name === 'invested' ? '누적 원금' : name === 'interest' ? '누적 이자수익' : '평가 자산';
+                        const labelName = name === 'invested' ? '누적 원금' : name === 'interest' ? '누적 이자수익' : name === 'annualInterest' ? '당해 이자' : '평가 자산';
                         return [formatKRW(value), labelName];
                       }}
                       labelFormatter={(label) => {
@@ -581,6 +585,14 @@ const CompoundInterestPage = () => {
                       fillOpacity={1} 
                       fill="url(#colorInterest)" 
                     />
+                    <Area 
+                      type="monotone" 
+                      dataKey="annualInterest" 
+                      stroke="transparent" 
+                      fill="transparent" 
+                      legendType="none"
+                      activeDot={false}
+                    />
                   </AreaChart>
                 </ResponsiveContainer>
               ) : (
@@ -608,6 +620,7 @@ const CompoundInterestPage = () => {
                       </>
                     )}
                     <th className="px-4 py-3 text-right">누적 원금</th>
+                    <th className="px-4 py-3 text-right">당해 이자</th>
                     <th className="px-4 py-3 text-right">누적 이자</th>
                     <th className="px-4 py-3 text-right font-bold text-slate-700">기말 자산</th>
                   </tr>
@@ -623,6 +636,7 @@ const CompoundInterestPage = () => {
                         </>
                       )}
                       <td className="px-4 py-2.5 text-right text-slate-500">{row.formattedInvested}</td>
+                      <td className="px-4 py-2.5 text-right text-emerald-500">{row.formattedAnnualInterest}</td>
                       <td className="px-4 py-2.5 text-right text-indigo-500">{row.formattedInterest}</td>
                       <td className="px-4 py-2.5 text-right font-bold text-slate-800">{row.formattedValuation}</td>
                     </tr>

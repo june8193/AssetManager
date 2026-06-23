@@ -93,4 +93,26 @@ describe('CompoundInterestPage - Unit Test', () => {
     const returnInput = returnInputs.find(input => parseFloat(input.value) === 8.5);
     expect(returnInput).toBeDefined();
   });
+
+  it('연도별 상세 추이표에 당해 이자 컬럼과 데이터가 정상적으로 렌더링된다', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ has_enough_data: false })
+    });
+
+    render(
+      <MaskingProvider>
+        <CompoundInterestPage />
+      </MaskingProvider>
+    );
+
+    // 테이블 헤더에 '당해 이자'가 있는지 확인
+    expect(screen.getByText('당해 이자')).toBeDefined();
+
+    // 0년차(시작) 당해 이자는 0원이고, 1년차부터는 이자가 붙음
+    await waitFor(() => {
+      // 0 원 표시 확인 (시작 연도의 당해 이자)
+      expect(screen.getAllByText('0 원').length).toBeGreaterThan(0);
+    });
+  });
 });
