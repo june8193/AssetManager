@@ -397,3 +397,316 @@ class SimulationService:
             "annual_roi_avg": annual_roi_avg,
             "latest_total_valuation": latest_valuation_sum
         }
+
+    async def run_recurring_simulation(
+        self,
+        allocations: List[Dict[str, Any]],
+        period: str,
+        rebalancing: str,
+        annual_deposit: float
+    ) -> Dict[str, Any]:
+        """주어진 자산 배분 비중 조합과 설정으로 적립식 백테스트 시뮬레이션을 수행합니다.
+
+        Args:
+            allocations (List[Dict]): 각 비중 조합 [{"name": "60/40", "stock_ratio": 60}]
+            period (str): '5Y', '10Y', '20Y', '30Y', 'ALL'
+            rebalancing (str): 'monthly', 'yearly', 'none'
+            annual_deposit (float): 매년 추가 적립금
+
+        Returns:
+            Dict[str, Any]: 차트, 요약 카드 및 연도별/월별 현황 데이터
+        """
+        start_date, end_date = await self.get_date_range(period)
+
+        # 1. S&P500 일별 가격 데이터 가져오기
+        prices = (
+            self.db.query(HistoricalPrice)
+            .filter(
+                HistoricalPrice.ticker == "^GSPC",
+                HistoricalPrice.price_date >= start_date,
+                HistoricalPrice.price_date <= end_date,
+                HistoricalPrice.close_price > 0.0
+            )
+            .order_by(HistoricalPrice.price_date.asc())
+            .all()
+        )
+
+        if not prices:
+            return {
+                "chart": {"labels": [], "datasets": []},
+                "summaries": [],
+                "yearly_stats": {},
+                "monthly_stats": {}
+            }
+
+        # 1.5. 차트 렌더링 다운샘플링 필터링
+        chart_indices = []
+        for t in range(len(prices)):
+            curr_p = prices[t]
+            is_sample_point = False
+            
+            if t == 0 or t == len(prices) - 1:
+                is_sample_point = True
+            else:
+                next_p = prices[t + 1]
+                if period == "5Y":
+                    curr_week = curr_p.price_date.isocalendar()[1]
+                    next_week = next_p.price_date.isocalendar()[1]
+                    if curr_week != next_week:
+                        is_sample_point = True
+                else:
+                    if curr_p.price_date.month != next_p.price_date.month:
+                        is_sample_point = True
+            
+            if is_sample_point:
+                chart_indices.append(t)
+
+        chart_indices = sorted(list(set(chart_indices)))
+        chart_labels = [prices[idx].price_date.isoformat() for idx in chart_indices]
+
+        # 2. 결과 저장을 위한 데이터 구조 정의
+        datasets = []
+        summaries = []
+        yearly_stats_by_alloc = {}
+        monthly_stats_by_alloc = {}
+
+        # 3. 비중 조합별 백테스트 실행
+        for alloc in allocations:
+            name = alloc.get("name")
+            stock_ratio = float(alloc.get("stock_ratio", 100))
+            w_s = stock_ratio / 100.0
+            w_c = (100.0 - stock_ratio) / 100.0
+
+            # 시뮬레이션 상태 변수 초기화
+            portfolio_values = []
+            invested_values = []
+            portfolio_dates = []
+
+            p_val = 0.0
+            invested = 0.0
+            qty = 0.0
+            cash = 0.0
+
+            # 리밸런싱 및 추가금 일자 판단을 위한 일별 루프
+            for t in range(len(prices)):
+                curr_p = prices[t]
+                
+                # 매년 초(연도 변경) 또는 시작일(t=0)에 추가금 주입
+                is_deposit_day = False
+                if t == 0:
+                    is_deposit_day = True
+                else:
+                    prev_p = prices[t - 1]
+                    if curr_p.price_date.year != prev_p.price_date.year:
+                        is_deposit_day = True
+
+                if is_deposit_day:
+                    p_val += annual_deposit
+                    invested += annual_deposit
+                    # 비중에 맞게 재조정
+                    stock_val = p_val * w_s
+                    cash = p_val * w_c
+                    qty = stock_val / curr_p.close_price
+                else:
+                    # 주가 변동에 따른 평가액 반영 (추가금 안 들어오는 날)
+                    stock_val = qty * curr_p.close_price
+                    p_val = stock_val + cash
+                
+                # 오늘이 리밸런싱일인지 판정
+                is_rebal_day = False
+                if t < len(prices) - 1:
+                    next_p = prices[t + 1]
+                    if rebalancing == "monthly" and curr_p.price_date.month != next_p.price_date.month:
+                        is_rebal_day = True
+                    elif rebalancing == "yearly" and curr_p.price_date.year != next_p.price_date.year:
+                        is_rebal_day = True
+
+                # 리밸런싱 수행
+                if is_rebal_day:
+                    stock_val = p_val * w_s
+                    cash = p_val * w_c
+                    qty = stock_val / curr_p.close_price
+
+                portfolio_values.append(p_val)
+                invested_values.append(invested)
+                portfolio_dates.append(curr_p.price_date)
+
+            # 요약 통계 계산
+            final_val = portfolio_values[-1]
+            total_invested = invested_values[-1]
+            total_interest = final_val - total_invested
+            final_return = round(((final_val - total_invested) / total_invested) * 100, 2) if total_invested > 0 else 0.0
+
+            # 포트폴리오 자체의 거치식 CAGR 계산 (기하 연평균 수익률)
+            # CAGR은 자산배분 자체의 성장률 지표이므로 거치식 성과를 임시 계산
+            lump_p_val = 100.0
+            lump_qty = (lump_p_val * w_s) / prices[0].close_price
+            lump_cash = lump_p_val * w_c
+            for t in range(1, len(prices)):
+                curr_p = prices[t]
+                lump_stock_val = lump_qty * curr_p.close_price
+                lump_p_val = lump_stock_val + lump_cash
+                
+                is_rebal_day = False
+                if t < len(prices) - 1:
+                    next_p = prices[t + 1]
+                    if rebalancing == "monthly" and curr_p.price_date.month != next_p.price_date.month:
+                        is_rebal_day = True
+                    elif rebalancing == "yearly" and curr_p.price_date.year != next_p.price_date.year:
+                        is_rebal_day = True
+                if is_rebal_day:
+                    lump_stock_val = lump_p_val * w_s
+                    lump_cash = lump_p_val * w_c
+                    lump_qty = lump_stock_val / curr_p.close_price
+
+            total_days = (portfolio_dates[-1] - portfolio_dates[0]).days
+            if total_days > 0 and lump_p_val > 0:
+                cagr = ((lump_p_val / 100.0) ** (365.25 / total_days) - 1.0) * 100
+                cagr = round(cagr, 2)
+            else:
+                cagr = 0.0
+
+            # MDD 계산
+            mdd = 0.0
+            peak = 0.0
+            for v in portfolio_values:
+                if v > peak:
+                    peak = v
+                if peak > 0:
+                    dd = (v - peak) / peak * 100
+                    if dd < mdd:
+                        mdd = dd
+            mdd = round(mdd, 2)
+
+            summaries.append({
+                "name": name,
+                "stock_ratio": stock_ratio,
+                "cagr": cagr,
+                "mdd": mdd,
+                "final_return": final_return,
+                "final_valuation": round(final_val, 2),
+                "total_invested": round(total_invested, 2),
+                "total_interest": round(total_interest, 2)
+            })
+
+            # 차트 데이터셋 추가 (금액 기준으로 전송)
+            chart_valuations = [round(portfolio_values[idx], 2) for idx in chart_indices]
+            datasets.append({
+                "label": name,
+                "data": chart_valuations
+            })
+
+            # 6. 연도별 통계 계산
+            yearly_stats = []
+            yearly_groups = {}
+            for dt, val, inv in zip(portfolio_dates, portfolio_values, invested_values):
+                yearly_groups.setdefault(dt.year, []).append((dt, val, inv))
+
+            sorted_years = sorted(yearly_groups.keys())
+            for idx, year in enumerate(sorted_years):
+                year_data = yearly_groups[year]
+                year_end_val = year_data[-1][1]
+                year_end_inv = year_data[-1][2]
+                
+                if idx > 0:
+                    prev_year = sorted_years[idx - 1]
+                    year_start_val = yearly_groups[prev_year][-1][1]
+                    year_start_inv = yearly_groups[prev_year][-1][2]
+                else:
+                    year_start_val = 0.0
+                    year_start_inv = 0.0
+
+                year_deposit = year_end_inv - year_start_inv
+                year_interest = year_end_val - year_start_val - year_deposit
+                denominator = year_start_val + year_deposit
+                year_return = ((year_end_val - denominator) / denominator) * 100 if denominator > 0 else 0.0
+                
+                cum_interest = year_end_val - year_end_inv
+                cum_return = (cum_interest / year_end_inv) * 100 if year_end_inv > 0 else 0.0
+
+                y_mdd = 0.0
+                y_peak = 0.0
+                for _, v, _ in year_data:
+                    if v > y_peak:
+                        y_peak = v
+                    if y_peak > 0:
+                        dd = (v - y_peak) / y_peak * 100
+                        if dd < y_mdd:
+                            y_mdd = dd
+
+                yearly_stats.append({
+                    "year": year,
+                    "year_return": round(year_return, 2),
+                    "cumulative_return": round(cum_return, 2),
+                    "mdd": round(y_mdd, 2),
+                    "valuation": round(year_end_val, 2),
+                    "invested": round(year_end_inv, 2),
+                    "interest": round(cum_interest, 2),
+                    "annual_interest": round(year_interest, 2)
+                })
+
+            yearly_stats.reverse()
+            yearly_stats_by_alloc[name] = yearly_stats
+
+            # 7. 월별 통계 계산
+            monthly_stats = []
+            monthly_groups = {}
+            for dt, val, inv in zip(portfolio_dates, portfolio_values, invested_values):
+                monthly_groups.setdefault((dt.year, dt.month), []).append((dt, val, inv))
+
+            sorted_months = sorted(monthly_groups.keys())
+            for idx, (year, month) in enumerate(sorted_months):
+                month_data = monthly_groups[(year, month)]
+                month_end_val = month_data[-1][1]
+                month_end_inv = month_data[-1][2]
+
+                if idx > 0:
+                    prev_ym = sorted_months[idx - 1]
+                    month_start_val = monthly_groups[prev_ym][-1][1]
+                    month_start_inv = monthly_groups[prev_ym][-1][2]
+                else:
+                    month_start_val = 0.0
+                    month_start_inv = 0.0
+
+                month_deposit = month_end_inv - month_start_inv
+                month_interest = month_end_val - month_start_val - month_deposit
+                denominator = month_start_val + month_deposit
+                month_return = ((month_end_val - denominator) / denominator) * 100 if denominator > 0 else 0.0
+                
+                cum_interest = month_end_val - month_end_inv
+                cum_return = (cum_interest / month_end_inv) * 100 if month_end_inv > 0 else 0.0
+
+                m_mdd = 0.0
+                m_peak = 0.0
+                for _, v, _ in month_data:
+                    if v > m_peak:
+                        m_peak = v
+                    if m_peak > 0:
+                        dd = (v - m_peak) / m_peak * 100
+                        if dd < m_mdd:
+                            m_mdd = dd
+
+                monthly_stats.append({
+                    "year": year,
+                    "month": month,
+                    "month_return": round(month_return, 2),
+                    "cumulative_return": round(cum_return, 2),
+                    "mdd": round(m_mdd, 2),
+                    "valuation": round(month_end_val, 2),
+                    "invested": round(month_end_inv, 2),
+                    "interest": round(cum_interest, 2),
+                    "annual_interest": round(month_interest, 2)
+                })
+
+            monthly_stats.reverse()
+            monthly_stats_by_alloc[name] = monthly_stats
+
+        return {
+            "chart": {
+                "labels": chart_labels,
+                "datasets": datasets
+            },
+            "summaries": summaries,
+            "yearly_stats": yearly_stats_by_alloc,
+            "monthly_stats": monthly_stats_by_alloc
+        }

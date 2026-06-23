@@ -23,6 +23,13 @@ class SimulationRequest(BaseModel):
     rebalancing: str
 
 
+class RecurringSimulationRequest(BaseModel):
+    allocations: List[AllocationItem]
+    period: str
+    rebalancing: str
+    annual_deposit: float = 20000000.0
+
+
 @router.post("/run")
 async def run_backtest_simulation(
     request: SimulationRequest,
@@ -55,6 +62,44 @@ async def run_backtest_simulation(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"시뮬레이션 수행 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.post("/run-recurring")
+async def run_recurring_backtest_simulation(
+    request: RecurringSimulationRequest,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """주식/현금 비중 및 리밸런싱, 매년 추가금에 따른 적립식 시뮬레이션을 실행하여 결과를 반환합니다."""
+    # 유효성 검사
+    if not request.allocations:
+        raise HTTPException(status_code=400, detail="최소 하나 이상의 비중 조합이 필요합니다.")
+        
+    for alloc in request.allocations:
+        if alloc.stock_ratio < 0 or alloc.stock_ratio > 100:
+            raise HTTPException(status_code=400, detail="주식 비중은 0%에서 100% 사이여야 합니다.")
+
+    if request.period not in ["5Y", "10Y", "20Y", "30Y", "ALL"]:
+        raise HTTPException(status_code=400, detail="유효하지 않은 기간 설정입니다.")
+
+    if request.rebalancing not in ["monthly", "yearly", "none"]:
+        raise HTTPException(status_code=400, detail="유효하지 않은 리밸런싱 주기 설정입니다.")
+
+    if request.annual_deposit < 0:
+        raise HTTPException(status_code=400, detail="매년 추가 적립금은 0원 이상이어야 합니다.")
+
+    # 서비스 실행
+    service = SimulationService(db)
+    try:
+        allocations_list = [{"name": item.name, "stock_ratio": item.stock_ratio} for item in request.allocations]
+        result = await service.run_recurring_simulation(
+            allocations=allocations_list,
+            period=request.period,
+            rebalancing=request.rebalancing,
+            annual_deposit=request.annual_deposit
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"적립식 시뮬레이션 수행 중 오류가 발생했습니다: {str(e)}")
 
 
 @router.get("/compound/snapshot-stats")
