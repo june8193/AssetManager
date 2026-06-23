@@ -321,3 +321,79 @@ class SimulationService:
             "yearly_stats": yearly_stats_by_alloc,
             "monthly_stats": monthly_stats_by_alloc
         }
+
+    async def get_compound_snapshot_stats(self) -> Dict[str, Any]:
+        """과거 스냅샷 기록을 분석하여 연평균 수익률(기하평균), 연평균 추가금, 최신 자산 합계를 반환합니다."""
+        from src.backend.models import AccountSnapshot
+        
+        snapshots = (
+            self.db.query(AccountSnapshot)
+            .order_by(AccountSnapshot.snapshot_date.asc())
+            .all()
+        )
+        
+        if not snapshots:
+            return {
+                "has_enough_data": False,
+                "annual_deposit_avg": 0.0,
+                "annual_roi_avg": 0.0,
+                "latest_total_valuation": 0.0
+            }
+            
+        # 2. 기간 계산
+        min_date = snapshots[0].snapshot_date
+        max_date = snapshots[-1].snapshot_date
+        total_days = (max_date - min_date).days
+        
+        # 1년 미만인 경우 충분한 데이터가 없다고 판단
+        if total_days < 365:
+            return {
+                "has_enough_data": False,
+                "annual_deposit_avg": 0.0,
+                "annual_roi_avg": 0.0,
+                "latest_total_valuation": 0.0
+            }
+            
+        total_years = total_days / 365.25
+        
+        # 3. 연평균 추가금 계산
+        total_deposit = sum(snap.period_deposit for snap in snapshots)
+        annual_deposit_avg = round(total_deposit / total_years, 2)
+        
+        # 4. 연평균 수익률 계산 (기하 평균)
+        from src.backend.services.dashboard_service import DashboardService
+        dashboard_service = DashboardService(self.db)
+        yearly_stats = dashboard_service.get_yearly_stats()
+        
+        rois = [item["roi"] for item in yearly_stats if "roi" in item]
+        
+        if not rois:
+            annual_roi_avg = 0.0
+        else:
+            prod = 1.0
+            for r in rois:
+                # -100% 이하가 있을 경우 최소값(-99.9%)으로 보정하여 에러 방지
+                r_val = max(r, -99.9) / 100.0
+                prod *= (1.0 + r_val)
+            
+            n = len(rois)
+            if prod > 0:
+                geo_mean = (prod ** (1.0 / n)) - 1.0
+                annual_roi_avg = round(geo_mean * 100.0, 2)
+            else:
+                annual_roi_avg = -100.0
+                
+        # 5. 최신 자산 총합 계산 (최신 스냅샷 날짜의 valuation 합계)
+        latest_date = max_date
+        latest_valuation_sum = sum(
+            snap.total_valuation 
+            for snap in snapshots 
+            if snap.snapshot_date == latest_date
+        )
+        
+        return {
+            "has_enough_data": True,
+            "annual_deposit_avg": annual_deposit_avg,
+            "annual_roi_avg": annual_roi_avg,
+            "latest_total_valuation": latest_valuation_sum
+        }

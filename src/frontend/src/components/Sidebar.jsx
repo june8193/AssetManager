@@ -21,7 +21,8 @@ const MENU_ITEMS = [
     label: '시뮬레이션', 
     icon: Calculator,
     subItems: [
-      { path: '/simulation/asset-allocation', label: '자산배분 시뮬레이션' }
+      { path: '/simulation/asset-allocation', label: '자산배분 시뮬레이션' },
+      { path: '/simulation/compound-interest', label: '복리 계산기' }
     ]
   },
   { 

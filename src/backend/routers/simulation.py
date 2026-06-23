@@ -55,3 +55,16 @@ async def run_backtest_simulation(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"시뮬레이션 수행 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.get("/compound/snapshot-stats")
+async def get_compound_snapshot_stats(
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """사용자의 과거 스냅샷 통계를 기반으로 연평균 수익률 및 연평균 추가금을 계산합니다."""
+    service = SimulationService(db)
+    try:
+        result = await service.get_compound_snapshot_stats()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스냅샷 통계 계산 중 오류가 발생했습니다: {str(e)}")

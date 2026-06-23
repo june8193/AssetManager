@@ -1,0 +1,96 @@
+import React from 'react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import CompoundInterestPage from './CompoundInterestPage';
+import { MaskingProvider } from '../contexts/MaskingContext';
+
+// API Fetch 모킹
+global.fetch = vi.fn();
+
+const mockStatsResponse = {
+  has_enough_data: true,
+  annual_roi_avg: 8.5,
+  annual_deposit_avg: 12000000.0,
+  latest_total_valuation: 50000000.0
+};
+
+describe('CompoundInterestPage - Unit Test', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('기본 UI 레이아웃 및 현재 자산기반 계산 탭 전용 요소가 정상 렌더링된다', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ has_enough_data: false })
+    });
+
+    render(
+      <MaskingProvider>
+        <CompoundInterestPage />
+      </MaskingProvider>
+    );
+
+    // 제목 확인
+    expect(screen.getByText('시뮬레이션 복리 계산기')).toBeDefined();
+
+    // 기본 탭인 '현재 자산기반 계산' 레이아웃 확인
+    expect(screen.getByText('출생 연도')).toBeDefined();
+    expect(screen.getByText('목표 연도')).toBeDefined();
+    expect(screen.getByText('현재 나이 (2026년)')).toBeDefined();
+    expect(screen.getByText('목표 연도 나이 (2056년)')).toBeDefined();
+    expect(screen.getByText('총 시뮬레이션 기간')).toBeDefined();
+  });
+
+  it('자유 계산 탭으로 전환 시 투자 기간 입력 요소가 나타난다', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ has_enough_data: false })
+    });
+
+    render(
+      <MaskingProvider>
+        <CompoundInterestPage />
+      </MaskingProvider>
+    );
+
+    // 자유 계산 탭 클릭
+    const freeCalcTabButton = screen.getByRole('button', { name: '자유 계산' });
+    expect(freeCalcTabButton).toBeDefined();
+    fireEvent.click(freeCalcTabButton);
+
+    // 투자 기간 라벨이 드러나는지 확인
+    expect(screen.getByLabelText('투자 기간')).toBeDefined();
+  });
+
+  it('나의 스냅샷 기록 연동 카드가 렌더링되고 적용 버튼 클릭 시 값이 대입된다', async () => {
+    fetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockStatsResponse
+    });
+
+    render(
+      <MaskingProvider>
+        <CompoundInterestPage />
+      </MaskingProvider>
+    );
+
+    // 스냅샷 데이터 로드 대기
+    await waitFor(() => {
+      expect(screen.getByText('8.50%')).toBeDefined();
+      expect(screen.getByText(/12,000,000/)).toBeDefined();
+      expect(screen.getAllByText(/50,000,000/).length).toBeGreaterThan(0);
+    });
+
+    // 자동 적용 버튼 클릭
+    const applyButton = screen.getByRole('button', { name: /위 통계 수치를 계산기에 자동 적용하기/i });
+    expect(applyButton).toBeDefined();
+    
+    fireEvent.click(applyButton);
+
+    // 값들이 입력 폼에 대입되었는지 확인 (수익률이 8.5% 로 반영되었는지 검사)
+    const returnInputs = screen.getAllByRole('spinbutton');
+    const returnInput = returnInputs.find(input => parseFloat(input.value) === 8.5);
+    expect(returnInput).toBeDefined();
+  });
+});

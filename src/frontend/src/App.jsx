@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import DashboardPage from './pages/DashboardPage';
 import BenchmarkPage from './pages/BenchmarkPage';
 import AssetAllocationSimulationPage from './pages/AssetAllocationSimulationPage';
+import CompoundInterestPage from './pages/CompoundInterestPage';
 import SectorPage from './pages/SectorPage';
 import ConnectionPage from './pages/ConnectionPage';
 import DbManagementPage from './pages/DbManagementPage';
@@ -27,6 +28,7 @@ function App() {
               <Route path="/benchmark/compare-returns" element={<SectorPage />} />
               <Route path="/ratios/check" element={<RatioCheckPage />} />
               <Route path="/simulation/asset-allocation" element={<AssetAllocationSimulationPage />} />
+              <Route path="/simulation/compound-interest" element={<CompoundInterestPage />} />
               <Route path="/connection" element={<ConnectionPage />} />
               <Route path="/db" element={<DbManagementPage />} />
               <Route path="/db/snapshots/new" element={<SnapshotWizardPage />} />
