@@ -154,6 +154,44 @@ async def test_market_analysis_service_comparison_table(mock_download, db_sessio
         assert t_name in row_2025
         assert isinstance(row_2025[t_name], float)
 
+
+@pytest.mark.asyncio
+@patch('yfinance.download')
+async def test_market_analysis_service_dynamic_start_year(mock_download, db_session: Session):
+    """4대 지수의 데이터가 존재하는 최초 연도 중 가장 최신 연도가 테이블의 시작 연도로 설정되는지 검증합니다."""
+    mock_download.return_value = pd.DataFrame()
+    service = MarketAnalysisService(db_session)
+
+    # 기존 데이터 삭제
+    db_session.query(HistoricalPrice).delete()
+    db_session.commit()
+
+    # 지수별로 시작 연도를 다르게 설정하여 더미 데이터 생성
+    # ^KS11 (KOSPI): 2015년부터 데이터 있음
+    create_dummy_prices(db_session, "^KS11", datetime.date(2015, 1, 1), datetime.date(2015, 1, 10), 1000.0)
+    create_dummy_prices(db_session, "^KS11", datetime.date(2025, 1, 1), datetime.date(2025, 1, 10), 1200.0)
+
+    # ^KQ11 (KOSDAQ): 2017년부터 데이터 있음
+    create_dummy_prices(db_session, "^KQ11", datetime.date(2017, 1, 1), datetime.date(2017, 1, 10), 800.0)
+    create_dummy_prices(db_session, "^KQ11", datetime.date(2025, 1, 1), datetime.date(2025, 1, 10), 900.0)
+
+    # ^GSPC (S&P500): 2012년부터 데이터 있음
+    create_dummy_prices(db_session, "^GSPC", datetime.date(2012, 1, 1), datetime.date(2012, 1, 10), 1500.0)
+    create_dummy_prices(db_session, "^GSPC", datetime.date(2025, 1, 1), datetime.date(2025, 1, 10), 2000.0)
+
+    # ^IXIC (NASDAQ): 2019년부터 데이터 있음 (이것이 4대 지수 시작 연도 중 가장 최신 연도임)
+    create_dummy_prices(db_session, "^IXIC", datetime.date(2019, 1, 1), datetime.date(2019, 1, 10), 2000.0)
+    create_dummy_prices(db_session, "^IXIC", datetime.date(2025, 1, 1), datetime.date(2025, 1, 10), 3000.0)
+
+    # 실행
+    comp_table = await service.get_index_comparison_table()
+
+    # 가장 최신인 2019년이 시작 연도여야 함 (2019년 데이터가 테이블 내에 존재해야 함)
+    # 현재 구현은 2020년으로 하드코딩되어 있으므로 이 테스트는 2019년 데이터가 없어서 실패할 것임
+    years = [row["year"] for row in comp_table]
+    assert 2019 in years
+    assert min(years) == 2019
+
 @pytest.mark.asyncio
 @patch('yfinance.download')
 async def test_market_analysis_endpoints(mock_download, db_session: Session):

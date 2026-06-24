@@ -232,9 +232,21 @@ class MarketAnalysisService:
         tickers = list(ticker_mapping.keys())
         today = datetime.date.today()
 
-        # 데이터가 존재하는 최초의 날짜부터 수집하기 위해, DB 상의 최소 날짜를 확인합니다.
-        # 전체 4대 지수 데이터를 2020년부터 오늘까지 연도별로 계산
-        start_year = 2020
+        # 4대 지수 각각의 데이터가 존재하는 최초의 날짜(최소 날짜)를 DB에서 동적으로 조회합니다.
+        # 4대 지수 모두 데이터가 준비되어 있는 첫 해부터 비교할 수 있도록 시작 연도를 결정합니다.
+        from sqlalchemy import func
+        min_dates_query = (
+            self.db.query(HistoricalPrice.ticker, func.min(HistoricalPrice.price_date))
+            .filter(HistoricalPrice.ticker.in_(tickers), HistoricalPrice.close_price > 0.0)
+            .group_by(HistoricalPrice.ticker)
+            .all()
+        )
+        
+        min_years = [date_val.year for _, date_val in min_dates_query if date_val]
+        
+        # 각 지수의 시작 연도 중 가장 최신(최대) 연도를 시작 연도로 삼습니다.
+        # 조회된 데이터가 없을 경우 기본값으로 2020년을 사용합니다.
+        start_year = max(min_years) if min_years else 2020
         end_year = today.year
         start_date = datetime.date(start_year, 1, 1)
 
