@@ -334,7 +334,194 @@ class PriceService:
                 print(f"[WARNING] 미국 종목명 조회 실패 ({ticker}): {e}")
         return None
 
+    async def get_historical_prices_with_cache(
+        self,
+        db,
+        ticker: str,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        country: str
+    ) -> List[Dict[str, Any]]:
+        """DB 캐시를 활용하여 특정 기간의 주가(종가) 리스트를 조회합니다.
+
+        Args:
+            db (Session): SQLAlchemy 데이터베이스 세션
+            ticker (str): 종목 코드 혹은 티커
+            start_date (datetime.date): 조회 시작일
+            end_date (datetime.date): 조회 종료일
+            country (str): 국가 구분 ('KR' 또는 'US')
+
+        Returns:
+            List[Dict[str, Any]]: [{price_date: datetime.date, close_price: float}] 형식의 리스트 (날짜 오름차순)
+        """
+        from src.backend.models import HistoricalPrice
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        # 1. DB에서 캐싱된 데이터를 먼저 조회
+        db_prices = (
+            db.query(HistoricalPrice)
+            .filter(
+                HistoricalPrice.ticker == ticker,
+                HistoricalPrice.price_date >= start_date,
+                HistoricalPrice.price_date <= end_date
+            )
+            .order_by(HistoricalPrice.price_date.asc())
+            .all()
+        )
+
+        # 2. 조회 기간 내 영업일(평일) 생성
+        current = start_date
+        weekdays = []
+        while current <= end_date:
+            if current.weekday() < 5:  # 월 ~ 금
+                weekdays.append(current)
+            current += datetime.timedelta(days=1)
+
+        # 캐싱된 날짜 집합
+        cached_dates = {p.price_date for p in db_prices}
+
+        # 오늘 날짜
+        today = datetime.date.today()
+
+        # 오늘이 평일이고 조회 범위에 포함되어 있으며, 장중인 경우 오늘 날짜는 캐시 미적용 대상
+        is_market_open = False
+        if country == "KR":
+            is_market_open = self.is_kr_market_open()
+        elif country == "US":
+            is_market_open = self.is_us_market_open()
+
+        # 장중인 오늘의 날짜는 누락된 날짜 판별 시 캐시 누락으로 취급하여 실시간 조회하도록 함
+        # 단, 과거 데이터 중 누락된 날짜만 찾기 위해 오늘을 제외한 누락 영업일을 계산
+        missing_dates = []
+        for d in weekdays:
+            if d == today and is_market_open:
+                continue
+            if d not in cached_dates:
+                missing_dates.append(d)
+
+        # 3. 과거 데이터 중 누락된 날짜가 있다면 외부 API로부터 일괄 조회 후 캐싱
+        if missing_dates:
+            try:
+                if country == "US":
+                    # yfinance로 조회
+                    yf_start = start_date.strftime("%Y-%m-%d")
+                    yf_end = (end_date + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+                    ticker_obj = await run_in_threadpool(yf.Ticker, ticker)
+                    hist = await run_in_threadpool(ticker_obj.history, start=yf_start, end=yf_end)
+
+                    if not hist.empty:
+                        for idx, row in hist.iterrows():
+                            p_date = idx.date()
+                            close_p = float(row["Close"])
+                            if close_p > 0:
+                                # 오늘 날짜이고 장중인 경우에는 DB 캐싱 건너뜀
+                                if p_date == today and is_market_open:
+                                    continue
+                                stmt = sqlite_insert(HistoricalPrice).values(
+                                    ticker=ticker,
+                                    price_date=p_date,
+                                    close_price=close_p
+                                )
+                                stmt = stmt.on_conflict_do_update(
+                                    index_elements=["ticker", "price_date"],
+                                    set_={"close_price": close_p}
+                                )
+                                db.execute(stmt)
+                        db.commit()
+                elif country == "KR":
+                    # 키움 API로 조회
+                    token = await self.kiwoom_auth.get_valid_token()
+                    clean_dt = end_date.strftime("%Y%m%d")
+                    res = await run_in_threadpool(self.kiwoom_api.get_historical_stock_price, token, ticker, clean_dt)
+
+                    if res and res.get("return_code") == 0:
+                        daly_stkpc = res.get("daly_stkpc", [])
+                        for day_data in daly_stkpc:
+                            date_str = day_data.get("date", "").replace("-", "")
+                            if len(date_str) == 8:
+                                p_date = datetime.datetime.strptime(date_str, "%Y%m%d").date()
+                                # 조회 기간 내의 데이터만 캐싱
+                                if start_date <= p_date <= end_date:
+                                    price_str = day_data.get("close_pric", "0").strip("+- ")
+                                    close_p = float(price_str) if price_str else 0.0
+                                    if close_p > 0:
+                                        if p_date == today and is_market_open:
+                                            continue
+                                        stmt = sqlite_insert(HistoricalPrice).values(
+                                            ticker=ticker,
+                                            price_date=p_date,
+                                            close_price=close_p
+                                        )
+                                        stmt = stmt.on_conflict_do_update(
+                                            index_elements=["ticker", "price_date"],
+                                            set_={"close_price": close_p}
+                                        )
+                                        db.execute(stmt)
+                        db.commit()
+            except Exception as e:
+                print(f"[WARNING] {country} 주식 과거 데이터 조회 및 캐싱 중 예외 발생: {e}")
+
+        # 4. 장중이고 조회 기간에 오늘이 포함된 경우 실시간 가격 추가 반영
+        today_price_info = None
+        if today in weekdays and is_market_open:
+            try:
+                if country == "KR":
+                    real_prices = await self.get_kr_prices([ticker], force_update=True)
+                    if real_prices and real_prices[0]["current_price"] > 0:
+                        today_price_info = {
+                            "price_date": today,
+                            "close_price": real_prices[0]["current_price"]
+                        }
+                elif country == "US":
+                    real_prices = await self.get_us_prices([ticker], force_update=True)
+                    if real_prices and real_prices[0]["current_price"] > 0:
+                        today_price_info = {
+                            "price_date": today,
+                            "close_price": real_prices[0]["current_price"]
+                        }
+            except Exception as e:
+                print(f"[WARNING] 장중 실시간 주가 조회 실패: {e}")
+
+        # 5. 최종 결과 조회 및 포맷팅
+        db_prices = (
+            db.query(HistoricalPrice)
+            .filter(
+                HistoricalPrice.ticker == ticker,
+                HistoricalPrice.price_date >= start_date,
+                HistoricalPrice.price_date <= end_date
+            )
+            .order_by(HistoricalPrice.price_date.asc())
+            .all()
+        )
+
+        results = []
+        for p in db_prices:
+            # 장중 오늘 가격은 캐시 대신 실시간 조회된 값으로 덮어씀
+            if p.price_date == today and today_price_info:
+                results.append({
+                    "price_date": p.price_date,
+                    "close_price": today_price_info["close_price"]
+                })
+                today_price_info = None  # 중복 추가 방지
+            else:
+                results.append({
+                    "price_date": p.price_date,
+                    "close_price": p.close_price
+                })
+
+        # 만약 장중 오늘 가격이 DB에 아직 없어서 위 루프에서 추가되지 않았다면 맨 뒤에 추가
+        if today_price_info:
+            results.append({
+                "price_date": today_price_info["price_date"],
+                "close_price": today_price_info["close_price"]
+            })
+
+        # 날짜 순 정렬
+        results.sort(key=lambda x: x["price_date"])
+
+        return results
 
 
 # 싱글톤 인스턴스
 price_service = PriceService()
+

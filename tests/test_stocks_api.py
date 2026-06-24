@@ -72,3 +72,91 @@ def test_delisting_on_sync(db_session):
         # '005930'은 남아있어야 함
         res = db_session.query(Stock).filter(Stock.stock_code == "005930").first()
         assert res is not None
+
+def test_get_stock_prices_validation():
+    """필수 파라미터가 없거나 형식이 잘못되었을 때 422 에러를 반환하는지 검증합니다."""
+    # 파라미터 누락
+    response = client.get("/api/stocks/prices")
+    assert response.status_code == 422
+    
+    # start_date 누락
+    response = client.get("/api/stocks/prices?ticker=005930")
+    assert response.status_code == 422
+
+def test_get_stock_prices_kr(db_session):
+    """국내 주식 주가 조회가 정상 동작하고 DB 캐싱이 수행되는지 검증합니다."""
+    # 임의의 종목 데이터 삽입
+    db_session.add(Stock(stock_code="005930", stock_name="삼성전자", market="KOSPI"))
+    db_session.commit()
+    
+    # 2026-06-01 ~ 2026-06-02 주가 조회
+    # 장외 시간이라고 가정하여 모킹 (is_kr_market_open=False)
+    with patch("src.backend.services.price_service.price_service.is_kr_market_open", return_value=False):
+        # 키움 API 응답 모킹
+        mock_response = {
+            "return_code": 0,
+            "daly_stkpc": [
+                {"date": "20260602", "close_pric": "75000"},
+                {"date": "20260601", "close_pric": "74000"}
+            ]
+        }
+        with patch("src.backend.services.price_service.price_service.kiwoom_auth.get_valid_token", return_value="mock_token"), \
+             patch("src.backend.services.price_service.price_service.kiwoom_api.get_historical_stock_price", return_value=mock_response):
+            
+            response = client.get("/api/stocks/prices?ticker=005930&start_date=2026-06-01&end_date=2026-06-02")
+            assert response.status_code == 200
+            data = response.json()
+            
+            # 응답 구조 검증
+            assert data["ticker"] == "005930"
+            assert data["name"] == "삼성전자"
+            assert data["market"] == "KOSPI"
+            assert len(data["prices"]) == 2
+            assert data["prices"][0]["date"] == "2026-06-01"
+            assert data["prices"][0]["close_price"] == 74000.0
+            assert data["prices"][1]["date"] == "2026-06-02"
+            assert data["prices"][1]["close_price"] == 75000.0
+            
+            # DB 캐싱 결과 검증
+            from src.backend.models import HistoricalPrice
+            import datetime
+            cached = db_session.query(HistoricalPrice).filter(HistoricalPrice.ticker == "005930").all()
+            assert len(cached) == 2
+            dates = [c.price_date.strftime("%Y-%m-%d") for c in cached]
+            assert "2026-06-01" in dates
+            assert "2026-06-02" in dates
+
+def test_get_stock_prices_us(db_session):
+    """미국 주식 주가 조회가 정상 동작하고 DB 캐싱이 수행되는지 검증합니다."""
+    # 장외 시간이라고 가정하여 모킹 (is_us_market_open=False)
+    with patch("src.backend.services.price_service.price_service.is_us_market_open", return_value=False):
+        # yfinance history 모킹
+        import pandas as pd
+        mock_data = pd.DataFrame(
+            {"Close": [150.0, 152.0]},
+            index=pd.to_datetime(["2026-06-01", "2026-06-02"])
+        )
+        
+        with patch("yfinance.Ticker") as mock_ticker:
+            mock_ticker.return_value.history.return_value = mock_data
+            
+            # yfinance.Ticker.info 모킹 (종목명 검색용)
+            # PropertyMock이나 getattr 모킹 대신 간단히 dict 속성 모킹
+            mock_ticker.return_value.info = {"longName": "Apple Inc."}
+            
+            response = client.get("/api/stocks/prices?ticker=AAPL&start_date=2026-06-01&end_date=2026-06-02")
+            assert response.status_code == 200
+            data = response.json()
+            
+            # 응답 구조 검증
+            assert data["ticker"] == "AAPL"
+            assert data["name"] == "Apple Inc."
+            assert len(data["prices"]) == 2
+            assert data["prices"][0]["date"] == "2026-06-01"
+            assert data["prices"][0]["close_price"] == 150.0
+            
+            # DB 캐싱 결과 검증
+            from src.backend.models import HistoricalPrice
+            cached = db_session.query(HistoricalPrice).filter(HistoricalPrice.ticker == "AAPL").all()
+            assert len(cached) == 2
+

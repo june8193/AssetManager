@@ -5,6 +5,7 @@ from typing import List, Dict
 from ..database import get_db
 from ..models import Stock
 from ..services.kiwoom_service import KiwoomStockService
+from ..services.price_service import price_service
 
 router = APIRouter(
     prefix="/api/stocks",
@@ -77,3 +78,91 @@ async def sync_stocks(db: Session = Depends(get_db)):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/prices")
+async def get_stock_prices(
+    ticker: str = Query(..., description="종목코드 또는 티커"),
+    start_date: str = Query(..., description="조회 시작일 (YYYY-MM-DD)"),
+    end_date: str = Query(None, description="조회 종료일 (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """
+    특정 종목의 현재 및 과거 주가 데이터를 조회하고 반환합니다.
+    조회 기간 중 DB에 없는 날짜의 데이터는 외부 API(yfinance, 키움 API)로 조회하여 DB에 캐싱합니다.
+    """
+    import datetime
+    import re
+    
+    # 날짜 검증 및 파싱
+    try:
+        start_dt = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="start_date 형식이 올바르지 않습니다 (YYYY-MM-DD).")
+        
+    if end_date:
+        try:
+            end_dt = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="end_date 형식이 올바르지 않습니다 (YYYY-MM-DD).")
+    else:
+        end_dt = datetime.date.today()
+        
+    if start_dt > end_dt:
+        raise HTTPException(status_code=400, detail="start_date가 end_date보다 늦을 수 없습니다.")
+
+    # 국가 자동 판별
+    country = "US"
+    # 숫자 6자리면 KR로 간주
+    if re.match(r"^\d{6}$", ticker):
+        country = "KR"
+    else:
+        # DB에 존재하는 종목이면 KR로 판별
+        db_stock = db.query(Stock).filter(Stock.stock_code == ticker).first()
+        if db_stock:
+            country = "KR"
+
+    # 종목 정보 획득
+    stock_name = ticker
+    market = "US" if country == "US" else "KR"
+    
+    if country == "KR":
+        db_stock = db.query(Stock).filter(Stock.stock_code == ticker).first()
+        if db_stock:
+            stock_name = db_stock.stock_name
+            market = db_stock.market
+        else:
+            fetched_name = await price_service.get_stock_name(ticker, "KR")
+            if fetched_name:
+                stock_name = fetched_name
+                db.add(Stock(stock_code=ticker, stock_name=fetched_name, market="KOSPI"))
+                db.commit()
+                market = "KOSPI"
+    else:
+        fetched_name = await price_service.get_stock_name(ticker, "US")
+        if fetched_name:
+            stock_name = fetched_name
+            market = "US"
+
+    # 주가 조회 (캐싱 포함)
+    prices_list = await price_service.get_historical_prices_with_cache(
+        db=db,
+        ticker=ticker,
+        start_date=start_dt,
+        end_date=end_dt,
+        country=country
+    )
+
+    formatted_prices = [
+        {
+            "date": p["price_date"].strftime("%Y-%m-%d"),
+            "close_price": p["close_price"]
+        } for p in prices_list
+    ]
+
+    return {
+        "ticker": ticker,
+        "name": stock_name,
+        "market": market,
+        "prices": formatted_prices
+    }
+
