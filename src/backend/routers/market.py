@@ -7,7 +7,7 @@
 
 import datetime
 import zoneinfo
-from typing import List, Optional
+from typing import List, Optional, Dict
 import yfinance as yf
 import holidays
 from fastapi import APIRouter, HTTPException, Query, Depends
@@ -16,8 +16,19 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from ..database import get_db
 from ..services.market_analysis_service import MarketAnalysisService
+from ..services.benchmark_service import BenchmarkService
 
 router = APIRouter(prefix="/api/market", tags=["market"])
+
+class MarketHistoryItem(BaseModel):
+    """시장 지수 일자별 가격 정보를 나타내는 Pydantic 모델입니다.
+
+    Attributes:
+        date: 날짜 (YYYY-MM-DD)
+        close_price: 종가 또는 실시간 현재가
+    """
+    date: str = Field(..., description="날짜 (YYYY-MM-DD)")
+    close_price: float = Field(..., description="종가 또는 실시간 현재가")
 
 class MarketIndexItem(BaseModel):
     """시장 지수 정보를 나타내는 Pydantic 모델입니다.
@@ -351,3 +362,78 @@ async def get_market_analysis_comparison(
         return await service.get_index_comparison_table()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지수 비교 테이블 조회 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.get("/history", response_model=Dict[str, List[MarketHistoryItem]])
+async def get_market_history(
+    tickers: str = Query(..., description="조회할 지수 티커 (콤마로 구분, 예: ^KS11,^GSPC)"),
+    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """지정된 지수 티커들의 기간별 역사적 가격 및 실시간 현재가를 통합하여 조회합니다.
+
+    Args:
+        tickers (str): 콤마로 구분된 티커 목록.
+        start_date (str, optional): 조회 시작일 (YYYY-MM-DD). 지정하지 않으면 30일 전.
+        end_date (str, optional): 조회 종료일 (YYYY-MM-DD). 지정하지 않으면 오늘.
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        Dict[str, List[MarketHistoryItem]]: 티커별 일자별 지수 데이터 매핑.
+    """
+    # 1. 날짜 범위 처리
+    today = datetime.date.today()
+    try:
+        s_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else today - datetime.timedelta(days=30)
+        e_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else today
+    except ValueError:
+        raise HTTPException(
+            status_code=400,
+            detail="날짜 형식이 잘못되었습니다. YYYY-MM-DD 형식을 사용해 주세요."
+        )
+
+    # 2. 티커 리스트 파싱
+    ticker_list = [t.strip() for t in tickers.split(",") if t.strip()]
+    if not ticker_list:
+        raise HTTPException(status_code=400, detail="유효한 티커가 입력되지 않았습니다.")
+
+    benchmark_service = BenchmarkService(db)
+    results = {}
+
+    # 3. 각 티커별 데이터 조회 및 병합
+    for ticker in ticker_list:
+        # DB 캐시 데이터 로드 (필요시 yfinance fetch)
+        db_prices = await benchmark_service.get_historical_prices(ticker, s_date, e_date)
+        
+        # 유효 종가만 필터링 (> 0.0)
+        valid_prices = [p for p in db_prices if p.close_price > 0.0]
+        
+        # Response 형태로 변환
+        history_items = [
+            MarketHistoryItem(date=p.price_date.strftime("%Y-%m-%d"), close_price=p.close_price)
+            for p in valid_prices
+        ]
+
+        # 4. 실시간 병합 처리
+        # 오늘 날짜가 조회 기간 내에 있고, 오늘 날짜의 데이터가 DB에 없거나 종가가 0인 경우 실시간 yfinance 조회
+        has_today_data = any(p.price_date == today for p in valid_prices)
+        if s_date <= today <= e_date and not has_today_data:
+            try:
+                # yfinance 호출은 스레드풀에서 실행
+                tickers_obj = await run_in_threadpool(yf.Tickers, ticker)
+                ticker_obj = tickers_obj.tickers[ticker]
+                info = ticker_obj.fast_info
+                
+                last_price = float(info.get('last_price', info.get('lastPrice', 0.0)))
+                if last_price > 0.0:
+                    history_items.append(MarketHistoryItem(
+                        date=today.strftime("%Y-%m-%d"),
+                        close_price=last_price
+                    ))
+            except Exception as e:
+                print(f"[WARNING] {ticker} 실시간 가격 조회 실패: {e}")
+
+        results[ticker] = history_items
+
+    return results
