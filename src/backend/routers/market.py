@@ -10,9 +10,12 @@ import zoneinfo
 from typing import List, Optional
 import yfinance as yf
 import holidays
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Depends
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+from ..database import get_db
+from ..services.market_analysis_service import MarketAnalysisService
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -295,10 +298,56 @@ async def check_market_holiday(
                 description=description
             )
 
-    # 5. 영업일 반환
-    return MarketHolidayResponse(
-        date=target_date.strftime("%Y-%m-%d"),
-        country=country_upper,
-        is_holiday=False,
-        description="영업일"
-    )
+
+@router.get("/analysis/historical")
+async def get_market_analysis_historical(
+    ticker: str = Query(..., description="조회할 지수 티커"),
+    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """특정 지수의 역사적 시계열 데이터 및 MDD 추이를 조회합니다."""
+    try:
+        today = datetime.date.today()
+        s_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else datetime.date(2020, 1, 1)
+        e_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else today
+        
+        service = MarketAnalysisService(db)
+        return await service.get_historical_data(ticker, s_date, e_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식이 잘못되었습니다. YYYY-MM-DD 형식을 사용해 주세요.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"데이터 조회 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.get("/analysis/stats")
+async def get_market_analysis_stats(
+    ticker: str = Query(..., description="조회할 지수 티커"),
+    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """특정 지수의 연도별/월별 성과 통계(수익률, 지수, MDD)를 조회합니다."""
+    try:
+        today = datetime.date.today()
+        s_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date() if start_date else datetime.date(2020, 1, 1)
+        e_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else today
+        
+        service = MarketAnalysisService(db)
+        return await service.get_monthly_and_yearly_stats(ticker, s_date, e_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식이 잘못되었습니다. YYYY-MM-DD 형식을 사용해 주세요.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"통계 조회 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.get("/analysis/comparison")
+async def get_market_analysis_comparison(
+    db: Session = Depends(get_db)
+):
+    """4대 지수의 연도별 수익률 비교 데이터를 조회합니다."""
+    try:
+        service = MarketAnalysisService(db)
+        return await service.get_index_comparison_table()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"지수 비교 테이블 조회 중 오류가 발생했습니다: {str(e)}")

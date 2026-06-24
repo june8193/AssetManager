@@ -13,7 +13,8 @@ const MENU_ITEMS = [
     icon: TrendingUp,
     subItems: [
       { path: '/benchmark', label: '벤치마크 비교' },
-      { path: '/benchmark/compare-returns', label: '수익률 비교 분석' }
+      { path: '/benchmark/compare-returns', label: '수익률 비교 분석' },
+      { path: '/market/analysis', label: '지표분석' }
     ]
   },
   { path: '/ratios/check', label: '비중 점검', icon: PieChart },
