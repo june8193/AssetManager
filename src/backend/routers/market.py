@@ -6,6 +6,7 @@
 """
 
 import datetime
+import zoneinfo
 from typing import List, Optional
 import yfinance as yf
 import holidays
@@ -40,6 +41,12 @@ class MarketHolidayResponse(BaseModel):
     country: str = Field(..., description="국가 코드 (KR 또는 US)")
     is_holiday: bool = Field(..., description="휴장일 여부")
     description: str = Field(..., description="휴장 사유 또는 영업일")
+
+# 국가별 시장 기준 시간대 정의
+COUNTRY_TIMEZONES = {
+    "KR": "Asia/Seoul",
+    "US": "America/New_York",
+}
 
 # 공휴일 명칭의 한글 변환을 위한 매핑 딕셔너리
 HOLIDAY_NAME_MAP = {
@@ -196,9 +203,23 @@ async def check_market_holiday(
     Returns:
         MarketHolidayResponse: 휴장 여부 및 사유 정보
     """
-    # 1. 날짜 결정 및 파싱
+    # 1. 국가 코드 정규화 및 검증
+    country_upper = country.upper()
+    if country_upper not in ["KR", "US"]:
+        raise HTTPException(
+            status_code=400,
+            detail="지원하지 않는 국가 코드입니다. KR 또는 US를 입력해 주세요."
+        )
+
+    # 2. 날짜 결정 및 파싱
     if not date:
-        target_date = datetime.date.today()
+        tz_name = COUNTRY_TIMEZONES.get(country_upper, "Asia/Seoul")
+        try:
+            local_tz = zoneinfo.ZoneInfo(tz_name)
+        except Exception:
+            local_tz = zoneinfo.ZoneInfo("Asia/Seoul")
+        local_now = datetime.datetime.now(local_tz)
+        target_date = local_now.date()
     else:
         try:
             target_date = datetime.datetime.strptime(date, "%Y-%m-%d").date()
@@ -207,14 +228,6 @@ async def check_market_holiday(
                 status_code=400,
                 detail="날짜 형식이 잘못되었습니다. YYYY-MM-DD 형식을 사용해 주세요."
             )
-            
-    # 2. 국가 코드 정규화 및 검증
-    country_upper = country.upper()
-    if country_upper not in ["KR", "US"]:
-        raise HTTPException(
-            status_code=400,
-            detail="지원하지 않는 국가 코드입니다. KR 또는 US를 입력해 주세요."
-        )
 
     # 3. 주말 판정 (토요일: 5, 일요일: 6)
     if target_date.weekday() >= 5:

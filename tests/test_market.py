@@ -198,3 +198,39 @@ def test_check_market_holiday_invalid_country():
     response = client.get("/api/market/holiday?country=JP")
     assert response.status_code == 400
     assert "국가 코드" in response.json()["detail"]
+
+
+def test_check_market_holiday_no_date_timezone():
+    """date 파라미터가 없을 때 국가별 타임존을 적용하여 당일 날짜를 계산하는지 테스트합니다."""
+    from datetime import datetime as real_datetime, timezone
+    from zoneinfo import ZoneInfo
+    
+    # 기준 시각: KST 2026-06-22 07:00:00 (월요일)
+    # UTC 시각: 2026-06-21 22:00:00
+    # EST 시각: 2026-06-21 18:00:00 (일요일, 주말)
+    base_utc = real_datetime(2026, 6, 21, 22, 0, 0, tzinfo=timezone.utc)
+    
+    class MockDatetime(real_datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is not None:
+                return base_utc.astimezone(tz)
+            return base_utc.astimezone(ZoneInfo("Asia/Seoul"))
+            
+    with patch("src.backend.routers.market.datetime.datetime", MockDatetime):
+        # US 시간으로 조회 (EST 2026-06-21 18:00 이므로 일요일, 즉 주말)
+        response_us = client.get("/api/market/holiday?country=US")
+        assert response_us.status_code == 200
+        data_us = response_us.json()
+        assert data_us["date"] == "2026-06-21"
+        assert data_us["is_holiday"] is True
+        assert data_us["description"] == "주말"
+        
+        # KR 시간으로 조회 (KST 2026-06-22 07:00 이므로 월요일, 영업일)
+        response_kr = client.get("/api/market/holiday?country=KR")
+        assert response_kr.status_code == 200
+        data_kr = response_kr.json()
+        assert data_kr["date"] == "2026-06-22"
+        assert data_kr["is_holiday"] is False
+        assert data_kr["description"] == "영업일"
+
