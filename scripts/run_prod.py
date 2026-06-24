@@ -7,19 +7,8 @@ import subprocess
 import os
 import sys
 import time
-import socket
 from pathlib import Path
 
-def find_available_port(start_port, max_attempts=10):
-    """사용 가능한 비어있는 포트를 찾습니다."""
-    for port in range(start_port, start_port + max_attempts):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(('localhost', port))
-                return port
-            except socket.error:
-                continue
-    raise IOError(f"Could not find an available port starting from {start_port}")
 
 def get_version(root_dir):
     """pyproject.toml 파일에서 버전을 추출합니다."""
@@ -40,9 +29,9 @@ def main():
     root_dir = Path(__file__).parent.parent.absolute()
     frontend_dir = root_dir / "src" / "frontend"
 
-    # 동적 포트 할당
-    backend_port = find_available_port(8000)
-    frontend_port = find_available_port(5173)
+    # 포트 고정
+    backend_port = 8000
+    frontend_port = 5173
 
     # 환경 변수 설정 (운영 환경 강제)
     env = os.environ.copy()
