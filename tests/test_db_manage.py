@@ -498,5 +498,72 @@ def test_delete_snapshots_by_date(db_session, test_user):
     assert tx_other_in_db is not None
 
 
+def test_get_transactions_with_date_filters(db_session, test_user):
+    """GET /api/db/transactions API의 start_date 및 end_date 필터 기능을 검증합니다."""
+    # 1. 자산 생성 (유효한 카테고리 조합 사용)
+    asset = Asset(ticker="BTC", name="비트코인", major_category="일반주식", sub_category="국내주식", country="KR")
+    db_session.add(asset)
+    db_session.flush()
+
+    # 2. 계좌 생성
+    acc = Account(user_id=test_user.id, name="테스트계좌", provider="테스트", account_type="BROKERAGE", is_active=True)
+    db_session.add(acc)
+    db_session.flush()
+
+    # 3. 거래 내역 삽입
+    tx1 = Transaction(
+        account_id=acc.id, asset_id=asset.id, transaction_date=date(2026, 5, 10),
+        type="BUY", quantity=1.0, price=100.0, total_amount=100.0, currency="KRW", memo="May Tx"
+    )
+    tx2 = Transaction(
+        account_id=acc.id, asset_id=asset.id, transaction_date=date(2026, 6, 15),
+        type="BUY", quantity=1.0, price=200.0, total_amount=200.0, currency="KRW", memo="June Tx"
+    )
+    tx3 = Transaction(
+        account_id=acc.id, asset_id=asset.id, transaction_date=date(2026, 7, 20),
+        type="BUY", quantity=1.0, price=300.0, total_amount=300.0, currency="KRW", memo="July Tx"
+    )
+    db_session.add_all([tx1, tx2, tx3])
+    db_session.commit()
+
+    # Case 1: 필터 없음 -> 모든 거래 반환
+    response = client.get("/api/db/transactions")
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) >= 3
+    # 생성된 3개가 포함되어 있고 asset_name, asset_ticker가 올바른지 확인
+    filtered = [t for t in data if t["memo"] in ["May Tx", "June Tx", "July Tx"]]
+    assert len(filtered) == 3
+    assert all(t["asset_name"] == "비트코인" for t in filtered)
+    assert all(t["asset_ticker"] == "BTC" for t in filtered)
+
+    # Case 2: start_date 지정 -> 2026-06-01 이후 거래 (June, July)
+    response = client.get("/api/db/transactions", params={"start_date": "2026-06-01"})
+    assert response.status_code == 200
+    data = response.json()
+    filtered = [t for t in data if t["memo"] in ["May Tx", "June Tx", "July Tx"]]
+    assert len(filtered) == 2
+    assert any(t["memo"] == "June Tx" for t in filtered)
+    assert any(t["memo"] == "July Tx" for t in filtered)
+
+    # Case 3: end_date 지정 -> 2026-06-30 이전 거래 (May, June)
+    response = client.get("/api/db/transactions", params={"end_date": "2026-06-30"})
+    assert response.status_code == 200
+    data = response.json()
+    filtered = [t for t in data if t["memo"] in ["May Tx", "June Tx", "July Tx"]]
+    assert len(filtered) == 2
+    assert any(t["memo"] == "May Tx" for t in filtered)
+    assert any(t["memo"] == "June Tx" for t in filtered)
+
+    # Case 4: start_date & end_date 지정 -> 2026-06-01 ~ 2026-06-30 사이 거래 (June)
+    response = client.get("/api/db/transactions", params={"start_date": "2026-06-01", "end_date": "2026-06-30"})
+    assert response.status_code == 200
+    data = response.json()
+    filtered = [t for t in data if t["memo"] in ["May Tx", "June Tx", "July Tx"]]
+    assert len(filtered) == 1
+    assert filtered[0]["memo"] == "June Tx"
+
+
+
 
 

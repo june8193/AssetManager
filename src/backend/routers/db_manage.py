@@ -373,9 +373,18 @@ def delete_asset(asset_id: int, db: Session = Depends(get_db)):
 
 # Transactions
 @router.get("/transactions", response_model=List[TransactionSchema])
-def get_transactions(db: Session = Depends(get_db)):
-    """전체 거래 내역을 조회합니다."""
-    return db.query(Transaction).order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
+def get_transactions(
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
+    db: Session = Depends(get_db)
+):
+    """전체 또는 필터링된 거래 내역을 조회합니다."""
+    query = db.query(Transaction).options(joinedload(Transaction.asset))
+    if start_date:
+        query = query.filter(Transaction.transaction_date >= start_date)
+    if end_date:
+        query = query.filter(Transaction.transaction_date <= end_date)
+    return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
 
 @router.post("/transactions", response_model=TransactionSchema)
 def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
