@@ -136,17 +136,26 @@ class DashboardService:
         results.reverse()
         return results
 
-    def get_daily_stats(self) -> List[Dict[str, Any]]:
+    def get_daily_stats(self, start_date: datetime.date = None, end_date: datetime.date = None, all_data: bool = False) -> List[Dict[str, Any]]:
         """일자별 자산 현황 통계를 계산하여 최신순으로 반환합니다.
         
         역사적 통계 데이터이므로 현재 계좌의 활성 여부와 관계없이 모든 데이터를 포함합니다.
         결과는 최신 일자가 가장 앞에 오도록(내림차순) 정렬되어 반환됩니다.
         """
-        snapshots = (
-            self.db.query(AccountSnapshot)
-            .order_by(AccountSnapshot.snapshot_date.asc())
-            .all()
-        )
+        query = self.db.query(AccountSnapshot)
+        
+        if not all_data:
+            if not end_date:
+                end_date = datetime.date.today()
+            if not start_date:
+                start_date = end_date - datetime.timedelta(days=30)
+            
+            query = query.filter(
+                AccountSnapshot.snapshot_date >= start_date,
+                AccountSnapshot.snapshot_date <= end_date
+            )
+            
+        snapshots = query.order_by(AccountSnapshot.snapshot_date.asc()).all()
         
         if not snapshots:
             return []
@@ -631,7 +640,7 @@ class DashboardService:
             "profit_ratio": round(profit_ratio, 2)
         }
 
-    def get_snapshots(self) -> Dict[str, Any]:
+    def get_snapshots(self, start_date: datetime.date = None, end_date: datetime.date = None, all_data: bool = False) -> Dict[str, Any]:
         """시계열 자산 추이 데이터를 가져옵니다.
         
         Returns:
@@ -643,11 +652,20 @@ class DashboardService:
                 "accounts": [{"id": 1, "name": "계좌1"}, ...]
             }
         """
-        snapshots = (
-            self.db.query(AccountSnapshot)
-            .order_by(AccountSnapshot.snapshot_date.asc())
-            .all()
-        )
+        query = self.db.query(AccountSnapshot)
+        
+        if not all_data:
+            if not end_date:
+                end_date = datetime.date.today()
+            if not start_date:
+                start_date = end_date - datetime.timedelta(days=30)
+            
+            query = query.filter(
+                AccountSnapshot.snapshot_date >= start_date,
+                AccountSnapshot.snapshot_date <= end_date
+            )
+            
+        snapshots = query.order_by(AccountSnapshot.snapshot_date.asc()).all()
         
         accounts = self.db.query(Account).all()
         

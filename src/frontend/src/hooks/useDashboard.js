@@ -11,8 +11,8 @@ export const useDashboard = () => {
       const [summaryRes, yearlyRes, dailyRes, snapshotsRes] = await Promise.all([
         fetch('/api/dashboard/summary'),
         fetch('/api/dashboard/yearly'),
-        fetch('/api/dashboard/daily'),
-        fetch('/api/dashboard/snapshots')
+        fetch('/api/dashboard/daily?all=true'),
+        fetch('/api/dashboard/snapshots?all=true')
       ]);
 
       if (!summaryRes.ok || !yearlyRes.ok || !dailyRes.ok || !snapshotsRes.ok) {
