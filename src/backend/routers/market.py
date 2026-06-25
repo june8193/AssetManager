@@ -309,6 +309,13 @@ async def check_market_holiday(
                 description=description
             )
 
+    return MarketHolidayResponse(
+        date=target_date.strftime("%Y-%m-%d"),
+        country=country_upper,
+        is_holiday=False,
+        description="영업일"
+    )
+
 
 @router.get("/analysis/historical")
 async def get_market_analysis_historical(
