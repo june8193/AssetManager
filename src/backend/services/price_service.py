@@ -298,7 +298,10 @@ class PriceService:
             ticker = await run_in_threadpool(yf.Ticker, symbol)
             hist = await run_in_threadpool(ticker.history, start=start_date, end=end_date)
             if not hist.empty:
-                return float(hist['Close'].iloc[-1])
+                # yfinance의 index(Timestamp)를 YYYYMMDD 문자열로 변환하여 요청일과 비교
+                last_trade_date = hist.index[-1].strftime("%Y%m%d")
+                if last_trade_date == clean_dt:
+                    return float(hist['Close'].iloc[-1])
         except Exception as e:
             print(f"[WARNING] 미국 주식 일별 주가 조회 중 예외 발생 ({symbol}): {e}")
         return 0.0
