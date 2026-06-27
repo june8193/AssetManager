@@ -15,6 +15,8 @@ class PriceService:
     def __init__(self):
         self.kiwoom_api = KiwoomAPI()
         self.kiwoom_auth = KiwoomAuthManager()
+        self.last_manual_refresh_time: Optional[datetime.datetime] = None
+
 
     def is_us_market_open(self) -> bool:
         """현재 뉴욕 현지 시각을 기준으로 미국 주식 시장이 개장 중인지 판별합니다."""

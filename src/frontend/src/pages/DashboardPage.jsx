@@ -17,10 +17,37 @@ import AssetChart from '../components/Dashboard/AssetChart';
  */
 const DashboardPage = () => {
   const { data, loading, error, refresh } = useDashboard();
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [toastMessage, setToastMessage] = useState(null);
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
   const [expandedCategories, setExpandedCategories] = useState(new Set());
   const [assetSortOptions, setAssetSortOptions] = useState({});
   const { maskValue } = useMasking();
+
+  const handleRefresh = async () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setToastMessage(null);
+    try {
+      const result = await refresh(true);
+      if (result) {
+        if (result.status === 'success') {
+          setToastMessage({ type: 'success', text: result.message });
+        } else if (result.status === 'skipped') {
+          setToastMessage({ type: 'info', text: result.message });
+        }
+      }
+    } catch (err) {
+      setToastMessage({ type: 'error', text: err.message || '새로고침 중 오류가 발생했습니다.' });
+    } finally {
+      setIsRefreshing(false);
+      // 3초 후 토스트 메시지 제거
+      setTimeout(() => {
+        setToastMessage(null);
+      }, 3000);
+    }
+  };
+
 
   const handleSortChange = (accountId, sortType) => {
     setAssetSortOptions(prev => ({ ...prev, [accountId]: sortType }));
@@ -112,6 +139,38 @@ const DashboardPage = () => {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
+      {/* Top Controls & Alerts */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-3xl font-black text-slate-800 tracking-tight">자산 대시보드</h1>
+          <p className="text-xs text-slate-400 font-medium mt-1">실시간 시세와 자산 분배율을 확인합니다.</p>
+        </div>
+        <div className="flex items-center gap-3 self-end md:self-auto relative">
+          {toastMessage && (
+            <div className={`absolute right-0 -top-12 z-50 px-4 py-2 rounded-xl text-xs font-bold shadow-lg animate-in fade-in slide-in-from-bottom-2 duration-300 ${
+              toastMessage.type === 'success' ? 'bg-emerald-500 text-white' :
+              toastMessage.type === 'info' ? 'bg-blue-500 text-white' :
+              'bg-rose-500 text-white'
+            }`}>
+              {toastMessage.text}
+            </div>
+          )}
+          <button 
+            onClick={handleRefresh}
+            disabled={isRefreshing}
+            className={`flex items-center gap-2 px-5 py-3 rounded-2xl font-bold transition-all shadow-md hover:shadow-lg ${
+              isRefreshing 
+                ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
+                : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-blue-500/10 active:scale-95'
+            }`}
+            title="실시간 시세 새로고침"
+          >
+            <RefreshCw size={16} className={isRefreshing ? "animate-spin" : "transition-transform group-hover:rotate-180"} />
+            <span className="text-sm">{isRefreshing ? "시세 최신화 중..." : "실시간 시세 새로고침"}</span>
+          </button>
+        </div>
+      </div>
+
       {/* Header & Overall Summary */}
       <div className="mb-10 p-8 bg-gradient-to-br from-slate-900 via-blue-900 to-indigo-900 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden">
         <div className="absolute top-0 right-0 -m-20 w-80 h-80 bg-blue-400 opacity-10 rounded-full blur-[100px]"></div>
@@ -212,15 +271,8 @@ const DashboardPage = () => {
               <Wallet className="text-blue-600" size={28} />
               계좌별 현황
             </h2>
-            <button 
-              onClick={refresh}
-              className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 hover:shadow-sm rounded-xl font-bold transition-all group/refresh"
-              title="새로고침"
-            >
-              <RefreshCw size={18} className="group-hover/refresh:rotate-180 transition-transform duration-500" />
-              <span className="text-sm">새로고침</span>
-            </button>
           </div>
+
 
           <div className="grid gap-4">
             {sortedAccounts.map((acc) => {

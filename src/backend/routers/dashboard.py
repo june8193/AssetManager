@@ -64,3 +64,31 @@ async def get_snapshots(
     except Exception as e:
         print(f"스냅샷 조회 중 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/refresh", response_model=Dict[str, Any])
+async def refresh_dashboard_prices(db: Session = Depends(get_db)):
+    """대시보드 시세 정보를 즉시 외부 API로부터 조회하여 DB를 업데이트합니다. (1분 Rate Limit 적용)"""
+    try:
+        from ..services.price_service import price_service
+        now = datetime.datetime.now()
+        last_refresh = price_service.last_manual_refresh_time
+        
+        # 1분 이내에 재요청한 경우, 업데이트를 스킵하고 기존 데이터 유지
+        if last_refresh and (now - last_refresh) < datetime.timedelta(minutes=1):
+            return {
+                "status": "skipped",
+                "message": "최근 1분 이내에 시세를 업데이트했습니다. 잠시 후 다시 시도해 주세요."
+            }
+            
+        await price_service.update_all_market_prices()
+        price_service.last_manual_refresh_time = now
+        
+        return {
+            "status": "success",
+            "message": "모든 지수, 보유 자산, 관심 종목의 시세가 최신화되었습니다."
+        }
+    except Exception as e:
+        print(f"대시보드 시세 최신화 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+

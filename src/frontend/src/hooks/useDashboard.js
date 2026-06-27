@@ -5,9 +5,20 @@ export const useDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetchDashboard = async () => {
+  const fetchDashboard = async (force = false) => {
     setLoading(true);
     try {
+      let refreshResult = null;
+      if (force) {
+        const refreshRes = await fetch('/api/dashboard/refresh', {
+          method: 'POST',
+        });
+        if (!refreshRes.ok) {
+          throw new Error('시세를 새로고침하는 중 오류가 발생했습니다.');
+        }
+        refreshResult = await refreshRes.json();
+      }
+
       const [summaryRes, yearlyRes, dailyRes, snapshotsRes] = await Promise.all([
         fetch('/api/dashboard/summary'),
         fetch('/api/dashboard/yearly'),
@@ -26,8 +37,10 @@ export const useDashboard = () => {
 
       setData({ ...summary, yearly, daily, snapshots });
       setError(null);
+      return refreshResult;
     } catch (err) {
       setError(err.message);
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -39,3 +52,4 @@ export const useDashboard = () => {
 
   return { data, loading, error, refresh: fetchDashboard };
 };
+
