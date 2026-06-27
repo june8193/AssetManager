@@ -527,7 +527,7 @@ class BenchmarkService:
         
         # 1. 포트폴리오의 연도별, 일자별 데이터 로딩 (내림차순 정렬되어 반환됨)
         yearly_stats = dash_svc.get_yearly_stats()
-        daily_stats = dash_svc.get_daily_stats()
+        daily_stats = dash_svc.get_daily_stats(all_data=True)
         
         tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
         ticker_names = {

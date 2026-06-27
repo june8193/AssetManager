@@ -20,6 +20,7 @@ def setup_database():
     Base.metadata.create_all(bind=engine)
     yield
     Base.metadata.drop_all(bind=engine)
+    engine.dispose()
     
     # 테스트 종료 후 파일 삭제
     try:

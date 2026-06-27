@@ -234,7 +234,7 @@ def test_get_daily_stats(db_session):
     db_session.commit()
 
     service = DashboardService(db_session)
-    stats = service.get_daily_stats()
+    stats = service.get_daily_stats(all_data=True)
 
     # 최신 날짜가 가장 먼저 오도록 정렬되었는지 확인
     assert len(stats) == 3

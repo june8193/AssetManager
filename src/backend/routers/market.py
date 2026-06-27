@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 from ..database import get_db
 from ..services.market_analysis_service import MarketAnalysisService
 from ..services.benchmark_service import BenchmarkService
+from ..services.price_service import price_service
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -243,71 +244,15 @@ async def check_market_holiday(
                 detail="날짜 형식이 잘못되었습니다. YYYY-MM-DD 형식을 사용해 주세요."
             )
 
-    # 3. 주말 판정 (토요일: 5, 일요일: 6)
-    if target_date.weekday() >= 5:
+    # 3. 공통 헬퍼 함수를 통한 휴장일 판정
+    holiday_reason = price_service.get_market_holiday_info(target_date, country_upper)
+    if holiday_reason:
         return MarketHolidayResponse(
             date=target_date.strftime("%Y-%m-%d"),
             country=country_upper,
             is_holiday=True,
-            description="주말"
+            description=holiday_reason
         )
-
-    # 4. 국가별 거래소 공휴일 판정
-    if country_upper == "KR":
-        # 제헌절은 2008년부터 관공서 공휴일에서 제외되었으며 주식시장도 정상 영업하므로 제외
-        # holidays 라이브러리에서 제헌절(Constitution Day)이 잡히는 경우 무시해야 함
-        kr_holidays = holidays.SouthKorea(years=target_date.year)
-        
-        # 한국거래소 특수 휴장일 체크
-        if target_date.month == 5 and target_date.day == 1:
-            return MarketHolidayResponse(
-                date=target_date.strftime("%Y-%m-%d"),
-                country=country_upper,
-                is_holiday=True,
-                description="근로자의 날"
-            )
-            
-        if is_krx_year_end_holiday(target_date):
-            return MarketHolidayResponse(
-                date=target_date.strftime("%Y-%m-%d"),
-                country=country_upper,
-                is_holiday=True,
-                description="연말 휴장일"
-            )
-
-        # 일반 공휴일 여부 체크
-        if target_date in kr_holidays:
-            holiday_name = kr_holidays.get(target_date)
-            # 제헌절인 경우 영업일로 판정
-            if holiday_name in ["제헌절", "Constitution Day"]:
-                return MarketHolidayResponse(
-                    date=target_date.strftime("%Y-%m-%d"),
-                    country=country_upper,
-                    is_holiday=False,
-                    description="영업일"
-                )
-            
-            description = HOLIDAY_NAME_MAP.get(holiday_name, holiday_name)
-            return MarketHolidayResponse(
-                date=target_date.strftime("%Y-%m-%d"),
-                country=country_upper,
-                is_holiday=True,
-                description=description
-            )
-            
-    elif country_upper == "US":
-        # 뉴욕 증시(NYSE) 휴장일 전용 객체 생성
-        nyse_holidays = holidays.NYSE(years=target_date.year)
-        
-        if target_date in nyse_holidays:
-            holiday_name = nyse_holidays.get(target_date)
-            description = HOLIDAY_NAME_MAP.get(holiday_name, holiday_name)
-            return MarketHolidayResponse(
-                date=target_date.strftime("%Y-%m-%d"),
-                country=country_upper,
-                is_holiday=True,
-                description=description
-            )
 
     return MarketHolidayResponse(
         date=target_date.strftime("%Y-%m-%d"),

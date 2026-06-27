@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 from fastapi.concurrency import run_in_threadpool
 import datetime
 import pytz
+import holidays
 
 from src.kiwoom.api import KiwoomAPI
 from src.kiwoom.auth import KiwoomAuthManager
@@ -523,6 +524,241 @@ class PriceService:
         results.sort(key=lambda x: x["price_date"])
 
         return results
+
+    def get_market_holiday_info(self, target_date: datetime.date, country: str) -> Optional[str]:
+        """지정된 날짜가 해당 국가 주식 시장의 휴장일(주말 또는 공휴일)인 경우 휴장 사유를 반환합니다.
+        
+        영업일인 경우 None을 반환합니다.
+        
+        Args:
+            target_date (datetime.date): 판별 대상 날짜
+            country (str): 국가 코드 ('KR' 또는 'US')
+            
+        Returns:
+            Optional[str]: 휴장 사유 또는 None
+        """
+        import holidays
+        country_upper = country.upper()
+
+        # 1. 주말 판정 (토요일: 5, 일요일: 6)
+        if target_date.weekday() >= 5:
+            return "주말"
+
+        # 2. 국가별 공휴일 판정
+        if country_upper == "KR":
+            # 한국거래소 연말 휴장일 판정용 로컬 헬퍼
+            def is_krx_year_end_holiday(d: datetime.date) -> bool:
+                if d.month != 12:
+                    return False
+                dec31 = datetime.date(d.year, 12, 31)
+                dec31_weekday = dec31.weekday()
+                if dec31_weekday < 5:
+                    target_date = dec31
+                elif dec31_weekday == 5:
+                    target_date = datetime.date(d.year, 12, 30)
+                else:
+                    target_date = datetime.date(d.year, 12, 29)
+                return d == target_date
+
+            kr_holidays = holidays.SouthKorea(years=target_date.year)
+            
+            # 근로자의 날
+            if target_date.month == 5 and target_date.day == 1:
+                return "근로자의 날"
+                
+            # 연말 휴장일
+            if is_krx_year_end_holiday(target_date):
+                return "연말 휴장일"
+
+            # 일반 공휴일 여부
+            if target_date in kr_holidays:
+                holiday_name = kr_holidays.get(target_date)
+                # 제헌절인 경우 영업함
+                if holiday_name in ["제헌절", "Constitution Day"]:
+                    return None
+                
+                # market.py의 HOLIDAY_NAME_MAP에 해당하는 변환
+                holiday_name_map = {
+                    "New Year's Day": "신정",
+                    "Alternative holiday for New Year's Day": "신정 대체공휴일",
+                    "Lunar New Year's Day": "설날 연휴",
+                    "Alternative holiday for Lunar New Year's Day": "설날 대체공휴일",
+                    "Independence Movement Day": "삼일절",
+                    "Alternative holiday for Independence Movement Day": "삼일절 대체공휴일",
+                    "Labor Day": "근로자의 날",
+                    "Children's Day": "어린이날",
+                    "Alternative holiday for Children's Day": "어린이날 대체공휴일",
+                    "Buddha's Birthday": "부처님오신날",
+                    "Alternative holiday for Buddha's Birthday": "부처님오신날 대체공휴일",
+                    "Memorial Day": "현충일",
+                    "Liberation Day": "광복절",
+                    "Alternative holiday for Liberation Day": "광복절 대체공휴일",
+                    "Chuseok": "추석 연휴",
+                    "Alternative holiday for Chuseok": "추석 대체공휴일",
+                    "National Foundation Day": "개천절",
+                    "Alternative holiday for National Foundation Day": "개천절 대체공휴일",
+                    "Hangeul Day": "한글날",
+                    "Alternative holiday for Hangeul Day": "한글날 대체공휴일",
+                    "Christmas Day": "성탄절",
+                    "Alternative holiday for Christmas Day": "성탄절 대체공휴일",
+                }
+                return holiday_name_map.get(holiday_name, holiday_name)
+
+        elif country_upper == "US":
+            nyse_holidays = holidays.NYSE(years=target_date.year)
+            if target_date in nyse_holidays:
+                holiday_name = nyse_holidays.get(target_date)
+                holiday_name_map = {
+                    "New Year's Day": "신정",
+                    "Alternative holiday for New Year's Day": "신정 대체공휴일",
+                    "Martin Luther King Jr. Day": "마틴 루터 킹 주니어 추모일",
+                    "Martin Luther King, Jr. Day": "마틴 루터 킹 주니어 추모일",
+                    "Washington's Birthday": "대통령의 날",
+                    "Presidents' Day": "대통령의 날",
+                    "Good Friday": "성금요일",
+                    "Juneteenth National Independence Day": "준틴스 독립기념일",
+                    "Juneteenth": "준틴스 독립기념일",
+                    "Independence Day": "독립기념일",
+                    "Independence Day (observed)": "독립기념일 대체휴일",
+                    "Thanksgiving": "추수감사절",
+                    "Thanksgiving Day": "추수감사절",
+                    "Christmas Day": "성탄절",
+                    "Alternative holiday for Christmas Day": "성탄절 대체공휴일",
+                }
+                return holiday_name_map.get(holiday_name, holiday_name)
+
+        return None
+
+    def _get_today(self) -> datetime.date:
+        """오늘 날짜를 반환합니다. 테스트 시 모킹 편의성을 위해 분리되었습니다."""
+        return datetime.date.today()
+
+    def is_market_holiday(self, target_date: datetime.date, country: str) -> bool:
+        """지정된 날짜가 해당 국가 주식 시장의 휴장일(주말 또는 공휴일)인지 판별합니다.
+        
+        Args:
+            target_date (datetime.date): 판별 대상 날짜
+            country (str): 국가 코드 ('KR' 또는 'US')
+            
+        Returns:
+            bool: 휴장일인 경우 True, 그렇지 않으면 False
+        """
+        return self.get_market_holiday_info(target_date, country) is not None
+
+    async def update_all_market_prices(self):
+        """1시간마다 지수, 보유 자산, 관심 종목의 시세를 외부 API로부터 조회하여 DB를 업데이트합니다."""
+        from src.backend.database import SessionLocal
+        from src.backend.models import Asset, Watchlist, HistoricalPrice
+        from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+
+        today = self._get_today()
+        is_kr_holiday = self.is_market_holiday(today, "KR")
+        is_us_holiday = self.is_market_holiday(today, "US")
+
+        # 둘 다 휴장일이면 전체 건너뜀
+        if is_kr_holiday and is_us_holiday:
+            print(f"[INFO] {today} 날짜는 한국과 미국 모두 휴장일입니다. 백그라운드 시세 업데이트를 생략합니다.")
+            return
+
+        with SessionLocal() as db:
+            # 1. 4대 지수 목록
+            # 한국 지수: KOSPI(^KS11), KOSDAQ(^KQ11)
+            # 미국 지수: S&P 500(^GSPC), NASDAQ(^IXIC)
+            kr_indices = ["^KS11", "^KQ11"]
+            us_indices = ["^GSPC", "^IXIC"]
+
+            # 2. 보유 자산 중 현금이 아닌 주식/ETF 등의 티커 조회
+            # major_category != '현금'
+            db_assets = db.query(Asset).filter(Asset.major_category != "현금").all()
+            
+            # 3. 관심종목 조회
+            db_watchlist = db.query(Watchlist).all()
+
+        # 국가 및 휴장 여부에 따라 업데이트 대상 코드 분류
+        kr_codes = set()
+        us_symbols = set()
+
+        # 한국 지수 추가 (한국 휴장일이 아닐 때만)
+        if not is_kr_holiday:
+            for ticker in kr_indices:
+                us_symbols.add(ticker)  # 지수는 yfinance(get_us_prices)로 조회하므로 us_symbols에 포함시킴
+
+        # 미국 지수 추가 (미국 휴장일이 아닐 때만)
+        if not is_us_holiday:
+            for ticker in us_indices:
+                us_symbols.add(ticker)
+
+        # 보유 자산 분류
+        for asset in db_assets:
+            if asset.country == "KR":
+                if not is_kr_holiday:
+                    kr_codes.add(asset.ticker)
+            elif asset.country == "US":
+                if not is_us_holiday:
+                    us_symbols.add(asset.ticker)
+
+        # 관심종목 분류
+        for item in db_watchlist:
+            if item.country == "KR":
+                if not is_kr_holiday:
+                    kr_codes.add(item.stock_code)
+            elif item.country == "US":
+                if not is_us_holiday:
+                    us_symbols.add(item.stock_code)
+
+        # 한국 주식 시세 업데이트
+        kr_codes_list = list(kr_codes)
+        if kr_codes_list:
+            try:
+                print(f"[INFO] 한국 주식 시세 조회 중... (대상 개수: {len(kr_codes_list)})")
+                # force_update=True로 실시간 시세를 획득
+                kr_prices = await self.get_kr_prices(kr_codes_list, force_update=True)
+                
+                # 강제로 오늘 날짜의 HistoricalPrice에 저장
+                with SessionLocal() as db:
+                    for p in kr_prices:
+                        code = p["stock_code"]
+                        price_val = p["current_price"]
+                        if price_val > 0.0:
+                            stmt = sqlite_insert(HistoricalPrice).values(
+                                ticker=code,
+                                price_date=today,
+                                close_price=price_val
+                            )
+                            stmt = stmt.on_conflict_do_update(
+                                index_elements=['ticker', 'price_date'],
+                                set_={'close_price': price_val}
+                            )
+                            db.execute(stmt)
+                    db.commit()
+            except Exception as e:
+                print(f"[ERROR] 한국 주식 백그라운드 시세 업데이트 실패: {e}")
+
+        # 미국 주식 및 지수 시세 업데이트
+        us_symbols_list = list(us_symbols)
+        if us_symbols_list:
+            try:
+                print(f"[INFO] 미국 주식 및 지수 시세 조회 중... (대상 개수: {len(us_symbols_list)})")
+                us_prices = await self.get_us_prices(us_symbols_list, force_update=True)
+                
+                with SessionLocal() as db:
+                    for p in us_prices:
+                        symbol = p["stock_code"]
+                        price_val = p["current_price"]
+                        if price_val > 0.0:
+                            stmt = sqlite_insert(HistoricalPrice).values(
+                                ticker=symbol,
+                                price_date=today,
+                                close_price=price_val
+                            )
+                            stmt = stmt.on_conflict_do_update(
+                                index_elements=['ticker', 'price_date'],
+                                set_={'close_price': price_val}
+                            )
+                            db.execute(stmt)
+                    db.commit()
+            except Exception as e:
+                print(f"[ERROR] 미국 주식/지수 백그라운드 시세 업데이트 실패: {e}")
 
 
 # 싱글톤 인스턴스

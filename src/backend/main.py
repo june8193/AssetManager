@@ -9,6 +9,24 @@ from .services.kiwoom_service import KiwoomStockService
 from .services.backup_service import BackupService
 import datetime
 import os
+import asyncio
+import sys
+from .services.price_service import price_service
+
+async def run_price_updater_loop():
+    """1시간마다 지수, 보유 자산, 관심 종목의 시세를 외부 API로부터 조회하여 DB를 업데이트합니다."""
+    # 서버 기동 후 최초 실행 전 5초 대기 (FastAPI가 완전히 기동된 후 돌기 시작하도록)
+    await asyncio.sleep(5)
+    while True:
+        try:
+            print("[INFO] 백그라운드 시세 업데이트 태스크 시작")
+            await price_service.update_all_market_prices()
+            print("[INFO] 백그라운드 시세 업데이트 완료")
+        except Exception as e:
+            print(f"[ERROR] 백그라운드 시세 업데이트 중 예외 발생: {e}")
+        
+        # 1시간(3600초) 대기
+        await asyncio.sleep(3600)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,8 +64,21 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     
+    # 백그라운드 시세 업데이트 루프 구동 (테스트 환경인 경우 기동 생략)
+    is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
+    updater_task = None
+    if not is_testing:
+        updater_task = asyncio.create_task(run_price_updater_loop())
+    
     yield
-    # Shutdown logic (none needed for now)
+    
+    # Shutdown: 백그라운드 태스크 취소
+    if updater_task:
+        updater_task.cancel()
+        try:
+            await updater_task
+        except asyncio.CancelledError:
+            pass
 
 app = FastAPI(title="AssetManager Backend API", lifespan=lifespan)
 

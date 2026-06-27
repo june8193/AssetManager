@@ -44,7 +44,7 @@ def test_get_snapshots(db_session):
 
     # 3. 서비스 호출 및 검증
     service = DashboardService(db_session)
-    data = service.get_snapshots()
+    data = service.get_snapshots(all_data=True)
 
     assert "history" in data
     assert "accounts" in data
