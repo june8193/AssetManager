@@ -72,6 +72,7 @@ describe('Sidebar Component', () => {
     // 하위 메뉴가 나타남
     expect(screen.getByText('마스터 관리')).toBeInTheDocument();
     expect(screen.getByText('스냅샷 생성')).toBeInTheDocument();
+    expect(screen.getByText('관심종목/섹터 관리')).toBeInTheDocument();
   });
 
   it('사이드바가 접힌 상태에서 DB 관리 클릭 시 사이드바가 펼쳐지고 하위 메뉴가 보여야 한다', () => {

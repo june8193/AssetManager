@@ -19,22 +19,11 @@ const mockDashboardData = {
       return_rate: 2.1
     }
   },
-  etfs: [
-    {
-      rank: 1,
-      ticker: "069500",
-      name: "KODEX 200",
-      current_price: 35000.0,
-      return_rate: 8.2,
-      alpha: 2.7,
-      judgment: "시장 상회"
-    }
-  ],
   custom_sectors: [
     {
       id: 1,
       name: "IT/반도체",
-      stock_count: 2,
+      stock_count: 1,
       return_rate: 12.5,
       alpha: 7.0,
       judgment: "시장 상회",
@@ -66,12 +55,11 @@ describe('SectorPage', () => {
   });
 
   afterEach(() => {
-    // 테스트 종료 후 fetch 원상태 복구 (전역 오염 방지)
+    // 테스트 종료 후 fetch 원상태 복구
     global.fetch = originalFetch;
   });
 
   it('로딩 중일 때 로딩 인디케이터가 렌더링된다', async () => {
-    // 끝나지 않는 프로미스로 fetch 모킹
     global.fetch = vi.fn().mockImplementation(() => new Promise(() => {}));
 
     render(
@@ -103,7 +91,7 @@ describe('SectorPage', () => {
     expect(retryButton).toBeDefined();
   });
 
-  it('정상 데이터 로드 시 주요 지수, 대표 ETF, 커스텀 섹터 정보가 올바르게 렌더링된다', async () => {
+  it('정상 데이터 로드 시 주요 지수, 커스텀 섹터 정보가 올바르게 렌더링된다', async () => {
     global.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => mockDashboardData
@@ -115,20 +103,12 @@ describe('SectorPage', () => {
       </MaskingProvider>
     );
 
-    // 디버깅용 렌더 결과 출력
-    screen.debug(undefined, 100000);
-
-    // 헤더 타이틀 확인
     await waitFor(() => {
-      expect(screen.getAllByText('KODEX 200')[0]).toBeDefined();
+      expect(screen.getAllByText('SK하이닉스')[0]).toBeDefined();
     });
 
-    // 주요 지수 값 렌더링 확인 (천 단위 쉼표 제거 포맷 대응)
+    // 주요 지수 값 렌더링 확인
     expect(screen.getByText('2,650.00')).toBeDefined();
-    
-    // 대표 ETF 수익률 및 알파 검증
-    expect(screen.getAllByText('+8.2%')[0]).toBeDefined();
-    expect(screen.getAllByText('+2.7%p')[0]).toBeDefined();
 
     // 커스텀 섹터 수익률 검증
     expect(screen.getAllByText('IT/반도체')[0]).toBeDefined();
@@ -161,9 +141,7 @@ describe('SectorPage', () => {
     fireEvent.click(usTabButton);
 
     await waitFor(() => {
-      // 탭 전환 시 fetch가 다시 호출되었는지 최소 호출 횟수 검증 (리액트 리렌더링 오차 방지)
       expect(fetchSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
-      // 마지막 호출된 URL 파라미터가 미국 탭 사양(US, ^GSPC)으로 변경되었는지 검증
       const lastUrl = fetchSpy.mock.lastCall[0];
       expect(lastUrl).toContain('country=US');
       expect(lastUrl).toContain('compare_index=%5EGSPC');

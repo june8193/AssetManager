@@ -31,7 +31,8 @@ const MENU_ITEMS = [
     icon: Database,
     subItems: [
       { path: '/db', label: '마스터 관리' },
-      { path: '/db/snapshots/new', label: '스냅샷 생성' }
+      { path: '/db/snapshots/new', label: '스냅샷 생성' },
+      { path: '/db/watchlist-sector', label: '관심종목/섹터 관리' }
     ]
   },
   { path: '/connection', label: 'API 연결 관리', icon: LinkIcon },
