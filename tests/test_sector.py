@@ -226,3 +226,99 @@ async def test_watchlist_returns_in_dashboard(sector_service: SectorService, db_
     assert stock_res["alpha"] == 5.0 # 10.0 - 5.0 = 5.0%
     assert stock_res["judgment"] == "시장 상회"
 
+
+@pytest.mark.asyncio
+async def test_individual_stocks_returns_in_dashboard(sector_service: SectorService, db_session: Session):
+    """대시보드 조회 시 관심종목과 커스텀섹터의 모든 개별종목을 중복 없이 포괄하여 개별종목 랭킹을 산출하는지 검증합니다."""
+    # 1. 관심종목 등록 (삼성전자: 005930, 카카오: 035720)
+    from src.backend.models import Watchlist
+    item_samsung = Watchlist(stock_code="005930", stock_name="삼성전자", country="KR")
+    item_kakao = Watchlist(stock_code="035720", stock_name="카카오", country="KR")
+    db_session.add(item_samsung)
+    db_session.add(item_kakao)
+    
+    # 2. 커스텀섹터 생성 및 종목 등록 (섹터 A에 삼성전자, 현대차: 005380 추가)
+    # 삼성전자는 관심종목과 커스텀섹터 모두에 존재하므로 중복 제거 대상입니다.
+    sector = await sector_service.create_custom_sector(name="E2E 반도체", country="KR")
+    await sector_service.add_stock_to_sector(
+        sector_id=sector.id,
+        stock_code="005930",
+        stock_name="삼성전자",
+        shares_outstanding=5000.0
+    )
+    await sector_service.add_stock_to_sector(
+        sector_id=sector.id,
+        stock_code="005380",
+        stock_name="현대차",
+        shares_outstanding=3000.0
+    )
+    db_session.commit()
+    
+    # 3. 역사적 가격 데이터 적재
+    start_date = datetime.date(2026, 6, 1)
+    end_date = datetime.date(2026, 6, 2)
+    
+    prices = [
+        # 삼성전자: +10%
+        HistoricalPrice(ticker="005930", price_date=start_date, close_price=50000.0),
+        HistoricalPrice(ticker="005930", price_date=end_date, close_price=55000.0),
+        # 현대차: +20%
+        HistoricalPrice(ticker="005380", price_date=start_date, close_price=200000.0),
+        HistoricalPrice(ticker="005380", price_date=end_date, close_price=240000.0),
+        # 카카오: -10%
+        HistoricalPrice(ticker="035720", price_date=start_date, close_price=50000.0),
+        HistoricalPrice(ticker="035720", price_date=end_date, close_price=45000.0),
+        # 비교 지수 KOSPI: +5% (2000 -> 2100)
+        HistoricalPrice(ticker="^KS11", price_date=start_date, close_price=2000.0),
+        HistoricalPrice(ticker="^KS11", price_date=end_date, close_price=2100.0)
+    ]
+    db_session.add_all(prices)
+    db_session.commit()
+    
+    # 4. 대시보드 API 서비스 호출
+    dashboard_data = await sector_service.get_sector_dashboard_data(
+        country="KR",
+        period="Custom",
+        compare_index="^KS11",
+        start_date=start_date,
+        end_date=end_date
+    )
+    
+    # 5. 개별종목 통합 랭킹 검증
+    ind_stocks = dashboard_data.get("individual_stocks", [])
+    
+    # 총 종목 수는 현대차(섹터), 삼성전자(중복), 카카오(관심) 총 3개여야 함
+    assert len(ind_stocks) == 3
+    
+    # 1위: 현대차 (수익률 20.0%, 알파 15.0%, 출처: ['E2E 반도체'])
+    # 2위: 삼성전자 (수익률 10.0%, 알파 5.0%, 출처: ['관심종목', 'E2E 반도체'])
+    # 3위: 카카오 (수익률 -10.0%, 알파 -15.0%, 출처: ['관심종목'])
+    
+    stock_1 = ind_stocks[0]
+    assert stock_1["ticker"] == "005380"
+    assert stock_1["name"] == "현대차"
+    assert stock_1["return_rate"] == 20.0
+    assert stock_1["alpha"] == 15.0
+    assert stock_1["rank"] == 1
+    assert "E2E 반도체" in stock_1["sources"]
+    assert "관심종목" not in stock_1["sources"]
+    
+    stock_2 = ind_stocks[1]
+    assert stock_2["ticker"] == "005930"
+    assert stock_2["name"] == "삼성전자"
+    assert stock_2["return_rate"] == 10.0
+    assert stock_2["alpha"] == 5.0
+    assert stock_2["rank"] == 2
+    assert "관심종목" in stock_2["sources"]
+    assert "E2E 반도체" in stock_2["sources"]
+    
+    stock_3 = ind_stocks[2]
+    assert stock_3["ticker"] == "035720"
+    assert stock_3["name"] == "카카오"
+    assert stock_3["return_rate"] == -10.0
+    assert stock_3["alpha"] == -15.0
+    assert stock_3["rank"] == 3
+    assert "관심종목" in stock_3["sources"]
+    assert "E2E 반도체" not in stock_3["sources"]
+
+

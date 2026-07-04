@@ -547,6 +547,45 @@ class SectorService:
         for i, item in enumerate(watchlist_results, 1):
             item["rank"] = i
 
+        # 6. 개별종목 통합 랭킹 연산
+        individual_stocks_map = {}
+        
+        # 1) 관심종목 데이터 추가
+        for item in watchlist_results:
+            ticker = item["ticker"]
+            individual_stocks_map[ticker] = {
+                "ticker": ticker,
+                "name": item["name"],
+                "return_rate": item["return_rate"],
+                "alpha": item["alpha"],
+                "sources": ["관심종목"]
+            }
+            
+        # 2) 커스텀섹터 개별 종목 데이터 추가
+        for sec in sector_results:
+            sec_name = sec["name"]
+            for stock in sec["stocks"]:
+                ticker = stock["stock_code"]
+                if ticker in individual_stocks_map:
+                    if sec_name not in individual_stocks_map[ticker]["sources"]:
+                        individual_stocks_map[ticker]["sources"].append(sec_name)
+                else:
+                    individual_stocks_map[ticker] = {
+                        "ticker": ticker,
+                        "name": stock["stock_name"],
+                        "return_rate": stock["return_rate"],
+                        "alpha": stock["alpha"],
+                        "sources": [sec_name]
+                    }
+                    
+        # 3) 리스트 변환 및 수익률 내림차순 정렬
+        individual_stocks_list = list(individual_stocks_map.values())
+        individual_stocks_list.sort(key=lambda x: x["return_rate"], reverse=True)
+        
+        # 4) 순위 부여
+        for i, item in enumerate(individual_stocks_list, 1):
+            item["rank"] = i
+
         return {
             "period": period,
             "start_date": start.isoformat(),
@@ -555,5 +594,6 @@ class SectorService:
             "index_returns": index_returns,
             "etfs": etf_results,
             "custom_sectors": sector_results,
-            "watchlist": watchlist_results
+            "watchlist": watchlist_results,
+            "individual_stocks": individual_stocks_list
         }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   TrendingUp, BarChart2, Calendar, Info, RefreshCw, 
-  ArrowUpRight, ArrowDownRight, ChevronRight, ChevronDown, Users
+  ArrowUpRight, ArrowDownRight, ChevronRight, ChevronDown, Users, ChevronUp
 } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
@@ -25,6 +25,8 @@ const SectorPage = () => {
   
   // 아코디언 상태
   const [expandedSectorId, setExpandedSectorId] = useState(null); 
+  const [isSectorExpanded, setIsSectorExpanded] = useState(false);
+  const [isStockExpanded, setIsStockExpanded] = useState(false);
 
   // 탭 변경 핸들러
   const handleCountryChange = (newCountry) => {
@@ -281,7 +283,7 @@ const SectorPage = () => {
                   </thead>
                   <tbody>
                     {dashboardData.custom_sectors && dashboardData.custom_sectors.length > 0 ? (
-                      dashboardData.custom_sectors.map((sec) => (
+                      (isSectorExpanded ? dashboardData.custom_sectors : dashboardData.custom_sectors.slice(0, 5)).map((sec) => (
                         <React.Fragment key={sec.id}>
                           <tr 
                             onClick={() => setExpandedSectorId(prev => prev === sec.id ? null : sec.id)}
@@ -388,9 +390,23 @@ const SectorPage = () => {
                   </tbody>
                 </table>
               </div>
+              {dashboardData.custom_sectors && dashboardData.custom_sectors.length > 5 && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={() => setIsSectorExpanded(!isSectorExpanded)}
+                    className="flex items-center gap-1 px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 shadow-sm transition-all"
+                  >
+                    {isSectorExpanded ? (
+                      <>접기 <ChevronUp size={14} /></>
+                    ) : (
+                      <>더 보기 (전체 {dashboardData.custom_sectors.length}개) <ChevronDown size={14} /></>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* 관심종목 수익률 대시보드 */}
+            {/* 개별종목 수익률 대시보드 */}
             <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -398,8 +414,8 @@ const SectorPage = () => {
                     <TrendingUp size={20} />
                   </span>
                   <div>
-                    <h2 className="text-lg font-bold text-slate-900">관심종목 수익률 랭킹</h2>
-                    <p className="text-xs text-slate-500">개별 관심주식의 단순 종가 수익률입니다.</p>
+                    <h2 className="text-lg font-bold text-slate-900">개별종목 수익률 랭킹</h2>
+                    <p className="text-xs text-slate-500">관심종목 및 커스텀섹터 소속 개별 종목들의 단순 종가 수익률입니다.</p>
                   </div>
                 </div>
               </div>
@@ -415,8 +431,8 @@ const SectorPage = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {dashboardData.watchlist && dashboardData.watchlist.length > 0 ? (
-                      dashboardData.watchlist.map((item) => (
+                    {dashboardData.individual_stocks && dashboardData.individual_stocks.length > 0 ? (
+                      (isStockExpanded ? dashboardData.individual_stocks : dashboardData.individual_stocks.slice(0, 5)).map((item) => (
                         <tr key={item.ticker} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
                           <td className="py-4 px-2 text-center">
                             <span className={`inline-flex items-center justify-center w-6 h-6 rounded-full font-bold text-xs ${
@@ -428,7 +444,24 @@ const SectorPage = () => {
                             </span>
                           </td>
                           <td className="py-4 px-2 font-medium">
-                            <div className="font-semibold text-slate-900">{item.name}</div>
+                            <div className="flex items-center flex-wrap gap-y-1">
+                              <span className="font-semibold text-slate-900">{item.name}</span>
+                              {item.sources && item.sources.map((src) => {
+                                const isWatchlist = src === '관심종목';
+                                return (
+                                  <span 
+                                    key={src} 
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-medium ml-1.5 ${
+                                      isWatchlist 
+                                        ? 'bg-rose-50 text-rose-600 border border-rose-100' 
+                                        : 'bg-blue-50 text-blue-600 border border-blue-100'
+                                    }`}
+                                  >
+                                    {src}
+                                  </span>
+                                );
+                              })}
+                            </div>
                             <div className="text-[10px] text-slate-400 mt-0.5">{item.ticker}</div>
                           </td>
                           <td className={`py-4 px-2 text-right font-bold ${
@@ -448,13 +481,27 @@ const SectorPage = () => {
                     ) : (
                       <tr>
                         <td colSpan="4" className="py-12 text-center text-slate-400 font-medium">
-                          등록된 관심종목이 없습니다.
+                          등록된 개별종목이 없습니다.
                         </td>
                       </tr>
                     )}
                   </tbody>
                 </table>
               </div>
+              {dashboardData.individual_stocks && dashboardData.individual_stocks.length > 5 && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={() => setIsStockExpanded(!isStockExpanded)}
+                    className="flex items-center gap-1 px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-800 border border-slate-200 rounded-xl bg-white hover:bg-slate-50 shadow-sm transition-all"
+                  >
+                    {isStockExpanded ? (
+                      <>접기 <ChevronUp size={14} /></>
+                    ) : (
+                      <>더 보기 (전체 {dashboardData.individual_stocks.length}개) <ChevronDown size={14} /></>
+                    )}
+                  </button>
+                </div>
+              )}
             </div>
 
           </div>
@@ -508,12 +555,12 @@ const SectorPage = () => {
                 </div>
               </div>
 
-              {/* 관심종목 알파 순위 차트 */}
+              {/* 개별종목 알파 순위 차트 */}
               <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-500">관심종목 성과 차이</h4>
+                <h4 className="text-xs font-bold text-slate-500">개별종목 성과 차이</h4>
                 <div className="space-y-2">
-                  {dashboardData.watchlist && dashboardData.watchlist.length > 0 ? (
-                    dashboardData.watchlist.map((item) => (
+                  {dashboardData.individual_stocks && dashboardData.individual_stocks.length > 0 ? (
+                    dashboardData.individual_stocks.map((item) => (
                       <div key={item.ticker} className="space-y-1">
                         <div className="flex justify-between text-xs font-semibold">
                           <span className="text-slate-700">{item.name}</span>
