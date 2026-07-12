@@ -86,7 +86,7 @@ describe('MarketAnalysisPage', () => {
     );
 
     // 타이틀 확인
-    expect(screen.getByText('지표분석')).toBeDefined();
+    expect(screen.getByText('지수분석')).toBeDefined();
 
     // 탭 이름 확인
     expect(screen.getByText('지수별 상세 분석')).toBeDefined();

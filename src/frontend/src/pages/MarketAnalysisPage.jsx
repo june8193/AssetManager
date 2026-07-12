@@ -172,7 +172,7 @@ export default function MarketAnalysisPage() {
         <div>
           <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
             <TrendingUp className="text-blue-600" size={32} />
-            지표분석
+            지수분석
           </h1>
           <p className="text-slate-500 text-sm font-medium mt-1">S&P500, NASDAQ, KOSPI, KOSDAQ의 역대 지수 시각화 및 기간별 통계를 조회합니다.</p>
         </div>
