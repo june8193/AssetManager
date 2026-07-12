@@ -667,6 +667,14 @@ export default function StockAnalysisPage() {
                         </h3>
                         <p className="text-[10px] text-slate-400 font-bold mt-1">고점 대비 현재 종가의 하락률 추이를 나타냅니다.</p>
                       </div>
+                      {processedData.length > 0 && (
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 MDD</span>
+                          <span className="text-sm font-black text-rose-600">
+                            {processedData[processedData.length - 1].mdd.toFixed(2)}%
+                          </span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="h-[150px] w-full">
