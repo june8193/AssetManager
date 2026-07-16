@@ -32,6 +32,7 @@ const SnapshotWizardPage = () => {
   const [accounts, setAccounts] = useState([]);
   const [selectedAccountIds, setSelectedAccountIds] = useState([]);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
+  const [latestSnapshotDate, setLatestSnapshotDate] = useState(null);
 
   // 상세 입력 관련 상태
   const [currentAccIdx, setCurrentAccIdx] = useState(0);
@@ -55,9 +56,9 @@ const SnapshotWizardPage = () => {
     { id: 5, label: '최종 확인', icon: <FileSearch size={18} /> },
   ];
 
-  // 계좌 데이터 가져오기
+  // 계좌 데이터 및 최근 스냅샷 날짜 가져오기
   useEffect(() => {
-    const fetchAccounts = async () => {
+    const fetchAccountsAndLatestSnapshot = async () => {
       try {
         setLoadingAccounts(true);
         const response = await fetch(`${DB_API_BASE}/accounts`);
@@ -70,9 +71,21 @@ const SnapshotWizardPage = () => {
       } finally {
         setLoadingAccounts(false);
       }
+
+      try {
+        const latestResponse = await fetch(`${DB_API_BASE}/snapshots/latest`);
+        if (latestResponse.ok) {
+          const latestData = await latestResponse.json();
+          if (latestData.latest_date) {
+            setLatestSnapshotDate(latestData.latest_date);
+          }
+        }
+      } catch (error) {
+        console.error('최근 스냅샷 일자 로드 실패:', error);
+      }
     };
 
-    fetchAccounts();
+    fetchAccountsAndLatestSnapshot();
   }, []);
 
   // 2단계/4단계 계좌 전환 시 기존 트랜잭션 로드
@@ -660,106 +673,7 @@ const SnapshotWizardPage = () => {
     );
   };
 
-  const renderAssetProfits = (calcResult) => {
-    const profits = calcResult?.asset_profits || [];
-    if (profits.length === 0) return null;
 
-    const totalLastValuation = profits.reduce((sum, p) => sum + (p.last_valuation || 0), 0);
-    const totalCurrentValuation = profits.reduce((sum, p) => sum + (p.current_valuation || 0), 0);
-    const totalPeriodProfit = profits.reduce((sum, p) => sum + (p.period_profit || 0), 0);
-
-    return (
-      <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4 animate-in slide-in-from-top-2 duration-300">
-        <h4 className="font-bold text-slate-800 flex items-center gap-2">
-          <DollarSign size={18} className="text-blue-600" /> 종목별 기간수익 상세
-        </h4>
-        <div className="overflow-x-auto border border-slate-100 rounded-xl">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-slate-50 border-b border-slate-100 text-slate-500">
-              <tr>
-                <th className="px-3 py-2.5 font-semibold">종목(국가)</th>
-                <th className="px-3 py-2.5 font-semibold text-right">이전 평가액</th>
-                <th className="px-3 py-2.5 font-semibold text-right">매수/매도</th>
-                <th className="px-3 py-2.5 font-semibold text-right">현재 평가액</th>
-                <th className="px-3 py-2.5 font-semibold text-right">기간 수익</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {profits.map((p) => {
-                const hasProfit = p.period_profit !== null && p.period_profit !== undefined;
-                const hasLast = p.last_valuation !== null && p.last_valuation !== undefined;
-                const hasCurrent = p.current_valuation !== null && p.current_valuation !== undefined;
-                
-                const isUsd = p.country === 'US' || p.ticker === 'USD';
-                const buyLabel = (p.ticker === 'KRW' || p.ticker === 'USD') ? '입금' : '매수';
-                const sellLabel = (p.ticker === 'KRW' || p.ticker === 'USD') ? '출금' : '매도';
-
-                const formatBuySell = (val) => {
-                  if (val === null || val === undefined) return '-';
-                  const rounded = Math.round(val * 100) / 100;
-                  return isUsd 
-                    ? `$${rounded.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })}` 
-                    : `${Math.round(val).toLocaleString()}원`;
-                };
-
-                return (
-                  <tr key={p.asset_id} className="hover:bg-slate-50/50">
-                    <td className="px-3 py-3">
-                      <div className="font-semibold text-slate-800">{p.asset_name}</div>
-                      <div className="text-[9px] text-slate-400 font-mono">{p.ticker} · {p.country}</div>
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-slate-600">
-                      {hasLast ? `${Math.round(p.last_valuation).toLocaleString()}원` : '-'}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono text-[10px] text-slate-500">
-                      <div className="text-rose-500">{buyLabel}: {formatBuySell(p.period_buy)}</div>
-                      {(p.ticker === 'KRW' || p.ticker === 'USD') && p.cash_sell_stock > 0 && (
-                        <div className="text-rose-400 text-[9px] mt-0.5">주식매도: +{formatBuySell(p.cash_sell_stock)}</div>
-                      )}
-                      <div className="text-emerald-500">{sellLabel}: {formatBuySell(p.period_sell)}</div>
-                      {(p.ticker === 'KRW' || p.ticker === 'USD') && p.cash_buy_stock > 0 && (
-                        <div className="text-emerald-400 text-[9px] mt-0.5">주식매수: -{formatBuySell(p.cash_buy_stock)}</div>
-                      )}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono font-semibold text-slate-800">
-                      {hasCurrent ? `${Math.round(p.current_valuation).toLocaleString()}원` : '-'}
-                    </td>
-                    <td className="px-3 py-3 text-right font-mono">
-                      {hasProfit ? (
-                        <span className={`font-bold ${p.period_profit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                          {p.period_profit > 0 ? '+' : ''}{Math.round(p.period_profit).toLocaleString()}원
-                        </span>
-                      ) : (
-                        <span className="text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded text-[10px]">조회 실패</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {/* 합계 행 추가 */}
-              <tr className="bg-slate-50 font-bold border-t border-slate-200">
-                <td className="px-3 py-3 text-slate-800 font-semibold">합계 (원화)</td>
-                <td className="px-3 py-3 text-right font-mono text-slate-800">
-                  {Math.round(totalLastValuation).toLocaleString()}원
-                </td>
-                <td className="px-3 py-3 text-right font-mono text-[10px] text-slate-400">
-                  -
-                </td>
-                <td className="px-3 py-3 text-right font-mono text-slate-800">
-                  {Math.round(totalCurrentValuation).toLocaleString()}원
-                </td>
-                <td className="px-3 py-3 text-right font-mono">
-                  <span className={`font-bold ${totalPeriodProfit >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                    {totalPeriodProfit > 0 ? '+' : ''}{Math.round(totalPeriodProfit).toLocaleString()}원
-                  </span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  };
 
   // --- 렌더링 함수들 ---
 
@@ -1093,9 +1007,6 @@ const SnapshotWizardPage = () => {
             </>
           )}
         </div>
-
-        {/* 종목별 기간수익 상세 테이블 하단 표시 */}
-        {calc && !calc.need_last_exchange_rate && renderAssetProfits(calc)}
       </div>
     );
   };
@@ -1524,22 +1435,6 @@ const SnapshotWizardPage = () => {
             </tbody>
           </table>
         </div>
-        {/* 증권 계좌들의 종목별 기간수익 정보 노출 */}
-        {selectedAccounts
-          .filter(acc => acc.account_type === 'BROKERAGE')
-          .map(acc => {
-            const data = accountsFormData[acc.id] || {};
-            if (!data.calcResult) return null;
-            return (
-              <div key={acc.id} className="mt-6 space-y-3">
-                <div className="text-sm font-bold text-slate-700 px-1">
-                  [{getAccountDisplayName(acc)}] 종목별 기간수익 상세
-                </div>
-                {renderAssetProfits(data.calcResult)}
-              </div>
-            );
-          })
-        }
       </div>
     );
   };
@@ -1554,7 +1449,14 @@ const SnapshotWizardPage = () => {
           </div>
           <div>
             <h1 className="text-2xl font-bold text-slate-900">신규 스냅샷 생성</h1>
-            <p className="text-slate-500 text-sm">현재 자산 상태를 기록하기 위한 통합 위저드를 시작합니다.</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <p className="text-slate-500 text-sm">현재 자산 상태를 기록하기 위한 통합 위저드를 시작합니다.</p>
+              {latestSnapshotDate && (
+                <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full border border-blue-100 font-bold">
+                  최근 스냅샷: {latestSnapshotDate}
+                </span>
+              )}
+            </div>
           </div>
         </div>
         <button
