@@ -20,3 +20,9 @@ dependencies = [
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
+testpaths = ["tests"]
+norecursedirs = [".venv", "scratch", "scripts"]
+
+[tool.pyright]
+include = ["src"]
+extraPaths = ["."]

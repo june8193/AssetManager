@@ -136,7 +136,7 @@ class DashboardService:
         results.reverse()
         return results
 
-    def get_daily_stats(self, start_date: datetime.date = None, end_date: datetime.date = None, all_data: bool = False) -> List[Dict[str, Any]]:
+    def get_daily_stats(self, start_date: datetime.date | None = None, end_date: datetime.date | None = None, all_data: bool = False) -> List[Dict[str, Any]]:
         """일자별 자산 현황 통계를 계산하여 최신순으로 반환합니다.
         
         역사적 통계 데이터이므로 현재 계좌의 활성 여부와 관계없이 모든 데이터를 포함합니다.
@@ -177,6 +177,7 @@ class DashboardService:
         results = []
         
         prev_assets = 0.0
+        sorted_dates_assets = 0.0
         
         for i, d in enumerate(sorted_dates):
             assets = date_valuations[d]
@@ -640,7 +641,7 @@ class DashboardService:
             "profit_ratio": round(profit_ratio, 2)
         }
 
-    def get_snapshots(self, start_date: datetime.date = None, end_date: datetime.date = None, all_data: bool = False) -> Dict[str, Any]:
+    def get_snapshots(self, start_date: datetime.date | None = None, end_date: datetime.date | None = None, all_data: bool = False) -> Dict[str, Any]:
         """시계열 자산 추이 데이터를 가져옵니다.
         
         Returns:

@@ -90,7 +90,7 @@ async def test_get_asset_ratios_mcp(db_session, setup_mcp_data):
 async def test_get_watchlist_prices_mcp(db_session, setup_mcp_data):
     """관심종목 시세 조회 MCP 도구 결과를 테스트합니다."""
     # price_service를 모킹하여 외부 API 호출 방지
-    with patch("src.backend.mcp_server.price_service") as mock_price_service:
+    with patch("src.backend.mcp.market.price_service") as mock_price_service:
         mock_price_service.get_kr_prices = AsyncMock(return_value=[
             {"stock_code": "005930", "current_price": 72000.0, "change_rate": 2.8}
         ])
@@ -139,7 +139,7 @@ async def test_get_transactions_mcp(db_session, setup_mcp_data):
 async def test_get_market_history_mcp(db_session, setup_mcp_data):
     """시장 지수 역사적 가격 조회 MCP 도구 결과를 테스트합니다."""
     # BenchmarkService를 모킹하여 테스트
-    with patch("src.backend.mcp_server.BenchmarkService") as MockBenchmarkService:
+    with patch("src.backend.mcp.market.BenchmarkService") as MockBenchmarkService:
         mock_service = MockBenchmarkService.return_value
         # mock_service.get_historical_prices 는 비동기 함수임
         mock_service.get_historical_prices = AsyncMock(return_value=[
@@ -154,7 +154,7 @@ async def test_get_market_history_mcp(db_session, setup_mcp_data):
 async def test_get_stock_history_mcp(db_session, setup_mcp_data):
     """개별 주가 조회 MCP 도구 결과를 테스트합니다."""
     # price_service를 모킹하여 테스트
-    with patch("src.backend.mcp_server.price_service") as mock_price_service:
+    with patch("src.backend.mcp.market.price_service") as mock_price_service:
         mock_price_service.get_historical_prices_with_cache = AsyncMock(return_value=[
             {"price_date": datetime.date.today(), "close_price": 70000.0}
         ])
@@ -167,7 +167,7 @@ async def test_get_stock_history_mcp(db_session, setup_mcp_data):
 @pytest.mark.asyncio
 async def test_refresh_market_prices_mcp():
     """수동 시세 최신화 MCP 도구 결과를 테스트합니다."""
-    with patch("src.backend.mcp_server.price_service") as mock_price_service:
+    with patch("src.backend.mcp.market.price_service") as mock_price_service:
         mock_price_service.update_all_market_prices = AsyncMock()
         result = await refresh_market_prices()
         assert result["status"] == "success"
