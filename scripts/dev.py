@@ -15,7 +15,7 @@ def find_available_port(start_port, max_attempts=10):
     for port in range(start_port, start_port + max_attempts):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
-                s.bind(('localhost', port))
+                s.bind(('0.0.0.0', port))
                 return port
             except socket.error:
                 continue

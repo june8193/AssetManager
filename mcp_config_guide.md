@@ -55,8 +55,10 @@
     "assetmanager": {
       "command": "uv",
       "args": [
+        "--directory",
+        "c:/localrepo/AssetManager",
         "run",
-        "c:/localrepo/AssetManager/src/mcp/main.py"
+        "src/mcp/main.py"
       ],
       "env": {
         "MCP_BACKEND_URL": "http://localhost:8000",
