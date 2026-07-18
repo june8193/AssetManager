@@ -1,9 +1,8 @@
 # [TICKET-2] 자산 조회 MCP 도구(Tool) 구현
 
-- **Type**: `task`
-- **Status**: `blocked` (Waiting for [TICKET-1](file:///c:/localrepo/AssetManager/docs/wayfinder/tickets/ticket_1_dependency.md))
+- **Status**: `completed`
 - **Assignee**: Antigravity
-- **Blocked By**: [TICKET-1](file:///c:/localrepo/AssetManager/docs/wayfinder/tickets/ticket_1_dependency.md)
+- **Blocked By**: [TICKET-1](file:///c:/localrepo/AssetManager/docs/wayfinder/tickets/ticket_1_dependency.md) (Completed)
 - **Blocks**: [TICKET-3](file:///c:/localrepo/AssetManager/docs/wayfinder/tickets/ticket_3_unit_tests.md)
 
 ## Question
@@ -26,4 +25,11 @@
    - `get_transactions`
    - `get_market_history`
    - `get_stock_history`
+   - `refresh_market_prices` (수동 시세 새로고침 도구 추가)
 3. DB 연결 시 check_same_thread 옵션을 다루는 `src.backend.database` 내 설정 점검 및 연동.
+
+## Answer
+- `src/backend/mcp_server.py`가 성공적으로 작성되었습니다.
+- `FastMCP("AssetManager")`를 인스턴스화하고, 위에 기재된 11개의 도구를 데코레이터(`@mcp.tool()`)를 사용하여 완벽히 노출시켰습니다.
+- 각 도구 내부에서 `src.backend.database.SessionLocal`을 직접 열고 닫는 방식으로, FastAPI가 미구동 중인 상태에서도 로컬 SQLite DB 파일과 내부 데이터 서비스 클래스들(`DashboardService`, `RatioService`, `BenchmarkService`, `price_service` 등)을 안전하게 호출할 수 있게 설계되었습니다.
+- 또한 `check_same_thread=False`가 포함된 `database.py` 설정을 활용하여 다중 스레드 호출 시의 안정성 문제를 미연에 방지했습니다.

@@ -1,9 +1,9 @@
 # [TICKET-5] 최종 통합 및 E2E 시나리오 검증
 
 - **Type**: `task`
-- **Status**: `blocked` (Waiting for [TICKET-4](file:///c:/localrepo/AssetManager/docs/wayfinder/tickets/ticket_4_bot_integration.md))
+- **Status**: `open` (Frontier)
 - **Assignee**: Antigravity
-- **Blocked By**: [TICKET-4](file:///c:/localrepo/AssetManager/docs/wayfinder/tickets/ticket_4_bot_integration.md)
+- **Blocked By**: [TICKET-4](file:///c:/localrepo/AssetManager/docs/wayfinder/tickets/ticket_4_bot_integration.md) (Completed)
 
 ## Question
 에이전트가 텔레그램이나 시뮬레이션 환경에서 자산 요약이나 포트폴리오를 조회해 달라는 사용자 질문에 대해, 실제로 MCP 도구를 무사히 호출하여 완결성 높고 정확한 대답을 구성하는가?
