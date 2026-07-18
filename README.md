@@ -175,3 +175,13 @@ pm2 start actions-runner/run.sh --name "asset-manager-gh-runner"
 uv run scripts/test.py
 ```
 *프론트엔드 테스트 실행 전에도 필요한 패키지가 없다면 자동으로 설치됩니다.*
+
+---
+
+## ⚙️ 안티그래비티 MCP 서버 설정 (Antigravity MCP)
+
+이 프로젝트는 AI 에이전트(안티그래비티)와 협업하여 자산 데이터 조회 및 분석을 수행할 수 있도록 지원하는 **MCP(Model Context Protocol) 서버**를 포함하고 있습니다.
+
+상세한 연동 및 활성화 설정 방법은 아래 가이드를 참고하세요.
+* 📖 [안티그래비티 MCP 서버 설정 가이드](mcp_config_guide.md)
+
