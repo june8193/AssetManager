@@ -128,6 +128,22 @@ async def test_get_daily_stats_mcp(mock_api_client):
     mock_get.assert_called_once_with("/api/dashboard/daily", params={"all": False})
 
 @pytest.mark.asyncio
+async def test_get_daily_stats_mcp_with_date_range(mock_api_client):
+    """일자별 통계 조회 MCP 도구에 기간 필터를 적용하여 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = [
+        {"date": "2026-07-18", "principal": 1200000.0, "valuation": 1500000.0, "profit": 300000.0, "profit_rate": 25.0}
+    ]
+    
+    result = await get_daily_stats(start_date="2026-07-01", end_date="2026-07-18", all_data=True)
+    assert "error" not in result
+    assert "stats" in result
+    mock_get.assert_called_once_with(
+        "/api/dashboard/daily", 
+        params={"all": True, "start_date": "2026-07-01", "end_date": "2026-07-18"}
+    )
+
+@pytest.mark.asyncio
 async def test_get_snapshots_mcp(mock_api_client):
     """계좌 스냅샷 이력 조회 MCP 도구 결과를 테스트합니다."""
     mock_get, _ = mock_api_client
@@ -139,6 +155,22 @@ async def test_get_snapshots_mcp(mock_api_client):
     assert "error" not in result
     assert "2026-07-18" in result
     mock_get.assert_called_once_with("/api/dashboard/snapshots", params={"all": False})
+
+@pytest.mark.asyncio
+async def test_get_snapshots_mcp_with_date_range(mock_api_client):
+    """계좌 스냅샷 이력 조회 MCP 도구에 기간 필터를 적용하여 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "2026-07-18": {"KB Account": 1500000.0}
+    }
+    
+    result = await get_snapshots(start_date="2026-07-01", end_date="2026-07-18", all_data=True)
+    assert "error" not in result
+    assert "2026-07-18" in result
+    mock_get.assert_called_once_with(
+        "/api/dashboard/snapshots", 
+        params={"all": True, "start_date": "2026-07-01", "end_date": "2026-07-18"}
+    )
 
 @pytest.mark.asyncio
 async def test_get_watchlist_prices_mcp(mock_api_client):

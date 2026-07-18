@@ -3,7 +3,7 @@
 백엔드 API 서버를 호출하여 데이터를 가져옵니다.
 """
 
-from typing import Optional
+from typing import Optional, Any
 from src.mcp.client import api_client
 
 async def get_yearly_stats() -> dict:
@@ -36,7 +36,7 @@ async def get_daily_stats(
         dict: 일자별 자산 및 수익률 흐름 통계
     """
     try:
-        params = {"all": all_data}
+        params: dict[str, Any] = {"all": all_data}
         if start_date:
             params["start_date"] = start_date
         if end_date:
@@ -65,7 +65,7 @@ async def get_snapshots(
         dict: 계좌 스냅샷 이력
     """
     try:
-        params = {"all": all_data}
+        params: dict[str, Any] = {"all": all_data}
         if start_date:
             params["start_date"] = start_date
         if end_date:
