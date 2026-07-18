@@ -52,6 +52,7 @@ def main():
     env["VITE_API_PORT"] = str(backend_port)
     env["VITE_API_URL"] = f"http://localhost:{backend_port}/api"
     env["VITE_APP_VERSION"] = get_version(root_dir)
+    env["MCP_BACKEND_URL"] = f"http://localhost:{backend_port}"
     
     # 개발 환경 강제 설정 (운영 DB 접근 차단)
     env["APP_ENV"] = "development"

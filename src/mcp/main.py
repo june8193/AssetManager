@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 """AssetManager MCP 서버의 진입점 파일입니다.
-
 FastMCP 인스턴스를 관리하며, 세분화된 모듈들로부터 도구(Tool)들을 가져와
 명시적으로 등록하고 서버를 기동합니다.
 """
@@ -8,10 +7,10 @@ FastMCP 인스턴스를 관리하며, 세분화된 모듈들로부터 도구(Too
 from fastmcp import FastMCP
 
 # 기능별 도구 함수 가져오기
-from src.backend.mcp.assets import get_asset_summary, get_asset_ratios, get_portfolio_status
-from src.backend.mcp.stats import get_yearly_stats, get_daily_stats, get_snapshots
-from src.backend.mcp.market import get_watchlist_prices, get_market_history, get_stock_history, refresh_market_prices
-from src.backend.mcp.transactions import get_transactions
+from src.mcp.tools.assets import get_asset_summary, get_asset_ratios, get_portfolio_status
+from src.mcp.tools.stats import get_yearly_stats, get_daily_stats, get_snapshots
+from src.mcp.tools.market import get_watchlist_prices, get_market_history, get_stock_history, refresh_market_prices
+from src.mcp.tools.transactions import get_transactions
 
 # MCP 서버 객체 선언
 mcp = FastMCP("AssetManager")

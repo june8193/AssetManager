@@ -1,12 +1,10 @@
 # -*- coding: utf-8 -*-
 """연도별/일자별 자산 통계 및 계좌 스냅샷 조회를 위한 MCP 도구 함수 모음입니다.
+백엔드 API 서버를 호출하여 데이터를 가져옵니다.
 """
 
-import datetime
 from typing import Optional
-
-from src.backend.database import SessionLocal
-from src.backend.services.dashboard_service import DashboardService
+from src.mcp.client import api_client
 
 async def get_yearly_stats() -> dict:
     """연도별 순 투자 원금 추가액, 투자 수익, 연말 자산 평가액 및 연간 수익률 통계를 조회합니다.
@@ -14,15 +12,13 @@ async def get_yearly_stats() -> dict:
     Returns:
         dict: 연도별 투자 수익률 통계 목록
     """
-    db = SessionLocal()
     try:
-        service = DashboardService(db)
-        stats = service.get_yearly_stats()
+        stats = await api_client.get("/api/dashboard/yearly")
+        if isinstance(stats, dict) and "error" in stats:
+            return stats
         return {"stats": stats}
     except Exception as e:
         return {"error": f"연도별 통계 조회 중 오류 발생: {str(e)}"}
-    finally:
-        db.close()
 
 async def get_daily_stats(
     start_date: Optional[str] = None,
@@ -39,20 +35,19 @@ async def get_daily_stats(
     Returns:
         dict: 일자별 자산 및 수익률 흐름 통계
     """
-    db = SessionLocal()
     try:
-        s_date = datetime.date.fromisoformat(start_date) if start_date else None
-        e_date = datetime.date.fromisoformat(end_date) if end_date else None
-
-        service = DashboardService(db)
-        stats = service.get_daily_stats(start_date=s_date, end_date=e_date, all_data=all_data)
+        params = {"all": all_data}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+        
+        stats = await api_client.get("/api/dashboard/daily", params=params)
+        if isinstance(stats, dict) and "error" in stats:
+            return stats
         return {"stats": stats}
-    except ValueError:
-        return {"error": "날짜 형식이 올바르지 않습니다. YYYY-MM-DD 형식을 이용해 주세요."}
     except Exception as e:
         return {"error": f"일자별 통계 조회 중 오류 발생: {str(e)}"}
-    finally:
-        db.close()
 
 async def get_snapshots(
     start_date: Optional[str] = None,
@@ -69,17 +64,14 @@ async def get_snapshots(
     Returns:
         dict: 계좌 스냅샷 이력
     """
-    db = SessionLocal()
     try:
-        s_date = datetime.date.fromisoformat(start_date) if start_date else None
-        e_date = datetime.date.fromisoformat(end_date) if end_date else None
-
-        service = DashboardService(db)
-        data = service.get_snapshots(start_date=s_date, end_date=e_date, all_data=all_data)
+        params = {"all": all_data}
+        if start_date:
+            params["start_date"] = start_date
+        if end_date:
+            params["end_date"] = end_date
+            
+        data = await api_client.get("/api/dashboard/snapshots", params=params)
         return data
-    except ValueError:
-        return {"error": "날짜 형식이 잘못되었습니다. YYYY-MM-DD 형식을 사용해주세요."}
     except Exception as e:
         return {"error": f"스냅샷 이력 조회 중 오류 발생: {str(e)}"}
-    finally:
-        db.close()

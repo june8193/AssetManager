@@ -2,173 +2,239 @@
 import pytest
 import datetime
 from unittest.mock import patch, AsyncMock
-from src.backend.models import User, Account, Asset, Transaction, ExchangeRate, HistoricalPrice, Watchlist, Stock
-from src.backend.mcp_server import (
+
+# 새로운 위치의 도구들을 임포트
+from src.mcp.tools.assets import (
     get_asset_summary,
     get_asset_ratios,
-    get_watchlist_prices,
     get_portfolio_status,
+)
+from src.mcp.tools.stats import (
     get_yearly_stats,
     get_daily_stats,
     get_snapshots,
-    get_transactions,
+)
+from src.mcp.tools.market import (
+    get_watchlist_prices,
     get_market_history,
     get_stock_history,
     refresh_market_prices
 )
+from src.mcp.tools.transactions import (
+    get_transactions,
+)
 
 @pytest.fixture
-def setup_mcp_data(db_session):
-    """MCP 서버 테스트를 위한 기본 데이터를 셋업합니다."""
-    # 1. 사용자 및 계좌 생성
-    user = User(name="MCP Owner")
-    db_session.add(user)
-    db_session.commit()
-
-    account = Account(user_id=user.id, name="KB Account", provider="KB증권", is_active=True)
-    db_session.add(account)
-    db_session.commit()
-
-    # 2. 자산 마스터 데이터 생성
-    krw_cash = Asset(ticker="KRW", name="원화예수금", major_category="현금", sub_category="원화예수금", country="KR")
-    usd_cash = Asset(ticker="USD", name="달러예수금", major_category="현금", sub_category="달러예수금", country="US")
-    aapl = Asset(ticker="AAPL", name="애플", major_category="일반주식", sub_category="해외주식", country="US")
-    samsung = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
-    db_session.add_all([krw_cash, usd_cash, aapl, samsung])
-    db_session.commit()
-
-    # 3. 관심종목 셋업
-    wl_kr = Watchlist(stock_code="005930", stock_name="삼성전자", country="KR")
-    wl_us = Watchlist(stock_code="AAPL", stock_name="애플", country="US")
-    db_session.add_all([wl_kr, wl_us])
-    db_session.commit()
-
-    # 4. 주가 정보 셋업
-    today = datetime.date.today()
-    price_aapl = HistoricalPrice(ticker="AAPL", price_date=today, close_price=180.0)
-    price_sam = HistoricalPrice(ticker="005930", price_date=today, close_price=70000.0)
-    db_session.add_all([price_aapl, price_sam])
-    db_session.commit()
-
-    # 5. 거래 내역 삽입
-    tx1 = Transaction(
-        account_id=account.id, asset_id=krw_cash.id,
-        transaction_date=today, type="DEPOSIT",
-        quantity=1000000.0, price=1.0, total_amount=1000000.0, currency="KRW"
-    )
-    tx2 = Transaction(
-        account_id=account.id, asset_id=samsung.id,
-        transaction_date=today, type="BUY",
-        quantity=10.0, price=70000.0, total_amount=700000.0, currency="KRW"
-    )
-    db_session.add_all([tx1, tx2])
-    db_session.commit()
-
-    return {
-        "account": account,
-        "samsung": samsung,
-        "aapl": aapl
-    }
+def mock_api_client():
+    """src.mcp.client.api_client의 get 및 post 메서드를 모킹하는 fixture입니다."""
+    with patch("src.mcp.client.api_client.get", new_callable=AsyncMock) as mock_get, \
+         patch("src.mcp.client.api_client.post", new_callable=AsyncMock) as mock_post:
+        yield mock_get, mock_post
 
 @pytest.mark.asyncio
-async def test_get_asset_summary_mcp(db_session, setup_mcp_data):
+async def test_get_asset_summary_mcp(mock_api_client):
     """총자산 요약 정보 MCP 도구 조회 결과를 테스트합니다."""
-    # DashboardService 내부의 복잡한 로직을 모킹하거나 실제 DB 연동 동작 확인
-    # mcp_server.py의 get_asset_summary 호출
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "total_valuation_krw": 1500000.0,
+        "total_principal": 1200000.0,
+        "total_profit": 300000.0,
+        "profit_rate": 25.0
+    }
+    
     result = await get_asset_summary()
     assert "error" not in result
     assert "total_valuation_krw" in result
+    assert result["total_valuation_krw"] == 1500000.0
+    mock_get.assert_called_once_with("/api/dashboard/summary", params={"force_update": False})
 
 @pytest.mark.asyncio
-async def test_get_asset_ratios_mcp(db_session, setup_mcp_data):
+async def test_get_asset_ratios_mcp(mock_api_client):
     """자산 비중 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "total_valuation": 1500000.0,
+        "total_target": 1500000.0,
+        "additional_cash": 0.0,
+        "major_results": [
+            {"category_name": "주식", "valuation": 1000000.0, "percentage": 66.7, "target_percentage": 70.0},
+            {"category_name": "현금", "valuation": 500000.0, "percentage": 33.3, "target_percentage": 30.0}
+        ],
+        "sub_results": []
+    }
+    
     result = await get_asset_ratios()
     assert "error" not in result
     assert "major_results" in result
+    assert len(result["major_results"]) == 2
+    mock_get.assert_called_once_with("/api/ratios/rebalancing", params={"additional_cash": 0.0})
 
 @pytest.mark.asyncio
-async def test_get_watchlist_prices_mcp(db_session, setup_mcp_data):
-    """관심종목 시세 조회 MCP 도구 결과를 테스트합니다."""
-    # price_service를 모킹하여 외부 API 호출 방지
-    with patch("src.backend.mcp.market.price_service") as mock_price_service:
-        mock_price_service.get_kr_prices = AsyncMock(return_value=[
-            {"stock_code": "005930", "current_price": 72000.0, "change_rate": 2.8}
-        ])
-        result = await get_watchlist_prices(country="KR")
-        assert result["country"] == "KR"
-        assert len(result["prices"]) > 0
-        assert result["prices"][0]["stock_code"] == "005930"
-
-@pytest.mark.asyncio
-async def test_get_portfolio_status_mcp(db_session, setup_mcp_data):
+async def test_get_portfolio_status_mcp(mock_api_client):
     """포트폴리오 상태 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "total_valuation_krw": 1500000.0,
+        "cash_balances": {"KRW": 500000.0},
+        "exchange_rate": 1300.0,
+        "holdings": [
+            {
+                "ticker": "005930",
+                "name": "삼성전자",
+                "major_category": "주식",
+                "sub_category": "국내주식",
+                "country": "KR",
+                "quantity": 10.0,
+                "current_price": 70000.0,
+                "valuation": 700000.0,
+                "valuation_krw": 700000.0
+            }
+        ]
+    }
+    
     result = await get_portfolio_status()
     assert "error" not in result
     assert "cash_balances" in result
     assert "holdings" in result
+    assert result["cash_balances"]["KRW"] == 500000.0
+    mock_get.assert_called_once_with("/api/portfolio/status", params={})
 
 @pytest.mark.asyncio
-async def test_get_yearly_stats_mcp(db_session, setup_mcp_data):
+async def test_get_yearly_stats_mcp(mock_api_client):
     """연도별 통계 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = [
+        {"year": 2026, "principal": 1200000.0, "valuation": 1500000.0, "profit": 300000.0, "profit_rate": 25.0}
+    ]
+    
     result = await get_yearly_stats()
     assert "error" not in result
     assert "stats" in result
+    assert result["stats"][0]["year"] == 2026
+    mock_get.assert_called_once_with("/api/dashboard/yearly")
 
 @pytest.mark.asyncio
-async def test_get_daily_stats_mcp(db_session, setup_mcp_data):
+async def test_get_daily_stats_mcp(mock_api_client):
     """일자별 통계 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = [
+        {"date": "2026-07-18", "principal": 1200000.0, "valuation": 1500000.0, "profit": 300000.0, "profit_rate": 25.0}
+    ]
+    
     result = await get_daily_stats()
     assert "error" not in result
     assert "stats" in result
+    assert result["stats"][0]["date"] == "2026-07-18"
+    mock_get.assert_called_once_with("/api/dashboard/daily", params={"all": False})
 
 @pytest.mark.asyncio
-async def test_get_snapshots_mcp(db_session, setup_mcp_data):
+async def test_get_snapshots_mcp(mock_api_client):
     """계좌 스냅샷 이력 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "2026-07-18": {"KB Account": 1500000.0}
+    }
+    
     result = await get_snapshots()
     assert "error" not in result
+    assert "2026-07-18" in result
+    mock_get.assert_called_once_with("/api/dashboard/snapshots", params={"all": False})
 
 @pytest.mark.asyncio
-async def test_get_transactions_mcp(db_session, setup_mcp_data):
+async def test_get_watchlist_prices_mcp(mock_api_client):
+    """관심종목 시세 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    
+    # 두 번의 GET 요청 호출에 대한 응답 순차적 셋업
+    # 1. /api/watchlist -> 관심종목 기본 정보
+    # 2. /api/watchlist/prices -> 시세 정보
+    mock_get.side_effect = [
+        [{"stock_code": "005930", "stock_name": "삼성전자", "country": "KR"}],
+        [{"stock_code": "005930", "current_price": 72000.0, "change_rate": 2.8}]
+    ]
+    
+    result = await get_watchlist_prices(country="KR")
+    assert "error" not in result
+    assert result["country"] == "KR"
+    assert len(result["prices"]) > 0
+    assert result["prices"][0]["stock_code"] == "005930"
+    assert result["prices"][0]["stock_name"] == "삼성전자"
+    assert result["prices"][0]["current_price"] == 72000.0
+    
+    assert mock_get.call_count == 2
+
+@pytest.mark.asyncio
+async def test_get_market_history_mcp(mock_api_client):
+    """시장 지수 역사적 가격 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "^KS11": [{"date": "2026-07-18", "close_price": 2500.0}]
+    }
+    
+    result = await get_market_history(tickers="^KS11")
+    assert "error" not in result
+    assert "^KS11" in result
+    assert len(result["^KS11"]) == 1
+    assert result["^KS11"][0]["close_price"] == 2500.0
+    mock_get.assert_called_once_with("/api/market/history", params={"tickers": "^KS11"})
+
+@pytest.mark.asyncio
+async def test_get_stock_history_mcp(mock_api_client):
+    """개별 주가 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "ticker": "005930",
+        "name": "삼성전자",
+        "market": "KOSPI",
+        "prices": [{"date": "2026-07-18", "close_price": 70000.0}]
+    }
+    
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    result = await get_stock_history(ticker="005930", start_date=today_str)
+    assert "error" not in result
+    assert result["ticker"] == "005930"
+    assert result["name"] == "삼성전자"
+    assert len(result["prices"]) == 1
+    mock_get.assert_called_once_with("/api/stocks/prices", params={"ticker": "005930", "start_date": today_str})
+
+@pytest.mark.asyncio
+async def test_get_transactions_mcp(mock_api_client):
     """거래 내역 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = [
+        {
+            "id": 1,
+            "account_id": 1,
+            "asset_id": 2,
+            "transaction_date": "2026-07-18",
+            "type": "BUY",
+            "quantity": 10.0,
+            "price": 70000.0,
+            "total_amount": 700000.0,
+            "currency": "KRW",
+            "exchange_rate": 1.0,
+            "memo": "삼성전자 매수",
+            "asset_name": "삼성전자",
+            "asset_ticker": "005930"
+        }
+    ]
+    
     result = await get_transactions()
     assert "error" not in result
     assert "transactions" in result
-    assert len(result["transactions"]) > 0
+    assert len(result["transactions"]) == 1
+    assert result["transactions"][0]["asset_name"] == "삼성전자"
+    mock_get.assert_called_once_with("/api/db/transactions", params={})
 
 @pytest.mark.asyncio
-async def test_get_market_history_mcp(db_session, setup_mcp_data):
-    """시장 지수 역사적 가격 조회 MCP 도구 결과를 테스트합니다."""
-    # BenchmarkService를 모킹하여 테스트
-    with patch("src.backend.mcp.market.BenchmarkService") as MockBenchmarkService:
-        mock_service = MockBenchmarkService.return_value
-        # mock_service.get_historical_prices 는 비동기 함수임
-        mock_service.get_historical_prices = AsyncMock(return_value=[
-            {"price_date": datetime.date.today(), "close_price": 2500.0}
-        ])
-        
-        result = await get_market_history(tickers="^KS11")
-        assert "^KS11" in result
-        assert len(result["^KS11"]) > 0
-
-@pytest.mark.asyncio
-async def test_get_stock_history_mcp(db_session, setup_mcp_data):
-    """개별 주가 조회 MCP 도구 결과를 테스트합니다."""
-    # price_service를 모킹하여 테스트
-    with patch("src.backend.mcp.market.price_service") as mock_price_service:
-        mock_price_service.get_historical_prices_with_cache = AsyncMock(return_value=[
-            {"price_date": datetime.date.today(), "close_price": 70000.0}
-        ])
-        mock_price_service.get_stock_name = AsyncMock(return_value="삼성전자")
-        
-        result = await get_stock_history(ticker="005930", start_date=datetime.date.today().strftime("%Y-%m-%d"))
-        assert result["ticker"] == "005930"
-        assert len(result["prices"]) > 0
-
-@pytest.mark.asyncio
-async def test_refresh_market_prices_mcp():
+async def test_refresh_market_prices_mcp(mock_api_client):
     """수동 시세 최신화 MCP 도구 결과를 테스트합니다."""
-    with patch("src.backend.mcp.market.price_service") as mock_price_service:
-        mock_price_service.update_all_market_prices = AsyncMock()
-        result = await refresh_market_prices()
-        assert result["status"] == "success"
-        mock_price_service.update_all_market_prices.assert_called_once()
+    _, mock_post = mock_api_client
+    mock_post.return_value = {
+        "status": "success",
+        "message": "성공적으로 모든 시장 지수 및 자산의 주가를 최신 상태로 동기화했습니다."
+    }
+    
+    result = await refresh_market_prices()
+    assert result["status"] == "success"
+    mock_post.assert_called_once_with("/api/dashboard/refresh")
