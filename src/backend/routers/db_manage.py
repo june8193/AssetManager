@@ -125,6 +125,7 @@ class TransactionSchema(BaseModel):
     memo: Optional[str] = None
     asset_name: Optional[str] = None
     asset_ticker: Optional[str] = None
+    account_display_name: Optional[str] = None
 
     class Config:
         from_attributes = True
@@ -363,7 +364,10 @@ def get_transactions(
     db: Session = Depends(get_db)
 ):
     """전체 또는 필터링된 거래 내역을 조회합니다."""
-    query = db.query(Transaction).options(joinedload(Transaction.asset))
+    query = db.query(Transaction).options(
+        joinedload(Transaction.asset),
+        joinedload(Transaction.account)
+    )
     if start_date:
         query = query.filter(Transaction.transaction_date >= start_date)
     if end_date:
@@ -373,7 +377,7 @@ def get_transactions(
 @router.post("/transactions", response_model=TransactionSchema)
 def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
     """새로운 거래 내역을 생성합니다."""
-    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker"})
+    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "account_display_name"})
     db_transaction = Transaction(**data)
     db.add(db_transaction)
     db.commit()
@@ -386,7 +390,7 @@ def update_transaction(transaction_id: int, transaction: TransactionSchema, db: 
     db_transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not db_transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker"})
+    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "account_display_name"})
     for key, value in data.items():
         setattr(db_transaction, key, value)
     db.commit()

@@ -377,8 +377,8 @@ def test_get_dashboard_summary_latest_price_date(db_session, monkeypatch):
     from src.backend.models import HistoricalPrice
 
     # 1. 테스트용 최신 가격 기록 추가
-    db_session.add(HistoricalPrice(ticker="AAPL", price_date=datetime.date(2026, 6, 6), close_price=150.0))
-    db_session.add(HistoricalPrice(ticker="MSFT", price_date=datetime.date(2026, 6, 5), close_price=250.0))
+    db_session.add(HistoricalPrice(ticker="AAPL", price_date=datetime.date(2026, 6, 6), close_price=150.0, updated_at=datetime.datetime(2026, 6, 6, 15, 30)))
+    db_session.add(HistoricalPrice(ticker="MSFT", price_date=datetime.date(2026, 6, 5), close_price=250.0, updated_at=datetime.datetime(2026, 6, 5, 15, 30)))
     db_session.commit()
 
     # 2. 기본 계좌 및 자산 설정 (평가액 계산을 위함)
@@ -399,7 +399,7 @@ def test_get_dashboard_summary_latest_price_date(db_session, monkeypatch):
     # 3. 검증: get_dashboard_summary()의 결과에 latest_price_date가 있어야 함
     summary = asyncio.run(service.get_dashboard_summary())
     assert "latest_price_date" in summary
-    assert summary["latest_price_date"] == "2026-06-06"
+    assert summary["latest_price_date"].startswith("2026-06-06")
 
 
 

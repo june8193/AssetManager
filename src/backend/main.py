@@ -34,6 +34,21 @@ async def lifespan(app: FastAPI):
     # DB 테이블 생성 (처음 실행 시 SQLite 파일(assets.db)과 테이블이 생성됨)
     Base.metadata.create_all(bind=engine)
     
+    # SQLite 마이그레이션 체크: historical_prices 테이블에 updated_at 컬럼 추가
+    from sqlalchemy import text
+    try:
+        with engine.connect() as conn:
+            result = conn.execute(text("PRAGMA table_info(historical_prices)")).fetchall()
+            columns = [row[1] for row in result]
+            if "updated_at" not in columns:
+                print("[INFO] historical_prices 테이블에 updated_at 컬럼을 추가합니다.")
+                conn.execute(text("ALTER TABLE historical_prices ADD COLUMN updated_at DATETIME"))
+                # 기존 데이터는 현재 시각으로 초기화
+                conn.execute(text("UPDATE historical_prices SET updated_at = datetime('now', 'localtime')"))
+                conn.commit()
+    except Exception as e:
+        print(f"⚠️ historical_prices 마이그레이션 오류 (무시하고 진행): {e}")
+    
     # Startup: DB 백업 체크 및 수행
     try:
         BackupService().check_and_backup()

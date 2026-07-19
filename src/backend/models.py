@@ -197,6 +197,26 @@ class Transaction(Base):
     account = relationship("Account", back_populates="transactions")
     asset = relationship("Asset", back_populates="transactions")
 
+    def __init__(self, **kwargs):
+        kwargs.pop("account_display_name", None)
+        kwargs.pop("asset_name", None)
+        kwargs.pop("asset_ticker", None)
+        super().__init__(**kwargs)
+
+    @property
+    def account_display_name(self):
+        """거래가 발생한 계좌의 표시 이름을 반환합니다."""
+        if not self.account:
+            return None
+        parts = []
+        if self.account.provider:
+            parts.append(self.account.provider)
+        if self.account.alias:
+            parts.append(f"({self.account.alias})")
+        elif self.account.name:
+            parts.append(f"({self.account.name})")
+        return " ".join(parts)
+
     @property
     def asset_name(self):
         """거래 대상 자산의 이름을 반환합니다."""
@@ -256,6 +276,7 @@ class HistoricalPrice(Base):
     ticker = Column(String, index=True, nullable=False)
     price_date = Column(Date, index=True, nullable=False)
     close_price = Column(Float, nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
 
     # 동일한 티커의 동일 날짜 데이터는 유일해야 합니다.
     __table_args__ = (

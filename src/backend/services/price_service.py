@@ -725,11 +725,15 @@ class PriceService:
                             stmt = sqlite_insert(HistoricalPrice).values(
                                 ticker=code,
                                 price_date=today,
-                                close_price=price_val
+                                close_price=price_val,
+                                updated_at=datetime.datetime.now()
                             )
                             stmt = stmt.on_conflict_do_update(
                                 index_elements=['ticker', 'price_date'],
-                                set_={'close_price': price_val}
+                                set_={
+                                    'close_price': price_val,
+                                    'updated_at': datetime.datetime.now()
+                                }
                             )
                             db.execute(stmt)
                     db.commit()
@@ -751,11 +755,15 @@ class PriceService:
                             stmt = sqlite_insert(HistoricalPrice).values(
                                 ticker=symbol,
                                 price_date=today,
-                                close_price=price_val
+                                close_price=price_val,
+                                updated_at=datetime.datetime.now()
                             )
                             stmt = stmt.on_conflict_do_update(
                                 index_elements=['ticker', 'price_date'],
-                                set_={'close_price': price_val}
+                                set_={
+                                    'close_price': price_val,
+                                    'updated_at': datetime.datetime.now()
+                                }
                             )
                             db.execute(stmt)
                     db.commit()

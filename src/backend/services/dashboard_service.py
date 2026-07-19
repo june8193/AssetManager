@@ -628,9 +628,18 @@ class DashboardService:
                 contribution_ratio = 100.0
                 profit_ratio = 0.0
 
-        # 최신 주가 업데이트 날짜 조회
-        latest_price_date_val = self.db.query(func.max(HistoricalPrice.price_date)).scalar()
-        latest_price_date_str = latest_price_date_val.isoformat() if latest_price_date_val else "최근 데이터 없음"
+        # 최신 주가 업데이트 날짜/시간 조회
+        latest_price_date_val = self.db.query(func.max(HistoricalPrice.updated_at)).scalar()
+        if not latest_price_date_val:
+            latest_price_date_val = self.db.query(func.max(HistoricalPrice.price_date)).scalar()
+        
+        if latest_price_date_val:
+            if isinstance(latest_price_date_val, datetime.datetime):
+                latest_price_date_str = latest_price_date_val.strftime("%Y-%m-%d %H:%M")
+            else:
+                latest_price_date_str = latest_price_date_val.isoformat()
+        else:
+            latest_price_date_str = "최근 데이터 없음"
 
         return {
             "accounts": sorted(list(account_summaries.values()), key=lambda x: x['total_valuation_krw'], reverse=True),
