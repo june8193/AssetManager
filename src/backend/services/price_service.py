@@ -647,6 +647,52 @@ class PriceService:
         """
         return self.get_market_holiday_info(target_date, country) is not None
 
+    async def fetch_and_save_exchange_rate(self, db, target_date: datetime.date) -> Optional[float]:
+        """키움 API를 통해 달러 환율을 조회하고 DB에 저장합니다 (매도적용환율 기준).
+
+        Args:
+            db (Session): 데이터베이스 세션
+            target_date (datetime.date): 환율을 기록할 날짜
+
+        Returns:
+            Optional[float]: 저장된 환율 값 (실패 시 None)
+        """
+        try:
+            token = await self.kiwoom_auth.get_valid_token()
+            res = await run_in_threadpool(self.kiwoom_api.get_exchange_rate, token, "USD", "KRW", "1")
+            
+            if res and res.get("return_code") == 0:
+                sell_rate_str = res.get("sell_aplc_exrt", "0").replace(",", "").strip()
+                sell_rate = float(sell_rate_str) if sell_rate_str else 0.0
+                
+                if sell_rate > 0.0:
+                    from src.backend.models import ExchangeRate
+                    existing_rate = db.query(ExchangeRate).filter(
+                        ExchangeRate.date == target_date,
+                        ExchangeRate.currency == "USD"
+                    ).first()
+                    
+                    if existing_rate:
+                        existing_rate.rate = sell_rate
+                    else:
+                        new_rate = ExchangeRate(
+                            date=target_date,
+                            currency="USD",
+                            rate=sell_rate
+                        )
+                        db.add(new_rate)
+                    db.commit()
+                    print(f"[INFO] {target_date} 환율 저장 완료: {sell_rate}")
+                    return sell_rate
+                else:
+                    print(f"[WARNING] 조회된 환율이 0 이하입니다: {sell_rate}")
+            else:
+                error_msg = res.get("return_msg") if res else "응답 없음"
+                print(f"[ERROR] 환율 조회 API 호출 실패: {error_msg}")
+        except Exception as e:
+            print(f"[ERROR] 환율 조회 및 저장 중 오류 발생: {e}")
+        return None
+
     async def update_all_market_prices(self):
         """1시간마다 지수, 보유 자산, 관심 종목의 시세를 외부 API로부터 조회하여 DB를 업데이트합니다."""
         from src.backend.database import SessionLocal
@@ -656,6 +702,27 @@ class PriceService:
         today = self._get_today()
         is_kr_holiday = self.is_market_holiday(today, "KR")
         is_us_holiday = self.is_market_holiday(today, "US")
+
+        # 한국시간 기준 오전 7시 이후이며 오늘이 한국 휴장일이 아닐 때, 당일 환율 정보가 없으면 자동 수집
+        try:
+            import pytz
+            seoul_tz = pytz.timezone('Asia/Seoul')
+            now_kst = datetime.datetime.now(seoul_tz)
+            today_kr = now_kst.date()
+            if now_kst.hour >= 7:
+                is_kr_holiday_today = self.is_market_holiday(today_kr, "KR")
+                if not is_kr_holiday_today:
+                    with SessionLocal() as db:
+                        from src.backend.models import ExchangeRate
+                        exists = db.query(ExchangeRate).filter(
+                            ExchangeRate.date == today_kr,
+                            ExchangeRate.currency == "USD"
+                        ).first()
+                        if not exists:
+                            print(f"[INFO] {today_kr} 자 환율 정보 없음. 환율 업데이트 시도...")
+                            await self.fetch_and_save_exchange_rate(db, today_kr)
+        except Exception as e:
+            print(f"[ERROR] 백그라운드 환율 업데이트 중 오류: {e}")
 
         # 둘 다 휴장일이면 전체 건너뜀
         if is_kr_holiday and is_us_holiday:

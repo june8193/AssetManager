@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Camera, ChevronLeft, ChevronRight, Check, Settings, ListChecks, FileSearch, Calendar, DollarSign, Wallet, Landmark, Plus, Trash2, X, RefreshCw, CheckCircle2, Save, HelpCircle } from 'lucide-react';
-import { DB_API_BASE } from '../config';
+import { DB_API_BASE, API_BASE_URL } from '../config';
 
 /**
  * 신규 스냅샷 생성을 위한 통합 위저드 페이지 컴포넌트입니다.
@@ -87,6 +87,32 @@ const SnapshotWizardPage = () => {
 
     fetchAccountsAndLatestSnapshot();
   }, []);
+
+  // 날짜 변경 시 해당 날짜의 환율 조회 및 적용 (없으면 최신 환율)
+  useEffect(() => {
+    const fetchExchangeRateForDate = async () => {
+      if (!inputDate) return;
+      try {
+        const response = await fetch(`${API_BASE_URL}/exchange/rates?limit=100`);
+        if (response.ok) {
+          const ratesList = await response.json();
+          if (ratesList && ratesList.length > 0) {
+            const matched = ratesList.find(r => r.date === inputDate);
+            if (matched) {
+              setExchangeRate(matched.rate.toString());
+            } else {
+              setExchangeRate(ratesList[0].rate.toString());
+            }
+          } else {
+            setExchangeRate('1300.00');
+          }
+        }
+      } catch (error) {
+        console.error('환율 정보 로드 실패:', error);
+      }
+    };
+    fetchExchangeRateForDate();
+  }, [inputDate]);
 
   // 2단계/4단계 계좌 전환 시 기존 트랜잭션 로드
   useEffect(() => {
@@ -703,10 +729,11 @@ const SnapshotWizardPage = () => {
           <input
             type="number"
             step="0.01"
-            placeholder="예: 1350.5"
+            placeholder="환율 정보 없음"
             value={exchangeRate}
-            onChange={(e) => setExchangeRate(e.target.value)}
-            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            readOnly
+            className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-100 text-slate-500 cursor-not-allowed focus:outline-none"
+            title="환율은 DB에 저장된 최근 환율이 자동으로 적용됩니다."
           />
         </div>
       </div>
