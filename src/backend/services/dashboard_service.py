@@ -628,6 +628,10 @@ class DashboardService:
                 contribution_ratio = 100.0
                 profit_ratio = 0.0
 
+        # 최신 주가 업데이트 날짜 조회
+        latest_price_date_val = self.db.query(func.max(HistoricalPrice.price_date)).scalar()
+        latest_price_date_str = latest_price_date_val.isoformat() if latest_price_date_val else "최근 데이터 없음"
+
         return {
             "accounts": sorted(list(account_summaries.values()), key=lambda x: x['total_valuation_krw'], reverse=True),
             "categories": formatted_categories,
@@ -638,7 +642,8 @@ class DashboardService:
             "total_profit": total_profit,
             "cumulative_roi": round(cumulative_roi, 2),
             "contribution_ratio": round(contribution_ratio, 2),
-            "profit_ratio": round(profit_ratio, 2)
+            "profit_ratio": round(profit_ratio, 2),
+            "latest_price_date": latest_price_date_str
         }
 
     def get_snapshots(self, start_date: datetime.date | None = None, end_date: datetime.date | None = None, all_data: bool = False) -> Dict[str, Any]:

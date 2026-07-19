@@ -372,3 +372,34 @@ def test_get_dashboard_summary_cumulative_stats(db_session, monkeypatch):
     assert summary["profit_ratio"] == 20.0
 
 
+def test_get_dashboard_summary_latest_price_date(db_session, monkeypatch):
+    """대시보드 요약 정보 조회 시 가장 최신의 주가 기준일이 포함되는지 테스트합니다."""
+    from src.backend.models import HistoricalPrice
+
+    # 1. 테스트용 최신 가격 기록 추가
+    db_session.add(HistoricalPrice(ticker="AAPL", price_date=datetime.date(2026, 6, 6), close_price=150.0))
+    db_session.add(HistoricalPrice(ticker="MSFT", price_date=datetime.date(2026, 6, 5), close_price=250.0))
+    db_session.commit()
+
+    # 2. 기본 계좌 및 자산 설정 (평가액 계산을 위함)
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+    acc = Account(user_id=user.id, name="Test Account", provider="Test Bank", is_active=True)
+    db_session.add(acc)
+    db_session.commit()
+
+    service = DashboardService(db_session)
+
+    # get_current_prices 및 get_holdings 등을 적절히 빈값으로 모킹
+    async def mock_get_current_prices(self, tickers, *args, **kwargs):
+        return {}
+    monkeypatch.setattr(DashboardService, "get_current_prices", mock_get_current_prices)
+
+    # 3. 검증: get_dashboard_summary()의 결과에 latest_price_date가 있어야 함
+    summary = asyncio.run(service.get_dashboard_summary())
+    assert "latest_price_date" in summary
+    assert summary["latest_price_date"] == "2026-06-06"
+
+
+
