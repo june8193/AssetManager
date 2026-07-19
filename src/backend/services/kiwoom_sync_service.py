@@ -167,6 +167,12 @@ class KiwoomTransactionService:
                         logger.warning(f"미등록 자산 발견으로 저장 생략: {ticker} ({tx_data['name']})")
                         continue
 
+                    # 자산 국가 정보에 따라 통화 보정 (미국 주식은 항상 USD로 저장)
+                    if asset.country == "US":
+                        tx_data["currency"] = "USD"
+                    else:
+                        tx_data["currency"] = "KRW"
+
                     # 3-2. 중복 적재 방지 검사
                     total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
                     
