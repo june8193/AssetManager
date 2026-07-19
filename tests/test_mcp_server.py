@@ -18,7 +18,9 @@ from src.mcp.tools.market import (
     get_watchlist_prices,
     get_market_history,
     get_stock_history,
-    refresh_market_prices
+    refresh_market_prices,
+    check_market_holiday,
+    get_market_indices,
 )
 from src.mcp.tools.transactions import (
     get_transactions,
@@ -270,3 +272,34 @@ async def test_refresh_market_prices_mcp(mock_api_client):
     result = await refresh_market_prices()
     assert result["status"] == "success"
     mock_post.assert_called_once_with("/api/dashboard/refresh")
+
+@pytest.mark.asyncio
+async def test_check_market_holiday_mcp(mock_api_client):
+    """시장 휴장일 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "date": "2026-07-18",
+        "country": "KR",
+        "is_holiday": True,
+        "description": "주말"
+    }
+    
+    result = await check_market_holiday(date="2026-07-18", country="KR")
+    assert "error" not in result
+    assert result["is_holiday"] is True
+    assert result["description"] == "주말"
+    mock_get.assert_called_once_with("/api/market/holiday", params={"country": "KR", "date": "2026-07-18"})
+
+@pytest.mark.asyncio
+async def test_get_market_indices_mcp(mock_api_client):
+    """시장 지수 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = [
+        {"index_name": "KOSPI", "current_price": 2500.0, "change_rate": 1.2}
+    ]
+    
+    result = await get_market_indices(country="KR")
+    assert "error" not in result
+    assert isinstance(result, list)
+    assert result[0]["index_name"] == "KOSPI"
+    mock_get.assert_called_once_with("/api/market/indices", params={"country": "KR"})

@@ -9,7 +9,14 @@ from fastmcp import FastMCP
 # 기능별 도구 함수 가져오기
 from src.mcp.tools.assets import get_asset_summary, get_asset_ratios, get_portfolio_status
 from src.mcp.tools.stats import get_yearly_stats, get_daily_stats, get_snapshots
-from src.mcp.tools.market import get_watchlist_prices, get_market_history, get_stock_history, refresh_market_prices
+from src.mcp.tools.market import (
+    get_watchlist_prices,
+    get_market_history,
+    get_stock_history,
+    refresh_market_prices,
+    check_market_holiday,
+    get_market_indices,
+)
 from src.mcp.tools.transactions import get_transactions
 
 # MCP 서버 객체 선언
@@ -27,6 +34,8 @@ mcp.tool()(get_market_history)
 mcp.tool()(get_stock_history)
 mcp.tool()(refresh_market_prices)
 mcp.tool()(get_transactions)
+mcp.tool()(check_market_holiday)
+mcp.tool()(get_market_indices)
 
 if __name__ == "__main__":
     mcp.run()
