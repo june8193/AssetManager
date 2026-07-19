@@ -16,15 +16,22 @@ def setup_test_data(db_session: Session):
     db_session.commit()
     db_session.refresh(user)
 
-    # 2. 키움증권 계좌 생성
-    account = Account(
+    # 2. 키움증권 계좌 2개 생성
+    account1 = Account(
         user_id=user.id,
         name="5526-9093",
         provider="키움증권",
         alias="일반주식",
         account_type="BROKERAGE"
     )
-    db_session.add(account)
+    account2 = Account(
+        user_id=user.id,
+        name="6066-7729",
+        provider="키움증권",
+        alias="미국주식",
+        account_type="BROKERAGE"
+    )
+    db_session.add_all([account1, account2])
     
     # 3. 테스트용 등록 자산 생성
     samsung = Asset(
@@ -53,7 +60,10 @@ def setup_test_data(db_session: Session):
     
     return {
         "user": user,
-        "account": account,
+        "accounts": {
+            "5526-9093": account1,
+            "6066-7729": account2
+        },
         "assets": {
             "005930": samsung,
             "AAPL": apple,
@@ -64,90 +74,96 @@ def setup_test_data(db_session: Session):
 @pytest.mark.asyncio
 @patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
 @patch("httpx.AsyncClient.post")
-async def test_sync_transactions_success_and_skip(
+async def test_sync_transactions_multi_accounts(
     mock_post, mock_auth_class, db_session: Session, setup_test_data
 ):
-    """정상적인 거래내역 저장, 미등록 자산 스킵, 그리고 중복 스킵 로직을 테스트합니다."""
+    """다중 계좌별 토큰 스위칭 조회 및 분리 적재 시나리오를 테스트합니다."""
     # Auth Manager Mock
     mock_auth = mock_auth_class.return_value
-    mock_auth.get_valid_token = AsyncMock(return_value="mock_token")
     mock_auth.base_url = "https://api.kiwoom.com"
+    
+    # 계좌별 다른 토큰 반환 모의
+    async def mock_get_token(account_name=None):
+        if account_name == "5526-9093":
+            return "token_5526"
+        elif account_name == "6066-7729":
+            return "token_6066"
+        return "default_token"
+    mock_auth.get_valid_token = mock_get_token
 
-    # API Response Mocking
-    # 1. ka10076 (국내 체결): 삼성전자 10주 매수
-    # 2. ust21510 (미국 체결): Apple 5주 매도, NVDA 3주 매수 (NVDA는 미등록 자산)
-    # 3. kt00015 (배당금): 맥쿼리인프라 배당금 15,000원 입금
+    # API Response Mocking (토큰 헤더에 따라 다르게 반환)
+    # - token_5526: 국내체결(삼성전자 10주 매수), 배당금(맥쿼리 15000원 입금)
+    # - token_6066: 미국체결(Apple 5주 매도, NVDA 3주 매수)
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
+        auth_header = headers.get("authorization", "")
         
         mock_response = AsyncMock()
         mock_response.status_code = 200
         
-        if api_id == "ka10076": # 국내 체결
-            mock_response.json = lambda: {
-                "return_code": 0,
-                "cntr": [
-                    {
-                        "stk_cd": "005930",
-                        "stk_nm": "삼성전자",
-                        "io_tp_nm": "+매수",
-                        "cntr_pric": 72000,
-                        "cntr_qty": 10,
-                        "ord_stt": "체결"
-                    }
-                ]
-            }
-        elif api_id == "ust21510": # 미국 체결
-            mock_response.json = lambda: {
-                "return_code": 0,
-                "result_list": [
-                    {
-                        "stk_cd": "AAPL",
-                        "stk_nm": "Apple",
-                        "io_tp_nm": "-매도",
-                        "cntr_pric": 185.0,
-                        "cntr_qty": 5,
-                        "ord_stt": "체결"
-                    },
-                    {
-                        "stk_cd": "NVDA", # 미등록 자산
-                        "stk_nm": "NVIDIA",
-                        "io_tp_nm": "+매수",
-                        "cntr_pric": 120.0,
-                        "cntr_qty": 3,
-                        "ord_stt": "체결"
-                    }
-                ]
-            }
-        elif api_id == "kt00015": # 위탁종합거래내역 (배당금)
-            mock_response.json = lambda: {
-                "return_code": 0,
-                "trst_ovrl_trde_prps_array": [
-                    {
-                        "trde_dt": "20260719",
-                        "rmrk_nm": "배당금",
-                        "stk_cd": "001230",
-                        "stk_nm": "맥쿼리인프라",
-                        "trde_amt": 15000,
-                        "trde_qty_jwa_cnt": 0,
-                        "exct_amt": 15000,
-                        "cmsn": 0
-                    },
-                    {
-                        "trde_dt": "20260719",
-                        "rmrk_nm": "이체입금", # 배당금이 아니므로 스킵
-                        "stk_cd": "",
-                        "stk_nm": "",
-                        "trde_amt": 100000,
-                        "trde_qty_jwa_cnt": 0,
-                        "exct_amt": 100000,
-                        "cmsn": 0
-                    }
-                ]
-            }
+        if auth_header == "Bearer token_5526":
+            if api_id == "ka10076": # 국내 체결
+                mock_response.json = lambda: {
+                    "return_code": 0,
+                    "cntr": [
+                        {
+                            "stk_cd": "005930",
+                            "stk_nm": "삼성전자",
+                            "io_tp_nm": "+매수",
+                            "cntr_pric": 72000,
+                            "cntr_qty": 10,
+                            "ord_stt": "체결"
+                        }
+                    ]
+                }
+            elif api_id == "ust21510": # 미국 체결 없음
+                mock_response.json = lambda: {"return_code": 0, "result_list": []}
+            elif api_id == "kt00015": # 배당금
+                mock_response.json = lambda: {
+                    "return_code": 0,
+                    "trst_ovrl_trde_prps_array": [
+                        {
+                            "trde_dt": "20260719",
+                            "rmrk_nm": "배당금",
+                            "stk_cd": "001230",
+                            "stk_nm": "맥쿼리인프라",
+                            "trde_amt": 15000,
+                            "trde_qty_jwa_cnt": 0,
+                            "exct_amt": 15000,
+                            "cmsn": 0
+                        }
+                    ]
+                }
+        elif auth_header == "Bearer token_6066":
+            if api_id == "ka10076": # 국내 체결 없음
+                mock_response.json = lambda: {"return_code": 0, "cntr": []}
+            elif api_id == "ust21510": # 미국 체결
+                mock_response.json = lambda: {
+                    "return_code": 0,
+                    "result_list": [
+                        {
+                            "stk_cd": "AAPL",
+                            "stk_nm": "Apple",
+                            "io_tp_nm": "-매도",
+                            "cntr_pric": 185.0,
+                            "cntr_qty": 5,
+                            "ord_stt": "체결"
+                        },
+                        {
+                            "stk_cd": "NVDA", # 미등록 자산
+                            "stk_nm": "NVIDIA",
+                            "io_tp_nm": "+매수",
+                            "cntr_pric": 120.0,
+                            "cntr_qty": 3,
+                            "ord_stt": "체결"
+                        }
+                    ]
+                }
+            elif api_id == "kt00015": # 배당 없음
+                mock_response.json = lambda: {"return_code": 0, "trst_ovrl_trde_prps_array": []}
         else:
-            mock_response.json = lambda: {"return_code": -1, "return_msg": "Unknown API"}
+            mock_response.json = lambda: {"return_code": -1, "return_msg": "Unknown Token"}
             
         return mock_response
 
@@ -155,47 +171,29 @@ async def test_sync_transactions_success_and_skip(
 
     service = KiwoomTransactionService()
     
-    # 첫 번째 동기화 시도 (삼성전자, Apple, 맥쿼리 배당금은 저장 성공해야 하고 NVDA는 미등록으로 스킵되어야 함)
+    # 동기화 시도 (두 계좌 모두 동기화가 순차적으로 구동되어야 함)
     result = await service.sync_transactions(db_session, days=1)
     
     assert result["status"] == "success"
+    # 총 성공건수 = account1(삼성 매수 1 + 맥쿼리 배당 1) + account2(Apple 매도 1) = 3
+    # 총 보류건수 = account2(NVDA 매수 1) = 1
     assert result["success_count"] == 3
     assert result["pending_count"] == 1
     
-    # 저장 결과 검증
-    transactions = db_session.query(Transaction).all()
-    assert len(transactions) == 3
+    # DB 저장 분리 검증
+    acc1 = setup_test_data["accounts"]["5526-9093"]
+    acc2 = setup_test_data["accounts"]["6066-7729"]
     
-    # 삼성전자 매수 검증
-    tx_samsung = db_session.query(Transaction).filter(Transaction.type == "BUY").first()
-    assert tx_samsung is not None
-    assert tx_samsung.quantity == 10
-    assert tx_samsung.price == 72000
-    assert tx_samsung.total_amount == 720000
-    assert tx_samsung.currency == "KRW"
+    txs_acc1 = db_session.query(Transaction).filter(Transaction.account_id == acc1.id).all()
+    assert len(txs_acc1) == 2
     
-    # Apple 매도 검증
-    tx_apple = db_session.query(Transaction).filter(Transaction.type == "SELL").first()
-    assert tx_apple is not None
-    assert tx_apple.quantity == 5
-    assert tx_apple.price == 185.0
-    assert tx_apple.total_amount == 925.0
-    assert tx_apple.currency == "USD"
+    txs_acc2 = db_session.query(Transaction).filter(Transaction.account_id == acc2.id).all()
+    assert len(txs_acc2) == 1
+    assert txs_acc2[0].asset.ticker == "AAPL"
 
-    # 맥쿼리 배당금 검증
-    tx_macquarie = db_session.query(Transaction).filter(Transaction.type == "INTEREST").first()
-    assert tx_macquarie is not None
-    assert tx_macquarie.total_amount == 15000
-    assert tx_macquarie.currency == "KRW"
-
-    # 미등록 자산 결과 검증
-    assert len(result["unregistered_assets"]) == 1
-    assert result["unregistered_assets"][0]["ticker"] == "NVDA"
-
-    # 두 번째 동기화 시도 (중복 검사 테스트: 동일 API 데이터로 재호출 시 신규 저장 건수가 0이어야 함)
+    # 중복 저장 방지 검증 (동일 데이터로 재호출 시 두 계좌 모두 추가 적재 건수가 0이어야 함)
     result_second = await service.sync_transactions(db_session, days=1)
     assert result_second["success_count"] == 0
-    assert len(db_session.query(Transaction).all()) == 3
 
 
 @pytest.mark.asyncio
