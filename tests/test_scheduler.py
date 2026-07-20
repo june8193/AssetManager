@@ -7,38 +7,52 @@ from src.backend.models import Asset, Watchlist, HistoricalPrice
 from src.backend.services.price_service import price_service
 
 
-def test_is_market_holiday():
+@pytest.mark.asyncio
+async def test_is_market_holiday():
     """휴장일 판별 헬퍼 함수가 정상적으로 동작하는지 검증합니다."""
-    # 주말 판정 (토요일)
-    sat = datetime.date(2026, 6, 27)  # 토요일
-    assert price_service.is_market_holiday(sat, "KR") is True
-    assert price_service.is_market_holiday(sat, "US") is True
+    # 외부 키움 API 실제 호출 격리를 위해 _query_kiwoom_holiday_api를 None으로 모킹 (holidays 백업 판정 테스트)
+    with patch.object(price_service, "_query_kiwoom_holiday_api", new_callable=AsyncMock, return_value=None):
+        # 주말 판정 (토요일)
+        sat = datetime.date(2026, 6, 27)  # 토요일
+        assert await price_service.is_market_holiday(sat, "KR") is True
+        assert await price_service.is_market_holiday(sat, "US") is True
 
-    # 평일 영업일 판정 (수요일)
-    wed = datetime.date(2026, 6, 24)  # 수요일
-    assert price_service.is_market_holiday(wed, "KR") is False
-    assert price_service.is_market_holiday(wed, "US") is False
+        # 평일 영업일 판정 (수요일)
+        wed = datetime.date(2026, 6, 24)  # 수요일
+        assert await price_service.is_market_holiday(wed, "KR") is False
+        assert await price_service.is_market_holiday(wed, "US") is False
 
-    # 한국 공휴일 판정 (삼일절)
-    samil = datetime.date(2026, 3, 1)  # 삼일절 (공휴일)
-    # 2026년 3월 1일은 일요일이므로 삼일절 자체는 휴일
-    # 2026년 3월 2일 월요일은 삼일절 대체공휴일
-    samil_alt = datetime.date(2026, 3, 2)
-    assert price_service.is_market_holiday(samil, "KR") is True
-    assert price_service.is_market_holiday(samil_alt, "KR") is True
+        # 한국 공휴일 판정 (삼일절)
+        samil = datetime.date(2026, 3, 1)  # 삼일절 (공휴일)
+        # 2026년 3월 1일은 일요일이므로 삼일절 자체는 휴일
+        # 2026년 3월 2일 월요일은 삼일절 대체공휴일
+        samil_alt = datetime.date(2026, 3, 2)
+        assert await price_service.is_market_holiday(samil, "KR") is True
+        assert await price_service.is_market_holiday(samil_alt, "KR") is True
 
-    # 제헌절 판정 (7월 17일 - 한국거래소 영업일)
-    jeheon = datetime.date(2026, 7, 17)
-    assert price_service.is_market_holiday(jeheon, "KR") is False
+        # 제헌절 판정 (7월 17일 - 한국거래소 영업일)
+        jeheon = datetime.date(2026, 7, 17)
+        assert await price_service.is_market_holiday(jeheon, "KR") is False
 
-    # 근로자의 날 판정 (5월 1일 - 한국거래소 휴장일)
-    labor_day = datetime.date(2026, 5, 1)
-    assert price_service.is_market_holiday(labor_day, "KR") is True
+        # 근로자의 날 판정 (5월 1일 - 한국거래소 휴장일)
+        labor_day = datetime.date(2026, 5, 1)
+        assert await price_service.is_market_holiday(labor_day, "KR") is True
 
-    # 미국 공휴일 판정 (독립기념일 7월 4일)
-    # 2026년 7월 4일은 토요일이므로 7월 3일 금요일이 대체휴일(observed)
-    independence_obs = datetime.date(2026, 7, 3)
-    assert price_service.is_market_holiday(independence_obs, "US") is True
+        # 미국 공휴일 판정 (독립기념일 7월 4일)
+        # 2026년 7월 4일은 토요일이므로 7월 3일 금요일이 대체휴일(observed)
+        independence_obs = datetime.date(2026, 7, 3)
+        assert await price_service.is_market_holiday(independence_obs, "US") is True
+
+    # 키움 API 모의(Mock) 호출에 따른 판정 검증 추가
+    # 1. 키움 API가 영업일(False)을 리턴할 때
+    with patch.object(price_service, "_query_kiwoom_holiday_api", new_callable=AsyncMock, return_value=False):
+        assert await price_service.is_market_holiday(wed, "KR") is False
+        assert await price_service.is_market_holiday(wed, "US") is False
+
+    # 2. 키움 API가 휴장일(True)을 리턴할 때
+    with patch.object(price_service, "_query_kiwoom_holiday_api", new_callable=AsyncMock, return_value=True):
+        assert await price_service.is_market_holiday(wed, "KR") is True
+        assert await price_service.is_market_holiday(wed, "US") is True
 
 
 @pytest.mark.asyncio
@@ -77,7 +91,9 @@ async def test_update_all_market_prices_normal_day(db_session: Session):
 
     with patch.object(price_service, "get_kr_prices", mock_get_kr), \
          patch.object(price_service, "get_us_prices", mock_get_us), \
-         patch.object(price_service, "_get_today", return_value=today):
+         patch.object(price_service, "_get_today", return_value=today), \
+         patch.object(price_service, "_get_now", return_value=datetime.datetime(2026, 6, 24, 10, 0, 0)), \
+         patch.object(price_service, "_query_kiwoom_holiday_api", new_callable=AsyncMock, return_value=None):
 
         # 백그라운드 시세 업데이트 실행
         await price_service.update_all_market_prices()
@@ -124,7 +140,9 @@ async def test_update_all_market_prices_kr_holiday(db_session: Session):
 
     with patch.object(price_service, "get_kr_prices", mock_get_kr), \
          patch.object(price_service, "get_us_prices", mock_get_us), \
-         patch.object(price_service, "_get_today", return_value=today):
+         patch.object(price_service, "_get_today", return_value=today), \
+         patch.object(price_service, "_get_now", return_value=datetime.datetime(2026, 5, 1, 10, 0, 0)), \
+         patch.object(price_service, "_query_kiwoom_holiday_api", new_callable=AsyncMock, return_value=None):
 
         await price_service.update_all_market_prices()
 

@@ -78,15 +78,10 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
     now_kst_6am = datetime.datetime(2026, 7, 20, 6, 30, 0)
     mock_fetch = AsyncMock(return_value=1350.0)
     
-    with patch("datetime.datetime") as mock_datetime, \
-         patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
-         patch.object(price_service, "is_market_holiday", return_value=False), \
+    with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
+         patch.object(price_service, "_get_now", return_value=now_kst_6am), \
          patch.object(price_service, "_get_today", return_value=today):
-        
-        mock_now = MagicMock()
-        mock_now.hour = 6
-        mock_now.date.return_value = today
-        mock_datetime.now.return_value = mock_now
         
         # 시세 업데이트 호출
         await price_service.update_all_market_prices()
@@ -96,15 +91,11 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
 
     # 2. 오전 7시 이후 실행 & DB에 오늘 환율이 없을 때 -> 환율 수집 실행
     mock_fetch.reset_mock()
-    with patch("datetime.datetime") as mock_datetime, \
-         patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
-         patch.object(price_service, "is_market_holiday", return_value=False), \
+    now_kst_7am = datetime.datetime(2026, 7, 20, 7, 30, 0)
+    with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
+         patch.object(price_service, "_get_now", return_value=now_kst_7am), \
          patch.object(price_service, "_get_today", return_value=today):
-        
-        mock_now = MagicMock()
-        mock_now.hour = 7
-        mock_now.date.return_value = today
-        mock_datetime.now.return_value = mock_now
         
         await price_service.update_all_market_prices()
         
@@ -118,15 +109,11 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
     db_session.add(existing_rate)
     db_session.commit()
     
-    with patch("datetime.datetime") as mock_datetime, \
-         patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
-         patch.object(price_service, "is_market_holiday", return_value=False), \
+    now_kst_8am = datetime.datetime(2026, 7, 20, 8, 30, 0)
+    with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
+         patch.object(price_service, "_get_now", return_value=now_kst_8am), \
          patch.object(price_service, "_get_today", return_value=today):
-        
-        mock_now = MagicMock()
-        mock_now.hour = 8
-        mock_now.date.return_value = today
-        mock_datetime.now.return_value = mock_now
         
         await price_service.update_all_market_prices()
         
@@ -139,15 +126,11 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
     db_session.delete(existing_rate)
     db_session.commit()
     
-    with patch("datetime.datetime") as mock_datetime, \
-         patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
-         patch.object(price_service, "is_market_holiday", return_value=True), \
+    now_kst_9am = datetime.datetime(2026, 7, 20, 9, 30, 0)
+    with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=True), \
+         patch.object(price_service, "_get_now", return_value=now_kst_9am), \
          patch.object(price_service, "_get_today", return_value=today):
-        
-        mock_now = MagicMock()
-        mock_now.hour = 9
-        mock_now.date.return_value = today
-        mock_datetime.now.return_value = mock_now
         
         await price_service.update_all_market_prices()
         

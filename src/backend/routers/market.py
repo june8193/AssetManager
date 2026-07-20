@@ -204,7 +204,7 @@ async def get_market_indices(
 
 @router.get("/holiday", response_model=MarketHolidayResponse)
 async def check_market_holiday(
-    date: Optional[str] = Query(None, description="조회 대상 날짜 (YYYY-MM-DD)"),
+    date: Optional[str] = Query(None, description="조회 대상 날짜 (YYYY-MM-DD, 조회 대상 국가 기준의 현지 날짜)"),
     country: str = Query("KR", description="국가 코드 (KR 또는 US)")
 ):
     """특정 날짜의 주식 시장 휴장일 여부를 판정합니다.
@@ -212,7 +212,7 @@ async def check_market_holiday(
     한국거래소(KRX) 또는 뉴욕증시(NYSE)의 휴장일 기준을 따릅니다.
 
     Args:
-        date (str, optional): 조회할 날짜 (형식: YYYY-MM-DD). 지정하지 않으면 오늘 날짜 기준.
+        date (str, optional): 조회할 날짜 (형식: YYYY-MM-DD, 조회 대상 국가 기준의 현지 날짜를 의미). 지정하지 않으면 오늘 날짜 기준.
         country (str): 국가 코드 ('KR' 또는 'US', 대소문자 구분 없음).
 
     Returns:
@@ -245,7 +245,7 @@ async def check_market_holiday(
             )
 
     # 3. 공통 헬퍼 함수를 통한 휴장일 판정
-    holiday_reason = price_service.get_market_holiday_info(target_date, country_upper)
+    holiday_reason = await price_service.get_market_holiday_info(target_date, country_upper)
     if holiday_reason:
         return MarketHolidayResponse(
             date=target_date.strftime("%Y-%m-%d"),

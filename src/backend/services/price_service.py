@@ -527,59 +527,165 @@ class PriceService:
 
         return results
 
-    def get_market_holiday_info(self, target_date: datetime.date, country: str) -> Optional[str]:
+    async def get_market_holiday_info(self, target_date: datetime.date, country: str) -> Optional[str]:
         """지정된 날짜가 해당 국가 주식 시장의 휴장일(주말 또는 공휴일)인 경우 휴장 사유를 반환합니다.
         
         영업일인 경우 None을 반환합니다.
         
         Args:
-            target_date (datetime.date): 판별 대상 날짜
+            target_date (datetime.date): 판별 대상 날짜 (해당 국가의 현지 날짜 기준)
             country (str): 국가 코드 ('KR' 또는 'US')
             
         Returns:
             Optional[str]: 휴장 사유 또는 None
         """
-        import holidays
         country_upper = country.upper()
 
-        # 1. 주말 판정 (토요일: 5, 일요일: 6)
+        # 1. 주말 판정 (토요일: 5, 일요일: 6) - 불필요한 API 호출 방지
         if target_date.weekday() >= 5:
             return "주말"
 
-        # 2. 국가별 공휴일 판정
+        # 2. 키움 REST API 질의 시도
+        try:
+            is_holiday = await self._query_kiwoom_holiday_api(target_date, country_upper)
+            if is_holiday is not None:
+                if is_holiday:
+                    # 백업 로직으로 구체적인 공휴일명을 조회해보고, 없으면 기본 사유 리턴
+                    backup_reason = self._get_holiday_reason_backup(target_date, country_upper)
+                    return backup_reason if backup_reason else "휴장일"
+                else:
+                    return None
+        except Exception as e:
+            print(f"[WARNING] 키움 API 휴장일 판단 중 오류 발생 (holidays 백업 동작): {e}")
+
+        # 3. API 실패 시 기존 holidays 라이브러리 백업 판정
+        return self._get_holiday_reason_backup(target_date, country_upper)
+
+    async def _query_kiwoom_holiday_api(self, target_date: datetime.date, country: str) -> Optional[bool]:
+        """키움 일봉 차트 API를 호출하여 해당 날짜가 영업일인지 판단합니다.
+        
+        영업일이면 False, 휴장일이면 True, 호출 실패 시 None을 반환합니다.
+        """
+        from src.kiwoom.auth import KiwoomAuthManager
+        import httpx
+
+        auth_manager = KiwoomAuthManager()
+        base_url = auth_manager.base_url if auth_manager.base_url else "https://api.kiwoom.com"
+
+        try:
+            token = await auth_manager.get_valid_token()
+        except Exception as e:
+            print(f"[ERROR] 키움 API 토큰 획득 실패: {e}")
+            return None
+
+        date_str = target_date.strftime("%Y%m%d")
+
+        async with httpx.AsyncClient() as client:
+            if country == "KR":
+                url = f"{base_url}/api/dostk/chart"
+                headers = {
+                    "Content-Type": "application/json;charset=UTF-8",
+                    "api-id": "ka10081",
+                    "authorization": f"Bearer {token}"
+                }
+                payload = {
+                    "stk_cd": "069500",  # KODEX 200
+                    "base_dt": date_str,
+                    "upd_stkpc_tp": "1"
+                }
+                try:
+                    response = await client.post(url, headers=headers, json=payload, timeout=5.0)
+                    response.raise_for_status()
+                    data = response.json()
+                    if str(data.get("return_code")) != "0":
+                        print(f"[ERROR] 키움 국내 일봉 차트 API 오류: {data.get('return_msg')}")
+                        return None
+
+                    chart_list = data.get("stk_dt_pole_chart_qry", [])
+                    if not chart_list:
+                        return True  # 데이터가 전혀 없으면 휴장일로 간주
+
+                    latest_date = chart_list[0].get("dt")
+                    if latest_date == date_str:
+                        return False  # 영업일
+                    else:
+                        return True  # 휴장일
+                except Exception as e:
+                    print(f"[ERROR] 키움 국내 일봉 API 호출 중 예외 발생: {e}")
+                    return None
+
+            elif country == "US":
+                url = f"{base_url}/api/us/chart"
+                headers = {
+                    "Content-Type": "application/json;charset=UTF-8",
+                    "api-id": "usa06012",
+                    "authorization": f"Bearer {token}"
+                }
+                payload = {
+                    "stex_tp": "NY",
+                    "stk_cd": "SPY",
+                    "strt_dt": date_str,
+                    "upd_stkpc_tp": "1",
+                    "exrt_appl_tp": "0"
+                }
+                try:
+                    response = await client.post(url, headers=headers, json=payload, timeout=5.0)
+                    response.raise_for_status()
+                    data = response.json()
+                    if str(data.get("return_code")) != "0":
+                        print(f"[ERROR] 키움 미국 일 차트 API 오류: {data.get('return_msg')}")
+                        return None
+
+                    chart_list = data.get("result_list", [])
+                    if not chart_list:
+                        return True
+
+                    latest_date = chart_list[0].get("dt")
+                    if latest_date == date_str:
+                        return False  # 영업일
+                    else:
+                        return True  # 휴장일
+                except Exception as e:
+                    print(f"[ERROR] 키움 미국 일봉 API 호출 중 예외 발생: {e}")
+                    return None
+
+        return None
+
+    def _get_holiday_reason_backup(self, target_date: datetime.date, country: str) -> Optional[str]:
+        """기존 holidays 패키지 기반 휴장 사유 백업 판단 로직입니다."""
+        import holidays
+        country_upper = country.upper()
+
+        if target_date.weekday() >= 5:
+            return "주말"
+
         if country_upper == "KR":
-            # 한국거래소 연말 휴장일 판정용 로컬 헬퍼
             def is_krx_year_end_holiday(d: datetime.date) -> bool:
                 if d.month != 12:
                     return False
                 dec31 = datetime.date(d.year, 12, 31)
                 dec31_weekday = dec31.weekday()
                 if dec31_weekday < 5:
-                    target_date = dec31
+                    t_date = dec31
                 elif dec31_weekday == 5:
-                    target_date = datetime.date(d.year, 12, 30)
+                    t_date = datetime.date(d.year, 12, 30)
                 else:
-                    target_date = datetime.date(d.year, 12, 29)
-                return d == target_date
+                    t_date = datetime.date(d.year, 12, 29)
+                return d == t_date
 
             kr_holidays = holidays.SouthKorea(years=target_date.year)
             
-            # 근로자의 날
             if target_date.month == 5 and target_date.day == 1:
                 return "근로자의 날"
                 
-            # 연말 휴장일
             if is_krx_year_end_holiday(target_date):
                 return "연말 휴장일"
 
-            # 일반 공휴일 여부
             if target_date in kr_holidays:
                 holiday_name = kr_holidays.get(target_date)
-                # 제헌절인 경우 영업함
                 if holiday_name in ["제헌절", "Constitution Day"]:
                     return None
                 
-                # market.py의 HOLIDAY_NAME_MAP에 해당하는 변환
                 holiday_name_map = {
                     "New Year's Day": "신정",
                     "Alternative holiday for New Year's Day": "신정 대체공휴일",
@@ -631,11 +737,15 @@ class PriceService:
 
         return None
 
+    def _get_now(self) -> datetime.datetime:
+        """현재 일시를 반환합니다. 테스트 시 모킹 편의성을 위해 분리되었습니다."""
+        return datetime.datetime.now()
+
     def _get_today(self) -> datetime.date:
         """오늘 날짜를 반환합니다. 테스트 시 모킹 편의성을 위해 분리되었습니다."""
         return datetime.date.today()
 
-    def is_market_holiday(self, target_date: datetime.date, country: str) -> bool:
+    async def is_market_holiday(self, target_date: datetime.date, country: str) -> bool:
         """지정된 날짜가 해당 국가 주식 시장의 휴장일(주말 또는 공휴일)인지 판별합니다.
         
         Args:
@@ -645,7 +755,7 @@ class PriceService:
         Returns:
             bool: 휴장일인 경우 True, 그렇지 않으면 False
         """
-        return self.get_market_holiday_info(target_date, country) is not None
+        return (await self.get_market_holiday_info(target_date, country)) is not None
 
     async def fetch_and_save_exchange_rate(self, db, target_date: datetime.date) -> Optional[float]:
         """키움 API를 통해 달러 환율을 조회하고 DB에 저장합니다 (매도적용환율 기준).
@@ -698,19 +808,27 @@ class PriceService:
         from src.backend.database import SessionLocal
         from src.backend.models import Asset, Watchlist, HistoricalPrice
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+        import pytz
 
-        today = self._get_today()
-        is_kr_holiday = self.is_market_holiday(today, "KR")
-        is_us_holiday = self.is_market_holiday(today, "US")
+        # 한국과 미국 현지 시간대 기준의 날짜 계산
+        seoul_tz = pytz.timezone('Asia/Seoul')
+        ny_tz = pytz.timezone('America/New_York')
+        
+        now = self._get_now()
+        
+        now_kst = now.astimezone(seoul_tz) if now.tzinfo else seoul_tz.localize(now)
+        now_est = now.astimezone(ny_tz) if now.tzinfo else ny_tz.localize(now)
+        
+        today_kr = now_kst.date()
+        today_us = now_est.date()
+
+        is_kr_holiday = await self.is_market_holiday(today_kr, "KR")
+        is_us_holiday = await self.is_market_holiday(today_us, "US")
 
         # 한국시간 기준 오전 7시 이후이며 오늘이 한국 휴장일이 아닐 때, 당일 환율 정보가 없으면 자동 수집
         try:
-            import pytz
-            seoul_tz = pytz.timezone('Asia/Seoul')
-            now_kst = datetime.datetime.now(seoul_tz)
-            today_kr = now_kst.date()
             if now_kst.hour >= 7:
-                is_kr_holiday_today = self.is_market_holiday(today_kr, "KR")
+                is_kr_holiday_today = await self.is_market_holiday(today_kr, "KR")
                 if not is_kr_holiday_today:
                     with SessionLocal() as db:
                         from src.backend.models import ExchangeRate
@@ -726,7 +844,7 @@ class PriceService:
 
         # 둘 다 휴장일이면 전체 건너뜀
         if is_kr_holiday and is_us_holiday:
-            print(f"[INFO] {today} 날짜는 한국과 미국 모두 휴장일입니다. 백그라운드 시세 업데이트를 생략합니다.")
+            print(f"[INFO] 한국({today_kr}) 및 미국({today_us}) 모두 휴장일입니다. 백그라운드 시세 업데이트를 생략합니다.")
             return
 
         with SessionLocal() as db:
@@ -791,7 +909,7 @@ class PriceService:
                         if price_val > 0.0:
                             stmt = sqlite_insert(HistoricalPrice).values(
                                 ticker=code,
-                                price_date=today,
+                                price_date=today_kr,
                                 close_price=price_val,
                                 updated_at=datetime.datetime.now()
                             )
@@ -821,7 +939,7 @@ class PriceService:
                         if price_val > 0.0:
                             stmt = sqlite_insert(HistoricalPrice).values(
                                 ticker=symbol,
-                                price_date=today,
+                                price_date=today_us,
                                 close_price=price_val,
                                 updated_at=datetime.datetime.now()
                             )

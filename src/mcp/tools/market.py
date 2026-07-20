@@ -117,7 +117,7 @@ async def check_market_holiday(
     """특정 날짜의 특정 국가 시장 휴장일 여부를 조회합니다.
 
     Args:
-        date (str, optional): 조회 대상 날짜 (YYYY-MM-DD), 미입력 시 오늘.
+        date (str, optional): 조회 대상 국가 기준의 현지 날짜 (YYYY-MM-DD), 미입력 시 오늘.
         country (str): 국가 코드 (KR 또는 US), 기본값 KR.
 
     Returns:
