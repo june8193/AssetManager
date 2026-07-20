@@ -16,6 +16,7 @@ def mock_settings_json():
         "base_url": "https://api.kiwoom.com",
         "accounts": [
             {
+                "account": "mock_account_1234",
                 "app_key": "mock_app_key",
                 "secret_key": "mock_secret_key"
             }
@@ -39,18 +40,24 @@ async def test_singleton_pattern():
 async def test_token_caching():
     """토큰이 유효할 때 캐시된 토큰을 반환하는지 확인합니다."""
     manager = KiwoomAuthManager()
-    manager._access_token = "test_token"
-    manager._expired_at = datetime.now() + timedelta(hours=1)
+    account_name = list(manager.accounts_config.keys())[0]
+    manager._tokens[account_name] = {
+        "token": "test_token",
+        "expired_at": datetime.now() + timedelta(hours=1)
+    }
     
-    token = await manager.get_valid_token()
+    token = await manager.get_valid_token(account_name)
     assert token == "test_token"
 
 @pytest.mark.asyncio
 async def test_token_refresh_on_expiration():
     """토큰이 만료되었을 때 새로운 토큰을 요청하는지 확인합니다."""
     manager = KiwoomAuthManager()
-    manager._access_token = "old_token"
-    manager._expired_at = datetime.now() - timedelta(seconds=1)
+    account_name = list(manager.accounts_config.keys())[0]
+    manager._tokens[account_name] = {
+        "token": "old_token",
+        "expired_at": datetime.now() - timedelta(seconds=1)
+    }
     
     with patch("httpx.AsyncClient.post") as mock_post:
         mock_response = AsyncMock()
@@ -63,7 +70,7 @@ async def test_token_refresh_on_expiration():
         mock_response.raise_for_status = Mock()
         mock_post.return_value = mock_response
         
-        token = await manager.get_valid_token()
+        token = await manager.get_valid_token(account_name)
         assert token == "new_token"
         assert mock_post.called
 
@@ -71,10 +78,14 @@ async def test_token_refresh_on_expiration():
 async def test_masking_logging(caplog):
     """로그 출력 시 중요한 정보가 마스킹되는지 확인합니다."""
     manager = KiwoomAuthManager()
-    manager._access_token = "very_secret_token_12345"
+    account_name = list(manager.accounts_config.keys())[0]
+    manager._tokens[account_name] = {
+        "token": "very_secret_token_12345",
+        "expired_at": datetime.now() + timedelta(hours=1)
+    }
     
     with caplog.at_level("INFO"):
-        manager.log_token_info()
+        manager.log_token_info(account_name)
     
     assert "very_secret_token_12345" not in caplog.text
     assert "ve***45" in caplog.text  # 예시 마스킹 형태
