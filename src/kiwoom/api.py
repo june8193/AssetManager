@@ -185,19 +185,19 @@ class KiwoomAPI:
             print(f"일별 주가 조회 에러: {e}")
         return None
 
-    def get_exchange_rate(self, token, sell_crnc="USD", buy_crnc="KRW", exmn_tp="1"):
+    def get_exchange_rate(self, token, sell_crnc="USD", buy_crnc="KRW", exch_tp="2"):
         """외화 환율 정보를 조회합니다 (ust31301).
 
         Args:
             token (str): 발급된 접근 토큰.
             sell_crnc (str): 매도통화코드 (기본값 'USD').
             buy_crnc (str): 매수통화코드 (기본값 'KRW').
-            exmn_tp (str): 환전기준 (1: 매도통화 기준, 2: 매수통화 기준).
+            exch_tp (str): 환율구분 (1: 매수통화 기준, 2: 매도통화 기준 / 기본값 '2').
 
         Returns:
             dict: API 응답 결과 (실패 시 None).
         """
-        url = f"{self.base_url}/api/us/etc"
+        url = f"{self.base_url}/api/us/exchange"
         headers = {
             "Content-Type": "application/json;charset=UTF-8",
             "api-id": "ust31301",
@@ -206,7 +206,7 @@ class KiwoomAPI:
         data = {
             "sell_crnc_code": sell_crnc,
             "buy_crnc_code": buy_crnc,
-            "exmn_tp": exmn_tp
+            "exch_tp": exch_tp
         }
         
         try:

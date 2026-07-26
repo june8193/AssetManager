@@ -545,21 +545,15 @@ class PriceService:
         if target_date.weekday() >= 5:
             return "주말"
 
-        # 2. 키움 REST API 질의 시도
-        try:
-            is_holiday = await self._query_kiwoom_holiday_api(target_date, country_upper)
-            if is_holiday is not None:
-                if is_holiday:
-                    # 백업 로직으로 구체적인 공휴일명을 조회해보고, 없으면 기본 사유 리턴
-                    backup_reason = self._get_holiday_reason_backup(target_date, country_upper)
-                    return backup_reason if backup_reason else "휴장일"
-                else:
-                    return None
-        except Exception as e:
-            print(f"[WARNING] 키움 API 휴장일 판단 중 오류 발생 (holidays 백업 동작): {e}")
+        # 2. 키움 REST API 질의 시도 (실패 시 예외 발생)
+        is_holiday = await self._query_kiwoom_holiday_api(target_date, country_upper)
+        if is_holiday is None:
+            raise RuntimeError(f"키움 API를 통한 휴장일 판단에 실패했습니다. (국가: {country_upper}, 일자: {target_date})")
 
-        # 3. API 실패 시 기존 holidays 라이브러리 백업 판정
-        return self._get_holiday_reason_backup(target_date, country_upper)
+        if is_holiday:
+            return "공휴일"
+        else:
+            return None
 
     async def _query_kiwoom_holiday_api(self, target_date: datetime.date, country: str) -> Optional[bool]:
         """키움 일봉 차트 API를 호출하여 해당 날짜가 영업일인지 판단합니다.
@@ -769,10 +763,11 @@ class PriceService:
         """
         try:
             token = await self.kiwoom_auth.get_valid_token()
-            res = await run_in_threadpool(self.kiwoom_api.get_exchange_rate, token, "USD", "KRW", "1")
+            res = await run_in_threadpool(self.kiwoom_api.get_exchange_rate, token, "USD", "KRW", "2")
             
             if res and res.get("return_code") == 0:
-                sell_rate_str = res.get("sell_aplc_exrt", "0").replace(",", "").strip()
+                rate_raw = res.get("sell_aplc_exrt") or res.get("aplc_exrt") or res.get("buy_aplc_exrt") or "0"
+                sell_rate_str = str(rate_raw).replace(",", "").strip()
                 sell_rate = float(sell_rate_str) if sell_rate_str else 0.0
                 
                 if sell_rate > 0.0:

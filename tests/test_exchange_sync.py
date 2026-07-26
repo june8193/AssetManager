@@ -17,24 +17,25 @@ async def test_kiwoom_api_get_exchange_rate():
     mock_response.status_code = 200
     mock_response.json = Mock(return_value={
         "return_code": 0,
-        "sell_aplc_exrt": "1,350.50",
-        "buy_aplc_exrt": "1,340.50",
-        "aplc_exrt": "1345.500000"
+        "sell_aplc_exrt": "1,415.96",
+        "buy_aplc_exrt": "0.00",
+        "aplc_exrt": "1415.960000"
     })
     
     with patch("requests.post", return_value=mock_response) as mock_post:
-        res = api.get_exchange_rate(token="mock_token", sell_crnc="USD", buy_crnc="KRW", exmn_tp="1")
+        res = api.get_exchange_rate(token="mock_token", sell_crnc="USD", buy_crnc="KRW", exch_tp="2")
         
         assert res is not None
-        assert res["sell_aplc_exrt"] == "1,350.50"
+        assert res["sell_aplc_exrt"] == "1,415.96"
         
         mock_post.assert_called_once()
         args, kwargs = mock_post.call_args
+        assert args[0] == "https://api.kiwoom.com/api/us/exchange"
         assert kwargs["headers"]["api-id"] == "ust31301"
         assert kwargs["headers"]["authorization"] == "Bearer mock_token"
         assert kwargs["json"]["sell_crnc_code"] == "USD"
         assert kwargs["json"]["buy_crnc_code"] == "KRW"
-        assert kwargs["json"]["exmn_tp"] == "1"
+        assert kwargs["json"]["exch_tp"] == "2"
 
 
 @pytest.mark.asyncio
