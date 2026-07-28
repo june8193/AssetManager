@@ -85,3 +85,18 @@
 ## 9. Scratch 스크립트 관리 규칙
 - **원칙**: 임시 테스트나 데이터 분석 등을 위해 `scratch` 폴더 내에 작성한 스크립트도 변경 이력 관리와 협업을 위해 Git에 커밋하여 관리합니다.
 
+## Agent skills
+
+### Issue tracker
+
+Local Markdown (`.scratch/<feature-slug>/`). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default 5 canonical triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
+
+
