@@ -144,19 +144,21 @@ async def test_sync_transactions_multi_accounts(
                     "result_list": [
                         {
                             "stk_cd": "AAPL",
-                            "stk_nm": "Apple",
-                            "io_tp_nm": "-매도",
-                            "cntr_pric": 185.0,
-                            "cntr_qty": 5,
-                            "ord_stt": "체결"
+                            "frgn_stk_nm": "Apple",
+                            "slby_tp": "1",
+                            "slby_tp_nm": "매도",
+                            "cntr_uv": "185.0",
+                            "cntr_qty": "5",
+                            "ord_stat": "체결완료"
                         },
                         {
                             "stk_cd": "NVDA", # 미등록 자산
-                            "stk_nm": "NVIDIA",
-                            "io_tp_nm": "+매수",
-                            "cntr_pric": 120.0,
-                            "cntr_qty": 3,
-                            "ord_stt": "체결"
+                            "frgn_stk_nm": "NVIDIA",
+                            "slby_tp": "2",
+                            "slby_tp_nm": "매수",
+                            "cntr_uv": "120.0",
+                            "cntr_qty": "3",
+                            "ord_stat": "체결완료"
                         }
                     ]
                 }

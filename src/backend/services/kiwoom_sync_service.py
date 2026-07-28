@@ -82,15 +82,23 @@ class KiwoomTransactionService:
                         })
 
                     # 2-2. 미국 주식 체결 조회 (ust21510)
-                    overseas_executions = await self._fetch_overseas_executions(token)
+                    overseas_executions = await self._fetch_overseas_executions(token, target_date=today_str)
                     for exe in overseas_executions:
+                        qty = float(exe.get("cntr_qty", 0))
+                        if qty <= 0:
+                            continue
+                        slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
+                        slby_tp = str(exe.get("slby_tp", ""))
+                        is_buy = "매수" in slby_nm or slby_tp == "2"
+                        price_val = float(exe.get("cntr_uv") or exe.get("cntr_pric") or 0)
+
                         raw_transactions.append({
                             "date": datetime.date.today(),
                             "ticker": exe.get("stk_cd"),
-                            "name": exe.get("stk_nm"),
-                            "type": "BUY" if "매수" in exe.get("io_tp_nm", "") else "SELL",
-                            "quantity": float(exe.get("cntr_qty", 0)),
-                            "price": float(exe.get("cntr_pric", 0)),
+                            "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
+                            "type": "BUY" if is_buy else "SELL",
+                            "quantity": qty,
+                            "price": price_val,
                             "currency": "USD",
                             "memo": f"키움 자동저장 (해외체결)"
                         })
@@ -110,7 +118,7 @@ class KiwoomTransactionService:
                                 "memo": f"키움 자동저장 (배당금)"
                             })
                 else:
-                    # 소급/수동 동기화 (최근 N일 종합거래내역 kt00015를 통한 수집)
+                    # 소급/수동 동기화 (최근 N일 종합거래내역 kt00015 + 해외 체결 ust21510 ord_dt 수집)
                     ledger_data = await self._fetch_comprehensive_ledger(token, start_date_str, today_str)
                     for tx in ledger_data:
                         rmrk = tx.get("rmrk_nm", "")
@@ -142,6 +150,31 @@ class KiwoomTransactionService:
                                 "price": float(tx.get("trde_amt", 0)) / float(tx.get("trde_qty_jwa_cnt", 1)) if float(tx.get("trde_qty_jwa_cnt", 0)) > 0 else 0,
                                 "currency": "KRW",
                                 "memo": f"키움 자동저장 (소급 매매)"
+                            })
+
+                    # N일 동안의 해외 주식 일별 체결 소급 조회
+                    for d in range(days):
+                        dt_obj = datetime.date.today() - datetime.timedelta(days=d)
+                        dt_str = dt_obj.strftime("%Y%m%d")
+                        overseas_exes = await self._fetch_overseas_executions(token, target_date=dt_str)
+                        for exe in overseas_exes:
+                            qty = float(exe.get("cntr_qty", 0))
+                            if qty <= 0:
+                                continue
+                            slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
+                            slby_tp = str(exe.get("slby_tp", ""))
+                            is_buy = "매수" in slby_nm or slby_tp == "2"
+                            price_val = float(exe.get("cntr_uv") or exe.get("cntr_pric") or 0)
+
+                            raw_transactions.append({
+                                "date": dt_obj,
+                                "ticker": exe.get("stk_cd"),
+                                "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
+                                "type": "BUY" if is_buy else "SELL",
+                                "quantity": qty,
+                                "price": price_val,
+                                "currency": "USD",
+                                "memo": f"키움 자동저장 (해외체결 소급)"
                             })
 
                 # 3. DB 적재 및 검증 처리
@@ -253,8 +286,13 @@ class KiwoomTransactionService:
                 return data.get("cntr", [])
             return []
 
-    async def _fetch_overseas_executions(self, token: str) -> list:
-        """미국 주식 당일 체결 내역을 조회합니다 (ust21510)."""
+    async def _fetch_overseas_executions(self, token: str, target_date: str = None) -> list:
+        """미국 주식 체결 내역을 조회합니다 (ust21510).
+        
+        Args:
+            token (str): Bearer 인증 토큰
+            target_date (str, optional): 조회일자 (YYYYMMDD 형식). 생략 시 당일 체결 조회.
+        """
         url = f"{self.base_url}/api/us/acnt"
         headers = {
             "Content-Type": "application/json;charset=UTF-8",
@@ -263,8 +301,10 @@ class KiwoomTransactionService:
         }
         payload = {
             "qry_tp": "0",  # 전체
-            "sell_tp": "0" # 전체
+            "sell_tp": "0"  # 전체
         }
+        if target_date:
+            payload["ord_dt"] = target_date
         
         async with httpx.AsyncClient() as client:
             response = await client.post(url, headers=headers, json=payload, timeout=15)
