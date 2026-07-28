@@ -178,14 +178,18 @@ def test_get_market_indices_invalid_country():
 )
 def test_check_market_holiday(date_str, country, expected_holiday, expected_desc):
     """지정된 날짜와 국가에 대해 휴장일 여부 및 사유가 정확히 반환되는지 검증합니다."""
-    response = client.get(f"/api/market/holiday?date={date_str}&country={country}")
-    assert response.status_code == 200
-    
-    data = response.json()
-    assert data["date"] == date_str
-    assert data["country"] == country.upper()
-    assert data["is_holiday"] == expected_holiday
-    assert data["description"] == expected_desc
+    # 주말이 아닌 평일인 경우 키움 API 모킹 (영업일이면 False, 공휴일이면 True)
+    # expected_holiday가 True이고 expected_desc가 '주말'이 아닌 경우는 공휴일(True)
+    is_holiday_mock = expected_holiday if expected_desc != "주말" else False
+    with patch("src.backend.services.price_service.price_service._query_kiwoom_holiday_api", return_value=is_holiday_mock):
+        response = client.get(f"/api/market/holiday?date={date_str}&country={country}")
+        assert response.status_code == 200
+        
+        data = response.json()
+        assert data["date"] == date_str
+        assert data["country"] == country.upper()
+        assert data["is_holiday"] == expected_holiday
+        assert data["description"] == expected_desc
 
 def test_check_market_holiday_invalid_date():
     """날짜 형식이 올바르지 않은 경우 400 에러를 반환하는지 확인합니다."""
@@ -217,7 +221,8 @@ def test_check_market_holiday_no_date_timezone():
                 return base_utc.astimezone(tz)
             return base_utc.astimezone(ZoneInfo("Asia/Seoul"))
             
-    with patch("src.backend.routers.market.datetime.datetime", MockDatetime):
+    with patch("src.backend.routers.market.datetime.datetime", MockDatetime), \
+         patch("src.backend.services.price_service.price_service._query_kiwoom_holiday_api", return_value=False):
         # US 시간으로 조회 (EST 2026-06-21 18:00 이므로 일요일, 즉 주말)
         response_us = client.get("/api/market/holiday?country=US")
         assert response_us.status_code == 200

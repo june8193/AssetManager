@@ -72,30 +72,30 @@ async def test_fetch_and_save_exchange_rate(db_session: Session):
 
 @pytest.mark.asyncio
 async def test_update_all_market_prices_exchange_trigger(db_session: Session):
-    """오전 7시 이후 영업일에 당일 환율 정보가 없으면 환율 수집이 트리거되는지 검증합니다."""
+    """오전 5시 이후 영업일에 당일 환율 정보가 없으면 환율 수집이 트리거되는지 검증합니다."""
     today = datetime.date(2026, 7, 20)  # 월요일 (영업일 가정)
     
-    # 1. 오전 7시 이전 실행 시 -> 환율 수집 미실행
-    now_kst_6am = datetime.datetime(2026, 7, 20, 6, 30, 0)
+    # 1. 오전 5시 이전(오전 4시 30분) 실행 시 -> 환율 수집 미실행
+    now_kst_4am = datetime.datetime(2026, 7, 20, 4, 30, 0)
     mock_fetch = AsyncMock(return_value=1350.0)
     
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
-         patch.object(price_service, "_get_now", return_value=now_kst_6am), \
+         patch.object(price_service, "_get_now", return_value=now_kst_4am), \
          patch.object(price_service, "_get_today", return_value=today):
         
         # 시세 업데이트 호출
         await price_service.update_all_market_prices()
         
-        # 오전 6시이므로 수집 미호출
+        # 오전 4시이므로 수집 미호출
         assert not mock_fetch.called
 
-    # 2. 오전 7시 이후 실행 & DB에 오늘 환율이 없을 때 -> 환율 수집 실행
+    # 2. 오전 5시 이후(오전 5시 30분) 실행 & DB에 오늘 환율이 없을 때 -> 환율 수집 실행
     mock_fetch.reset_mock()
-    now_kst_7am = datetime.datetime(2026, 7, 20, 7, 30, 0)
+    now_kst_5am = datetime.datetime(2026, 7, 20, 5, 30, 0)
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
-         patch.object(price_service, "_get_now", return_value=now_kst_7am), \
+         patch.object(price_service, "_get_now", return_value=now_kst_5am), \
          patch.object(price_service, "_get_today", return_value=today):
         
         await price_service.update_all_market_prices()
@@ -103,17 +103,17 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
         # 호출되어야 함
         assert mock_fetch.called
 
-    # 3. 오전 7시 이후 실행 & DB에 이미 오늘 환율이 있을 때 -> 환율 수집 스킵
+    # 3. 오전 5시 이후 실행 & DB에 이미 오늘 환율이 있을 때 -> 환율 수집 스킵
     mock_fetch.reset_mock()
     # DB에 오늘 환율 미리 주입
     existing_rate = ExchangeRate(date=today, currency="USD", rate=1350.0)
     db_session.add(existing_rate)
     db_session.commit()
     
-    now_kst_8am = datetime.datetime(2026, 7, 20, 8, 30, 0)
+    now_kst_6am = datetime.datetime(2026, 7, 20, 6, 30, 0)
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
-         patch.object(price_service, "_get_now", return_value=now_kst_8am), \
+         patch.object(price_service, "_get_now", return_value=now_kst_6am), \
          patch.object(price_service, "_get_today", return_value=today):
         
         await price_service.update_all_market_prices()
@@ -121,16 +121,16 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
         # 이미 존재하므로 호출되면 안 됨
         assert not mock_fetch.called
 
-    # 4. 한국 휴장일일 때 -> 오전 7시 이후라도 환율 수집 스킵
+    # 4. 한국 휴장일일 때 -> 오전 5시 이후라도 환율 수집 스킵
     mock_fetch.reset_mock()
     # DB에서 기존 환율 제거
     db_session.delete(existing_rate)
     db_session.commit()
     
-    now_kst_9am = datetime.datetime(2026, 7, 20, 9, 30, 0)
+    now_kst_7am = datetime.datetime(2026, 7, 20, 7, 30, 0)
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=True), \
-         patch.object(price_service, "_get_now", return_value=now_kst_9am), \
+         patch.object(price_service, "_get_now", return_value=now_kst_7am), \
          patch.object(price_service, "_get_today", return_value=today):
         
         await price_service.update_all_market_prices()

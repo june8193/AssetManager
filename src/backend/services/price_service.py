@@ -820,9 +820,9 @@ class PriceService:
         is_kr_holiday = await self.is_market_holiday(today_kr, "KR")
         is_us_holiday = await self.is_market_holiday(today_us, "US")
 
-        # 한국시간 기준 오전 7시 이후이며 오늘이 한국 휴장일이 아닐 때, 당일 환율 정보가 없으면 자동 수집
+        # 한국시간 기준 오전 5시 이후이며 오늘이 한국 휴장일이 아닐 때, 당일 환율 정보가 없으면 자동 수집
         try:
-            if now_kst.hour >= 7:
+            if now_kst.hour >= 5:
                 is_kr_holiday_today = await self.is_market_holiday(today_kr, "KR")
                 if not is_kr_holiday_today:
                     with SessionLocal() as db:
