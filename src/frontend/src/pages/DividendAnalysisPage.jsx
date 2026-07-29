@@ -18,6 +18,8 @@ const DividendAnalysisPage = () => {
   const [error, setError] = useState(null);
   const [customPrices, setCustomPrices] = useState({});
 
+  const [activeTab, setActiveTab] = useState('배당주');
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -54,6 +56,11 @@ const DividendAnalysisPage = () => {
       [stockId]: val === '' ? 0 : Number(val),
     }));
   };
+
+  const filteredStocks = stocks.filter((stock) => {
+    if (activeTab === '전체 자산') return true;
+    return stock.major_category === activeTab;
+  });
 
   if (loading) {
     return (
@@ -185,10 +192,31 @@ const DividendAnalysisPage = () => {
 
       {/* 3. 하단 종목별 배당 표 (Inline 가상 주가 입력 시뮬레이터) */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-slate-200 flex justify-between items-center">
+        <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
             <h3 className="text-base font-bold text-slate-800">종목별 연간 배당률 & 가상 주가 시뮬레이터</h3>
             <p className="text-xs text-slate-500">가상 주가를 수정하면 즉시 가상 배당률(%)이 실시간으로 재계산됩니다.</p>
+          </div>
+
+          {/* 카테고리 탭 (배당주 / 채권 / 전체 자산) */}
+          <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
+            {[
+              { id: '배당주', label: '배당주' },
+              { id: '채권', label: '채권' },
+              { id: '전체 자산', label: '전체 자산' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`px-3 py-1.5 text-xs font-semibold rounded-md transition-colors ${
+                  activeTab === tab.id
+                    ? 'bg-white text-blue-600 shadow-sm'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -207,8 +235,8 @@ const DividendAnalysisPage = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {stocks.length > 0 ? (
-                stocks.map((stock) => {
+              {filteredStocks.length > 0 ? (
+                filteredStocks.map((stock) => {
                   const symbol = stock.currency === 'USD' ? '$' : '₩';
                   const inputVal = customPrices[stock.id] ?? stock.current_price;
                   const simYield = inputVal > 0 && stock.annual_estimate > 0 
@@ -265,7 +293,7 @@ const DividendAnalysisPage = () => {
               ) : (
                 <tr>
                   <td colSpan="9" className="px-4 py-8 text-center text-slate-400 text-xs">
-                    등록된 자산 정보가 없습니다.
+                    {activeTab} 카테고리에 해당하는 자산 정보가 없습니다.
                   </td>
                 </tr>
               )}

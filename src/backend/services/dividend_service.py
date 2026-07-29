@@ -131,6 +131,8 @@ class DividendService:
                 "id": asset.id,
                 "name": asset.name,
                 "ticker": asset.ticker,
+                "major_category": asset.major_category,
+                "sub_category": asset.sub_category,
                 "currency": currency,
                 "current_price": current_price,
                 "buy_price": buy_price,
