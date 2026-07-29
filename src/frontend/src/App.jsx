@@ -13,6 +13,7 @@ import DbManagementPage from './pages/DbManagementPage';
 import RatioCheckPage from './pages/RatioCheckPage';
 import SnapshotWizardPage from './pages/SnapshotWizardPage';
 import WatchlistSectorPage from './pages/WatchlistSectorPage';
+import DividendAnalysisPage from './pages/DividendAnalysisPage';
 import TitleManager from './components/TitleManager';
 
 function App() {
@@ -32,6 +33,7 @@ function App() {
               <Route path="/market/analysis" element={<MarketAnalysisPage />} />
               <Route path="/market/stock-analysis" element={<StockAnalysisPage />} />
               <Route path="/ratios/check" element={<RatioCheckPage />} />
+              <Route path="/dividend" element={<DividendAnalysisPage />} />
               <Route path="/simulation/asset-allocation" element={<AssetAllocationSimulationPage />} />
               <Route path="/simulation/compound-interest" element={<CompoundInterestPage />} />
               <Route path="/connection" element={<ConnectionPage />} />

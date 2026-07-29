@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart, DollarSign } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -19,6 +19,7 @@ const MENU_ITEMS = [
     ]
   },
   { path: '/ratios/check', label: '비중 점검', icon: PieChart },
+  { path: '/dividend', label: '배당 분석', icon: DollarSign },
   { 
     label: '시뮬레이션', 
     icon: Calculator,
