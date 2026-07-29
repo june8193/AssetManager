@@ -54,52 +54,72 @@ async def test_get_asset_summary_mcp(mock_api_client):
 async def test_get_asset_ratios_mcp(mock_api_client):
     """자산 비중 조회 MCP 도구 결과를 테스트합니다."""
     mock_get, _ = mock_api_client
-    mock_get.return_value = {
-        "total_valuation": 1500000.0,
-        "total_target": 1500000.0,
-        "additional_cash": 0.0,
-        "major_results": [
-            {"category_name": "주식", "valuation": 1000000.0, "percentage": 66.7, "target_percentage": 70.0},
-            {"category_name": "현금", "valuation": 500000.0, "percentage": 33.3, "target_percentage": 30.0}
-        ],
-        "sub_results": []
-    }
+    async def mock_get_side_effect(url, params=None):
+        if url == "/api/ratios/rebalancing":
+            return {
+                "total_valuation": 1500000.0,
+                "total_target": 1500000.0,
+                "additional_cash": 0.0,
+                "major_results": [
+                    {"category_name": "주식", "valuation": 1000000.0, "percentage": 66.7, "target_percentage": 70.0},
+                    {"category_name": "현금", "valuation": 500000.0, "percentage": 33.3, "target_percentage": 30.0}
+                ],
+                "sub_results": []
+            }
+        elif url == "/api/v1/performance/portfolio":
+            return {"sharpe_ratio": 1.25, "sortino_ratio": 1.5, "mdd": -5.2, "max_mdd": -8.5}
+        return {}
+
+    mock_get.side_effect = mock_get_side_effect
     
     result = await get_asset_ratios()
     assert "error" not in result
     assert "major_results" in result
     assert len(result["major_results"]) == 2
-    mock_get.assert_called_once_with("/api/ratios/rebalancing", params={"additional_cash": 0.0})
+    assert result["sharpe_ratio"] == 1.25
+    assert result["sortino_ratio"] == 1.5
+    assert result["mdd"] == -5.2
+
 
 @pytest.mark.asyncio
 async def test_get_portfolio_status_mcp(mock_api_client):
     """포트폴리오 상태 조회 MCP 도구 결과를 테스트합니다."""
     mock_get, _ = mock_api_client
-    mock_get.return_value = {
-        "total_valuation_krw": 1500000.0,
-        "cash_balances": {"KRW": 500000.0},
-        "exchange_rate": 1300.0,
-        "holdings": [
-            {
-                "ticker": "005930",
-                "name": "삼성전자",
-                "major_category": "주식",
-                "sub_category": "국내주식",
-                "country": "KR",
-                "quantity": 10.0,
-                "current_price": 70000.0,
-                "valuation": 700000.0,
-                "valuation_krw": 700000.0
+    async def mock_get_side_effect(url, params=None):
+        if url == "/api/portfolio/status":
+            return {
+                "total_valuation_krw": 1500000.0,
+                "cash_balances": {"KRW": 500000.0},
+                "exchange_rate": 1300.0,
+                "holdings": [
+                    {
+                        "ticker": "005930",
+                        "name": "삼성전자",
+                        "major_category": "주식",
+                        "sub_category": "국내주식",
+                        "country": "KR",
+                        "quantity": 10.0,
+                        "current_price": 70000.0,
+                        "valuation": 700000.0,
+                        "valuation_krw": 700000.0
+                    }
+                ]
             }
-        ]
-    }
+        elif url == "/api/v1/performance/portfolio":
+            return {"sharpe_ratio": 1.25, "sortino_ratio": 1.5, "mdd": -5.2, "max_mdd": -8.5}
+        return {}
+
+    mock_get.side_effect = mock_get_side_effect
     
     result = await get_portfolio_status()
     assert "error" not in result
     assert "cash_balances" in result
     assert "holdings" in result
     assert result["cash_balances"]["KRW"] == 500000.0
-    mock_get.assert_called_once_with("/api/portfolio/status", params={})
+    assert result["sharpe_ratio"] == 1.25
+    assert result["sortino_ratio"] == 1.5
+    assert result["mdd"] == -5.2
+
 
 @pytest.mark.asyncio
 async def test_get_yearly_stats_mcp(mock_api_client):

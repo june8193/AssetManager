@@ -20,6 +20,7 @@ const MENU_ITEMS = [
   },
   { path: '/ratios/check', label: '비중 점검', icon: PieChart },
   { path: '/dividend', label: '배당 분석', icon: DollarSign },
+  { path: '/performance', label: '성과 분석', icon: Activity },
   { 
     label: '시뮬레이션', 
     icon: Calculator,

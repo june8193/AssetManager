@@ -321,3 +321,19 @@ class CustomSectorStock(Base):
     __table_args__ = (
         UniqueConstraint('sector_id', 'stock_code', name='_sector_stock_uc'),
     )
+
+
+class SystemSetting(Base):
+    """시스템 기본 설정 및 무위험 수익률 등을 저장하는 키-값 형태의 모델입니다.
+    
+    Attributes:
+        key (str): 설정 키 (PK, 예: 'risk_free_rate')
+        value (str): 설정 값 (예: '3.5')
+        updated_at (datetime): 수정 일시
+    """
+    __tablename__ = "system_settings"
+
+    key = Column(String(50), primary_key=True)
+    value = Column(String(255), nullable=False)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
+

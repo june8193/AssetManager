@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .database import engine, Base
-from .routers import watchlist, stocks, exchange, dashboard, db_manage, connection, ratios, benchmark, sector, market, simulation, portfolio, kiwoom, system, dividend
+from .routers import watchlist, stocks, exchange, dashboard, db_manage, connection, ratios, benchmark, sector, market, simulation, portfolio, kiwoom, system, dividend, performance
 import os
 import sys
 import asyncio
@@ -76,6 +76,7 @@ app.include_router(portfolio.router)
 app.include_router(kiwoom.router)
 app.include_router(system.router)
 app.include_router(dividend.router)
+app.include_router(performance.router)
 
 if __name__ == "__main__":
     import uvicorn
