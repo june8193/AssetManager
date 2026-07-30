@@ -115,8 +115,9 @@ class TransactionSchema(BaseModel):
     id: Optional[int] = None
     account_id: int
     asset_id: int
+    target_asset_id: Optional[int] = None
     transaction_date: date
-    type: Literal["INITIAL_BALANCE", "DEPOSIT", "WITHDRAW", "BUY", "SELL", "INTEREST", "TAX", "CASH_ADJUSTMENT"]
+    type: Literal["INITIAL_BALANCE", "DEPOSIT", "WITHDRAW", "BUY", "SELL", "INTEREST", "TAX", "CASH_ADJUSTMENT", "EXCHANGE"]
     quantity: float = 0.0
     price: float = 0.0
     total_amount: float
@@ -125,6 +126,8 @@ class TransactionSchema(BaseModel):
     memo: Optional[str] = None
     asset_name: Optional[str] = None
     asset_ticker: Optional[str] = None
+    target_asset_name: Optional[str] = None
+    target_asset_ticker: Optional[str] = None
     account_display_name: Optional[str] = None
 
     class Config:
@@ -366,6 +369,7 @@ def get_transactions(
     """전체 또는 필터링된 거래 내역을 조회합니다."""
     query = db.query(Transaction).options(
         joinedload(Transaction.asset),
+        joinedload(Transaction.target_asset),
         joinedload(Transaction.account)
     )
     if start_date:
@@ -377,7 +381,9 @@ def get_transactions(
 @router.post("/transactions", response_model=TransactionSchema)
 def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
     """새로운 거래 내역을 생성합니다."""
-    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "account_display_name"})
+    if transaction.type == "EXCHANGE" and not transaction.target_asset_id:
+        raise HTTPException(status_code=422, detail="target_asset_id is required for EXCHANGE transactions")
+    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name"})
     db_transaction = Transaction(**data)
     db.add(db_transaction)
     db.commit()
@@ -390,7 +396,9 @@ def update_transaction(transaction_id: int, transaction: TransactionSchema, db: 
     db_transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not db_transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "account_display_name"})
+    if transaction.type == "EXCHANGE" and not transaction.target_asset_id:
+        raise HTTPException(status_code=422, detail="target_asset_id is required for EXCHANGE transactions")
+    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name"})
     for key, value in data.items():
         setattr(db_transaction, key, value)
     db.commit()

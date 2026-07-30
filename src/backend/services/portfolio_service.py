@@ -43,7 +43,14 @@ async def get_portfolio_status(db: Session, date_str: Optional[str] = None) -> D
             continue
 
         # 예수금 자산 변동 처리 (KRW, USD)
-        if tx.currency in cash_balances:
+        if tx.type == 'EXCHANGE':
+            if asset.ticker in cash_balances:
+                cash_balances[asset.ticker] -= tx.total_amount
+            if tx.target_asset_id:
+                target_asset = asset_map.get(tx.target_asset_id)
+                if target_asset and target_asset.ticker in cash_balances:
+                    cash_balances[target_asset.ticker] += tx.quantity
+        elif tx.currency in cash_balances:
             if tx.type in ['DEPOSIT', 'INTEREST', 'CASH_ADJUSTMENT']:
                 cash_balances[tx.currency] += tx.total_amount
             elif tx.type == 'INITIAL_BALANCE' and asset.ticker in ['KRW', 'USD']:

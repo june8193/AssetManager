@@ -129,7 +129,7 @@ class Asset(Base):
     sub_category = Column(String, nullable=False)   # 중분류 (예: 해외주식, 국내주식, 원화예수금)
     country = Column(String, nullable=False, default="KR") # 국가 (KR, US 등)
 
-    transactions = relationship("Transaction", back_populates="asset")
+    transactions = relationship("Transaction", foreign_keys="[Transaction.asset_id]", back_populates="asset")
 
 # 자산 대분류 및 중분류 유효성 검증 규칙 정의
 VALID_CATEGORIES = {
@@ -185,8 +185,9 @@ class Transaction(Base):
     id = Column(Integer, primary_key=True, index=True)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
     asset_id = Column(Integer, ForeignKey("assets.id"), nullable=False)
+    target_asset_id = Column(Integer, ForeignKey("assets.id"), nullable=True)
     transaction_date = Column(Date, nullable=False)
-    type = Column(String, nullable=False)  # INITIAL_BALANCE, DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, TAX, CASH_ADJUSTMENT
+    type = Column(String, nullable=False)  # INITIAL_BALANCE, DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, TAX, CASH_ADJUSTMENT, EXCHANGE
     quantity = Column(Float, default=0.0)
     price = Column(Float, default=0.0)
     total_amount = Column(Float, nullable=False)
@@ -197,12 +198,15 @@ class Transaction(Base):
     external_id = Column(String, nullable=True, index=True)
 
     account = relationship("Account", back_populates="transactions")
-    asset = relationship("Asset", back_populates="transactions")
+    asset = relationship("Asset", foreign_keys=[asset_id], back_populates="transactions")
+    target_asset = relationship("Asset", foreign_keys=[target_asset_id])
 
     def __init__(self, **kwargs):
         kwargs.pop("account_display_name", None)
         kwargs.pop("asset_name", None)
         kwargs.pop("asset_ticker", None)
+        kwargs.pop("target_asset_name", None)
+        kwargs.pop("target_asset_ticker", None)
         super().__init__(**kwargs)
 
     @property
@@ -228,6 +232,16 @@ class Transaction(Base):
     def asset_ticker(self):
         """거래 대상 자산의 티커(심볼)를 반환합니다."""
         return self.asset.ticker if self.asset else None
+
+    @property
+    def target_asset_name(self):
+        """환전 상대 자산의 이름을 반환합니다."""
+        return self.target_asset.name if self.target_asset else None
+
+    @property
+    def target_asset_ticker(self):
+        """환전 상대 자산의 티커(심볼)를 반환합니다."""
+        return self.target_asset.ticker if self.target_asset else None
 
 class AccountSnapshot(Base):
     """주기적으로 계산된 계좌의 상태를 캐싱하는 모델입니다.
