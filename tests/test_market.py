@@ -3,7 +3,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 from src.backend.main import app
 
 client = TestClient(app)
@@ -181,7 +181,7 @@ def test_check_market_holiday(date_str, country, expected_holiday, expected_desc
     # 주말이 아닌 평일인 경우 키움 API 모킹 (영업일이면 False, 공휴일이면 True)
     # expected_holiday가 True이고 expected_desc가 '주말'이 아닌 경우는 공휴일(True)
     is_holiday_mock = expected_holiday if expected_desc != "주말" else False
-    with patch("src.backend.services.price_service.price_service._query_kiwoom_holiday_api", return_value=is_holiday_mock):
+    with patch("src.backend.routers.market.price_service._query_kiwoom_holiday_api", new_callable=AsyncMock, return_value=is_holiday_mock):
         response = client.get(f"/api/market/holiday?date={date_str}&country={country}")
         assert response.status_code == 200
         
@@ -222,7 +222,7 @@ def test_check_market_holiday_no_date_timezone():
             return base_utc.astimezone(ZoneInfo("Asia/Seoul"))
             
     with patch("src.backend.routers.market.datetime.datetime", MockDatetime), \
-         patch("src.backend.services.price_service.price_service._query_kiwoom_holiday_api", return_value=False):
+         patch("src.backend.services.price_service.price_service._query_kiwoom_holiday_api", new_callable=AsyncMock, return_value=False):
         # US 시간으로 조회 (EST 2026-06-21 18:00 이므로 일요일, 즉 주말)
         response_us = client.get("/api/market/holiday?country=US")
         assert response_us.status_code == 200

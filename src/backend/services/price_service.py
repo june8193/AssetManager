@@ -551,7 +551,8 @@ class PriceService:
             raise RuntimeError(f"키움 API를 통한 휴장일 판단에 실패했습니다. (국가: {country_upper}, 일자: {target_date})")
 
         if is_holiday:
-            return "공휴일"
+            backup_reason = self._get_holiday_reason_backup(target_date, country_upper)
+            return backup_reason or "공휴일"
         else:
             return None
 
