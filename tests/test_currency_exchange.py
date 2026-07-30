@@ -50,12 +50,12 @@ def db_session():
 
 @pytest.fixture
 def client(db_session):
-    """FastAPI TestClient 픽스처 (lifespan="off"로 real DB locking 방지)"""
+    """FastAPI TestClient 픽스처"""
     def _get_db_override():
         return db_session
 
     app.dependency_overrides[get_db] = _get_db_override
-    with TestClient(app, lifespan="off") as c:
+    with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
 
