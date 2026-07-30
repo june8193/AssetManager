@@ -33,6 +33,16 @@ def set_risk_free_rate(payload: RiskFreeRateRequest, db: Session = Depends(get_d
     return {"rate": new_rate}
 
 
+@router.get("/assets/batch")
+def get_assets_batch_performance(
+    period: str = Query("1Y", description="기간 (1M, 3M, 6M, 1Y, YTD, Max)"),
+    db: Session = Depends(get_db),
+):
+    """보유 종목 및 대표 지수의 위험조정 성과 지표(Sharpe, Sortino, MDD)를 일괄 조회합니다."""
+    service = PerformanceService(db)
+    return service.calculate_assets_batch_performance(period=period)
+
+
 @router.get("/asset/{ticker}")
 def get_asset_performance(
     ticker: str,
@@ -52,3 +62,4 @@ def get_portfolio_performance(
     """총 자산(TWR) 기반 포트폴리오 Sharpe, Sortino 및 MDD 성과 지표를 조회합니다."""
     service = PerformanceService(db)
     return service.calculate_portfolio_performance(period=period)
+

@@ -24,8 +24,13 @@ export default function PerformanceAnalysisPage() {
   const [isEditingRate, setIsEditingRate] = useState(false);
   
   const [portfolioPerf, setPortfolioPerf] = useState(null);
+  const [assetPerfs, setAssetPerfs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  // 테이블 정렬 상태
+  const [sortKey, setSortKey] = useState('sharpe_ratio');
+  const [sortOrder, setSortOrder] = useState('desc');
 
   // 모달 상태
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
@@ -70,15 +75,24 @@ export default function PerformanceAnalysisPage() {
     }
   };
 
-  // 성과 데이터 로드
+  // 성과 데이터 로드 (총 자산 + 종목/지수 일괄)
   const fetchPerformanceData = async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/v1/performance/portfolio?period=${selectedPeriod}`);
-      if (!res.ok) throw new Error("성과 데이터를 가져오는 데 실패했습니다.");
-      const data = await res.json();
-      setPortfolioPerf(data);
+      const [portRes, assetRes] = await Promise.all([
+        fetch(`/api/v1/performance/portfolio?period=${selectedPeriod}`),
+        fetch(`/api/v1/performance/assets/batch?period=${selectedPeriod}`)
+      ]);
+
+      if (portRes.ok) {
+        const portData = await portRes.json();
+        setPortfolioPerf(portData);
+      }
+      if (assetRes.ok) {
+        const assetData = await assetRes.json();
+        setAssetPerfs(assetData);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -93,6 +107,33 @@ export default function PerformanceAnalysisPage() {
   useEffect(() => {
     fetchPerformanceData();
   }, [selectedPeriod]);
+
+  // 테이블 정렬 핸들러
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortOrder('desc');
+    }
+  };
+
+  // 정렬된 자산 리스트
+  const sortedAssetPerfs = useMemo(() => {
+    if (!assetPerfs || assetPerfs.length === 0) return [];
+    return [...assetPerfs].sort((a, b) => {
+      let valA = a[sortKey] ?? 0;
+      let valB = b[sortKey] ?? 0;
+
+      if (typeof valA === 'string') {
+        return sortOrder === 'asc' 
+          ? valA.localeCompare(valB) 
+          : valB.localeCompare(valA);
+      }
+      return sortOrder === 'asc' ? valA - valB : valB - valA;
+    });
+  }, [assetPerfs, sortKey, sortOrder]);
+
 
   // 샤프 지수 레벨 평가
   const sharpeEvaluation = useMemo(() => {
@@ -385,6 +426,116 @@ export default function PerformanceAnalysisPage() {
         </div>
       </div>
 
+      {/* 보유 종목 및 벤치마크 지수 위험조정 성과 비교 테이블 */}
+      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
+          <div>
+            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+              <Award className="text-blue-600" size={18} />
+              <span>보유 종목 및 벤치마크 지수 위험조정 성과 비교</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              선택한 기간 동안의 연율화 샤프/소티노 지수, MDD 및 연율 수익률을 한눈에 비교 분석합니다.
+            </p>
+          </div>
+          <div className="text-xs text-slate-400">
+            총 <span className="font-bold text-slate-700">{sortedAssetPerfs.length}</span>개 자산
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-xs text-slate-600">
+            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
+              <tr>
+                <th className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('name')}>
+                  <div className="flex items-center gap-1">
+                    자산명 (티커)
+                    {sortKey === 'name' && (sortOrder === 'asc' ? '▲' : '▼')}
+                  </div>
+                </th>
+                <th className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('asset_type')}>
+                  <div className="flex items-center gap-1">
+                    구분
+                    {sortKey === 'asset_type' && (sortOrder === 'asc' ? '▲' : '▼')}
+                  </div>
+                </th>
+                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('sharpe_ratio')}>
+                  <div className="flex items-center justify-end gap-1">
+                    샤프 지수 (Sharpe)
+                    {sortKey === 'sharpe_ratio' && (sortOrder === 'asc' ? '▲' : '▼')}
+                  </div>
+                </th>
+                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('sortino_ratio')}>
+                  <div className="flex items-center justify-end gap-1">
+                    소티노 지수 (Sortino)
+                    {sortKey === 'sortino_ratio' && (sortOrder === 'asc' ? '▲' : '▼')}
+                  </div>
+                </th>
+                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('mdd')}>
+                  <div className="flex items-center justify-end gap-1">
+                    최대 낙폭 (MDD)
+                    {sortKey === 'mdd' && (sortOrder === 'asc' ? '▲' : '▼')}
+                  </div>
+                </th>
+                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('annualized_return')}>
+                  <div className="flex items-center justify-end gap-1">
+                    연율화 수익률
+                    {sortKey === 'annualized_return' && (sortOrder === 'asc' ? '▲' : '▼')}
+                  </div>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                    종목별 위험조정 지표를 산출 중입니다...
+                  </td>
+                </tr>
+              ) : sortedAssetPerfs.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                    조회된 지수 및 종목 성과 데이터가 없습니다.
+                  </td>
+                </tr>
+              ) : (
+                sortedAssetPerfs.map((item) => (
+                  <tr key={item.ticker} className="hover:bg-slate-50/80 transition-colors">
+                    <td className="py-3 px-4 font-medium text-slate-800">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-semibold">{item.name}</span>
+                        <span className="text-[10px] text-slate-400 font-mono">({item.ticker})</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md ${
+                        item.asset_type === 'benchmark'
+                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
+                          : 'bg-blue-50 text-blue-700 border border-blue-200'
+                      }`}>
+                        {item.asset_type === 'benchmark' ? '벤치마크' : '보유종목'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
+                      {item.sharpe_ratio != null ? item.sharpe_ratio.toFixed(2) : '0.00'}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
+                      {item.sortino_ratio != null ? item.sortino_ratio.toFixed(2) : '0.00'}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-semibold text-rose-600">
+                      {item.mdd != null ? `${item.mdd.toFixed(2)}%` : '0.00%'}
+                    </td>
+                    <td className="py-3 px-4 text-right font-mono font-semibold text-slate-700">
+                      {item.annualized_return != null ? `${item.annualized_return.toFixed(2)}%` : '0.00%'}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* 안내 모달 */}
       <PerformanceInfoModal 
         isOpen={isInfoModalOpen} 
@@ -392,5 +543,6 @@ export default function PerformanceAnalysisPage() {
       />
 
     </div>
+
   );
 }

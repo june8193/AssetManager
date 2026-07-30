@@ -106,3 +106,40 @@ def test_portfolio_twr_irregular_snapshots(db_session):
     assert "max_mdd" in res
     assert "drawdown_series" in res
     assert len(res["drawdown_series"]) > 0
+
+
+def test_assets_batch_performance_calculation(db_session):
+    """보유 종목 및 대표 지수의 일괄 위험조정 성과 지표 계산 서비스 테스트"""
+    service = PerformanceService(db_session)
+    service.set_risk_free_rate(3.5)
+
+    base_date = date(2026, 1, 1)
+    prices = [100.0, 102.0, 105.0, 103.0, 108.0, 106.0, 110.0, 107.0, 105.0, 112.0]
+    for i, p in enumerate(prices):
+        db_session.add(HistoricalPrice(ticker="^KS11", price_date=base_date + timedelta(days=i), close_price=p))
+        db_session.add(HistoricalPrice(ticker="005930", price_date=base_date + timedelta(days=i), close_price=p * 500))
+    db_session.commit()
+
+    res = service.calculate_assets_batch_performance(period="Max")
+    assert isinstance(res, list)
+    assert len(res) >= 2
+    tickers = [item["ticker"] for item in res]
+    assert "^KS11" in tickers
+    assert "005930" in tickers
+
+    for item in res:
+        assert "name" in item
+        assert "asset_type" in item  # "benchmark" or "holding"
+        assert "sharpe_ratio" in item
+        assert "sortino_ratio" in item
+        assert "mdd" in item
+        assert "annualized_return" in item
+
+
+def test_assets_batch_performance_api(db_session):
+    """보유 종목 및 대표 지수의 일괄 성과 지표 REST API 테스트"""
+    resp = client.get("/api/v1/performance/assets/batch?period=1Y")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert isinstance(data, list)
+

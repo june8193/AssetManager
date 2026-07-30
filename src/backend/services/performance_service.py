@@ -5,7 +5,7 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from ..models import SystemSetting, HistoricalPrice, AccountSnapshot, Account
+from ..models import SystemSetting, HistoricalPrice, AccountSnapshot, Account, Asset
 
 
 class PerformanceService:
@@ -267,3 +267,48 @@ class PerformanceService:
         res = self._compute_metrics(daily_returns, daily_dates, twr_series, rf_annual)
         res.update({"period": period})
         return res
+
+    def calculate_assets_batch_performance(self, period: str = "1Y") -> List[Dict]:
+        """보유 종목 및 대표 지수의 위험조정 성과 지표 일괄 계산
+
+        Args:
+            period (str): 조회 기간 (1M, 3M, 6M, 1Y, YTD, Max)
+
+        Returns:
+            List[Dict]: 자산별 위험조정 성과 지표 목록
+        """
+        benchmark_map = {
+            "^KS11": "코스피 (KOSPI)",
+            "^KQ11": "코스닥 (KOSDAQ)",
+            "^GSPC": "S&P 500",
+            "^NDX": "NASDAQ 100",
+        }
+
+        hp_tickers = set(
+            row[0] for row in self.db.query(HistoricalPrice.ticker).distinct().all()
+        )
+
+        asset_names = {}
+        for asset in self.db.query(Asset).all():
+            if asset.ticker:
+                asset_names[asset.ticker] = asset.name
+
+        target_tickers = set(benchmark_map.keys()) | hp_tickers
+
+        results = []
+        for ticker in sorted(list(target_tickers)):
+            perf = self.calculate_asset_performance(ticker, period=period)
+            if ticker in benchmark_map:
+                asset_type = "benchmark"
+                name = benchmark_map[ticker]
+            else:
+                asset_type = "holding"
+                name = asset_names.get(ticker, ticker)
+
+            perf["name"] = name
+            perf["asset_type"] = asset_type
+            results.append(perf)
+
+        results.sort(key=lambda x: x.get("sharpe_ratio", 0.0), reverse=True)
+        return results
+
