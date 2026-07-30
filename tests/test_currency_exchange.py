@@ -218,8 +218,8 @@ def test_dashboard_service_handles_currency_exchange(db_session):
     service = DashboardService(db_session)
     holdings = service.get_holdings()
     
-    krw_holding = next(h for h in holdings if h["asset_id"] == krw.id)
-    usd_holding = next(h for h in holdings if h["asset_id"] == usd.id)
+    krw_holding = next(h for h in holdings if h["asset"].id == krw.id)
+    usd_holding = next(h for h in holdings if h["asset"].id == usd.id)
 
     assert krw_holding["quantity"] == 650000.0
     assert usd_holding["quantity"] == 1000.0
