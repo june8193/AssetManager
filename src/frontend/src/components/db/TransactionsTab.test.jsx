@@ -292,4 +292,115 @@ describe('TransactionsTab', () => {
       expect(screen.getByText(/거래 내역을 불러오는데 실패했습니다/)).toBeInTheDocument();
     });
   });
+
+  it('환전(EXCHANGE) 선택 시 도착 자산 및 적용 환율 필드가 표시되고 자동 연동 계산 및 POST 전송이 성공해야 한다', async () => {
+    const customAssets = [
+      { id: 1, ticker: 'KRW', name: '원화예수금', country: 'KR' },
+      { id: 2, ticker: 'USD', name: '달러예수금', country: 'US' }
+    ];
+    let requestBody = null;
+    vi.stubGlobal('fetch', vi.fn((url, options) => {
+      if (url.endsWith('/transactions')) {
+        if (options && options.method === 'POST') {
+          requestBody = JSON.parse(options.body);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 99 }) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(customAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const typeSelect = container.querySelector('select[name="type"]');
+    
+    // 유형에서 환전(EXCHANGE) 선택
+    fireEvent.change(typeSelect, { target: { value: 'EXCHANGE' } });
+
+    // 출발 자산, 도착 자산 선택창 및 적용 환율 라벨 노출 확인
+    expect(screen.getByText('출발 자산')).toBeInTheDocument();
+    expect(screen.getByText('도착 자산')).toBeInTheDocument();
+    expect(screen.getByText('적용 환율')).toBeInTheDocument();
+
+    const targetAssetSelect = container.querySelector('select[name="target_asset_id"]');
+    const quantityInput = container.querySelector('input[name="quantity"]');
+    const exchangeRateInput = container.querySelector('input[name="price"]');
+    const totalInput = container.querySelector('input[name="total_amount"]');
+
+    // 도착 자산을 USD(id: 2)로 설정
+    fireEvent.change(targetAssetSelect, { target: { value: '2' } });
+
+    // 수량 $1,000, 환율 1,350 입력
+    fireEvent.change(quantityInput, { target: { value: '1,000' } });
+    fireEvent.change(exchangeRateInput, { target: { value: '1,350' } });
+
+    // 총 금액 = 1,000 * 1,350 = 1,350,000 자동 계산 검증
+    expect(totalInput.value).toBe('1,350,000');
+
+    // 제출
+    const submitButton = screen.getByText('거래 기록 추가');
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(requestBody).not.toBeNull();
+      expect(requestBody.type).toBe('EXCHANGE');
+      expect(requestBody.asset_id.toString()).toBe('1');
+      expect(requestBody.target_asset_id.toString()).toBe('2');
+      expect(requestBody.quantity).toBe(1000);
+      expect(requestBody.total_amount).toBe(1350000);
+      expect(requestBody.exchange_rate).toBe(1350);
+    });
+  });
+
+  it('거래 목록 테이블에서 환전(EXCHANGE) 거래 항목이 [출발자산 ➔ 도착자산] 형식과 환율로 표시되어야 한다', async () => {
+    const customAssets = [
+      { id: 1, ticker: 'KRW', name: '원화예수금', country: 'KR' },
+      { id: 2, ticker: 'USD', name: '달러예수금', country: 'US' }
+    ];
+    const exchangeTx = [
+      {
+        id: 10,
+        account_id: 1,
+        asset_id: 1,
+        target_asset_id: 2,
+        target_asset_name: '달러예수금',
+        target_asset_ticker: 'USD',
+        transaction_date: '2026-07-30',
+        type: 'EXCHANGE',
+        quantity: 1000,
+        price: 1350,
+        total_amount: 1350000,
+        currency: 'KRW',
+        exchange_rate: 1350
+      }
+    ];
+
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(exchangeTx) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(customAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('KRW ➔ USD')).toBeInTheDocument();
+      expect(screen.getByText('환전')).toBeInTheDocument();
+    });
+  });
 });

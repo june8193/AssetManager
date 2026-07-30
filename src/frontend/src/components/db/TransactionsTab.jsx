@@ -33,6 +33,7 @@ const TransactionsTab = () => {
   const [formData, setFormData] = useState({
     account_id: '',
     asset_id: '',
+    target_asset_id: '',
     transaction_date: new Date().toISOString().split('T')[0],
     type: 'BUY',
     quantity: '0',
@@ -70,18 +71,26 @@ const TransactionsTab = () => {
       // 초기 폼 데이터 설정 및 자산별 기본 제약사항/통화 매핑 자동 적용
       let initialAccountId = formData.account_id;
       let initialAssetId = formData.asset_id;
+      let initialTargetAssetId = formData.target_asset_id;
+
       if (accData.length > 0 && !initialAccountId) {
         initialAccountId = accData[0].id;
       }
       if (assetData.length > 0 && !initialAssetId) {
         initialAssetId = assetData[0].id;
       }
+      if (assetData.length > 1 && !initialTargetAssetId) {
+        const cashAssets = assetData.filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH');
+        const defaultTarget = cashAssets.find(a => a.id.toString() !== initialAssetId.toString()) || assetData[1];
+        initialTargetAssetId = defaultTarget ? defaultTarget.id : '';
+      }
 
       setFormData(prev => {
         const updated = {
           ...prev,
           account_id: initialAccountId,
-          asset_id: initialAssetId
+          asset_id: initialAssetId,
+          target_asset_id: initialTargetAssetId
         };
         const firstAsset = assetData.find(a => a.id.toString() === initialAssetId.toString());
         if (firstAsset) {
@@ -92,12 +101,14 @@ const TransactionsTab = () => {
           updated.currency = newCurrency;
 
           if (firstAsset.ticker === 'USD' || firstAsset.ticker === 'KRW') {
-            if (updated.type !== 'DEPOSIT' && updated.type !== 'WITHDRAW') {
+            if (updated.type !== 'DEPOSIT' && updated.type !== 'WITHDRAW' && updated.type !== 'EXCHANGE') {
               updated.type = 'DEPOSIT';
             }
-            updated.price = '1';
-            const q = parseFloat(updated.quantity.toString().replace(/,/g, '')) || 0;
-            updated.total_amount = q.toString();
+            if (updated.type !== 'EXCHANGE') {
+              updated.price = '1';
+              const q = parseFloat(updated.quantity.toString().replace(/,/g, '')) || 0;
+              updated.total_amount = q.toString();
+            }
           }
         }
         return updated;
@@ -119,7 +130,19 @@ const TransactionsTab = () => {
    */
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    let newFormData = { ...formData };
+    let newFormData = { ...formData, [name]: value };
+
+    if (name === 'type') {
+      if (value === 'EXCHANGE') {
+        const cashAssets = assets.filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH');
+        let targetId = newFormData.target_asset_id;
+        if (!targetId || targetId.toString() === newFormData.asset_id.toString()) {
+          const alternativeTarget = cashAssets.find(a => a.id.toString() !== newFormData.asset_id.toString());
+          targetId = alternativeTarget ? alternativeTarget.id : (cashAssets[0]?.id || '');
+        }
+        newFormData.target_asset_id = targetId;
+      }
+    }
 
     if (name === 'quantity' || name === 'price' || name === 'total_amount') {
       // 쉼표 제거
@@ -132,7 +155,7 @@ const TransactionsTab = () => {
         return; // 올바르지 않은 입력 무시
       }
 
-      // 수량이나 단가가 변경되면 총 금액 자동 계산
+      // 수량이나 단가/환율 변경 시 계산
       if (name === 'quantity' || name === 'price') {
         const q = name === 'quantity' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
         const p = name === 'price' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.price.toString().replace(/,/g, '')) || 0;
@@ -151,16 +174,16 @@ const TransactionsTab = () => {
 
         // 예수금 자산 선택 시
         if (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') {
-          if (newFormData.type !== 'DEPOSIT' && newFormData.type !== 'WITHDRAW') {
+          if (newFormData.type !== 'DEPOSIT' && newFormData.type !== 'WITHDRAW' && newFormData.type !== 'EXCHANGE') {
             newFormData.type = 'DEPOSIT';
           }
-          newFormData.price = '1';
-          const q = parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
-          newFormData.total_amount = q.toString();
+          if (newFormData.type !== 'EXCHANGE') {
+            newFormData.price = '1';
+            const q = parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
+            newFormData.total_amount = q.toString();
+          }
         }
       }
-    } else {
-      newFormData[name] = value;
     }
 
     setFormData(newFormData);
@@ -174,12 +197,17 @@ const TransactionsTab = () => {
     const url = editingId ? `${DB_API_BASE}/transactions/${editingId}` : `${DB_API_BASE}/transactions`;
     const method = editingId ? 'PUT' : 'POST';
 
+    const isExchange = formData.type === 'EXCHANGE';
+
     const payload = {
       ...formData,
       quantity: parseFloat(formData.quantity.toString().replace(/,/g, '')) || 0,
       price: parseFloat(formData.price.toString().replace(/,/g, '')) || 0,
       total_amount: parseFloat(formData.total_amount.toString().replace(/,/g, '')) || 0,
-      exchange_rate: formData.exchange_rate ? parseFloat(formData.exchange_rate) : null
+      target_asset_id: isExchange && formData.target_asset_id ? parseInt(formData.target_asset_id) : null,
+      exchange_rate: isExchange 
+        ? (parseFloat(formData.price.toString().replace(/,/g, '')) || null) 
+        : (formData.exchange_rate ? parseFloat(formData.exchange_rate) : null)
     };
 
     try {
@@ -199,7 +227,7 @@ const TransactionsTab = () => {
           setFormData(prev => ({
             ...prev,
             quantity: '0',
-            price: isCash ? '1' : '0',
+            price: isCash && prev.type !== 'EXCHANGE' ? '1' : '0',
             total_amount: '0'
           }));
         }
@@ -217,6 +245,7 @@ const TransactionsTab = () => {
     setFormData({
       account_id: tx.account_id,
       asset_id: tx.asset_id,
+      target_asset_id: tx.target_asset_id || '',
       transaction_date: tx.transaction_date,
       type: tx.type,
       quantity: tx.quantity.toString(),
@@ -247,6 +276,8 @@ const TransactionsTab = () => {
     setEditingId(null);
     const defaultAssetId = assets.length > 0 ? assets[0].id : '';
     const defaultAsset = assets.find(a => a.id.toString() === defaultAssetId.toString());
+    const cashAssets = assets.filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH');
+    const defaultTarget = cashAssets.find(a => a.id.toString() !== defaultAssetId.toString()) || assets[1];
 
     let defaultCurrency = 'KRW';
     let defaultType = 'BUY';
@@ -265,6 +296,7 @@ const TransactionsTab = () => {
     setFormData({
       account_id: accounts.length > 0 ? accounts[0].id : '',
       asset_id: defaultAssetId,
+      target_asset_id: defaultTarget ? defaultTarget.id : '',
       transaction_date: new Date().toISOString().split('T')[0],
       type: defaultType,
       quantity: '0',
@@ -285,6 +317,7 @@ const TransactionsTab = () => {
   // 현재 선택된 자산 및 예수금 여부 판단
   const selectedAsset = assets.find(a => a.id.toString() === formData.asset_id.toString());
   const isCashAsset = selectedAsset ? (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') : false;
+  const isExchangeForm = formData.type === 'EXCHANGE';
 
   return (
     <div className="p-6">
@@ -353,7 +386,9 @@ const TransactionsTab = () => {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">자산</label>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              {isExchangeForm ? '출발 자산' : '자산'}
+            </label>
             <select
               name="asset_id"
               value={formData.asset_id}
@@ -379,7 +414,8 @@ const TransactionsTab = () => {
                 <>
                   <option value="DEPOSIT">입금 (DEPOSIT)</option>
                   <option value="WITHDRAW">출금 (WITHDRAW)</option>
-                  {editingId && !['DEPOSIT', 'WITHDRAW'].includes(formData.type) && (
+                  <option value="EXCHANGE">환전 (EXCHANGE)</option>
+                  {editingId && !['DEPOSIT', 'WITHDRAW', 'EXCHANGE'].includes(formData.type) && (
                     <option value={formData.type}>{formData.type}</option>
                   )}
                 </>
@@ -393,10 +429,31 @@ const TransactionsTab = () => {
                   <option value="INTEREST">이자 (INTEREST)</option>
                   <option value="TAX">세금 (TAX)</option>
                   <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
+                  <option value="EXCHANGE">환전 (EXCHANGE)</option>
                 </>
               )}
             </select>
           </div>
+
+          {isExchangeForm && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">도착 자산</label>
+              <select
+                name="target_asset_id"
+                value={formData.target_asset_id}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                required
+              >
+                {assets
+                  .filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH')
+                  .map(asset => (
+                    <option key={asset.id} value={asset.id}>{asset.ticker} ({asset.name})</option>
+                  ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">수량</label>
             <input
@@ -409,15 +466,17 @@ const TransactionsTab = () => {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">단가</label>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              {isExchangeForm ? '적용 환율' : '단가'}
+            </label>
             <input
               type="text"
               name="price"
               value={formatInputNumber(formData.price)}
               onChange={handleInputChange}
-              readOnly={isCashAsset}
+              readOnly={isCashAsset && !isExchangeForm}
               className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                isCashAsset ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                isCashAsset && !isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
               }`}
               required
             />
@@ -480,69 +539,90 @@ const TransactionsTab = () => {
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">자산명</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider">유형</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">수량</th>
-              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">단가</th>
+              <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">단가/환율</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">총액</th>
               <th className="px-4 py-3 text-xs font-semibold text-slate-600 uppercase tracking-wider text-right">관리</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {filteredTransactions.map((tx) => (
-              <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
-                <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{tx.transaction_date}</td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {accounts.find(a => a.id === tx.account_id)?.name || tx.account_id}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-900 font-bold">
-                  {assets.find(a => a.id === tx.asset_id)?.ticker || tx.asset_id}
-                </td>
-                <td className="px-4 py-3 text-sm text-slate-700">
-                  {assets.find(a => a.id === tx.asset_id)?.name || ''}
-                </td>
-                <td className="px-4 py-3 text-sm">
-                  <div className="flex items-center gap-1.5">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      ['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type) ? 'bg-blue-50 text-blue-600' : 
-                      ['SELL', 'WITHDRAW'].includes(tx.type) ? 'bg-red-50 text-red-600' :
-                      'bg-emerald-50 text-emerald-600'
-                    }`}>
-                      {tx.type}
-                    </span>
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
-                      tx.source === 'AUTO_KIWOOM' 
-                        ? 'bg-emerald-100 text-emerald-700' 
-                        : 'bg-indigo-100 text-indigo-700'
-                    }`}>
-                      {tx.source === 'AUTO_KIWOOM' ? '키움자동' : '수동입력'}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-sm text-right font-mono">{maskValue(tx.quantity.toLocaleString())}</td>
-                <td className="px-4 py-3 text-sm text-right font-mono text-slate-500">
-                  {maskValue(tx.price.toLocaleString())} {tx.currency}
-                </td>
-                <td className="px-4 py-3 text-sm text-right font-bold font-mono">
-                  {maskValue(tx.total_amount.toLocaleString())} {tx.currency}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => handleEdit(tx)}
-                      className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
-                      title="수정"
-                    >
-                      <Edit2 size={16} />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(tx.id)}
-                      className="p-1 text-slate-400 hover:text-red-600 transition-colors"
-                      title="삭제"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {filteredTransactions.map((tx) => {
+              const isExchangeTx = tx.type === 'EXCHANGE';
+              const srcAsset = assets.find(a => a.id === tx.asset_id);
+              const targetAsset = tx.target_asset_name 
+                ? { name: tx.target_asset_name, ticker: tx.target_asset_ticker }
+                : assets.find(a => a.id === tx.target_asset_id);
+
+              const tickerDisplay = isExchangeTx
+                ? `${srcAsset?.ticker || tx.asset_id} ➔ ${targetAsset?.ticker || tx.target_asset_id || '?'}`
+                : (srcAsset?.ticker || tx.asset_id);
+
+              const nameDisplay = isExchangeTx
+                ? `${srcAsset?.name || ''} ➔ ${targetAsset?.name || ''}`
+                : (srcAsset?.name || '');
+
+              const typeBadgeText = isExchangeTx ? '환전' : tx.type;
+
+              return (
+                <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{tx.transaction_date}</td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {accounts.find(a => a.id === tx.account_id)?.name || tx.account_id}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-900 font-bold">
+                    {tickerDisplay}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-slate-700">
+                    {nameDisplay}
+                  </td>
+                  <td className="px-4 py-3 text-sm">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        isExchangeTx ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
+                        ['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type) ? 'bg-blue-50 text-blue-600' : 
+                        ['SELL', 'WITHDRAW'].includes(tx.type) ? 'bg-red-50 text-red-600' :
+                        'bg-emerald-50 text-emerald-600'
+                      }`}>
+                        {typeBadgeText}
+                      </span>
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        tx.source === 'AUTO_KIWOOM' 
+                          ? 'bg-emerald-100 text-emerald-700' 
+                          : 'bg-indigo-100 text-indigo-700'
+                      }`}>
+                        {tx.source === 'AUTO_KIWOOM' ? '키움자동' : '수동입력'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right font-mono">{maskValue(tx.quantity.toLocaleString())}</td>
+                  <td className="px-4 py-3 text-sm text-right font-mono text-slate-500">
+                    {isExchangeTx 
+                      ? `@ ${maskValue((tx.exchange_rate || tx.price).toLocaleString())}`
+                      : `${maskValue(tx.price.toLocaleString())} ${tx.currency}`}
+                  </td>
+                  <td className="px-4 py-3 text-sm text-right font-bold font-mono">
+                    {maskValue(tx.total_amount.toLocaleString())} {tx.currency}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => handleEdit(tx)}
+                        className="p-1 text-slate-400 hover:text-blue-600 transition-colors"
+                        title="수정"
+                      >
+                        <Edit2 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(tx.id)}
+                        className="p-1 text-slate-400 hover:text-red-600 transition-colors"
+                        title="삭제"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
         {filteredTransactions.length === 0 && (
