@@ -224,7 +224,7 @@ def test_dashboard_service_handles_currency_exchange(db_session):
     assert krw_holding["quantity"] == 650000.0
     assert usd_holding["quantity"] == 1000.0
 
-    theoretical = service.calculate_theoretical_cash(target_date=datetime.date(2026, 5, 2))
+    theoretical = service.calculate_theoretical_cash(account_id=account.id, snapshot_date=datetime.date(2026, 5, 2))
     assert theoretical["KRW"] == 650000.0
     assert theoretical["USD"] == 1000.0
 
