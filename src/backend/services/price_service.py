@@ -798,10 +798,18 @@ class PriceService:
             print(f"[ERROR] 환율 조회 및 저장 중 오류 발생: {e}")
         return None
 
+    EXCHANGE_RATE_FETCH_START_HOUR = 9
+    EXCHANGE_RATE_FETCH_START_MINUTE = 30
+
     async def update_all_market_prices(self, is_manual: bool = False):
-        """1시간마다 지수, 보유 자산, 관심 종목의 시세를 외부 API로부터 조회하여 DB를 업데이트합니다."""
+        """1시간마다 지수, 보유 자산, 관심 종목의 시세를 외부 API로부터 조회하여 DB를 업데이트합니다.
+
+        Args:
+            is_manual (bool): 수동 시세 새로고침 여부 (True일 경우 환율 자동 수집 제외)
+        """
         from src.backend.database import SessionLocal
         from src.backend.models import Asset, Watchlist, HistoricalPrice
+        from src.backend.tasks import task_manager_instance
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
         import pytz
 
@@ -822,7 +830,13 @@ class PriceService:
 
         # 한국시간 기준 오전 9시 30분 이후이며 수동 갱신이 아니고, 오늘이 한국 휴장일이 아닐 때 당일 환율 정보가 없으면 자동 수집
         try:
-            if not is_manual and (now_kst.hour > 9 or (now_kst.hour == 9 and now_kst.minute >= 30)):
+            is_after_fetch_time = (
+                now_kst.hour > self.EXCHANGE_RATE_FETCH_START_HOUR or (
+                    now_kst.hour == self.EXCHANGE_RATE_FETCH_START_HOUR and 
+                    now_kst.minute >= self.EXCHANGE_RATE_FETCH_START_MINUTE
+                )
+            )
+            if not is_manual and is_after_fetch_time:
                 is_kr_holiday_today = await self.is_market_holiday(today_kr, "KR")
                 if not is_kr_holiday_today:
                     with SessionLocal() as db:
@@ -833,16 +847,14 @@ class PriceService:
                         ).first()
                         if not exists:
                             print(f"[INFO] {today_kr} 자 환율 정보 없음. 환율 업데이트 시도...")
-                            from src.backend.tasks import task_manager_instance
                             rate_res = await self.fetch_and_save_exchange_rate(db, today_kr)
                             if rate_res is not None and rate_res > 0.0:
                                 task_manager_instance.update_task_success("exchange_rate_update")
                             else:
-                                err_msg = f"{today_kr} 자 환율 자동 수집 실패 (오전 9시 30분 시도)"
+                                err_msg = f"{today_kr} 자 키움 API 환율 자동 수집 실패 (오전 9시 30분 시도)"
                                 task_manager_instance.update_task_error("exchange_rate_update", err_msg)
         except Exception as e:
             print(f"[ERROR] 백그라운드 환율 업데이트 중 오류: {e}")
-            from src.backend.tasks import task_manager_instance
             task_manager_instance.update_task_error("exchange_rate_update", str(e))
 
         # 둘 다 휴장일이면 전체 건너뜀

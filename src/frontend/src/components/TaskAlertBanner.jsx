@@ -41,6 +41,9 @@ const TaskAlertBanner = () => {
     };
 
     fetchTaskStatus();
+    // 30초마다 백그라운드 태스크 상태 주기적 폴링 (Polling)
+    const intervalId = setInterval(fetchTaskStatus, 30000);
+    return () => clearInterval(intervalId);
   }, []);
 
   if (dismissed || failedTasks.length === 0) {

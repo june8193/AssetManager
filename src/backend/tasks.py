@@ -79,9 +79,6 @@ class BackgroundTaskManager:
             self._task_status[task_name]["last_error"] = error_msg
             self._task_status[task_name]["last_error_time"] = now_str
 
-    _update_task_success = update_task_success
-    _update_task_error = update_task_error
-
     def start(self):
         """백그라운드 태스크 루프를 가동합니다.
 
@@ -118,14 +115,14 @@ class BackgroundTaskManager:
             try:
                 logger.info("백그라운드 시세 업데이트 태스크 시작")
                 await price_service.update_all_market_prices()
-                self._update_task_success("price_update")
+                self.update_task_success("price_update")
                 logger.info("백그라운드 시세 업데이트 완료")
             except asyncio.CancelledError:
                 logger.info("시세 업데이트 루프가 취소되었습니다.")
                 break
             except Exception as e:
                 error_msg = str(e)
-                self._update_task_error("price_update", error_msg)
+                self.update_task_error("price_update", error_msg)
                 logger.error(f"백그라운드 시세 업데이트 중 예외 발생: {e}")
 
             # 1시간(3600초) 대기
@@ -138,13 +135,13 @@ class BackgroundTaskManager:
                 # 1. DB 자동 백업 수행
                 logger.info("데이터베이스 자동 백업 조건 확인 중...")
                 await asyncio.to_thread(BackupService().check_and_backup)
-                self._update_task_success("db_backup")
+                self.update_task_success("db_backup")
             except asyncio.CancelledError:
                 logger.info("유지보수 루프가 취소되었습니다.")
                 break
             except Exception as e:
                 error_msg = str(e)
-                self._update_task_error("db_backup", error_msg)
+                self.update_task_error("db_backup", error_msg)
                 logger.error(f"유지보수 루프 - DB 백업 중 예외 발생: {e}")
 
             try:
@@ -158,9 +155,9 @@ class BackgroundTaskManager:
                     if last_sync != datetime.date.today():
                         logger.info("오늘 수행된 주식 종목 동기화 기록이 없어 동기화를 실행합니다.")
                         await stock_service.sync_all_stocks(db)
+                        self.update_task_success("stock_sync")
                     else:
                         logger.info("오늘 이미 주식 종목 동기화가 완료되었습니다. 작업을 건너뜁니다.")
-                    self._update_task_success("stock_sync")
                 finally:
                     db.close()
             except asyncio.CancelledError:
