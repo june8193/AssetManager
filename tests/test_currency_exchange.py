@@ -11,16 +11,13 @@ from src.backend.database import get_db
 
 @pytest.fixture
 def db_session():
-    """테스트용 인메모리 SQLite DB 세션을 생성합니다."""
-    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
-    tables = [
-        User.__table__,
-        Account.__table__,
-        Asset.__table__,
-        Transaction.__table__,
-        ExchangeRate.__table__
-    ]
-    Base.metadata.create_all(bind=engine, tables=tables)
+    """테스트용 공유 인메모리 SQLite DB 세션을 생성합니다."""
+    engine = create_engine(
+        "sqlite:///file:memdb_exchange?mode=memory&cache=shared",
+        connect_args={"check_same_thread": False, "uri": True},
+        poolclass=StaticPool
+    )
+    Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestingSessionLocal()
 
@@ -45,7 +42,7 @@ def db_session():
         yield db
     finally:
         db.close()
-        Base.metadata.drop_all(bind=engine, tables=tables)
+        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
