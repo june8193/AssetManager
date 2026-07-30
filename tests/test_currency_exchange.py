@@ -9,16 +9,10 @@ from src.backend.services.portfolio_service import get_portfolio_status
 from src.backend.main import app
 from src.backend.database import get_db
 
-from sqlalchemy.pool import StaticPool
-
 @pytest.fixture
 def db_session():
-    """인메모리 SQLite DB 테스트 세션을 생성합니다."""
-    engine = create_engine(
-        "sqlite:///:memory:",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool
-    )
+    """테스트용 인메모리 SQLite DB 세션을 생성합니다."""
+    engine = create_engine("sqlite://", connect_args={"check_same_thread": False})
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestingSessionLocal()
@@ -40,18 +34,21 @@ def db_session():
     db.add(ex_rate)
     db.commit()
 
-    yield db
-    db.close()
+    try:
+        yield db
+    finally:
+        db.close()
+        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture
 def client(db_session):
-    """FastAPI TestClient 픽스처"""
+    """FastAPI TestClient 픽스처 (lifespan="off"로 real DB locking 방지)"""
     def _get_db_override():
         return db_session
 
     app.dependency_overrides[get_db] = _get_db_override
-    with TestClient(app) as c:
+    with TestClient(app, lifespan="off") as c:
         yield c
     app.dependency_overrides.clear()
 
