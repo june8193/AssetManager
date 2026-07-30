@@ -216,7 +216,7 @@ def test_dashboard_service_handles_currency_exchange(db_session):
     db_session.commit()
 
     service = DashboardService(db_session)
-    holdings = service.get_holdings(target_date=datetime.date(2026, 5, 2))
+    holdings = service.get_holdings()
     
     krw_holding = next(h for h in holdings if h["asset_id"] == krw.id)
     usd_holding = next(h for h in holdings if h["asset_id"] == usd.id)
