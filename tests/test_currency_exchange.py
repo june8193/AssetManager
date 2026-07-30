@@ -9,10 +9,16 @@ from src.backend.services.portfolio_service import get_portfolio_status
 from src.backend.main import app
 from src.backend.database import get_db
 
+from sqlalchemy.pool import StaticPool
+
 @pytest.fixture
 def db_session():
     """인메모리 SQLite DB 테스트 세션을 생성합니다."""
-    engine = create_engine("sqlite:///:memory:")
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool
+    )
     Base.metadata.create_all(bind=engine)
     TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
     db = TestingSessionLocal()
