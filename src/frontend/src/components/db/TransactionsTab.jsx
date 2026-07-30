@@ -481,13 +481,22 @@ const TransactionsTab = () => {
                   {assets.find(a => a.id === tx.asset_id)?.name || ''}
                 </td>
                 <td className="px-4 py-3 text-sm">
-                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                    ['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type) ? 'bg-blue-50 text-blue-600' : 
-                    ['SELL', 'WITHDRAW'].includes(tx.type) ? 'bg-red-50 text-red-600' :
-                    'bg-emerald-50 text-emerald-600'
-                  }`}>
-                    {tx.type}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                      ['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type) ? 'bg-blue-50 text-blue-600' : 
+                      ['SELL', 'WITHDRAW'].includes(tx.type) ? 'bg-red-50 text-red-600' :
+                      'bg-emerald-50 text-emerald-600'
+                    }`}>
+                      {tx.type}
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      tx.source === 'AUTO_KIWOOM' 
+                        ? 'bg-emerald-100 text-emerald-700' 
+                        : 'bg-indigo-100 text-indigo-700'
+                    }`}>
+                      {tx.source === 'AUTO_KIWOOM' ? '키움자동' : '수동입력'}
+                    </span>
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-sm text-right font-mono">{maskValue(tx.quantity.toLocaleString())}</td>
                 <td className="px-4 py-3 text-sm text-right font-mono text-slate-500">

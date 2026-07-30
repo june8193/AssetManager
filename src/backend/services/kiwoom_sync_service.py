@@ -3,6 +3,7 @@
 
 import logging
 import datetime
+import re
 import httpx
 from sqlalchemy.orm import Session
 from ..models import Account, Asset, Transaction
@@ -17,6 +18,19 @@ def _safe_float(val, default: float = 0.0) -> float:
         return float(val)
     except (ValueError, TypeError):
         return default
+
+def normalize_ticker(ticker: str | None) -> str | None:
+    """국내 주식 종목코드에 붙은 'A' 접두사(예: A000660)를 제거하여 정제합니다.
+
+    Args:
+        ticker (str | None): 정제할 티커 종목코드
+
+    Returns:
+        str | None: 정제된 6자리 숫자 종목코드 또는 원본 티커
+    """
+    if not ticker:
+        return ticker
+    return re.sub(r"^A(\d{6})$", r"\1", ticker)
 
 class KiwoomTransactionService:
     """키움증권 계좌의 당일 체결 내역 및 배당금 입금 내역을 DB에 자동 저장하는 서비스 클래스입니다.
@@ -82,6 +96,7 @@ class KiwoomTransactionService:
                     # 당일 동기화 (체결요청 + 당일 배당금)
                     domestic_executions = await self._fetch_domestic_executions(token)
                     for exe in domestic_executions:
+                        ext_id = exe.get("ord_no") or exe.get("cntr_no")
                         raw_transactions.append({
                             "date": datetime.date.today(),
                             "ticker": exe.get("stk_cd"),
@@ -90,6 +105,7 @@ class KiwoomTransactionService:
                             "quantity": _safe_float(exe.get("cntr_qty")),
                             "price": _safe_float(exe.get("cntr_pric")),
                             "currency": "KRW",
+                            "external_id": str(ext_id) if ext_id else None,
                             "memo": f"키움 자동저장 (체결)"
                         })
 
@@ -102,6 +118,7 @@ class KiwoomTransactionService:
                         slby_tp = str(exe.get("slby_tp", ""))
                         is_buy = "매수" in slby_nm or slby_tp == "2"
                         price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
+                        ext_id = exe.get("ord_no") or exe.get("cntr_no")
 
                         raw_transactions.append({
                             "date": datetime.date.today(),
@@ -111,12 +128,14 @@ class KiwoomTransactionService:
                             "quantity": qty,
                             "price": price_val,
                             "currency": "USD",
+                            "external_id": str(ext_id) if ext_id else None,
                             "memo": f"키움 자동저장 (해외체결)"
                         })
 
                     daily_ledger = await self._fetch_comprehensive_ledger(token, today_str, today_str)
                     for tx in daily_ledger:
                         if "배당금" in tx.get("rmrk_nm", ""):
+                            ext_id = tx.get("seq") or tx.get("trde_no")
                             raw_transactions.append({
                                 "date": datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date(),
                                 "ticker": tx.get("stk_cd"),
@@ -125,6 +144,7 @@ class KiwoomTransactionService:
                                 "quantity": _safe_float(tx.get("trde_qty_jwa_cnt")),
                                 "price": _safe_float(tx.get("trde_amt")),
                                 "currency": "KRW",
+                                "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (배당금)"
                             })
                 else:
@@ -132,6 +152,7 @@ class KiwoomTransactionService:
                     for tx in ledger_data:
                         rmrk = tx.get("rmrk_nm", "")
                         stk_cd = tx.get("stk_cd")
+                        ext_id = tx.get("seq") or tx.get("trde_no")
                         
                         if "배당금" in rmrk:
                             raw_transactions.append({
@@ -142,6 +163,7 @@ class KiwoomTransactionService:
                                 "quantity": _safe_float(tx.get("trde_qty_jwa_cnt")),
                                 "price": _safe_float(tx.get("trde_amt")),
                                 "currency": "KRW",
+                                "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (소급 배당금)"
                             })
                         elif any(m in rmrk for m in ["장내매수", "장내매도", "매매", "매수", "매도"]):
@@ -160,6 +182,7 @@ class KiwoomTransactionService:
                                 "quantity": qty,
                                 "price": price,
                                 "currency": "KRW",
+                                "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (소급 매매)"
                             })
 
@@ -175,6 +198,7 @@ class KiwoomTransactionService:
                             slby_tp = str(exe.get("slby_tp", ""))
                             is_buy = "매수" in slby_nm or slby_tp == "2"
                             price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
+                            ext_id = exe.get("ord_no") or exe.get("cntr_no")
 
                             raw_transactions.append({
                                 "date": dt_obj,
@@ -184,13 +208,14 @@ class KiwoomTransactionService:
                                 "quantity": qty,
                                 "price": price_val,
                                 "currency": "USD",
+                                "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (해외체결 소급)"
                             })
 
                 # DB 적재 및 검증 처리
                 success_count = 0
                 for tx_data in raw_transactions:
-                    ticker = tx_data["ticker"]
+                    ticker = normalize_ticker(tx_data["ticker"])
                     if not ticker:
                         continue
 
@@ -214,21 +239,64 @@ class KiwoomTransactionService:
                         tx_data["currency"] = "KRW"
 
                     total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
-                    
-                    exists = db.query(Transaction).filter(
+                    ext_id = tx_data.get("external_id")
+
+                    # 1) 동일 체결번호(external_id)가 이미 DB에 존재하는 경우 -> 100% 중복 스킵
+                    if ext_id:
+                        exists_by_ext_id = db.query(Transaction).filter(
+                            Transaction.account_id == account.id,
+                            Transaction.asset_id == asset.id,
+                            Transaction.external_id == ext_id
+                        ).first()
+                        if exists_by_ext_id:
+                            logger.info(f"이미 존재(체결번호 중복)하여 저장 스킵: {asset.name} ({ext_id})")
+                            continue
+
+                    # 2) 수동 입력 거래중 1:1 매칭 가능한 건(external_id가 NULL인 MANUAL 거래) 찾기
+                    manual_tx = db.query(Transaction).filter(
                         Transaction.account_id == account.id,
                         Transaction.asset_id == asset.id,
                         Transaction.transaction_date == tx_data["date"],
                         Transaction.type == tx_data["type"],
                         Transaction.quantity == tx_data["quantity"],
                         Transaction.price == tx_data["price"],
-                        Transaction.total_amount == total_amt
+                        Transaction.total_amount == total_amt,
+                        Transaction.source == "MANUAL",
+                        Transaction.external_id.is_(None)
                     ).first()
 
-                    if exists:
-                        logger.info(f"이미 존재하는 거래내역으로 저장 스킵: {asset.name} ({tx_data['date']})")
+                    if manual_tx:
+                        manual_tx.external_id = ext_id
+                        manual_tx.source = "AUTO_KIWOOM"
+                        success_count += 1
+                        synced_list.append({
+                            "type": tx_data["type"],
+                            "asset_name": asset.name,
+                            "quantity": tx_data["quantity"],
+                            "price": tx_data["price"],
+                            "total_amount": total_amt,
+                            "currency": tx_data["currency"],
+                            "is_manual_matched": True
+                        })
+                        logger.info(f"기존 수동 거래와 키움 체결 매칭 완료: {asset.name} ({ext_id})")
                         continue
 
+                    # 3) external_id도 없고 수동 거래 매칭 대상도 없는 경우: 단순 중복 체크 (external_id 없는 레코드 중복 방지)
+                    if not ext_id:
+                        exists_legacy = db.query(Transaction).filter(
+                            Transaction.account_id == account.id,
+                            Transaction.asset_id == asset.id,
+                            Transaction.transaction_date == tx_data["date"],
+                            Transaction.type == tx_data["type"],
+                            Transaction.quantity == tx_data["quantity"],
+                            Transaction.price == tx_data["price"],
+                            Transaction.total_amount == total_amt
+                        ).first()
+                        if exists_legacy:
+                            logger.info(f"이미 존재하는 거래내역으로 저장 스킵: {asset.name} ({tx_data['date']})")
+                            continue
+
+                    # 4) 신규 거래 적재(Insert)
                     new_tx = Transaction(
                         account_id=account.id,
                         asset_id=asset.id,
@@ -238,7 +306,9 @@ class KiwoomTransactionService:
                         price=tx_data["price"],
                         total_amount=total_amt,
                         currency=tx_data["currency"],
-                        memo=tx_data["memo"]
+                        memo=tx_data["memo"],
+                        source="AUTO_KIWOOM",
+                        external_id=ext_id
                     )
                     db.add(new_tx)
                     success_count += 1
@@ -248,7 +318,8 @@ class KiwoomTransactionService:
                         "quantity": tx_data["quantity"],
                         "price": tx_data["price"],
                         "total_amount": total_amt,
-                        "currency": tx_data["currency"]
+                        "currency": tx_data["currency"],
+                        "is_manual_matched": False
                     })
 
                 if success_count > 0:

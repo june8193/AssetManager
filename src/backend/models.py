@@ -193,6 +193,8 @@ class Transaction(Base):
     currency = Column(String, nullable=False)
     exchange_rate = Column(Float, nullable=True)
     memo = Column(String, nullable=True)
+    source = Column(String, nullable=False, default="MANUAL")
+    external_id = Column(String, nullable=True, index=True)
 
     account = relationship("Account", back_populates="transactions")
     asset = relationship("Asset", back_populates="transactions")

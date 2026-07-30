@@ -234,3 +234,183 @@ async def test_sync_transactions_account_failure_reporting(mock_get_token, setup
     assert result["failed_accounts"][0]["account_name"] == "5526-9093"
     assert "인증 토큰 오류 발생" in result["failed_accounts"][0]["error"]
 
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_with_a_prefix_ticker(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """국내 주식 종목코드에 'A' 접두사(예: A005930)가 포함된 경우 DB의 등록 자산(005930)과 매칭되어 저장되는지 테스트합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="token_test")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "ka10076":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "cntr": [
+                    {
+                        "stk_cd": "A005930",
+                        "stk_nm": "삼성전자",
+                        "io_tp_nm": "매수",
+                        "cntr_qty": "5",
+                        "cntr_pric": "70000"
+                    }
+                ]
+            }
+        elif api_id == "ust21510":
+            mock_response.json = lambda: {"return_code": 0, "cntr": []}
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": []}
+
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=1)
+
+    assert result["status"] == "success"
+    assert result["success_count"] == 2
+    assert result["pending_count"] == 0
+    assert len(result["unregistered_assets"]) == 0
+    assert result["synced_transactions"][0]["asset_name"] == "삼성전자"
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_binding_manual_transaction(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """기존 수동 등록 거래(external_id=None)가 있을 때 키움 체결 데이터 수신 시 1:1 매칭(바인딩)되는지 테스트합니다."""
+    import datetime
+
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="token_test")
+
+    acc1 = setup_test_data["accounts"]["5526-9093"]
+    samsung = setup_test_data["assets"]["005930"]
+
+    # 수동 거래 사전 생성
+    manual_tx = Transaction(
+        account_id=acc1.id,
+        asset_id=samsung.id,
+        transaction_date=datetime.date.today(),
+        type="BUY",
+        quantity=10.0,
+        price=70000.0,
+        total_amount=700000.0,
+        currency="KRW",
+        source="MANUAL",
+        external_id=None,
+        memo="수동 입력 거래"
+    )
+    db_session.add(manual_tx)
+    db_session.commit()
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "ka10076":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "cntr": [
+                    {
+                        "ord_no": "ORD_001",
+                        "stk_cd": "005930",
+                        "stk_nm": "삼성전자",
+                        "io_tp_nm": "매수",
+                        "cntr_qty": "10",
+                        "cntr_pric": "70000"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": []}
+
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=1)
+
+    assert result["status"] == "success"
+    db_session.refresh(manual_tx)
+    assert manual_tx.source == "AUTO_KIWOOM"
+    assert manual_tx.external_id == "ORD_001"
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_split_executions(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """동일 일자/종목/수량/단가로 2개의 다른 체결번호가 수신될 때 분할 매매가 누락 없이 각각 저장되는지 테스트합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="token_test")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "ka10076":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "cntr": [
+                    {
+                        "ord_no": "SPLIT_001",
+                        "stk_cd": "005930",
+                        "stk_nm": "삼성전자",
+                        "io_tp_nm": "매수",
+                        "cntr_qty": "10",
+                        "cntr_pric": "70000"
+                    },
+                    {
+                        "ord_no": "SPLIT_002",
+                        "stk_cd": "005930",
+                        "stk_nm": "삼성전자",
+                        "io_tp_nm": "매수",
+                        "cntr_qty": "10",
+                        "cntr_pric": "70000"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": []}
+
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=1)
+
+    assert result["status"] == "success"
+    # 계좌 2개 x 분할매수 2건 = 총 4건
+    assert result["success_count"] == 4
+    
+    acc1 = setup_test_data["accounts"]["5526-9093"]
+    txs = db_session.query(Transaction).filter(Transaction.account_id == acc1.id).all()
+    assert len(txs) == 2
+    ext_ids = {t.external_id for t in txs}
+    assert ext_ids == {"SPLIT_001", "SPLIT_002"}
+
+
+

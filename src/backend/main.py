@@ -17,21 +17,34 @@ async def lifespan(app: FastAPI):
     # DB 테이블 생성 (처음 실행 시 SQLite 파일(assets.db)과 테이블이 생성됨)
     Base.metadata.create_all(bind=engine)
     
-    # SQLite 마이그레이션 체크: historical_prices 테이블에 updated_at 컬럼 추가
+    # SQLite 마이그레이션 체크
     from sqlalchemy import text
     try:
         with engine.connect() as conn:
+            # historical_prices 마이그레이션
             result = conn.execute(text("PRAGMA table_info(historical_prices)")).fetchall()
             columns = [row[1] for row in result]
             if "updated_at" not in columns:
                 print("[INFO] historical_prices 테이블에 updated_at 컬럼을 추가합니다.")
                 conn.execute(text("ALTER TABLE historical_prices ADD COLUMN updated_at DATETIME"))
-                # 기존 데이터는 현재 시각으로 초기화
                 conn.execute(text("UPDATE historical_prices SET updated_at = datetime('now', 'localtime')"))
                 conn.commit()
+
+            # transactions 마이그레이션 (source, external_id 추가 및 소급 보정)
+            tx_result = conn.execute(text("PRAGMA table_info(transactions)")).fetchall()
+            tx_columns = [row[1] for row in tx_result]
+            if "source" not in tx_columns:
+                print("[INFO] transactions 테이블에 source 컬럼을 추가합니다.")
+                conn.execute(text("ALTER TABLE transactions ADD COLUMN source VARCHAR DEFAULT 'MANUAL'"))
+                conn.execute(text("UPDATE transactions SET source = 'AUTO_KIWOOM' WHERE memo LIKE '%키움 자동저장%'"))
+                conn.commit()
+            if "external_id" not in tx_columns:
+                print("[INFO] transactions 테이블에 external_id 컬럼을 추가합니다.")
+                conn.execute(text("ALTER TABLE transactions ADD COLUMN external_id VARCHAR"))
+                conn.commit()
     except Exception as e:
-        print(f"⚠️ historical_prices 마이그레이션 오류 (무시하고 진행): {e}")
-    
+        print(f"⚠️ 마이그레이션 오류 (무시하고 진행): {e}")
+
     # 백그라운드 주기적 태스크 매니저 가동 (테스트 환경인 경우 기동 생략)
     is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
     global task_manager
@@ -39,9 +52,9 @@ async def lifespan(app: FastAPI):
         from .tasks import BackgroundTaskManager
         task_manager = BackgroundTaskManager()
         task_manager.start()
-    
+
     yield
-    
+
     # Shutdown: 백그라운드 태스크 정지
     if not is_testing and task_manager is not None:
         await task_manager.stop()
@@ -58,7 +71,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # 모듈화된 라우터 연결
 app.include_router(watchlist.router)
