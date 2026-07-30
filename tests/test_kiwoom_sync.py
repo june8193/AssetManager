@@ -216,3 +216,21 @@ async def test_sync_transactions_api_endpoint(mock_sync):
     assert data["status"] == "success"
     assert data["success_count"] == 2
     mock_sync.assert_called_once()
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager.get_valid_token")
+async def test_sync_transactions_account_failure_reporting(mock_get_token, setup_test_data, db_session: Session):
+    """특정 계좌 동기화 중 예외 발생 시 failed_accounts 목록에 담겨 반환되는지 검증합니다."""
+    # 토큰 발급 시 예외 발생시킴
+    mock_get_token.side_effect = Exception("인증 토큰 오류 발생")
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=1)
+
+    assert result["status"] == "success"
+    assert "failed_accounts" in result
+    assert len(result["failed_accounts"]) == 2
+    assert result["failed_accounts"][0]["account_name"] == "5526-9093"
+    assert "인증 토큰 오류 발생" in result["failed_accounts"][0]["error"]
+

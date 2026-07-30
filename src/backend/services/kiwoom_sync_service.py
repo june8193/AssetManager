@@ -10,10 +10,18 @@ from src.kiwoom.auth import KiwoomAuthManager
 
 logger = logging.getLogger("KiwoomTransactionService")
 
+def _safe_float(val, default: float = 0.0) -> float:
+    if val is None or val == "":
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
 class KiwoomTransactionService:
     """키움증권 계좌의 당일 체결 내역 및 배당금 입금 내역을 DB에 자동 저장하는 서비스 클래스입니다.
 
-    이 클래스는 키움증권 REST API를 호출하여 최신 거래(매수/매도/배당) 내역을 수집하고,
+    이 클래원은 키움증권 REST API를 호출하여 최신 거래(매수/매도/배당) 내역을 수집하고,
     DB의 자산 정보 유효성 검증 및 중복 적재 방지 처리를 수행합니다.
     """
 
@@ -48,6 +56,7 @@ class KiwoomTransactionService:
         total_success_count = 0
         synced_list = []
         unregistered_list = []
+        failed_accounts_list = []
 
         today_str = datetime.date.today().strftime("%Y%m%d")
         start_date_str = (datetime.date.today() - datetime.timedelta(days=days - 1)).strftime("%Y%m%d")
@@ -59,15 +68,18 @@ class KiwoomTransactionService:
                 token = await self.auth_manager.get_valid_token(account.name)
             except Exception as e:
                 logger.error(f"계좌 {account.name} 인증 토큰 획득 실패 (동기화 생략): {e}")
+                failed_accounts_list.append({
+                    "account_name": account.name,
+                    "error": str(e)
+                })
                 continue
 
             raw_transactions = []
 
             try:
-                # 2. 수집 대상 데이터 수집 (당일 배치 vs 소급/수동)
+                # ... 데이터 수집 및 DB 저장 로직 ...
                 if days == 1:
                     # 당일 동기화 (체결요청 + 당일 배당금)
-                    # 2-1. 국내 주식 체결 조회 (ka10076)
                     domestic_executions = await self._fetch_domestic_executions(token)
                     for exe in domestic_executions:
                         raw_transactions.append({
@@ -75,22 +87,21 @@ class KiwoomTransactionService:
                             "ticker": exe.get("stk_cd"),
                             "name": exe.get("stk_nm"),
                             "type": "BUY" if "매수" in exe.get("io_tp_nm", "") else "SELL",
-                            "quantity": float(exe.get("cntr_qty", 0)),
-                            "price": float(exe.get("cntr_pric", 0)),
+                            "quantity": _safe_float(exe.get("cntr_qty")),
+                            "price": _safe_float(exe.get("cntr_pric")),
                             "currency": "KRW",
                             "memo": f"키움 자동저장 (체결)"
                         })
 
-                    # 2-2. 미국 주식 체결 조회 (ust21510)
                     overseas_executions = await self._fetch_overseas_executions(token, target_date=today_str)
                     for exe in overseas_executions:
-                        qty = float(exe.get("cntr_qty", 0))
+                        qty = _safe_float(exe.get("cntr_qty"))
                         if qty <= 0:
                             continue
                         slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
                         slby_tp = str(exe.get("slby_tp", ""))
                         is_buy = "매수" in slby_nm or slby_tp == "2"
-                        price_val = float(exe.get("cntr_uv") or exe.get("cntr_pric") or 0)
+                        price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
 
                         raw_transactions.append({
                             "date": datetime.date.today(),
@@ -103,7 +114,6 @@ class KiwoomTransactionService:
                             "memo": f"키움 자동저장 (해외체결)"
                         })
 
-                    # 2-3. 당일 종합거래내역 조회 (kt00015 - 배당금만 수집)
                     daily_ledger = await self._fetch_comprehensive_ledger(token, today_str, today_str)
                     for tx in daily_ledger:
                         if "배당금" in tx.get("rmrk_nm", ""):
@@ -112,13 +122,12 @@ class KiwoomTransactionService:
                                 "ticker": tx.get("stk_cd"),
                                 "name": tx.get("stk_nm", "배당금 입금"),
                                 "type": "INTEREST",
-                                "quantity": float(tx.get("trde_qty_jwa_cnt", 0) or 0),
-                                "price": float(tx.get("trde_amt", 0)),
+                                "quantity": _safe_float(tx.get("trde_qty_jwa_cnt")),
+                                "price": _safe_float(tx.get("trde_amt")),
                                 "currency": "KRW",
                                 "memo": f"키움 자동저장 (배당금)"
                             })
                 else:
-                    # 소급/수동 동기화 (최근 N일 종합거래내역 kt00015 + 해외 체결 ust21510 ord_dt 수집)
                     ledger_data = await self._fetch_comprehensive_ledger(token, start_date_str, today_str)
                     for tx in ledger_data:
                         rmrk = tx.get("rmrk_nm", "")
@@ -130,41 +139,42 @@ class KiwoomTransactionService:
                                 "ticker": stk_cd,
                                 "name": tx.get("stk_nm", "배당금 입금"),
                                 "type": "INTEREST",
-                                "quantity": float(tx.get("trde_qty_jwa_cnt", 0) or 0),
-                                "price": float(tx.get("trde_amt", 0)),
+                                "quantity": _safe_float(tx.get("trde_qty_jwa_cnt")),
+                                "price": _safe_float(tx.get("trde_amt")),
                                 "currency": "KRW",
                                 "memo": f"키움 자동저장 (소급 배당금)"
                             })
                         elif any(m in rmrk for m in ["장내매수", "장내매도", "매매", "매수", "매도"]):
-                            # 매매 내역 소급 (체결일자 cntr_dt가 존재해야 함)
                             cntr_dt_str = tx.get("cntr_dt") or tx.get("trde_dt")
                             cntr_date = datetime.datetime.strptime(cntr_dt_str, "%Y%m%d").date()
                             
-                            # 원화 거래로 처리
+                            qty = _safe_float(tx.get("trde_qty_jwa_cnt"))
+                            trde_amt = _safe_float(tx.get("trde_amt"))
+                            price = trde_amt / qty if qty > 0 else 0
+                            
                             raw_transactions.append({
                                 "date": cntr_date,
                                 "ticker": stk_cd,
                                 "name": tx.get("stk_nm"),
                                 "type": "BUY" if "매수" in rmrk else "SELL",
-                                "quantity": float(tx.get("trde_qty_jwa_cnt", 0)),
-                                "price": float(tx.get("trde_amt", 0)) / float(tx.get("trde_qty_jwa_cnt", 1)) if float(tx.get("trde_qty_jwa_cnt", 0)) > 0 else 0,
+                                "quantity": qty,
+                                "price": price,
                                 "currency": "KRW",
                                 "memo": f"키움 자동저장 (소급 매매)"
                             })
 
-                    # N일 동안의 해외 주식 일별 체결 소급 조회
                     for d in range(days):
                         dt_obj = datetime.date.today() - datetime.timedelta(days=d)
                         dt_str = dt_obj.strftime("%Y%m%d")
                         overseas_exes = await self._fetch_overseas_executions(token, target_date=dt_str)
                         for exe in overseas_exes:
-                            qty = float(exe.get("cntr_qty", 0))
+                            qty = _safe_float(exe.get("cntr_qty"))
                             if qty <= 0:
                                 continue
                             slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
                             slby_tp = str(exe.get("slby_tp", ""))
                             is_buy = "매수" in slby_nm or slby_tp == "2"
-                            price_val = float(exe.get("cntr_uv") or exe.get("cntr_pric") or 0)
+                            price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
 
                             raw_transactions.append({
                                 "date": dt_obj,
@@ -177,17 +187,15 @@ class KiwoomTransactionService:
                                 "memo": f"키움 자동저장 (해외체결 소급)"
                             })
 
-                # 3. DB 적재 및 검증 처리
+                # DB 적재 및 검증 처리
                 success_count = 0
                 for tx_data in raw_transactions:
                     ticker = tx_data["ticker"]
                     if not ticker:
                         continue
 
-                    # 3-1. 자산 마스터 검증
                     asset = db.query(Asset).filter(Asset.ticker == ticker).first()
                     if not asset:
-                        # 자산이 등록되지 않은 경우
                         unregistered_list.append({
                             "ticker": ticker,
                             "name": tx_data["name"],
@@ -200,13 +208,11 @@ class KiwoomTransactionService:
                         logger.warning(f"미등록 자산 발견으로 저장 생략: {ticker} ({tx_data['name']})")
                         continue
 
-                    # 자산 국가 정보에 따라 통화 보정 (미국 주식은 항상 USD로 저장)
                     if asset.country == "US":
                         tx_data["currency"] = "USD"
                     else:
                         tx_data["currency"] = "KRW"
 
-                    # 3-2. 중복 적재 방지 검사
                     total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
                     
                     exists = db.query(Transaction).filter(
@@ -223,7 +229,6 @@ class KiwoomTransactionService:
                         logger.info(f"이미 존재하는 거래내역으로 저장 스킵: {asset.name} ({tx_data['date']})")
                         continue
 
-                    # 3-3. 신규 거래내역 저장
                     new_tx = Transaction(
                         account_id=account.id,
                         asset_id=asset.id,
@@ -254,6 +259,10 @@ class KiwoomTransactionService:
             except Exception as e:
                 db.rollback()
                 logger.error(f"계좌 {account.name} 동기화 처리 중 예외 발생 (스킵): {str(e)}")
+                failed_accounts_list.append({
+                    "account_name": account.name,
+                    "error": str(e)
+                })
                 continue
 
         return {
@@ -261,7 +270,8 @@ class KiwoomTransactionService:
             "success_count": total_success_count,
             "pending_count": len(unregistered_list),
             "synced_transactions": synced_list,
-            "unregistered_assets": unregistered_list
+            "unregistered_assets": unregistered_list,
+            "failed_accounts": failed_accounts_list
         }
 
     async def _fetch_domestic_executions(self, token: str) -> list:
