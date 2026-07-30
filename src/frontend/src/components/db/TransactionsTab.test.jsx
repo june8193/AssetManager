@@ -273,4 +273,23 @@ describe('TransactionsTab', () => {
     expect(currencySelect.value).toBe('USD');
     expect(currencySelect.disabled).toBe(true);
   });
+
+  it('API 호출 실패 시 에러 경고 배너가 표시되어야 한다', async () => {
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: false, status: 500 });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/거래 내역을 불러오는데 실패했습니다/)).toBeInTheDocument();
+    });
+  });
 });

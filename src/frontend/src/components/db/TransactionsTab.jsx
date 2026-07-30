@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, Check, Search } from 'lucide-react';
+import { Plus, Edit2, Trash2, Check, Search, AlertTriangle } from 'lucide-react';
 import { DB_API_BASE } from '../../config';
 import { useMasking } from '../../contexts/MaskingContext';
 
@@ -24,6 +24,7 @@ const TransactionsTab = () => {
   const [accounts, setAccounts] = useState([]);         // 계좌 목록 (필터 및 입력용)
   const [assets, setAssets] = useState([]);             // 자산 목록 (입력용)
   const [loading, setLoading] = useState(true);         // 로딩 상태
+  const [error, setError] = useState(null);             // 데이터 로딩 에러 상태
   const [editingId, setEditingId] = useState(null);     // 수정 중인 거래 ID
   const [accountFilter, setAccountFilter] = useState('all'); // 계좌 필터 상태
   const { maskValue } = useMasking();
@@ -47,11 +48,17 @@ const TransactionsTab = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      setError(null);
       const [txRes, accRes, assetRes] = await Promise.all([
         fetch(`${DB_API_BASE}/transactions`),
         fetch(`${DB_API_BASE}/accounts`),
         fetch(`${DB_API_BASE}/assets`)
       ]);
+
+      if (!txRes.ok || !accRes.ok || !assetRes.ok) {
+        throw new Error('거래 내역을 불러오는데 실패했습니다. 서버 상태나 DB 스키마를 확인해주세요.');
+      }
+
       const txData = await txRes.json();
       const accData = await accRes.json();
       const assetData = await assetRes.json();
@@ -95,8 +102,9 @@ const TransactionsTab = () => {
         }
         return updated;
       });
-    } catch (error) {
-      console.error('거래 데이터 로딩 오류:', error);
+    } catch (err) {
+      console.error('거래 데이터 로딩 오류:', err);
+      setError(err.message || '거래 내역을 불러오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -280,6 +288,16 @@ const TransactionsTab = () => {
 
   return (
     <div className="p-6">
+      {error && (
+        <div className="mb-6 bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3 text-red-700">
+          <AlertTriangle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5 animate-pulse" />
+          <div>
+            <h4 className="font-semibold text-sm">데이터 로딩 오류</h4>
+            <p className="text-sm mt-0.5">{error}</p>
+          </div>
+        </div>
+      )}
+
       {/* 필터 영역 */}
       <div className="mb-6 flex items-center gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
         <div className="flex items-center gap-2">

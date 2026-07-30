@@ -4,8 +4,6 @@ from datetime import date
 from src.backend.main import app
 from src.backend.models import User, Account, Asset, Transaction
 
-client = TestClient(app)
-
 @pytest.fixture
 def setup_test_data(db_session):
     """테스트를 위한 유저, 계좌, 자산 기초 데이터를 셋업합니다."""
@@ -40,7 +38,7 @@ def setup_test_data(db_session):
         "asset_id": asset.id
     }
 
-def test_create_transaction_with_asset_details(setup_test_data):
+def test_create_transaction_with_asset_details(client, setup_test_data):
     """TransactionSchema에 asset_name과 asset_ticker가 포함되어도
     거래 내역 생성(POST)이 500 에러 없이 성공하는지 테스트합니다."""
     payload = {

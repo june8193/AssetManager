@@ -1,6 +1,6 @@
 [project]
 name = "AssetManager"
-version = "0.8.0"
+version = "0.8.1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -16,12 +16,14 @@ dependencies = [
     "pandas>=2.0.0",
     "holidays>=0.25",
     "fastmcp>=3.4.4",
+    "pytest-xdist>=3.5.0",
 ]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
 testpaths = ["tests"]
 norecursedirs = [".venv", "scratch", "scripts"]
+addopts = "-n auto"
 
 [tool.pyright]
 include = ["src"]
