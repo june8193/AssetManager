@@ -48,13 +48,20 @@ class BackgroundTaskManager:
                 "last_error": None,
                 "last_error_time": None,
             },
+            "exchange_rate_update": {
+                "last_run": None,
+                "status": "pending",
+                "last_success": None,
+                "last_error": None,
+                "last_error_time": None,
+            },
         }
 
     def get_task_status(self) -> dict:
         """현재 태스크별 상태 레지스트리 복사본을 반환합니다."""
         return self._task_status.copy()
 
-    def _update_task_success(self, task_name: str):
+    def update_task_success(self, task_name: str):
         """특정 태스크 성공 기록을 업데이트합니다."""
         now_str = datetime.datetime.now().isoformat()
         if task_name in self._task_status:
@@ -63,7 +70,7 @@ class BackgroundTaskManager:
             self._task_status[task_name]["last_success"] = now_str
             self._task_status[task_name]["last_error"] = None
 
-    def _update_task_error(self, task_name: str, error_msg: str):
+    def update_task_error(self, task_name: str, error_msg: str):
         """특정 태스크 에러 기록을 업데이트합니다."""
         now_str = datetime.datetime.now().isoformat()
         if task_name in self._task_status:
@@ -71,6 +78,9 @@ class BackgroundTaskManager:
             self._task_status[task_name]["status"] = "failed"
             self._task_status[task_name]["last_error"] = error_msg
             self._task_status[task_name]["last_error_time"] = now_str
+
+    _update_task_success = update_task_success
+    _update_task_error = update_task_error
 
     def start(self):
         """백그라운드 태스크 루프를 가동합니다.

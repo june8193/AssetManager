@@ -81,7 +81,7 @@ async def refresh_dashboard_prices(db: Session = Depends(get_db)):
                 "message": "최근 1분 이내에 시세를 업데이트했습니다. 잠시 후 다시 시도해 주세요."
             }
             
-        await price_service.update_all_market_prices()
+        await price_service.update_all_market_prices(is_manual=True)
         price_service.last_manual_refresh_time = now
         
         return {

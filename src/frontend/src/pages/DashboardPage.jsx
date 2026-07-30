@@ -5,6 +5,7 @@ import { useMasking } from '../contexts/MaskingContext';
 import YearlyStatusTable from '../components/YearlyStatusTable';
 import DailyStatusTable from '../components/DailyStatusTable';
 import AssetChart from '../components/Dashboard/AssetChart';
+import TaskAlertBanner from '../components/TaskAlertBanner';
 
 /**
  * 대시보드 페이지 컴포넌트.
@@ -139,6 +140,7 @@ const DashboardPage = () => {
 
   return (
     <main className="max-w-6xl mx-auto px-4 py-8">
+      <TaskAlertBanner />
       {/* Top Controls & Alerts */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
         <div>

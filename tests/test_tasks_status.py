@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch, MagicMock
 from fastapi.testclient import TestClient
 
 from src.backend.tasks import BackgroundTaskManager, task_manager_instance
+from src.backend.services.price_service import price_service
 from src.backend.main import app
 
 
@@ -21,7 +22,8 @@ def test_task_manager_initial_status(manager):
     assert "price_update" in status
     assert "db_backup" in status
     assert "stock_sync" in status
-    assert status["price_update"]["status"] == "pending"
+    assert "exchange_rate_update" in status
+    assert status["exchange_rate_update"]["status"] == "pending"
 
 
 @pytest.mark.asyncio
@@ -68,6 +70,34 @@ async def test_price_update_loop_records_error(manager):
     assert status["price_update"]["last_error_time"] is not None
 
 
+@pytest.mark.asyncio
+async def test_exchange_rate_update_records_status_on_fetch(db_session):
+    """환율 수집 성공 및 실패 시 BackgroundTaskManager에 상태가 기록되는지 검증합니다."""
+    today = datetime.date(2026, 7, 20)
+    now_kst_930am = datetime.datetime(2026, 7, 20, 9, 30, 0)
+
+    # 1. 환율 수집 성공 시
+    with patch.object(price_service, "fetch_and_save_exchange_rate", new_callable=AsyncMock, return_value=1380.0), \
+         patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
+         patch.object(price_service, "_get_now", return_value=now_kst_930am), \
+         patch.object(price_service, "_get_today", return_value=today), \
+         patch("src.backend.tasks.task_manager_instance.update_task_success") as mock_success:
+
+        await price_service.update_all_market_prices(is_manual=False)
+        mock_success.assert_called_with("exchange_rate_update")
+
+    # 2. 환율 수집 실패(None) 시 -> 재시도 없이 수집 중단 및 error 상태 기록
+    with patch.object(price_service, "fetch_and_save_exchange_rate", new_callable=AsyncMock, return_value=None), \
+         patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
+         patch.object(price_service, "_get_now", return_value=now_kst_930am), \
+         patch.object(price_service, "_get_today", return_value=today), \
+         patch("src.backend.tasks.task_manager_instance.update_task_error") as mock_error:
+
+        await price_service.update_all_market_prices(is_manual=False)
+        mock_error.assert_called_once()
+        assert "exchange_rate_update" in mock_error.call_args[0][0]
+
+
 def test_task_status_api_endpoint():
     """GET /api/v1/system/tasks/status 엔드포인트가 200 OK와 상태 정보를 반환하는지 검증합니다."""
     client = TestClient(app)
@@ -77,3 +107,5 @@ def test_task_status_api_endpoint():
     assert "price_update" in data
     assert "db_backup" in data
     assert "stock_sync" in data
+    assert "exchange_rate_update" in data
+
