@@ -171,14 +171,18 @@ class Transaction(Base):
     Attributes:
         id (int): 고유 식별자 (PK)
         account_id (int): 계좌 식별자 (FK)
-        asset_id (int): 자산 식별자 (FK)
+        asset_id (int): 거래 자산 또는 환전 출발 자산 식별자 (FK)
+        target_asset_id (Optional[int]): 환전 도착 자산 식별자 (FK, EXCHANGE 거래 시)
         transaction_date (date): 거래 일자
-        type (str): 거래 유형 (INITIAL_BALANCE, DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, TAX, CASH_ADJUSTMENT)
-        quantity (float): 수량
+        type (str): 거래 유형 (INITIAL_BALANCE, DEPOSIT, WITHDRAW, BUY, SELL, INTEREST, TAX, CASH_ADJUSTMENT, EXCHANGE)
+        quantity (float): 수량 (또는 환전 도착 수량)
         price (float): 거래 단가
-        total_amount (float): 총 거래 금액 (quantity * price)
+        total_amount (float): 총 거래 금액 (quantity * price 또는 환전 출발 금액)
         currency (str): 통화 (KRW, USD 등)
         exchange_rate (float): 거래 당시 적용 환율
+        memo (str): 메모
+        source (str): 거래 발생 출처 (MANUAL, AUTO_KIWOOM 등)
+        external_id (str): 외부 식별자
     """
     __tablename__ = "transactions"
 

@@ -1,8 +1,15 @@
+"""transactions 테이블에 target_asset_id 컬럼을 추가하는 데이터베이스 마이그레이션 스크립트입니다."""
+
 import sqlite3
 import os
 import sys
 
 def migrate_db(db_path: str):
+    """지정된 SQLite 데이터베이스 파일에 target_asset_id 컬럼을 멱등하게 추가합니다.
+
+    Args:
+        db_path (str): 데이터베이스 파일의 절대/상대 경로
+    """
     if not os.path.exists(db_path):
         print(f"[Info] DB file not found: {db_path}, skipping migration.")
         return

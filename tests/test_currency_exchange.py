@@ -1,3 +1,5 @@
+"""환전(EXCHANGE) 트랜잭션 타입 지원 기능에 대한 단위 및 통합 테스트 모듈입니다."""
+
 import pytest
 import datetime
 from sqlalchemy import create_engine
@@ -174,3 +176,107 @@ def test_api_create_exchange_transaction_missing_target_asset_id(client, db_sess
 
     response = client.post("/api/db/transactions", json=payload)
     assert response.status_code == 422
+
+
+def test_dashboard_service_handles_currency_exchange(db_session):
+    """DashboardService의 get_holdings 및 calculate_theoretical_cash에서 EXCHANGE 거래가 정확하게 반영되는지 테스트합니다."""
+    from src.backend.services.dashboard_service import DashboardService
+    
+    krw = db_session.query(Asset).filter_by(ticker="KRW").first()
+    usd = db_session.query(Asset).filter_by(ticker="USD").first()
+    account = db_session.query(Account).first()
+
+    # 1. 초기 입금: 2,000,000 KRW
+    tx_init = Transaction(
+        account_id=account.id,
+        asset_id=krw.id,
+        transaction_date=datetime.date(2026, 5, 1),
+        type="INITIAL_BALANCE",
+        quantity=2000000.0,
+        price=1.0,
+        total_amount=2000000.0,
+        currency="KRW"
+    )
+    db_session.add(tx_init)
+
+    # 2. 환전: 1,350,000 KRW -> $1,000 USD
+    tx_exchange = Transaction(
+        account_id=account.id,
+        asset_id=krw.id,
+        target_asset_id=usd.id,
+        transaction_date=datetime.date(2026, 5, 2),
+        type="EXCHANGE",
+        quantity=1000.0,
+        price=1350.0,
+        total_amount=1350000.0,
+        currency="KRW",
+        exchange_rate=1350.0
+    )
+    db_session.add(tx_exchange)
+    db_session.commit()
+
+    service = DashboardService(db_session)
+    holdings = service.get_holdings(target_date=datetime.date(2026, 5, 2))
+    
+    krw_holding = next(h for h in holdings if h["asset_id"] == krw.id)
+    usd_holding = next(h for h in holdings if h["asset_id"] == usd.id)
+
+    assert krw_holding["quantity"] == 650000.0
+    assert usd_holding["quantity"] == 1000.0
+
+    theoretical = service.calculate_theoretical_cash(target_date=datetime.date(2026, 5, 2))
+    assert theoretical["KRW"] == 650000.0
+    assert theoretical["USD"] == 1000.0
+
+
+def test_api_create_exchange_transaction_non_cash_asset_validation(client, db_session):
+    """EXCHANGE 트랜잭션의 출발/도착 자산이 현금이 아닐 때 422 오류를 반환하는지 테스트합니다."""
+    stock_asset = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    usd = db_session.query(Asset).filter_by(ticker="USD").first()
+    account = db_session.query(Account).first()
+    db_session.add(stock_asset)
+    db_session.commit()
+
+    payload = {
+        "account_id": account.id,
+        "asset_id": stock_asset.id,
+        "target_asset_id": usd.id,
+        "transaction_date": "2026-05-02",
+        "type": "EXCHANGE",
+        "quantity": 1000.0,
+        "price": 1350.0,
+        "total_amount": 1350000.0,
+        "currency": "KRW"
+    }
+
+    response = client.post("/api/db/transactions", json=payload)
+    assert response.status_code == 422
+    assert "현금 카테고리 자산" in response.json()["detail"]
+
+
+def test_get_period_transactions_eager_loads_target_asset(client, db_session):
+    """특정 계좌 기간별 거래 조회 API가 target_asset_name 및 target_asset_ticker를 정상 반환하는지 테스트합니다."""
+    krw = db_session.query(Asset).filter_by(ticker="KRW").first()
+    usd = db_session.query(Asset).filter_by(ticker="USD").first()
+    account = db_session.query(Account).first()
+
+    tx = Transaction(
+        account_id=account.id,
+        asset_id=krw.id,
+        target_asset_id=usd.id,
+        transaction_date=datetime.date(2026, 5, 2),
+        type="EXCHANGE",
+        quantity=1000.0,
+        price=1350.0,
+        total_amount=1350000.0,
+        currency="KRW"
+    )
+    db_session.add(tx)
+    db_session.commit()
+
+    response = client.get(f"/api/db/accounts/{account.id}/transactions/period?start_date=2026-05-01&end_date=2026-05-03")
+    assert response.status_code == 200
+    tx_list = response.json()
+    assert len(tx_list) == 1
+    assert tx_list[0]["target_asset_name"] == "달러예수금"
+    assert tx_list[0]["target_asset_ticker"] == "USD"

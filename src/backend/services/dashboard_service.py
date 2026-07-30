@@ -237,22 +237,30 @@ class DashboardService:
             if key not in holdings:
                 holdings[key] = 0.0
             
-            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
+            if tx.type == 'EXCHANGE':
+                holdings[key] -= tx.total_amount
+                if tx.target_asset_id:
+                    target_key = (tx.account_id, tx.target_asset_id)
+                    if target_key not in holdings:
+                        holdings[target_key] = 0.0
+                    holdings[target_key] += tx.quantity
+            elif tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
                 holdings[key] += tx.quantity
             elif tx.type in ['SELL', 'WITHDRAW', 'TAX']:
                 holdings[key] -= tx.quantity
 
             # (2) 현금 자산에 대한 상대적 증감 동적 반영
-            cash_asset_id = ticker_to_asset_id.get(tx.currency)
-            if cash_asset_id and tx.asset_id != cash_asset_id:
-                cash_key = (tx.account_id, cash_asset_id)
-                if cash_key not in holdings:
-                    holdings[cash_key] = 0.0
-                
-                if tx.type in ['BUY', 'TAX']:
-                    holdings[cash_key] -= tx.total_amount
-                elif tx.type in ['SELL', 'INTEREST']:
-                    holdings[cash_key] += tx.total_amount
+            if tx.type != 'EXCHANGE':
+                cash_asset_id = ticker_to_asset_id.get(tx.currency)
+                if cash_asset_id and tx.asset_id != cash_asset_id:
+                    cash_key = (tx.account_id, cash_asset_id)
+                    if cash_key not in holdings:
+                        holdings[cash_key] = 0.0
+                    
+                    if tx.type in ['BUY', 'TAX']:
+                        holdings[cash_key] -= tx.total_amount
+                    elif tx.type in ['SELL', 'INTEREST']:
+                        holdings[cash_key] += tx.total_amount
         
         # 결과 정리
         results = []
@@ -740,7 +748,12 @@ class DashboardService:
             if ib_date and tx.transaction_date < ib_date:
                 continue
 
-            if tx.type in ['DEPOSIT', 'INTEREST', 'CASH_ADJUSTMENT']:
+            if tx.type == 'EXCHANGE':
+                if tx.asset and tx.asset.ticker in theoretical:
+                    theoretical[tx.asset.ticker] -= tx.total_amount
+                if tx.target_asset and tx.target_asset.ticker in theoretical:
+                    theoretical[tx.target_asset.ticker] += tx.quantity
+            elif tx.type in ['DEPOSIT', 'INTEREST', 'CASH_ADJUSTMENT']:
                 theoretical[currency] += tx.total_amount
             elif tx.type == 'INITIAL_BALANCE':
                 # INITIAL_BALANCE는 자산이 현금(KRW, USD)인 경우에만 더합니다.

@@ -100,9 +100,10 @@ class TransactionSchema(BaseModel):
     Attributes:
         id (Optional[int]): 거래 식별자
         account_id (int): 계좌 식별자
-        asset_id (int): 자산 식별자
+        asset_id (int): 거래 자산 식별자
+        target_asset_id (Optional[int]): 환전 상대 자산 식별자
         transaction_date (date): 거래 일자
-        type (str): 거래 유형 (BUY, SELL 등)
+        type (str): 거래 유형 (BUY, SELL, EXCHANGE 등)
         quantity (float): 수량
         price (float): 단가
         total_amount (float): 총 거래 금액
@@ -111,6 +112,9 @@ class TransactionSchema(BaseModel):
         memo (Optional[str]): 메모
         asset_name (Optional[str]): 자산명
         asset_ticker (Optional[str]): 자산 티커
+        target_asset_name (Optional[str]): 환전 상대 자산명
+        target_asset_ticker (Optional[str]): 환전 상대 자산 티커
+        account_display_name (Optional[str]): 계좌 표시 이름
     """
     id: Optional[int] = None
     account_id: int
@@ -378,12 +382,49 @@ def get_transactions(
         query = query.filter(Transaction.transaction_date <= end_date)
     return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
 
+def _validate_and_extract_transaction_data(transaction: TransactionSchema, db: Session) -> dict:
+    """트랜잭션 입력값의 유효성을 검증하고 DB 모델용 딕셔너리를 추출합니다.
+
+    Args:
+        transaction (TransactionSchema): 트랜잭션 요청 데이터
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        dict: DB 모델 키워드 인자 딕셔너리
+
+    Raises:
+        HTTPException: 유효성 검증 실패 시
+    """
+    if transaction.type == "EXCHANGE":
+        if not transaction.target_asset_id:
+            raise HTTPException(
+                status_code=422, 
+                detail="환전(EXCHANGE) 거래 등록 시 도착 자산(target_asset_id)은 필수입니다."
+            )
+        
+        # 출발 자산 및 도착 자산의 현금 여부 유효성 검증
+        source_asset = db.query(Asset).filter(Asset.id == transaction.asset_id).first()
+        target_asset = db.query(Asset).filter(Asset.id == transaction.target_asset_id).first()
+        
+        if not source_asset or source_asset.major_category != "현금":
+            raise HTTPException(
+                status_code=422, 
+                detail="환전 출발 자산(asset_id)은 현금 카테고리 자산이어야 합니다."
+            )
+        if not target_asset or target_asset.major_category != "현금":
+            raise HTTPException(
+                status_code=422, 
+                detail="환전 도착 자산(target_asset_id)은 현금 카테고리 자산이어야 합니다."
+            )
+
+    return transaction.model_dump(
+        exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name"}
+    )
+
 @router.post("/transactions", response_model=TransactionSchema)
 def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
     """새로운 거래 내역을 생성합니다."""
-    if transaction.type == "EXCHANGE" and not transaction.target_asset_id:
-        raise HTTPException(status_code=422, detail="target_asset_id is required for EXCHANGE transactions")
-    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name"})
+    data = _validate_and_extract_transaction_data(transaction, db)
     db_transaction = Transaction(**data)
     db.add(db_transaction)
     db.commit()
@@ -395,10 +436,8 @@ def update_transaction(transaction_id: int, transaction: TransactionSchema, db: 
     """기존 거래 내역 정보를 수정합니다."""
     db_transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not db_transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
-    if transaction.type == "EXCHANGE" and not transaction.target_asset_id:
-        raise HTTPException(status_code=422, detail="target_asset_id is required for EXCHANGE transactions")
-    data = transaction.model_dump(exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name"})
+        raise HTTPException(status_code=404, detail="거래 내역을 찾을 수 없습니다.")
+    data = _validate_and_extract_transaction_data(transaction, db)
     for key, value in data.items():
         setattr(db_transaction, key, value)
     db.commit()
@@ -410,7 +449,7 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     """거래 내역을 삭제합니다."""
     db_transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not db_transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise HTTPException(status_code=404, detail="거래 내역을 찾을 수 없습니다.")
     db.delete(db_transaction)
     db.commit()
     return {"message": "Deleted"}
@@ -423,7 +462,11 @@ def get_period_transactions(
     db: Session = Depends(get_db)
 ):
     """특정 계좌의 특정 기간 내 기존 거래 내역을 조회합니다."""
-    query = db.query(Transaction).options(joinedload(Transaction.asset)).filter(Transaction.account_id == account_id)
+    query = db.query(Transaction).options(
+        joinedload(Transaction.asset),
+        joinedload(Transaction.target_asset),
+        joinedload(Transaction.account)
+    ).filter(Transaction.account_id == account_id)
     if start_date:
         query = query.filter(Transaction.transaction_date > start_date)
     if end_date:
