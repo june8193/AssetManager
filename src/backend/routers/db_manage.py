@@ -462,7 +462,7 @@ def _build_transfer_pair(req: TransferTransactionRequest, currency: str, transfe
     base_kwargs = {
         "asset_id": req.asset_id,
         "transaction_date": req.transaction_date,
-        "quantity": 0.0,
+        "quantity": req.amount,
         "price": 1.0,
         "total_amount": req.amount,
         "currency": currency,

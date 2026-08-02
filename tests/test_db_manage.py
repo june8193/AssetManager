@@ -589,10 +589,14 @@ def test_create_transfer_transaction(db_session, test_user):
 
     assert tx_src["type"] == "WITHDRAW"
     assert tx_src["total_amount"] == 50000.0
+    assert tx_src["quantity"] == 50000.0
+    assert tx_src["price"] == 1.0
     assert tx_src["transfer_pair_id"] is not None
 
     assert tx_dst["type"] == "DEPOSIT"
     assert tx_dst["total_amount"] == 50000.0
+    assert tx_dst["quantity"] == 50000.0
+    assert tx_dst["price"] == 1.0
     assert tx_dst["transfer_pair_id"] == tx_src["transfer_pair_id"]
 
 def test_delete_transfer_transaction_cascade(db_session, test_user):
