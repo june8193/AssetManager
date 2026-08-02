@@ -1,3 +1,4 @@
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, model_validator
@@ -28,6 +29,10 @@ class SnapshotPreviewSchema(BaseModel):
     period_deposit: float
     total_valuation: float
     total_profit: float
+    period_profit: float = 0.0
+    calculated_return_rate: float = 0.0
+    current_cash: float = 0.0
+
 
 class AccountSchema(BaseModel):
     """계좌 정보를 담는 스키마입니다.
@@ -110,6 +115,7 @@ class TransactionSchema(BaseModel):
         currency (str): 통화 (KRW, USD)
         exchange_rate (Optional[float]): 환율
         memo (Optional[str]): 메모
+        transfer_pair_id (Optional[str]): 이체 연동 식별자 (UUID)
         asset_name (Optional[str]): 자산명
         asset_ticker (Optional[str]): 자산 티커
         target_asset_name (Optional[str]): 환전 상대 자산명
@@ -121,13 +127,14 @@ class TransactionSchema(BaseModel):
     asset_id: int
     target_asset_id: Optional[int] = None
     transaction_date: date
-    type: Literal["INITIAL_BALANCE", "DEPOSIT", "WITHDRAW", "BUY", "SELL", "INTEREST", "TAX", "CASH_ADJUSTMENT", "EXCHANGE"]
+    type: Literal["INITIAL_BALANCE", "DEPOSIT", "WITHDRAW", "BUY", "SELL", "INTEREST", "TAX", "CASH_ADJUSTMENT", "EXCHANGE", "TRANSFER"]
     quantity: float = 0.0
     price: float = 0.0
     total_amount: float
     currency: str
     exchange_rate: Optional[float] = None
     memo: Optional[str] = None
+    transfer_pair_id: Optional[str] = None
     asset_name: Optional[str] = None
     asset_ticker: Optional[str] = None
     target_asset_name: Optional[str] = None
@@ -136,6 +143,16 @@ class TransactionSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+class TransferTransactionRequest(BaseModel):
+    """계좌 간 이체 생성 요청 스키마입니다."""
+    source_account_id: int
+    target_account_id: int
+    asset_id: int
+    amount: float
+    transaction_date: date
+    memo: Optional[str] = None
+
 
 class SnapshotSchema(BaseModel):
     """계좌 상태 스냅샷 정보를 담는 스키마입니다.
@@ -431,6 +448,63 @@ def create_transaction(transaction: TransactionSchema, db: Session = Depends(get
     db.refresh(db_transaction)
     return db_transaction
 
+def _build_transfer_pair(req: TransferTransactionRequest, currency: str, transfer_pair_id: str) -> List[Transaction]:
+    """이체 쌍(출금 및 입금) Transaction 인스턴스를 생성하는 헬퍼 함수입니다.
+
+    Args:
+        req (TransferTransactionRequest): 계좌 이체 요청 스키마.
+        currency (str): 이체 적용 통화.
+        transfer_pair_id (str): 공유 이체 UUID 고유 식별자.
+
+    Returns:
+        List[Transaction]: 생성된 [WITHDRAW, DEPOSIT] Transaction 객체 리스트.
+    """
+    base_kwargs = {
+        "asset_id": req.asset_id,
+        "transaction_date": req.transaction_date,
+        "quantity": 0.0,
+        "price": 1.0,
+        "total_amount": req.amount,
+        "currency": currency,
+        "memo": req.memo,
+        "transfer_pair_id": transfer_pair_id
+    }
+    tx_withdraw = Transaction(account_id=req.source_account_id, type="WITHDRAW", **base_kwargs)
+    tx_deposit = Transaction(account_id=req.target_account_id, type="DEPOSIT", **base_kwargs)
+    return [tx_withdraw, tx_deposit]
+
+@router.post("/transactions/transfer", response_model=List[TransactionSchema])
+def create_transfer_transaction(req: TransferTransactionRequest, db: Session = Depends(get_db)):
+    """계좌 이체 트랜잭션(WITHDRAW + DEPOSIT 쌍)을 원자적으로 생성합니다.
+
+    Args:
+        req (TransferTransactionRequest): 이체 정보 요청 데이터 (출발/도착 계좌, 자산, 금액, 일자, 메모).
+        db (Session): SQLAlchemy 데이터베이스 세션 객체.
+
+    Returns:
+        List[TransactionSchema]: 생성된 이체 쌍 트랜잭션 (WITHDRAW, DEPOSIT) 목록.
+
+    Raises:
+        HTTPException: 출발 계좌와 도착 계좌가 동일하거나(400), 대상 자산을 찾을 수 없을 때(404) 발생.
+    """
+    if req.source_account_id == req.target_account_id:
+        raise HTTPException(status_code=400, detail="출발 계좌와 도착 계좌가 동일할 수 없습니다.")
+    
+    asset = db.query(Asset).filter(Asset.id == req.asset_id).first()
+    if not asset:
+        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
+
+    transfer_pair_id = str(uuid.uuid4())
+    currency = asset.country if asset.country in ["USD", "KRW"] else "KRW"
+
+    pair_txs = _build_transfer_pair(req, currency, transfer_pair_id)
+    db.add_all(pair_txs)
+    db.commit()
+    for tx in pair_txs:
+        db.refresh(tx)
+    return pair_txs
+
+
 @router.put("/transactions/{transaction_id}", response_model=TransactionSchema)
 def update_transaction(transaction_id: int, transaction: TransactionSchema, db: Session = Depends(get_db)):
     """기존 거래 내역 정보를 수정합니다."""
@@ -440,6 +514,18 @@ def update_transaction(transaction_id: int, transaction: TransactionSchema, db: 
     data = _validate_and_extract_transaction_data(transaction, db)
     for key, value in data.items():
         setattr(db_transaction, key, value)
+
+    # 이체 트랜잭션 연동 수정 (Cascade)
+    if db_transaction.transfer_pair_id:
+        pair_txs = db.query(Transaction).filter(
+            Transaction.transfer_pair_id == db_transaction.transfer_pair_id,
+            Transaction.id != db_transaction.id
+        ).all()
+        for p in pair_txs:
+            p.total_amount = db_transaction.total_amount
+            p.transaction_date = db_transaction.transaction_date
+            p.memo = db_transaction.memo
+
     db.commit()
     db.refresh(db_transaction)
     return db_transaction
@@ -450,9 +536,20 @@ def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     db_transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
     if not db_transaction:
         raise HTTPException(status_code=404, detail="거래 내역을 찾을 수 없습니다.")
-    db.delete(db_transaction)
+    
+    # 이체 트랜잭션 연동 삭제 (Cascade)
+    if db_transaction.transfer_pair_id:
+        pair_txs = db.query(Transaction).filter(
+            Transaction.transfer_pair_id == db_transaction.transfer_pair_id
+        ).all()
+        for p in pair_txs:
+            db.delete(p)
+    else:
+        db.delete(db_transaction)
+
     db.commit()
     return {"message": "Deleted"}
+
 
 @router.get("/accounts/{account_id}/transactions/period", response_model=List[TransactionSchema])
 def get_period_transactions(

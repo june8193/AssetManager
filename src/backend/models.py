@@ -183,6 +183,7 @@ class Transaction(Base):
         memo (str): 메모
         source (str): 거래 발생 출처 (MANUAL, AUTO_KIWOOM 등)
         external_id (str): 외부 식별자
+        transfer_pair_id (str): 이체 연동 고유 식별자 (UUID)
     """
     __tablename__ = "transactions"
 
@@ -200,6 +201,8 @@ class Transaction(Base):
     memo = Column(String, nullable=True)
     source = Column(String, nullable=False, default="MANUAL")
     external_id = Column(String, nullable=True, index=True)
+    transfer_pair_id = Column(String, nullable=True, index=True)
+
 
     account = relationship("Account", back_populates="transactions")
     asset = relationship("Asset", foreign_keys=[asset_id], back_populates="transactions")

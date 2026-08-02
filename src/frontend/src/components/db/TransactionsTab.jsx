@@ -16,10 +16,33 @@ const formatInputNumber = (value) => {
 };
 
 /**
+ * 거래 유형 및 연동 여부에 따라 뱃지의 텍스트와 스타일 CSS를 반환합니다.
+ */
+const getTypeBadgeProps = (tx) => {
+  const isExchangeTx = tx.type === 'EXCHANGE';
+  const isTransferTx = !!tx.transfer_pair_id || tx.type === 'TRANSFER';
+
+  if (isExchangeTx) {
+    return { label: '환전', style: 'bg-emerald-100 text-emerald-800 border border-emerald-200' };
+  }
+  if (isTransferTx) {
+    return { label: '이체', style: 'bg-purple-100 text-purple-800 border border-purple-200' };
+  }
+  if (['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type)) {
+    return { label: tx.type, style: 'bg-blue-50 text-blue-600' };
+  }
+  if (['SELL', 'WITHDRAW'].includes(tx.type)) {
+    return { label: tx.type, style: 'bg-red-50 text-red-600' };
+  }
+  return { label: tx.type, style: 'bg-emerald-50 text-emerald-600' };
+};
+
+/**
  * 거래 내역 관리 탭 컴포넌트입니다.
  * 계좌별 거래(매수, 매도, 입출금 등) 내역을 조회하고 편집합니다.
  */
 const TransactionsTab = () => {
+
   const [transactions, setTransactions] = useState([]); // 전체 거래 내역
   const [accounts, setAccounts] = useState([]);         // 계좌 목록 (필터 및 입력용)
   const [assets, setAssets] = useState([]);             // 자산 목록 (입력용)
@@ -32,6 +55,7 @@ const TransactionsTab = () => {
   // 입력 폼 데이터 상태
   const [formData, setFormData] = useState({
     account_id: '',
+    target_account_id: '',
     asset_id: '',
     target_asset_id: '',
     transaction_date: new Date().toISOString().split('T')[0],
@@ -40,7 +64,8 @@ const TransactionsTab = () => {
     price: '0',
     total_amount: '0',
     currency: 'KRW',
-    exchange_rate: null
+    exchange_rate: null,
+    memo: ''
   });
 
   /**
@@ -70,11 +95,16 @@ const TransactionsTab = () => {
 
       // 초기 폼 데이터 설정 및 자산별 기본 제약사항/통화 매핑 자동 적용
       let initialAccountId = formData.account_id;
+      let initialTargetAccountId = formData.target_account_id;
       let initialAssetId = formData.asset_id;
       let initialTargetAssetId = formData.target_asset_id;
 
       if (accData.length > 0 && !initialAccountId) {
         initialAccountId = accData[0].id;
+      }
+      if (accData.length > 1 && !initialTargetAccountId) {
+        const altAcc = accData.find(a => a.id.toString() !== initialAccountId.toString());
+        initialTargetAccountId = altAcc ? altAcc.id : accData[1].id;
       }
       if (assetData.length > 0 && !initialAssetId) {
         initialAssetId = assetData[0].id;
@@ -89,6 +119,7 @@ const TransactionsTab = () => {
         const updated = {
           ...prev,
           account_id: initialAccountId,
+          target_account_id: initialTargetAccountId,
           asset_id: initialAssetId,
           target_asset_id: initialTargetAssetId
         };
@@ -101,10 +132,10 @@ const TransactionsTab = () => {
           updated.currency = newCurrency;
 
           if (firstAsset.ticker === 'USD' || firstAsset.ticker === 'KRW') {
-            if (updated.type !== 'DEPOSIT' && updated.type !== 'WITHDRAW' && updated.type !== 'EXCHANGE') {
+            if (updated.type !== 'DEPOSIT' && updated.type !== 'WITHDRAW' && updated.type !== 'EXCHANGE' && updated.type !== 'TRANSFER') {
               updated.type = 'DEPOSIT';
             }
-            if (updated.type !== 'EXCHANGE') {
+            if (updated.type !== 'EXCHANGE' && updated.type !== 'TRANSFER') {
               updated.price = '1';
               const q = parseFloat(updated.quantity.toString().replace(/,/g, '')) || 0;
               updated.total_amount = q.toString();
@@ -141,21 +172,36 @@ const TransactionsTab = () => {
           targetId = alternativeTarget ? alternativeTarget.id : (cashAssets[0]?.id || '');
         }
         newFormData.target_asset_id = targetId;
+      } else if (value === 'TRANSFER') {
+        let targetAccId = newFormData.target_account_id;
+        if (!targetAccId || targetAccId.toString() === newFormData.account_id.toString()) {
+          const altAcc = accounts.find(a => a.id.toString() !== newFormData.account_id.toString());
+          targetAccId = altAcc ? altAcc.id : '';
+        }
+        newFormData.target_account_id = targetAccId;
+        const krwAsset = assets.find(a => a.ticker === 'KRW') || assets[0];
+        if (krwAsset) {
+          newFormData.asset_id = krwAsset.id;
+          newFormData.currency = krwAsset.country === 'US' ? 'USD' : 'KRW';
+        }
+      }
+    } else if (name === 'account_id' && newFormData.type === 'TRANSFER') {
+      if (newFormData.target_account_id.toString() === value.toString()) {
+        const altAcc = accounts.find(a => a.id.toString() !== value.toString());
+        newFormData.target_account_id = altAcc ? altAcc.id : '';
       }
     }
 
     if (name === 'quantity' || name === 'price' || name === 'total_amount') {
-      // 쉼표 제거
       const cleanedValue = value.replace(/,/g, '');
       if (cleanedValue === '' || cleanedValue === '-') {
         newFormData[name] = cleanedValue;
       } else if (!isNaN(cleanedValue) || cleanedValue.endsWith('.')) {
         newFormData[name] = cleanedValue;
       } else {
-        return; // 올바르지 않은 입력 무시
+        return;
       }
 
-      // 수량이나 단가/환율 변경 시 계산
       if (name === 'quantity' || name === 'price') {
         const q = name === 'quantity' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
         const p = name === 'price' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.price.toString().replace(/,/g, '')) || 0;
@@ -165,19 +211,17 @@ const TransactionsTab = () => {
       newFormData.asset_id = value;
       const selectedAsset = assets.find(a => a.id.toString() === value.toString());
       if (selectedAsset) {
-        // 통화 자동 매핑
         let newCurrency = 'KRW';
         if (selectedAsset.ticker === 'USD' || selectedAsset.country === 'US') {
           newCurrency = 'USD';
         }
         newFormData.currency = newCurrency;
 
-        // 예수금 자산 선택 시
         if (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') {
-          if (newFormData.type !== 'DEPOSIT' && newFormData.type !== 'WITHDRAW' && newFormData.type !== 'EXCHANGE') {
+          if (newFormData.type !== 'DEPOSIT' && newFormData.type !== 'WITHDRAW' && newFormData.type !== 'EXCHANGE' && newFormData.type !== 'TRANSFER') {
             newFormData.type = 'DEPOSIT';
           }
-          if (newFormData.type !== 'EXCHANGE') {
+          if (newFormData.type !== 'EXCHANGE' && newFormData.type !== 'TRANSFER') {
             newFormData.price = '1';
             const q = parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
             newFormData.total_amount = q.toString();
@@ -194,10 +238,38 @@ const TransactionsTab = () => {
    */
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const isTransfer = formData.type === 'TRANSFER';
+    const isExchange = formData.type === 'EXCHANGE';
+
+    if (isTransfer && !editingId) {
+      const transferPayload = {
+        source_account_id: parseInt(formData.account_id),
+        target_account_id: parseInt(formData.target_account_id),
+        asset_id: parseInt(formData.asset_id),
+        amount: parseFloat(formData.total_amount.toString().replace(/,/g, '')) || 0,
+        transaction_date: formData.transaction_date,
+        memo: formData.memo || null
+      };
+
+      try {
+        const response = await fetch(`${DB_API_BASE}/transactions/transfer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(transferPayload)
+        });
+
+        if (response.ok) {
+          fetchData();
+          resetForm();
+        }
+      } catch (error) {
+        console.error('계좌 이체 등록 오류:', error);
+      }
+      return;
+    }
+
     const url = editingId ? `${DB_API_BASE}/transactions/${editingId}` : `${DB_API_BASE}/transactions`;
     const method = editingId ? 'PUT' : 'POST';
-
-    const isExchange = formData.type === 'EXCHANGE';
 
     const payload = {
       ...formData,
@@ -227,7 +299,7 @@ const TransactionsTab = () => {
           setFormData(prev => ({
             ...prev,
             quantity: '0',
-            price: isCash && prev.type !== 'EXCHANGE' ? '1' : '0',
+            price: isCash && prev.type !== 'EXCHANGE' && prev.type !== 'TRANSFER' ? '1' : '0',
             total_amount: '0'
           }));
         }
@@ -244,15 +316,17 @@ const TransactionsTab = () => {
     setEditingId(tx.id);
     setFormData({
       account_id: tx.account_id,
+      target_account_id: '',
       asset_id: tx.asset_id,
       target_asset_id: tx.target_asset_id || '',
       transaction_date: tx.transaction_date,
       type: tx.type,
-      quantity: tx.quantity.toString(),
-      price: tx.price.toString(),
-      total_amount: tx.total_amount.toString(),
+      quantity: (tx.quantity ?? 0).toString(),
+      price: (tx.price ?? 0).toString(),
+      total_amount: (tx.total_amount ?? 0).toString(),
       currency: tx.currency,
-      exchange_rate: tx.exchange_rate !== undefined ? tx.exchange_rate : null
+      exchange_rate: tx.exchange_rate !== undefined ? tx.exchange_rate : null,
+      memo: tx.memo || ''
     });
   };
 
@@ -278,6 +352,8 @@ const TransactionsTab = () => {
     const defaultAsset = assets.find(a => a.id.toString() === defaultAssetId.toString());
     const cashAssets = assets.filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH');
     const defaultTarget = cashAssets.find(a => a.id.toString() !== defaultAssetId.toString()) || assets[1];
+    const defaultAccountId = accounts.length > 0 ? accounts[0].id : '';
+    const altAcc = accounts.find(a => a.id.toString() !== defaultAccountId.toString());
 
     let defaultCurrency = 'KRW';
     let defaultType = 'BUY';
@@ -294,7 +370,8 @@ const TransactionsTab = () => {
     }
 
     setFormData({
-      account_id: accounts.length > 0 ? accounts[0].id : '',
+      account_id: defaultAccountId,
+      target_account_id: altAcc ? altAcc.id : '',
       asset_id: defaultAssetId,
       target_asset_id: defaultTarget ? defaultTarget.id : '',
       transaction_date: new Date().toISOString().split('T')[0],
@@ -303,7 +380,8 @@ const TransactionsTab = () => {
       price: defaultPrice,
       total_amount: '0',
       currency: defaultCurrency,
-      exchange_rate: null
+      exchange_rate: null,
+      memo: ''
     });
   };
 
@@ -318,6 +396,7 @@ const TransactionsTab = () => {
   const selectedAsset = assets.find(a => a.id.toString() === formData.asset_id.toString());
   const isCashAsset = selectedAsset ? (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') : false;
   const isExchangeForm = formData.type === 'EXCHANGE';
+  const isTransferForm = formData.type === 'TRANSFER';
 
   return (
     <div className="p-6">
@@ -355,7 +434,7 @@ const TransactionsTab = () => {
       <div className="mb-8 bg-slate-50 p-6 rounded-xl border border-slate-200">
         <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
           {editingId ? <Edit2 size={16} /> : <Plus size={16} />}
-          {editingId ? '거래 내역 수정' : '새 거래 내역 추가'}
+          {editingId ? '거래 내역 수정' : (isTransferForm ? '계좌 이체' : '새 거래 내역 추가')}
         </h3>
         <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4 items-end">
           <div>
@@ -369,8 +448,11 @@ const TransactionsTab = () => {
               required
             />
           </div>
+
           <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">계좌</label>
+            <label className="block text-xs font-medium text-slate-500 mb-1">
+              {isTransferForm ? '출발 계좌' : '계좌'}
+            </label>
             <select
               name="account_id"
               value={formData.account_id}
@@ -385,6 +467,28 @@ const TransactionsTab = () => {
               ))}
             </select>
           </div>
+
+          {isTransferForm && (
+            <div>
+              <label className="block text-xs font-medium text-slate-500 mb-1">도착 계좌</label>
+              <select
+                name="target_account_id"
+                value={formData.target_account_id}
+                onChange={handleInputChange}
+                className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                required
+              >
+                {accounts
+                  .filter(acc => acc.id.toString() !== formData.account_id.toString())
+                  .map(acc => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.provider} / {acc.name}{acc.alias ? ` / ${acc.alias}` : ''}
+                    </option>
+                  ))}
+              </select>
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
               {isExchangeForm ? '출발 자산' : '자산'}
@@ -401,6 +505,7 @@ const TransactionsTab = () => {
               ))}
             </select>
           </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">유형</label>
             <select
@@ -414,8 +519,9 @@ const TransactionsTab = () => {
                 <>
                   <option value="DEPOSIT">입금 (DEPOSIT)</option>
                   <option value="WITHDRAW">출금 (WITHDRAW)</option>
+                  <option value="TRANSFER">이체 (TRANSFER)</option>
                   <option value="EXCHANGE">환전 (EXCHANGE)</option>
-                  {editingId && !['DEPOSIT', 'WITHDRAW', 'EXCHANGE'].includes(formData.type) && (
+                  {editingId && !['DEPOSIT', 'WITHDRAW', 'TRANSFER', 'EXCHANGE'].includes(formData.type) && (
                     <option value={formData.type}>{formData.type}</option>
                   )}
                 </>
@@ -425,6 +531,7 @@ const TransactionsTab = () => {
                   <option value="SELL">매도 (SELL)</option>
                   <option value="DEPOSIT">입금 (DEPOSIT)</option>
                   <option value="WITHDRAW">출금 (WITHDRAW)</option>
+                  <option value="TRANSFER">이체 (TRANSFER)</option>
                   <option value="INITIAL_BALANCE">초기 잔고 (INITIAL_BALANCE)</option>
                   <option value="INTEREST">이자 (INTEREST)</option>
                   <option value="TAX">세금 (TAX)</option>
@@ -454,35 +561,42 @@ const TransactionsTab = () => {
             </div>
           )}
 
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">수량</label>
-            <input
-              type="text"
-              name="quantity"
-              value={formatInputNumber(formData.quantity)}
-              onChange={handleInputChange}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-              required
-            />
-          </div>
+          {!isTransferForm && (
+            <>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">수량</label>
+                <input
+                  type="text"
+                  name="quantity"
+                  value={formatInputNumber(formData.quantity)}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  {isExchangeForm ? '적용 환율' : '단가'}
+                </label>
+                <input
+                  type="text"
+                  name="price"
+                  value={formatInputNumber(formData.price)}
+                  onChange={handleInputChange}
+                  readOnly={isCashAsset && !isExchangeForm}
+                  className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
+                    isCashAsset && !isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                  }`}
+                  required
+                />
+              </div>
+            </>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
-              {isExchangeForm ? '적용 환율' : '단가'}
+              {isTransferForm ? '이체 금액' : '총 금액'}
             </label>
-            <input
-              type="text"
-              name="price"
-              value={formatInputNumber(formData.price)}
-              onChange={handleInputChange}
-              readOnly={isCashAsset && !isExchangeForm}
-              className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                isCashAsset && !isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
-              }`}
-              required
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-slate-500 mb-1">총 금액</label>
             <input
               type="text"
               name="total_amount"
@@ -513,7 +627,7 @@ const TransactionsTab = () => {
               className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center gap-2"
             >
               {editingId ? <Check size={16} /> : <Plus size={16} />}
-              {editingId ? '저장' : '거래 기록 추가'}
+              {editingId ? '저장' : (isTransferForm ? '이체 실행' : '거래 기록 추가')}
             </button>
             {editingId && (
               <button
@@ -547,6 +661,7 @@ const TransactionsTab = () => {
           <tbody className="divide-y divide-slate-100">
             {filteredTransactions.map((tx) => {
               const isExchangeTx = tx.type === 'EXCHANGE';
+              const isTransferTx = !!tx.transfer_pair_id || tx.type === 'TRANSFER';
               const srcAsset = assets.find(a => a.id === tx.asset_id);
               const targetAsset = tx.target_asset_name 
                 ? { name: tx.target_asset_name, ticker: tx.target_asset_ticker }
@@ -560,13 +675,37 @@ const TransactionsTab = () => {
                 ? `${srcAsset?.name || ''} ➔ ${targetAsset?.name || ''}`
                 : (srcAsset?.name || '');
 
-              const typeBadgeText = isExchangeTx ? '환전' : tx.type;
+              const badgeProps = getTypeBadgeProps(tx);
+
+              const safeQuantity = tx.quantity ?? 0;
+              const safePrice = tx.price ?? 0;
+              const safeTotal = tx.total_amount ?? 0;
+
+              const currentAccount = accounts.find(a => a.id === tx.account_id);
+              const currentAccountName = currentAccount ? currentAccount.name : tx.account_id;
+
+              let counterpartElement = null;
+              if (isTransferTx && tx.transfer_pair_id) {
+                const pairTx = transactions.find(t => t.transfer_pair_id === tx.transfer_pair_id && t.id !== tx.id);
+                if (pairTx) {
+                  const pairAccount = accounts.find(a => a.id === pairTx.account_id);
+                  if (pairAccount) {
+                    const arrow = tx.type === 'WITHDRAW' ? '➔' : '⬅';
+                    counterpartElement = (
+                      <span className="ml-1.5 text-xs text-purple-600 font-semibold">
+                        {arrow} {pairAccount.name}
+                      </span>
+                    );
+                  }
+                }
+              }
 
               return (
                 <tr key={tx.id} className="hover:bg-slate-50 transition-colors">
                   <td className="px-4 py-3 text-sm text-slate-500 whitespace-nowrap">{tx.transaction_date}</td>
                   <td className="px-4 py-3 text-sm text-slate-700">
-                    {accounts.find(a => a.id === tx.account_id)?.name || tx.account_id}
+                    {currentAccountName}
+                    {counterpartElement}
                   </td>
                   <td className="px-4 py-3 text-sm text-slate-900 font-bold">
                     {tickerDisplay}
@@ -576,13 +715,8 @@ const TransactionsTab = () => {
                   </td>
                   <td className="px-4 py-3 text-sm">
                     <div className="flex items-center gap-1.5">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        isExchangeTx ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' :
-                        ['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type) ? 'bg-blue-50 text-blue-600' : 
-                        ['SELL', 'WITHDRAW'].includes(tx.type) ? 'bg-red-50 text-red-600' :
-                        'bg-emerald-50 text-emerald-600'
-                      }`}>
-                        {typeBadgeText}
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeProps.style}`}>
+                        {badgeProps.label}
                       </span>
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                         tx.source === 'AUTO_KIWOOM' 
@@ -593,14 +727,14 @@ const TransactionsTab = () => {
                       </span>
                     </div>
                   </td>
-                  <td className="px-4 py-3 text-sm text-right font-mono">{maskValue(tx.quantity.toLocaleString())}</td>
+                  <td className="px-4 py-3 text-sm text-right font-mono">{maskValue(safeQuantity.toLocaleString())}</td>
                   <td className="px-4 py-3 text-sm text-right font-mono text-slate-500">
                     {isExchangeTx 
-                      ? `@ ${maskValue((tx.exchange_rate || tx.price).toLocaleString())}`
-                      : `${maskValue(tx.price.toLocaleString())} ${tx.currency}`}
+                      ? `@ ${maskValue(((tx.exchange_rate !== undefined && tx.exchange_rate !== null) ? tx.exchange_rate : safePrice).toLocaleString())}`
+                      : `${maskValue(safePrice.toLocaleString())} ${tx.currency}`}
                   </td>
                   <td className="px-4 py-3 text-sm text-right font-bold font-mono">
-                    {maskValue(tx.total_amount.toLocaleString())} {tx.currency}
+                    {maskValue(safeTotal.toLocaleString())} {tx.currency}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">
@@ -623,6 +757,7 @@ const TransactionsTab = () => {
                 </tr>
               );
             })}
+
           </tbody>
         </table>
         {filteredTransactions.length === 0 && (
@@ -631,6 +766,7 @@ const TransactionsTab = () => {
       </div>
     </div>
   );
+
 };
 
 export default TransactionsTab;

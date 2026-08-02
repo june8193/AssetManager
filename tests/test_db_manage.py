@@ -563,7 +563,102 @@ def test_get_transactions_with_date_filters(db_session, test_user):
     assert len(filtered) == 1
     assert filtered[0]["memo"] == "June Tx"
 
+def test_create_transfer_transaction(db_session, test_user):
+    """POST /api/db/transactions/transfer 호출 시 이체 쌍 트랜잭션(WITHDRAW, DEPOSIT)이 자동 생성되는지 검증합니다."""
+    asset = Asset(ticker="KRW", name="원화예수금", major_category="일반주식", sub_category="국내주식", country="KR")
+    acc_src = Account(user_id=test_user.id, name="출발계좌", provider="은행A", account_type="BANK", is_active=True)
+    acc_dst = Account(user_id=test_user.id, name="도착계좌", provider="은행B", account_type="BANK", is_active=True)
+    db_session.add_all([asset, acc_src, acc_dst])
+    db_session.commit()
 
+    payload = {
+        "source_account_id": acc_src.id,
+        "target_account_id": acc_dst.id,
+        "asset_id": asset.id,
+        "amount": 50000.0,
+        "transaction_date": "2026-08-01",
+        "memo": "용돈 이체"
+    }
+    response = client.post("/api/db/transactions/transfer", json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert len(data) == 2
 
+    tx_src = next(t for t in data if t["account_id"] == acc_src.id)
+    tx_dst = next(t for t in data if t["account_id"] == acc_dst.id)
 
+    assert tx_src["type"] == "WITHDRAW"
+    assert tx_src["total_amount"] == 50000.0
+    assert tx_src["transfer_pair_id"] is not None
 
+    assert tx_dst["type"] == "DEPOSIT"
+    assert tx_dst["total_amount"] == 50000.0
+    assert tx_dst["transfer_pair_id"] == tx_src["transfer_pair_id"]
+
+def test_delete_transfer_transaction_cascade(db_session, test_user):
+    """이체 트랜잭션 삭제 시 동일 transfer_pair_id를 가진 상대방 트랜잭션도 함께 삭제되는지 검증합니다."""
+    asset = Asset(ticker="KRW2", name="원화예수금2", major_category="일반주식", sub_category="국내주식", country="KR")
+    acc_src = Account(user_id=test_user.id, name="출발계좌2", provider="은행A", account_type="BANK", is_active=True)
+    acc_dst = Account(user_id=test_user.id, name="도착계좌2", provider="은행B", account_type="BANK", is_active=True)
+    db_session.add_all([asset, acc_src, acc_dst])
+    db_session.commit()
+
+    payload = {
+        "source_account_id": acc_src.id,
+        "target_account_id": acc_dst.id,
+        "asset_id": asset.id,
+        "amount": 30000.0,
+        "transaction_date": "2026-08-02",
+        "memo": "이체 삭제 테스트"
+    }
+    res = client.post("/api/db/transactions/transfer", json=payload)
+    assert res.status_code == 200
+    created_txs = res.json()
+    tx_id = created_txs[0]["id"]
+
+    # 삭제
+    del_res = client.delete(f"/api/db/transactions/{tx_id}")
+    assert del_res.status_code == 200
+
+    # DB 확인: 두 거래 모두 삭제되어야 함
+    pair_id = created_txs[0]["transfer_pair_id"]
+    remaining = db_session.query(Transaction).filter(Transaction.transfer_pair_id == pair_id).all()
+    assert len(remaining) == 0
+
+def test_update_transfer_transaction_cascade(db_session, test_user):
+    """이체 트랜잭션 수정 시 동일 transfer_pair_id를 가진 상대방 트랜잭션도 금액/일자/메모가 자동 수정되는지 검증합니다."""
+    asset = Asset(ticker="KRW3", name="원화예수금3", major_category="일반주식", sub_category="국내주식", country="KR")
+    acc_src = Account(user_id=test_user.id, name="출발계좌3", provider="은행A", account_type="BANK", is_active=True)
+    acc_dst = Account(user_id=test_user.id, name="도착계좌3", provider="은행B", account_type="BANK", is_active=True)
+    db_session.add_all([asset, acc_src, acc_dst])
+    db_session.commit()
+
+    payload = {
+        "source_account_id": acc_src.id,
+        "target_account_id": acc_dst.id,
+        "asset_id": asset.id,
+        "amount": 20000.0,
+        "transaction_date": "2026-08-01",
+        "memo": "변경전 이체"
+    }
+    res = client.post("/api/db/transactions/transfer", json=payload)
+    assert res.status_code == 200
+    created_txs = res.json()
+    src_tx = next(t for t in created_txs if t["account_id"] == acc_src.id)
+
+    # 수정 payload (출금 트랜잭션 업데이트)
+    update_payload = dict(src_tx)
+    update_payload["total_amount"] = 25000.0
+    update_payload["transaction_date"] = "2026-08-03"
+    update_payload["memo"] = "변경후 이체"
+
+    put_res = client.put(f"/api/db/transactions/{src_tx['id']}", json=update_payload)
+    assert put_res.status_code == 200
+
+    # DB 확인: 상대방 입금 거래도 25000.0, 2026-08-03, "변경후 이체"로 수정되어야 함
+    pair_id = src_tx["transfer_pair_id"]
+    updated_pair = db_session.query(Transaction).filter(Transaction.transfer_pair_id == pair_id).all()
+    assert len(updated_pair) == 2
+    assert all(t.total_amount == 25000.0 for t in updated_pair)
+    assert all(str(t.transaction_date) == "2026-08-03" for t in updated_pair)
+    assert all(t.memo == "변경후 이체" for t in updated_pair)

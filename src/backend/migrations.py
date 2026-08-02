@@ -56,6 +56,8 @@ def run_migrations(engine: Engine) -> None:
 
             _add_column_if_missing(conn, "transactions", "external_id", "VARCHAR")
             _add_column_if_missing(conn, "transactions", "target_asset_id", "INTEGER")
+            _add_column_if_missing(conn, "transactions", "transfer_pair_id", "VARCHAR")
+
     except Exception as e:
         logger.error(f"⚠️ 데이터베이스 마이그레이션 수행 중 오류 발생: {e}", exc_info=True)
         raise RuntimeError(f"데이터베이스 마이그레이션 실패: {e}") from e

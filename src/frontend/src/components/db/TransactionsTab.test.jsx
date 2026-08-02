@@ -403,4 +403,94 @@ describe('TransactionsTab', () => {
       expect(screen.getByText('환전')).toBeInTheDocument();
     });
   });
+
+  it('거래 유형으로 계좌 이체(TRANSFER) 선택 시 이체 폼이 노출되고 POST /transactions/transfer 요청이 성공해야 한다', async () => {
+    let transferRequestBody = null;
+    vi.stubGlobal('fetch', vi.fn((url, options) => {
+      if (url.endsWith('/transactions/transfer') && options?.method === 'POST') {
+        transferRequestBody = JSON.parse(options.body);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([{ id: 100 }, { id: 101 }]) });
+      }
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockTransactions) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const typeSelect = container.querySelector('select[name="type"]');
+    fireEvent.change(typeSelect, { target: { value: 'TRANSFER' } });
+
+
+    await waitFor(() => {
+      expect(screen.getByText('출발 계좌')).toBeInTheDocument();
+      expect(screen.getByText('도착 계좌')).toBeInTheDocument();
+    });
+
+    const submitButton = screen.getByText('이체 실행');
+    fireEvent.click(submitButton);
+
+    await waitFor(() => {
+      expect(transferRequestBody).not.toBeNull();
+      expect(transferRequestBody.source_account_id).toBeDefined();
+      expect(transferRequestBody.target_account_id).toBeDefined();
+    });
+  });
+
+  it('거래 목록 테이블에서 이체 거래 건(transfer_pair_id 존재)에 이체 배지와 상대 계좌 정보가 표시되어야 한다', async () => {
+    const transferTxList = [
+      {
+        id: 20,
+        account_id: 1,
+        asset_id: 1,
+        transaction_date: '2026-08-01',
+        type: 'WITHDRAW',
+        total_amount: 50000,
+        currency: 'KRW',
+        transfer_pair_id: 'uuid-1234',
+        memo: '이체 메모'
+      },
+      {
+        id: 21,
+        account_id: 2,
+        asset_id: 1,
+        transaction_date: '2026-08-01',
+        type: 'DEPOSIT',
+        total_amount: 50000,
+        currency: 'KRW',
+        transfer_pair_id: 'uuid-1234',
+        memo: '이체 메모'
+      }
+    ];
+
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(transferTxList) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getAllByText('이체').length).toBeGreaterThan(0);
+      expect(screen.getByText(/➔ Acc2/i)).toBeInTheDocument();
+      expect(screen.getByText(/⬅ Acc1/i)).toBeInTheDocument();
+    });
+  });
 });
+
+
