@@ -486,7 +486,9 @@ describe('TransactionsTab', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getAllByText('이체').length).toBeGreaterThan(0);
+      expect(screen.getByText('WITHDRAW')).toBeInTheDocument();
+      expect(screen.getByText('DEPOSIT')).toBeInTheDocument();
+      expect(screen.getAllByText('이체')).toHaveLength(2);
       expect(screen.getByText(/➔ Acc2/i)).toBeInTheDocument();
       expect(screen.getByText(/⬅ Acc1/i)).toBeInTheDocument();
     });

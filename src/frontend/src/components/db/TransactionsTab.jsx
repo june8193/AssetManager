@@ -20,13 +20,9 @@ const formatInputNumber = (value) => {
  */
 const getTypeBadgeProps = (tx) => {
   const isExchangeTx = tx.type === 'EXCHANGE';
-  const isTransferTx = !!tx.transfer_pair_id || tx.type === 'TRANSFER';
 
   if (isExchangeTx) {
     return { label: '환전', style: 'bg-emerald-100 text-emerald-800 border border-emerald-200' };
-  }
-  if (isTransferTx) {
-    return { label: '이체', style: 'bg-purple-100 text-purple-800 border border-purple-200' };
   }
   if (['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type)) {
     return { label: tx.type, style: 'bg-blue-50 text-blue-600' };
@@ -718,6 +714,11 @@ const TransactionsTab = () => {
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${badgeProps.style}`}>
                         {badgeProps.label}
                       </span>
+                      {isTransferTx && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-100 text-purple-700 border border-purple-200">
+                          이체
+                        </span>
+                      )}
                       <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                         tx.source === 'AUTO_KIWOOM' 
                           ? 'bg-emerald-100 text-emerald-700' 
