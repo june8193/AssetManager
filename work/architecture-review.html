@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>Architecture Review — AssetManager</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
+    </script>
+    <style>
+      .seam { stroke-dasharray: 4 4; }
+      .leak { stroke: #dc2626; }
+      .deep-bg { background: linear-gradient(135deg, #0f172a, #1e293b); }
+    </style>
+  </head>
+  <body class="bg-stone-50 text-slate-900 font-sans">
+    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
+      <!-- Header -->
+      <header class="border-b border-stone-200 pb-6">
+        <div class="flex items-center justify-between">
+          <div>
+            <h1 class="text-3xl font-bold font-serif text-slate-900">Architecture Review — AssetManager</h1>
+            <p class="text-stone-500 text-sm mt-1">Deepening opportunities, locality analysis, and seam placement</p>
+          </div>
+          <div class="text-right">
+            <span class="inline-block bg-slate-900 text-white text-xs px-3 py-1 rounded-full font-mono">2026-08-02</span>
+          </div>
+        </div>
+
+        <!-- Legend -->
+        <div class="mt-6 flex items-center space-x-6 text-xs text-stone-600 bg-white p-3 rounded-lg border border-stone-200">
+          <div class="flex items-center space-x-2">
+            <span class="w-4 h-4 rounded border border-slate-400 bg-stone-100 inline-block"></span>
+            <span>Module</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-4 h-4 rounded border-2 border-dashed border-slate-600 inline-block"></span>
+            <span>Seam</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-4 h-4 rounded bg-red-500 inline-block"></span>
+            <span class="text-red-700 font-medium">Leakage</span>
+          </div>
+          <div class="flex items-center space-x-2">
+            <span class="w-4 h-4 rounded deep-bg inline-block"></span>
+            <span class="font-semibold text-slate-900">Deep Module</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- Candidates List -->
+      <section id="candidates" class="space-y-10">
+        
+        <!-- Candidate 1 -->
+        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 01</span>
+              <h2 class="text-2xl font-bold text-slate-900 mt-1">Collapse Snapshot & Transaction Calculation into Deep SnapshotEngine</h2>
+            </div>
+            <div class="flex items-center space-x-2">
+              <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full">Strong</span>
+              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">in-process</span>
+            </div>
+          </div>
+
+          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/routers/db_manage.py" class="text-indigo-600 hover:underline">src/backend/routers/db_manage.py</a> (51KB)</div>
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/dashboard_service.py" class="text-indigo-600 hover:underline">src/backend/services/dashboard_service.py</a></div>
+          </div>
+
+          <!-- Side-by-Side Diagram -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <!-- Before -->
+            <div class="border border-red-200 bg-red-50/30 rounded-lg p-4 space-y-2">
+              <span class="text-xs font-bold text-red-700 uppercase tracking-wider">Before — Shallow Router & Leaky Seam</span>
+              <div class="bg-white p-3 rounded border border-red-200 text-xs space-y-2">
+                <div class="font-bold text-red-900">db_manage.py (Router - 1285 lines)</div>
+                <ul class="list-disc pl-4 text-stone-600 space-y-1 text-[11px]">
+                  <li>Inline ORM queries & explicit SQL</li>
+                  <li>Snapshot valuation & cash math inside endpoint</li>
+                  <li>Directly instantiates DashboardService & PriceService</li>
+                  <li>Leaks transaction logic & FX conversions</li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- After -->
+            <div class="border border-emerald-200 bg-emerald-50/30 rounded-lg p-4 space-y-2">
+              <span class="text-xs font-bold text-emerald-700 uppercase tracking-wider">After — Deep SnapshotEngine Seam</span>
+              <div class="deep-bg text-white p-3 rounded shadow-md text-xs space-y-2">
+                <div class="font-bold text-emerald-400">SnapshotEngine (Deep Module)</div>
+                <div class="text-[11px] text-slate-300 font-mono">Interface: preview_snapshot(date, fx) | commit_snapshot(previews)</div>
+                <div class="text-[10px] text-slate-400 border-t border-slate-700 pt-1">
+                  Absorbs ORM queries, cash calculation, brokerage/bank valuations, & transaction pair matching.
+                </div>
+              </div>
+              <div class="bg-white p-2 rounded border border-emerald-200 text-xs text-stone-600 text-center">
+                db_manage.py (Router) shrinks to 2-line pass-through adapter
+              </div>
+            </div>
+          </div>
+
+          <!-- Problem & Solution -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
+              <p class="text-stone-600">The HTTP router <code class="bg-stone-100 px-1 font-mono text-xs">db_manage.py</code> is a 51KB shallow interface containing raw ORM queries, snapshot valuation algorithms, and cash calculation logic, forcing tests to boot FastAPI HTTP TestClient.</p>
+            </div>
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
+              <p class="text-stone-600">Extract a deep <code class="bg-stone-100 px-1 font-mono text-xs">SnapshotEngine</code> module with a small interface (<code class="bg-stone-100 px-1 font-mono text-xs">preview_snapshot</code>, <code class="bg-stone-100 px-1 font-mono text-xs">commit_snapshot</code>) that absorbs all snapshot calculation, transaction matching, and DB session management.</p>
+            </div>
+          </div>
+
+          <!-- Benefits -->
+          <div>
+            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
+            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: Snapshot & cash calculation rules concentrate in one module</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>leverage</b>: One interface used by HTTP Router, CLI, and Background Tasks</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>interface shrinks</b>: Router shrinks from 1285 lines to clean thin handlers</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>testability</b>: Direct unit tests for SnapshotEngine without HTTP client setup</span></li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- Candidate 2 -->
+        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 02</span>
+              <h2 class="text-2xl font-bold text-slate-900 mt-1">Consolidate Market Data Provider Adapters & Holiday Seam</h2>
+            </div>
+            <div class="flex items-start space-x-2">
+              <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full">Strong</span>
+              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">ports & adapters</span>
+            </div>
+          </div>
+
+          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/price_service.py" class="text-indigo-600 hover:underline">src/backend/services/price_service.py</a> (47KB)</div>
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/dashboard_service.py" class="text-indigo-600 hover:underline">src/backend/services/dashboard_service.py</a></div>
+          </div>
+
+          <!-- Diagram -->
+          <div class="bg-stone-50 p-4 rounded-lg border border-stone-200">
+            <pre class="mermaid">
+              flowchart LR
+                subgraph Callers["Callers"]
+                  DS[DashboardService]
+                  R[Price Router]
+                  MCP[MCP Tools]
+                end
+
+                subgraph Seam["MarketData Seam"]
+                  MDM["MarketDataModule (Deep)"]
+                end
+
+                subgraph Adapters["Adapters (Internal)"]
+                  KA["KiwoomAdapter"]
+                  YA["YFinanceAdapter"]
+                  HA["HolidayAdapter"]
+                end
+
+                DS -->|get_prices| MDM
+                R -->|get_prices| MDM
+                MCP -->|get_prices| MDM
+
+                MDM --> KA
+                MDM --> YA
+                MDM --> HA
+
+                classDef deep fill:#0f172a,color:#fff,stroke:#0f172a;
+                classDef adapter fill:#f8fafc,stroke:#cbd5e1,color:#334155;
+                class MDM deep;
+                class KA,YA,HA adapter;
+            </pre>
+          </div>
+
+          <!-- Problem & Solution -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
+              <p class="text-stone-600"><code class="bg-stone-100 px-1 font-mono text-xs">is_us_market_open</code> and <code class="bg-stone-100 px-1 font-mono text-xs">is_kr_market_open</code> are duplicated verbatim across <code class="bg-stone-100 px-1 font-mono text-xs">PriceService</code> and <code class="bg-stone-100 px-1 font-mono text-xs">DashboardService</code>. Both modules instantiate Kiwoom API clients directly and manage price caching, leading to shallow wrapper leakage.</p>
+            </div>
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
+              <p class="text-stone-600">Establish a single deep <code class="bg-stone-100 px-1 font-mono text-xs">MarketDataModule</code>. Hide Kiwoom API and yfinance as internal adapters behind a unified interface (<code class="bg-stone-100 px-1 font-mono text-xs">get_prices(tickers)</code>, <code class="bg-stone-100 px-1 font-mono text-xs">is_market_open(market)</code>).</p>
+            </div>
+          </div>
+
+          <!-- Benefits -->
+          <div>
+            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
+            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: Deletes duplicated market open and holiday logic across services</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>leverage</b>: Callers do not know whether a ticker comes from Kiwoom or yfinance</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>real seam</b>: Two adapters (Kiwoom, yfinance) + In-memory Fake for tests</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>implementation absorbs wrappers</b>: Cache & rate-limiting logic hidden inside module</span></li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- Candidate 3 -->
+        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 03</span>
+              <h2 class="text-2xl font-bold text-slate-900 mt-1">Deep Portfolio Valuation & Performance Calculation Engine</h2>
+            </div>
+            <div class="flex items-start space-x-2">
+              <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">Worth exploring</span>
+              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">in-process</span>
+            </div>
+          </div>
+
+          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/dashboard_service.py" class="text-indigo-600 hover:underline">src/backend/services/dashboard_service.py</a> (35KB)</div>
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/performance_service.py" class="text-indigo-600 hover:underline">src/backend/services/performance_service.py</a></div>
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/ratio_service.py" class="text-indigo-600 hover:underline">src/backend/services/ratio_service.py</a></div>
+          </div>
+
+          <!-- Problem & Solution -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
+              <p class="text-stone-600">Holding valuation, asset classification, FX conversion, and ROI calculations are scattered across <code class="bg-stone-100 px-1 font-mono text-xs">DashboardService</code>, <code class="bg-stone-100 px-1 font-mono text-xs">PerformanceService</code>, and <code class="bg-stone-100 px-1 font-mono text-xs">RatioService</code>. Callers must invoke multiple services and manually stitch risk metrics.</p>
+            </div>
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
+              <p class="text-stone-600">Consolidate valuation into a deep <code class="bg-stone-100 px-1 font-mono text-xs">PortfolioValuator</code> module. A single call <code class="bg-stone-100 px-1 font-mono text-xs">evaluate_portfolio(as_of_date)</code> computes holdings, valuations, asset category ratios, and risk metrics (Sharpe/Sortino/MDD) atomically.</p>
+            </div>
+          </div>
+
+          <!-- Benefits -->
+          <div>
+            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
+            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: All valuation rules, FX conversions, and ROI metrics in one place</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>leverage</b>: Single interface serves Dashboard UI, Reports, and MCP Tools</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>deletion test</b>: Collapses 3 shallow service files into 1 deep domain module</span></li>
+            </ul>
+          </div>
+        </article>
+
+        <!-- Candidate 4 -->
+        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
+          <div class="flex items-start justify-between">
+            <div>
+              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 04</span>
+              <h2 class="text-2xl font-bold text-slate-900 mt-1">Encapsulate MCP Backend Client & Tool Seam Adapter</h2>
+            </div>
+            <div class="flex items-start space-x-2">
+              <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">Worth exploring</span>
+              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">local-substitutable</span>
+            </div>
+          </div>
+
+          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/mcp/client.py" class="text-indigo-600 hover:underline">src/mcp/client.py</a></div>
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/mcp/tools/assets.py" class="text-indigo-600 hover:underline">src/mcp/tools/assets.py</a></div>
+            <div>• <a href="file:///C:/localrepo/AssetManager/src/mcp/tools/market.py" class="text-indigo-600 hover:underline">src/mcp/tools/market.py</a></div>
+          </div>
+
+          <!-- Problem & Solution -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
+              <p class="text-stone-600">MCP tool modules (<code class="bg-stone-100 px-1 font-mono text-xs">assets.py</code>, <code class="bg-stone-100 px-1 font-mono text-xs">market.py</code>) perform fine-grained HTTP REST stitching (e.g. <code class="bg-stone-100 px-1 font-mono text-xs">_append_performance_metrics</code> making separate REST calls to merge Sharpe/MDD metrics), leaking backend route structures into MCP tool code.</p>
+            </div>
+            <div>
+              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
+              <p class="text-stone-600">Create a deep <code class="bg-stone-100 px-1 font-mono text-xs">McpBackendAdapter</code> seam. MCP tools interact with domain-level adapter methods rather than stitching raw HTTP endpoints and mutating unstructured JSON dicts.</p>
+            </div>
+          </div>
+
+          <!-- Benefits -->
+          <div>
+            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
+            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: REST payload stitching and error fallbacks hidden behind seam</span></li>
+              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>interface shrinks</b>: MCP tools become thin declaration wrappers over domain adapter</span></li>
+            </ul>
+          </div>
+        </article>
+      </section>
+
+      <!-- Top Recommendation Section -->
+      <section id="top-recommendation" class="bg-slate-900 text-white rounded-xl p-8 space-y-4">
+        <div class="flex items-center space-x-3 text-emerald-400 text-xs font-mono uppercase tracking-wider">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <span>Top Recommendation</span>
+        </div>
+        <h3 class="text-2xl font-bold font-serif">Candidate 01: Deepen Snapshot Engine & Refactor db_manage.py</h3>
+        <p class="text-slate-300 text-sm leading-relaxed max-w-3xl">
+          <code class="bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded font-mono">db_manage.py</code> (51KB) is the single biggest source of architectural friction in the codebase. By extracting <code class="bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded font-mono">SnapshotEngine</code>, we eliminate 800+ lines of procedural SQL/ORM code from the HTTP router, isolate snapshot valuation rules into a deep module with high <b>locality</b>, and enable direct fast unit testing without spinning up FastAPI HTTP servers.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

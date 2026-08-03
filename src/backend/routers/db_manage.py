@@ -9,6 +9,8 @@ from ..database import get_db
 from ..models import Account, Asset, Transaction, AccountSnapshot, User, ExchangeRate, VALID_CATEGORIES
 from ..services.dashboard_service import DashboardService
 from ..services.price_service import price_service
+from ..services.snapshot_service import SnapshotService
+from ..services.transaction_service import TransactionService
 
 
 router = APIRouter(
@@ -388,77 +390,25 @@ def get_transactions(
     db: Session = Depends(get_db)
 ):
     """전체 또는 필터링된 거래 내역을 조회합니다."""
-    query = db.query(Transaction).options(
-        joinedload(Transaction.asset),
-        joinedload(Transaction.target_asset),
-        joinedload(Transaction.account)
-    )
-    if start_date:
-        query = query.filter(Transaction.transaction_date >= start_date)
-    if end_date:
-        query = query.filter(Transaction.transaction_date <= end_date)
-    return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
+    return TransactionService(db).get_transactions(start_date, end_date)
 
 def _validate_and_extract_transaction_data(transaction: TransactionSchema, db: Session) -> dict:
-    """트랜잭션 입력값의 유효성을 검증하고 DB 모델용 딕셔너리를 추출합니다.
-
-    Args:
-        transaction (TransactionSchema): 트랜잭션 요청 데이터
-        db (Session): 데이터베이스 세션
-
-    Returns:
-        dict: DB 모델 키워드 인자 딕셔너리
-
-    Raises:
-        HTTPException: 유효성 검증 실패 시
-    """
-    if transaction.type == "EXCHANGE":
-        if not transaction.target_asset_id:
-            raise HTTPException(
-                status_code=422, 
-                detail="환전(EXCHANGE) 거래 등록 시 도착 자산(target_asset_id)은 필수입니다."
-            )
-        
-        # 출발 자산 및 도착 자산의 현금 여부 유효성 검증
-        source_asset = db.query(Asset).filter(Asset.id == transaction.asset_id).first()
-        target_asset = db.query(Asset).filter(Asset.id == transaction.target_asset_id).first()
-        
-        if not source_asset or source_asset.major_category != "현금":
-            raise HTTPException(
-                status_code=422, 
-                detail="환전 출발 자산(asset_id)은 현금 카테고리 자산이어야 합니다."
-            )
-        if not target_asset or target_asset.major_category != "현금":
-            raise HTTPException(
-                status_code=422, 
-                detail="환전 도착 자산(target_asset_id)은 현금 카테고리 자산이어야 합니다."
-            )
-
-    return transaction.model_dump(
-        exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name"}
-    )
+    """트랜잭션 입력값의 유효성을 검증하고 DB 모델용 딕셔너리를 추출합니다."""
+    try:
+        return TransactionService(db).validate_and_extract_transaction_data(transaction)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 @router.post("/transactions", response_model=TransactionSchema)
 def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
     """새로운 거래 내역을 생성합니다."""
-    data = _validate_and_extract_transaction_data(transaction, db)
-    db_transaction = Transaction(**data)
-    db.add(db_transaction)
-    db.commit()
-    db.refresh(db_transaction)
-    return db_transaction
+    try:
+        return TransactionService(db).create_transaction(transaction)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 def _build_transfer_pair(req: TransferTransactionRequest, currency: str, transfer_pair_id: str) -> List[Transaction]:
-    """이체 쌍(출금 및 입금) Transaction 인스턴스를 생성하는 헬퍼 함수입니다.
-
-    Args:
-        req (TransferTransactionRequest): 계좌 이체 요청 스키마.
-        currency (str): 이체 적용 통화.
-        transfer_pair_id (str): 공유 이체 UUID 고유 식별자.
-
-    Returns:
-        List[Transaction]: 생성된 [WITHDRAW, DEPOSIT] Transaction 객체 리스트.
-    """
+    """이체 쌍(출금 및 입금) Transaction 인스턴스를 생성하는 헬퍼 함수입니다."""
     base_kwargs = {
         "asset_id": req.asset_id,
         "transaction_date": req.transaction_date,
@@ -475,81 +425,33 @@ def _build_transfer_pair(req: TransferTransactionRequest, currency: str, transfe
 
 @router.post("/transactions/transfer", response_model=List[TransactionSchema])
 def create_transfer_transaction(req: TransferTransactionRequest, db: Session = Depends(get_db)):
-    """계좌 이체 트랜잭션(WITHDRAW + DEPOSIT 쌍)을 원자적으로 생성합니다.
-
-    Args:
-        req (TransferTransactionRequest): 이체 정보 요청 데이터 (출발/도착 계좌, 자산, 금액, 일자, 메모).
-        db (Session): SQLAlchemy 데이터베이스 세션 객체.
-
-    Returns:
-        List[TransactionSchema]: 생성된 이체 쌍 트랜잭션 (WITHDRAW, DEPOSIT) 목록.
-
-    Raises:
-        HTTPException: 출발 계좌와 도착 계좌가 동일하거나(400), 대상 자산을 찾을 수 없을 때(404) 발생.
-    """
-    if req.source_account_id == req.target_account_id:
-        raise HTTPException(status_code=400, detail="출발 계좌와 도착 계좌가 동일할 수 없습니다.")
-    
-    asset = db.query(Asset).filter(Asset.id == req.asset_id).first()
-    if not asset:
-        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
-
-    transfer_pair_id = str(uuid.uuid4())
-    currency = asset.country if asset.country in ["USD", "KRW"] else "KRW"
-
-    pair_txs = _build_transfer_pair(req, currency, transfer_pair_id)
-    db.add_all(pair_txs)
-    db.commit()
-    for tx in pair_txs:
-        db.refresh(tx)
-    return pair_txs
-
+    """계좌 이체 트랜잭션(WITHDRAW + DEPOSIT 쌍)을 원자적으로 생성합니다."""
+    try:
+        return TransactionService(db).create_transfer_pair(req)
+    except ValueError as e:
+        err_msg = str(e)
+        if "동일할 수 없습니다" in err_msg:
+            raise HTTPException(status_code=400, detail=err_msg)
+        if "찾을 수 없습니다" in err_msg:
+            raise HTTPException(status_code=404, detail=err_msg)
+        raise HTTPException(status_code=422, detail=err_msg)
 
 @router.put("/transactions/{transaction_id}", response_model=TransactionSchema)
 def update_transaction(transaction_id: int, transaction: TransactionSchema, db: Session = Depends(get_db)):
     """기존 거래 내역 정보를 수정합니다."""
-    db_transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
-    if not db_transaction:
-        raise HTTPException(status_code=404, detail="거래 내역을 찾을 수 없습니다.")
-    data = _validate_and_extract_transaction_data(transaction, db)
-    for key, value in data.items():
-        setattr(db_transaction, key, value)
-
-    # 이체 트랜잭션 연동 수정 (Cascade)
-    if db_transaction.transfer_pair_id:
-        pair_txs = db.query(Transaction).filter(
-            Transaction.transfer_pair_id == db_transaction.transfer_pair_id,
-            Transaction.id != db_transaction.id
-        ).all()
-        for p in pair_txs:
-            p.total_amount = db_transaction.total_amount
-            p.transaction_date = db_transaction.transaction_date
-            p.memo = db_transaction.memo
-
-    db.commit()
-    db.refresh(db_transaction)
-    return db_transaction
+    try:
+        return TransactionService(db).update_transaction(transaction_id, transaction)
+    except ValueError as e:
+        raise HTTPException(status_code=404 if "찾을 수 없습니다" in str(e) else 422, detail=str(e))
 
 @router.delete("/transactions/{transaction_id}")
 def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
     """거래 내역을 삭제합니다."""
-    db_transaction = db.query(Transaction).filter(Transaction.id == transaction_id).first()
-    if not db_transaction:
-        raise HTTPException(status_code=404, detail="거래 내역을 찾을 수 없습니다.")
-    
-    # 이체 트랜잭션 연동 삭제 (Cascade)
-    if db_transaction.transfer_pair_id:
-        pair_txs = db.query(Transaction).filter(
-            Transaction.transfer_pair_id == db_transaction.transfer_pair_id
-        ).all()
-        for p in pair_txs:
-            db.delete(p)
-    else:
-        db.delete(db_transaction)
-
-    db.commit()
-    return {"message": "Deleted"}
-
+    try:
+        TransactionService(db).delete_transaction(transaction_id)
+        return {"message": "Deleted"}
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 @router.get("/accounts/{account_id}/transactions/period", response_model=List[TransactionSchema])
 def get_period_transactions(
@@ -559,16 +461,8 @@ def get_period_transactions(
     db: Session = Depends(get_db)
 ):
     """특정 계좌의 특정 기간 내 기존 거래 내역을 조회합니다."""
-    query = db.query(Transaction).options(
-        joinedload(Transaction.asset),
-        joinedload(Transaction.target_asset),
-        joinedload(Transaction.account)
-    ).filter(Transaction.account_id == account_id)
-    if start_date:
-        query = query.filter(Transaction.transaction_date > start_date)
-    if end_date:
-        query = query.filter(Transaction.transaction_date <= end_date)
-    return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
+    return TransactionService(db).get_period_transactions(account_id, start_date, end_date)
+
 
 
 # Snapshots
@@ -610,154 +504,18 @@ def delete_snapshots_by_date(snapshot_date: date, db: Session = Depends(get_db))
 
 @router.post("/snapshots/preview", response_model=List[SnapshotPreviewSchema])
 async def preview_snapshots(req: SaveSnapshotRequest, db: Session = Depends(get_db)):
-    """입력받은 환율을 적용하여 저장될 스냅샷 데이터를 미리 계산합니다.
-
-    Args:
-        req (SaveSnapshotRequest): 기준 일자와 환율 정보를 포함한 요청 객체
-        db (Session): 데이터베이스 세션
-
-    Returns:
-        List[SnapshotPreviewSchema]: 각 계좌별 계산된 스냅샷 미리보기 데이터 리스트
-    """
-    dashboard_service = DashboardService(db)
-    
-    accounts = db.query(Account).filter(Account.is_active == True).all()
-    if not accounts:
-        return []
-
-    # 1. 현재 보유 자산 및 주가 조회
-    holdings = dashboard_service.get_holdings()
-    query_tickers = list(set([h['asset'].ticker for h in holdings]))
-    prices = await dashboard_service.get_current_prices(query_tickers)
-    
-    # 2. 계좌별 평가액 합산 (입력된 환율 적용)
-    account_valuations = {acc.id: 0.0 for acc in accounts}
-    for h in holdings:
-        acc_id = h['account'].id
-        asset = h['asset']
-        qty = h['quantity']
-        price = prices.get(asset.ticker, 0.0)
-        
-        valuation = qty * price
-        valuation_krw = valuation
-        if asset.country == 'US' or asset.ticker == 'USD':
-            valuation_krw = valuation * req.exchange_rate
-        
-        if acc_id in account_valuations:
-            account_valuations[acc_id] += valuation_krw
-            
-    # 3. 각 계좌별 스냅샷 데이터 산출
-    # 최적화: 모든 계좌의 트랜잭션을 한 번에 조회
-    account_ids = [acc.id for acc in accounts]
-    all_transactions = db.query(Transaction).filter(
-        Transaction.account_id.in_(account_ids),
-        Transaction.transaction_date <= req.snapshot_date
-    ).all()
-    
-    # 계좌별 트랜잭션 그룹화
-    tx_by_account = {acc_id: [] for acc_id in account_ids}
-    for tx in all_transactions:
-        tx_by_account[tx.account_id].append(tx)
-
-    previews = []
-    for acc in accounts:
-        val_krw = account_valuations[acc.id]
-        
-        # 이전 마지막 스냅샷 조회 (기간 입금액 계산용)
-        last_snapshot = db.query(AccountSnapshot).filter(
-            AccountSnapshot.account_id == acc.id,
-            AccountSnapshot.snapshot_date < req.snapshot_date
-        ).order_by(AccountSnapshot.snapshot_date.desc()).first()
-        
-        last_date = last_snapshot.snapshot_date if last_snapshot else date(1970, 1, 1)
-        
-        period_deposit_krw = 0.0
-        total_net_deposit_krw = 0.0
-        
-        for tx in tx_by_account[acc.id]:
-            # 트랜잭션 당시 환율이 있으면 그것을 쓰고, 없으면 입력받은 환율(또는 1.0)을 적용하여 원화 환산
-            tx_rate = tx.exchange_rate if tx.exchange_rate else (req.exchange_rate if tx.currency == 'USD' else 1.0)
-            amount_krw = tx.total_amount
-            if tx.currency == 'USD':
-                amount_krw = tx.total_amount * tx_rate
-                
-            # 전체 누적 순 입금액 (수익 계산용)
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
-                total_net_deposit_krw += amount_krw
-            elif tx.type == 'WITHDRAW':
-                total_net_deposit_krw -= amount_krw
-            
-            # 특정 기간 순 입금액 (스냅샷 기록용)
-            if tx.transaction_date > last_date:
-                if tx.type == 'DEPOSIT':
-                    period_deposit_krw += amount_krw
-                elif tx.type == 'WITHDRAW':
-                    period_deposit_krw -= amount_krw
-                
-        if acc.account_type == 'BROKERAGE':
-            last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
-            total_profit = val_krw - last_valuation - period_deposit_krw
-        else:
-            total_profit = val_krw - total_net_deposit_krw
-        
-        previews.append(SnapshotPreviewSchema(
-            account_id=acc.id,
-            account_name=acc.name,
-            snapshot_date=req.snapshot_date,
-            period_deposit=period_deposit_krw,
-            total_valuation=val_krw,
-            total_profit=total_profit
-        ))
-        
-    return previews
+    """입력받은 환율을 적용하여 저장될 스냅샷 데이터를 미리 계산합니다."""
+    return await SnapshotService(db).preview_snapshots(req.snapshot_date, req.exchange_rate)
 
 def _save_snapshots_logic(previews: List[SnapshotPreviewSchema], db: Session, commit: bool = True) -> List[AccountSnapshot]:
-    """스냅샷 저장 로직의 실제 구현부입니다. (트랜잭션 제어 가능)
-
-    Args:
-        previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 미리보기 데이터 리스트
-        db (Session): 데이터베이스 세션
-        commit (bool): DB 커밋 수행 여부. 기본값은 True.
-
-    Returns:
-        List[AccountSnapshot]: 생성된 AccountSnapshot 객체 리스트
-    """
-    saved_snapshots = []
-    for p in previews:
-        # 기존 동일 날짜 데이터 삭제
-        db.query(AccountSnapshot).filter(
-            AccountSnapshot.account_id == p.account_id,
-            AccountSnapshot.snapshot_date == p.snapshot_date
-        ).delete()
-        
-        new_snap = AccountSnapshot(
-            account_id=p.account_id,
-            snapshot_date=p.snapshot_date,
-            period_deposit=p.period_deposit,
-            total_valuation=p.total_valuation,
-            total_profit=p.total_profit
-        )
-        db.add(new_snap)
-        saved_snapshots.append(new_snap)
-        
-    if commit:
-        db.commit()
-        for snap in saved_snapshots:
-            db.refresh(snap)
-    return saved_snapshots
+    """스냅샷 저장 로직의 실제 구현부입니다."""
+    return SnapshotService(db).save_snapshots(previews, commit=commit)
 
 @router.post("/snapshots/save", response_model=List[SnapshotSchema])
 async def save_snapshots(previews: List[SnapshotPreviewSchema], db: Session = Depends(get_db)):
-    """확인된 미리보기 데이터를 바탕으로 스냅샷을 실제 DB에 저장합니다.
+    """확인된 미리보기 데이터를 바탕으로 스냅샷을 실제 DB에 저장합니다."""
+    return SnapshotService(db).save_snapshots(previews, commit=True)
 
-    Args:
-        previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 데이터 리스트
-        db (Session): 데이터베이스 세션
-
-    Returns:
-        List[SnapshotSchema]: DB에 저장된 최종 스냅샷 객체 리스트
-    """
-    return _save_snapshots_logic(previews, db, commit=True)
 
 # --- Helper Functions for Snapshot Saving ---
 
