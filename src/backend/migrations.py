@@ -54,9 +54,13 @@ def run_migrations(engine: Engine) -> None:
                 conn.execute(text("UPDATE transactions SET source = 'AUTO_KIWOOM' WHERE memo LIKE '%키움 자동저장%'"))
                 conn.commit()
 
+            conn.execute(text("UPDATE transactions SET source = 'MANUAL' WHERE source IS NULL"))
+            conn.commit()
+
             _add_column_if_missing(conn, "transactions", "external_id", "VARCHAR")
             _add_column_if_missing(conn, "transactions", "target_asset_id", "INTEGER")
             _add_column_if_missing(conn, "transactions", "transfer_pair_id", "VARCHAR")
+            conn.commit()
 
     except Exception as e:
         logger.error(f"⚠️ 데이터베이스 마이그레이션 수행 중 오류 발생: {e}", exc_info=True)

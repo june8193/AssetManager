@@ -493,6 +493,55 @@ describe('TransactionsTab', () => {
       expect(screen.getByText(/⬅ Acc1/i)).toBeInTheDocument();
     });
   });
+
+  it('source가 AUTO_KIWOOM일 경우 거래 목록에 키움자동 뱃지가 표시되어야 한다', async () => {
+    const autoTxList = [
+      {
+        id: 30,
+        account_id: 1,
+        asset_id: 1,
+        transaction_date: '2026-08-03',
+        type: 'BUY',
+        quantity: 10,
+        price: 50000,
+        total_amount: 500000,
+        currency: 'KRW',
+        source: 'AUTO_KIWOOM',
+        memo: '키움 자동저장 (체결)'
+      },
+      {
+        id: 31,
+        account_id: 1,
+        asset_id: 1,
+        transaction_date: '2026-08-03',
+        type: 'BUY',
+        quantity: 5,
+        price: 50000,
+        total_amount: 250000,
+        currency: 'KRW',
+        source: 'MANUAL',
+        memo: '수동 저장건'
+      }
+    ];
+
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(autoTxList) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('키움자동')).toBeInTheDocument();
+      expect(screen.getByText('수동입력')).toBeInTheDocument();
+    });
+  });
 });
 
 

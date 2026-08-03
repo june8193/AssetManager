@@ -666,3 +666,88 @@ def test_update_transfer_transaction_cascade(db_session, test_user):
     assert all(t.total_amount == 25000.0 for t in updated_pair)
     assert all(str(t.transaction_date) == "2026-08-03" for t in updated_pair)
     assert all(t.memo == "변경후 이체" for t in updated_pair)
+
+def _create_test_asset_and_account(db_session, user_id: int, suffix: str):
+    """테스트용 자산 및 계좌를 생성하는 헬퍼 함수입니다."""
+    asset = Asset(ticker=f"SRC_TEST_{suffix}", name=f"출처테스트자산_{suffix}", major_category="일반주식", sub_category="국내주식", country="KR")
+    account = Account(user_id=user_id, name=f"출처테스트계좌_{suffix}", provider="키움증권", account_type="BROKERAGE", is_active=True)
+    db_session.add_all([asset, account])
+    db_session.commit()
+    db_session.refresh(asset)
+    db_session.refresh(account)
+    return asset, account
+
+
+def test_get_transactions_includes_source_and_external_id(db_session, test_user):
+    """GET /api/db/transactions 호출 시 source 및 external_id 필드가 정상 직렬화되는지 검증합니다."""
+    asset, account = _create_test_asset_and_account(db_session, test_user.id, "1")
+
+    tx = Transaction(
+        account_id=account.id,
+        asset_id=asset.id,
+        transaction_date=date(2026, 8, 3),
+        type="BUY",
+        quantity=10.0,
+        price=50000.0,
+        total_amount=500000.0,
+        currency="KRW",
+        memo="키움 자동저장 (체결)",
+        source="AUTO_KIWOOM",
+        external_id="EXT12345"
+    )
+    db_session.add(tx)
+    db_session.commit()
+
+    res = client.get("/api/db/transactions")
+    assert res.status_code == 200
+    tx_list = res.json()
+    target_tx = next((t for t in tx_list if t["id"] == tx.id), None)
+    assert target_tx is not None
+    assert target_tx["source"] == "AUTO_KIWOOM"
+    assert target_tx["external_id"] == "EXT12345"
+
+
+def test_create_transaction_default_source_is_manual(db_session, test_user):
+    """POST /api/db/transactions 호출 시 source 미지정할 경우 기본값 'MANUAL'로 보정되는지 검증합니다."""
+    asset, account = _create_test_asset_and_account(db_session, test_user.id, "2")
+
+    payload = {
+        "account_id": account.id,
+        "asset_id": asset.id,
+        "transaction_date": "2026-08-03",
+        "type": "BUY",
+        "quantity": 5.0,
+        "price": 50000.0,
+        "total_amount": 250000.0,
+        "currency": "KRW"
+    }
+    post_res = client.post("/api/db/transactions", json=payload)
+    assert post_res.status_code == 200
+    post_data = post_res.json()
+    assert post_data["source"] == "MANUAL"
+
+
+def test_create_transaction_with_custom_source_and_external_id(db_session, test_user):
+    """POST /api/db/transactions 호출 시 커스텀 source 및 external_id 전달 및 직렬화를 검증합니다."""
+    asset, account = _create_test_asset_and_account(db_session, test_user.id, "3")
+
+    payload_auto = {
+        "account_id": account.id,
+        "asset_id": asset.id,
+        "transaction_date": "2026-08-03",
+        "type": "BUY",
+        "quantity": 2.0,
+        "price": 100000.0,
+        "total_amount": 200000.0,
+        "currency": "KRW",
+        "source": "AUTO_KIWOOM",
+        "external_id": "EXT99999"
+    }
+    post_auto_res = client.post("/api/db/transactions", json=payload_auto)
+    assert post_auto_res.status_code == 200
+    post_auto_data = post_auto_res.json()
+    assert post_auto_data["source"] == "AUTO_KIWOOM"
+    assert post_auto_data["external_id"] == "EXT99999"
+
+
+

@@ -117,6 +117,8 @@ class TransactionSchema(BaseModel):
         currency (str): 통화 (KRW, USD)
         exchange_rate (Optional[float]): 환율
         memo (Optional[str]): 메모
+        source (Literal["MANUAL", "AUTO_KIWOOM"]): 거래 출처 (MANUAL, AUTO_KIWOOM)
+        external_id (Optional[str]): 외부 시스템 연동 식별자
         transfer_pair_id (Optional[str]): 이체 연동 식별자 (UUID)
         asset_name (Optional[str]): 자산명
         asset_ticker (Optional[str]): 자산 티커
@@ -136,6 +138,8 @@ class TransactionSchema(BaseModel):
     currency: str
     exchange_rate: Optional[float] = None
     memo: Optional[str] = None
+    source: Literal["MANUAL", "AUTO_KIWOOM"] = "MANUAL"
+    external_id: Optional[str] = None
     transfer_pair_id: Optional[str] = None
     asset_name: Optional[str] = None
     asset_ticker: Optional[str] = None
