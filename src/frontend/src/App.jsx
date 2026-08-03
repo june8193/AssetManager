@@ -15,6 +15,8 @@ import SnapshotWizardPage from './pages/SnapshotWizardPage';
 import WatchlistSectorPage from './pages/WatchlistSectorPage';
 import DividendAnalysisPage from './pages/DividendAnalysisPage';
 import PerformanceAnalysisPage from './pages/PerformanceAnalysisPage';
+import DbExplorerPage from './pages/DbExplorerPage';
+import SystemLogPage from './pages/SystemLogPage';
 import TitleManager from './components/TitleManager';
 
 function App() {
@@ -42,6 +44,8 @@ function App() {
               <Route path="/db" element={<DbManagementPage />} />
               <Route path="/db/snapshots/new" element={<SnapshotWizardPage />} />
               <Route path="/db/watchlist-sector" element={<WatchlistSectorPage />} />
+              <Route path="/system/db-explorer" element={<DbExplorerPage />} />
+              <Route path="/system/logs" element={<SystemLogPage />} />
             </Routes>
           </div>
         </div>

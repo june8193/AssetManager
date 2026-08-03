@@ -18,6 +18,12 @@ from src.mcp.tools.market import (
     get_market_indices,
 )
 from src.mcp.tools.transactions import get_transactions
+from src.mcp.tools.system import (
+    get_db_tables,
+    get_db_schema,
+    execute_db_query,
+    get_system_logs,
+)
 
 # MCP 서버 객체 선언
 mcp = FastMCP("AssetManager")
@@ -36,6 +42,12 @@ mcp.tool()(refresh_market_prices)
 mcp.tool()(get_transactions)
 mcp.tool()(check_market_holiday)
 mcp.tool()(get_market_indices)
+
+# 시스템 DB 탐색 및 로그 조회를 위한 신규 MCP 도구 등록
+mcp.tool()(get_db_tables)
+mcp.tool()(get_db_schema)
+mcp.tool()(execute_db_query)
+mcp.tool()(get_system_logs)
 
 if __name__ == "__main__":
     mcp.run()

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart, DollarSign } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart, DollarSign, Server } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -38,7 +38,15 @@ const MENU_ITEMS = [
       { path: '/db/watchlist-sector', label: '관심종목/섹터 관리' }
     ]
   },
-  { path: '/connection', label: 'API 연결 관리', icon: LinkIcon },
+  { 
+    label: '서버 점검', 
+    icon: Server,
+    subItems: [
+      { path: '/system/db-explorer', label: 'DB 탐색기' },
+      { path: '/system/logs', label: '시스템 로그 보기' },
+      { path: '/connection', label: 'API 연결 관리' }
+    ]
+  },
 ];
 
 /**

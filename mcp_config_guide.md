@@ -1,6 +1,6 @@
 # 안티그래비티 MCP 서버 설정 가이드 (AssetManager)
 
-이 문서는 안티그래비티(Antigravity) AI 에이전트가 본 프로젝트의 자산 현황 및 조회 도구(MCP 서버)를 정상적으로 인식하고 실행할 수 있도록 설정하는 가이드입니다.
+이 문서는 안티그래비티(Antigravity) AI 에이전트가 본 프로젝트의 자산 현황, 원격 서버 DB 탐색 및 로그 조회 도구(MCP 서버)를 정상적으로 인식하고 실행할 수 있도록 설정하는 가이드입니다.
 
 ---
 
@@ -45,9 +45,8 @@
 }
 ```
 
-### 방법 B: 절대 경로 방식 (전역 설정 용)
-* 다른 폴더나 절대 경로 기준의 환경에서 `AssetManager` 도구를 강제 기동하고 싶을 때 사용합니다.
-* *주의: `c:/localrepo/AssetManager` 부분을 실제 프로젝트가 설치된 절대 경로로 변경해야 합니다.*
+### 방법 B: 원격 서버 PC 접속 방식 (개발용 개인 노트북에서 실용 서버 DB/로그 조회 시)
+* 개인 노트북에서 개발할 때 서버 PC(운영 DB가 위치한 PC)의 IP 주소(예: `http://192.168.x.x:8000`)를 `MCP_BACKEND_URL`로 지정합니다.
 
 ```json
 {
@@ -55,14 +54,12 @@
     "assetmanager": {
       "command": "uv",
       "args": [
-        "--directory",
-        "c:/localrepo/AssetManager",
         "run",
         "src/mcp/main.py"
       ],
       "env": {
-        "MCP_BACKEND_URL": "http://localhost:8000",
-        "PYTHONPATH": "c:/localrepo/AssetManager"
+        "MCP_BACKEND_URL": "http://192.168.0.10:8000",
+        "PYTHONPATH": "."
       }
     }
   }
@@ -86,3 +83,15 @@
      ```powershell
      uv run scripts/run_prod.py
      ```
+
+---
+
+## 4. 지원하는 MCP 도구 목록
+
+* **자산 및 성과 분석**: `get_asset_summary`, `get_asset_ratios`, `get_portfolio_status`, `get_yearly_stats`, `get_daily_stats`, `get_snapshots`, `get_transactions`
+* **시장 및 종목 정보**: `get_watchlist_prices`, `get_market_history`, `get_stock_history`, `refresh_market_prices`, `check_market_holiday`, `get_market_indices`
+* **원격 서버 DB 및 시스템 로그 점검 (신규)**:
+  * `get_db_tables`: 서버 DB 테이블 목록 및 레코드 수 조회
+  * `get_db_schema`: 특정 테이블의 컬럼, 데이터 타입 및 제약 조건 조회
+  * `execute_db_query`: Read-Only SELECT SQL 실행 (최대 500행 제한)
+  * `get_system_logs`: 서버 PC 백엔드 최신 시스템/에러 로그 조회 (레벨/키워드 필터 지원)
