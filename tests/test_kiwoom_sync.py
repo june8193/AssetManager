@@ -1,10 +1,11 @@
+import datetime
 import pytest
 from unittest.mock import AsyncMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from src.backend.main import app
 from src.backend.models import Account, Asset, Transaction, User
-from src.backend.services.kiwoom_sync_service import KiwoomTransactionService
+from src.backend.services.kiwoom_sync_service import KiwoomTransactionService, _parse_traded_at
 
 client = TestClient(app)
 
@@ -413,4 +414,113 @@ async def test_sync_split_executions(
     assert ext_ids == {"SPLIT_001", "SPLIT_002"}
 
 
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_transactions_traded_at_field(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """동기화 결과(synced_transactions 및 unregistered_assets)에 traded_at 필드가 날짜/시간 포맷으로 포함되는지 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="token_traded_at")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        
+        mock_response = AsyncMock()
+        mock_response.status_code = 200
+        
+        if api_id == "ka10076": # 국내 체결 (시간 14:30:15 포함)
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "cntr": [
+                    {
+                        "stk_cd": "005930",
+                        "stk_nm": "삼성전자",
+                        "io_tp_nm": "+매수",
+                        "cntr_pric": 72000,
+                        "cntr_qty": 10,
+                        "cntr_tm": "143015"
+                    }
+                ]
+            }
+        elif api_id == "ust21510": # 미국 체결 (미등록 종목, 시간 22:15:00 포함)
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "result_list": [
+                    {
+                        "stk_cd": "NVDA",
+                        "frgn_stk_nm": "NVIDIA",
+                        "slby_tp": "2",
+                        "slby_tp_nm": "매수",
+                        "cntr_uv": "120.0",
+                        "cntr_qty": "3",
+                        "cntr_tm": "221500"
+                    }
+                ]
+            }
+        elif api_id == "kt00015": # 배당금 (시간 없음)
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": "20260719",
+                        "rmrk_nm": "배당금",
+                        "stk_cd": "001230",
+                        "stk_nm": "맥쿼리인프라",
+                        "trde_amt": 15000,
+                        "trde_qty_jwa_cnt": 0
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=1)
+
+    assert result["status"] == "success"
+    # synced_transactions 검증
+    synced = result["synced_transactions"]
+    assert len(synced) >= 2
+    samsung_tx = next(t for t in synced if t["asset_name"] == "삼성전자")
+    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    assert "traded_at" in samsung_tx
+    assert samsung_tx["traded_at"] == f"{today_str} 14:30"
+
+    macquarie_tx = next(t for t in synced if t["asset_name"] == "맥쿼리인프라")
+    assert "traded_at" in macquarie_tx
+    assert macquarie_tx["traded_at"] == "2026-07-19"
+
+    # unregistered_assets 검증
+    unregistered = result["unregistered_assets"]
+    assert len(unregistered) >= 1
+    nvda_tx = next(t for t in unregistered if t["ticker"] == "NVDA")
+    assert "traded_at" in nvda_tx
+    assert nvda_tx["traded_at"] == f"{today_str} 22:15"
+
+
+def test_parse_traded_at_helper():
+    """_parse_traded_at 헬퍼 함수의 3/4/5/6자리 시각 패딩, 날짜 포맷팅 및 예외 케이스 처리 단원 검증."""
+    # 3자리 시각 ("930" -> 09:30)
+    assert _parse_traded_at("20260803", "930") == "2026-08-03 09:30"
+    # 4자리 시각 ("1430" -> 14:30)
+    assert _parse_traded_at("20260803", "1430") == "2026-08-03 14:30"
+    # 5자리 시각 ("93000" -> 09:30)
+    assert _parse_traded_at("20260803", "93000") == "2026-08-03 09:30"
+    # 6자리 시각 ("143015" -> 14:30)
+    assert _parse_traded_at("20260803", "143015") == "2026-08-03 14:30"
+    # 00시 00분 또는 시각 정보 없음
+    assert _parse_traded_at("20260803", "000000") == "2026-08-03"
+    assert _parse_traded_at("20260803", None) == "2026-08-03"
+    # datetime 객체 전달
+    dt = datetime.datetime(2026, 8, 3, 14, 30)
+    assert _parse_traded_at(dt.date(), "143000") == "2026-08-03 14:30"
 

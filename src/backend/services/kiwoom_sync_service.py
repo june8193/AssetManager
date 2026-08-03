@@ -19,6 +19,42 @@ def _safe_float(val, default: float = 0.0) -> float:
     except (ValueError, TypeError):
         return default
 
+def _parse_traded_at(
+    date_obj_or_str: datetime.date | datetime.datetime | str,
+    time_str: str | None = None
+) -> str:
+    """날짜 객체/문자열과 체결 시각 문자열을 조합하여 YYYY-MM-DD HH:MM 또는 YYYY-MM-DD 포맷을 반환합니다.
+
+    Args:
+        date_obj_or_str (datetime.date | datetime.datetime | str): 거래일자 객체 또는 YYYYMMDD/YYYY-MM-DD 문자열
+        time_str (str | None, optional): 체결시각 문자열 (예: "143015", "93000", "1430"). 기본값 None.
+
+    Returns:
+        str: 포맷팅된 거래일시 문자열 (예: "2026-08-03 14:30" 또는 "2026-08-03")
+    """
+    if isinstance(date_obj_or_str, (datetime.date, datetime.datetime)):
+        formatted_date = date_obj_or_str.strftime("%Y-%m-%d")
+    else:
+        raw_date_str = str(date_obj_or_str).replace("-", "").strip()
+        if len(raw_date_str) == 8:
+            formatted_date = f"{raw_date_str[:4]}-{raw_date_str[4:6]}-{raw_date_str[6:8]}"
+        else:
+            formatted_date = str(date_obj_or_str)
+
+    if time_str:
+        raw_time_str = str(time_str).strip().replace(":", "")
+        if raw_time_str:
+            if len(raw_time_str) == 5:
+                raw_time_str = raw_time_str.zfill(6)
+            elif len(raw_time_str) == 3:
+                raw_time_str = raw_time_str.zfill(4)
+            if len(raw_time_str) >= 4:
+                hour_str = raw_time_str[:2]
+                minute_str = raw_time_str[2:4]
+                if hour_str != "00" or minute_str != "00":
+                    return f"{formatted_date} {hour_str}:{minute_str}"
+    return formatted_date
+
 def normalize_ticker(ticker: str | None) -> str | None:
     """국내 주식 종목코드에 붙은 'A' 접두사(예: A000660)를 제거하여 정제합니다.
 
@@ -97,8 +133,10 @@ class KiwoomTransactionService:
                     domestic_executions = await self._fetch_domestic_executions(token)
                     for exe in domestic_executions:
                         ext_id = exe.get("ord_no") or exe.get("cntr_no")
+                        tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
                         raw_transactions.append({
                             "date": datetime.date.today(),
+                            "traded_at": _parse_traded_at(datetime.date.today(), tm_str),
                             "ticker": exe.get("stk_cd"),
                             "name": exe.get("stk_nm"),
                             "type": "BUY" if "매수" in exe.get("io_tp_nm", "") else "SELL",
@@ -119,9 +157,11 @@ class KiwoomTransactionService:
                         is_buy = "매수" in slby_nm or slby_tp == "2"
                         price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
                         ext_id = exe.get("ord_no") or exe.get("cntr_no")
+                        tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
 
                         raw_transactions.append({
                             "date": datetime.date.today(),
+                            "traded_at": _parse_traded_at(datetime.date.today(), tm_str),
                             "ticker": exe.get("stk_cd"),
                             "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
                             "type": "BUY" if is_buy else "SELL",
@@ -136,8 +176,11 @@ class KiwoomTransactionService:
                     for tx in daily_ledger:
                         if "배당금" in tx.get("rmrk_nm", ""):
                             ext_id = tx.get("seq") or tx.get("trde_no")
+                            trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
+                            tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
                             raw_transactions.append({
-                                "date": datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date(),
+                                "date": trde_dt,
+                                "traded_at": _parse_traded_at(trde_dt, tm_str),
                                 "ticker": tx.get("stk_cd"),
                                 "name": tx.get("stk_nm", "배당금 입금"),
                                 "type": "INTEREST",
@@ -153,10 +196,13 @@ class KiwoomTransactionService:
                         rmrk = tx.get("rmrk_nm", "")
                         stk_cd = tx.get("stk_cd")
                         ext_id = tx.get("seq") or tx.get("trde_no")
+                        tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
                         
                         if "배당금" in rmrk:
+                            trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
                             raw_transactions.append({
-                                "date": datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date(),
+                                "date": trde_dt,
+                                "traded_at": _parse_traded_at(trde_dt, tm_str),
                                 "ticker": stk_cd,
                                 "name": tx.get("stk_nm", "배당금 입금"),
                                 "type": "INTEREST",
@@ -176,6 +222,7 @@ class KiwoomTransactionService:
                             
                             raw_transactions.append({
                                 "date": cntr_date,
+                                "traded_at": _parse_traded_at(cntr_date, tm_str),
                                 "ticker": stk_cd,
                                 "name": tx.get("stk_nm"),
                                 "type": "BUY" if "매수" in rmrk else "SELL",
@@ -199,9 +246,11 @@ class KiwoomTransactionService:
                             is_buy = "매수" in slby_nm or slby_tp == "2"
                             price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
                             ext_id = exe.get("ord_no") or exe.get("cntr_no")
+                            tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
 
                             raw_transactions.append({
                                 "date": dt_obj,
+                                "traded_at": _parse_traded_at(dt_obj, tm_str),
                                 "ticker": exe.get("stk_cd"),
                                 "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
                                 "type": "BUY" if is_buy else "SELL",
@@ -228,7 +277,8 @@ class KiwoomTransactionService:
                             "quantity": tx_data["quantity"],
                             "price": tx_data["price"],
                             "total_amount": tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"],
-                            "currency": tx_data["currency"]
+                            "currency": tx_data["currency"],
+                            "traded_at": tx_data.get("traded_at")
                         })
                         logger.warning(f"미등록 자산 발견으로 저장 생략: {ticker} ({tx_data['name']})")
                         continue
@@ -276,7 +326,8 @@ class KiwoomTransactionService:
                             "price": tx_data["price"],
                             "total_amount": total_amt,
                             "currency": tx_data["currency"],
-                            "is_manual_matched": True
+                            "is_manual_matched": True,
+                            "traded_at": tx_data.get("traded_at")
                         })
                         logger.info(f"기존 수동 거래와 키움 체결 매칭 완료: {asset.name} ({ext_id})")
                         continue
@@ -319,7 +370,8 @@ class KiwoomTransactionService:
                         "price": tx_data["price"],
                         "total_amount": total_amt,
                         "currency": tx_data["currency"],
-                        "is_manual_matched": False
+                        "is_manual_matched": False,
+                        "traded_at": tx_data.get("traded_at")
                     })
 
                 if success_count > 0:
