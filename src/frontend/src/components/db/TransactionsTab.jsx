@@ -34,6 +34,22 @@ const getTypeBadgeProps = (tx) => {
 };
 
 /**
+ * 현금(CASH) 카테고리 또는 예수금 Ticker(KRW, USD) 자산인지 판단하는 헬퍼 함수입니다.
+ */
+const isCashAsset = (asset) => {
+  if (!asset) return false;
+  return asset.category === 'CASH' || asset.ticker === 'USD' || asset.ticker === 'KRW';
+};
+
+/**
+ * 두 Entity ID(문자열/숫자)가 동일한지 안전하게 비교하는 헬퍼 함수입니다.
+ */
+const isSameId = (id1, id2) => {
+  if (id1 === undefined || id1 === null || id2 === undefined || id2 === null) return false;
+  return String(id1) === String(id2);
+};
+
+/**
  * 거래 내역 관리 탭 컴포넌트입니다.
  * 계좌별 거래(매수, 매도, 입출금 등) 내역을 조회하고 편집합니다.
  */
@@ -99,15 +115,15 @@ const TransactionsTab = () => {
         initialAccountId = accData[0].id;
       }
       if (accData.length > 1 && !initialTargetAccountId) {
-        const altAcc = accData.find(a => a.id.toString() !== initialAccountId.toString());
+        const altAcc = accData.find(a => !isSameId(a.id, initialAccountId));
         initialTargetAccountId = altAcc ? altAcc.id : accData[1].id;
       }
       if (assetData.length > 0 && !initialAssetId) {
         initialAssetId = assetData[0].id;
       }
       if (assetData.length > 1 && !initialTargetAssetId) {
-        const cashAssets = assetData.filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH');
-        const defaultTarget = cashAssets.find(a => a.id.toString() !== initialAssetId.toString()) || assetData[1];
+        const cashAssets = assetData.filter(isCashAsset);
+        const defaultTarget = cashAssets.find(a => !isSameId(a.id, initialAssetId)) || assetData[1];
         initialTargetAssetId = defaultTarget ? defaultTarget.id : '';
       }
 
@@ -119,7 +135,7 @@ const TransactionsTab = () => {
           asset_id: initialAssetId,
           target_asset_id: initialTargetAssetId
         };
-        const firstAsset = assetData.find(a => a.id.toString() === initialAssetId.toString());
+        const firstAsset = assetData.find(a => isSameId(a.id, initialAssetId));
         if (firstAsset) {
           let newCurrency = 'KRW';
           if (firstAsset.ticker === 'USD' || firstAsset.country === 'US') {
@@ -127,7 +143,7 @@ const TransactionsTab = () => {
           }
           updated.currency = newCurrency;
 
-          if (firstAsset.ticker === 'USD' || firstAsset.ticker === 'KRW') {
+          if (isCashAsset(firstAsset)) {
             if (updated.type !== 'DEPOSIT' && updated.type !== 'WITHDRAW' && updated.type !== 'EXCHANGE' && updated.type !== 'TRANSFER') {
               updated.type = 'DEPOSIT';
             }
@@ -161,21 +177,21 @@ const TransactionsTab = () => {
 
     if (name === 'type') {
       if (value === 'EXCHANGE') {
-        const cashAssets = assets.filter(a => a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW');
-        let currentSource = assets.find(a => a.id.toString() === newFormData.asset_id.toString());
-        if (!currentSource || (currentSource.category !== 'CASH' && currentSource.ticker !== 'USD' && currentSource.ticker !== 'KRW')) {
+        const cashAssets = assets.filter(isCashAsset);
+        let currentSource = assets.find(a => isSameId(a.id, newFormData.asset_id));
+        if (!currentSource || !isCashAsset(currentSource)) {
           newFormData.asset_id = cashAssets[0] ? cashAssets[0].id : newFormData.asset_id;
         }
         let targetId = newFormData.target_asset_id;
-        if (!targetId || targetId.toString() === newFormData.asset_id.toString()) {
-          const alternativeTarget = cashAssets.find(a => a.id.toString() !== newFormData.asset_id.toString());
+        if (!targetId || isSameId(targetId, newFormData.asset_id)) {
+          const alternativeTarget = cashAssets.find(a => !isSameId(a.id, newFormData.asset_id));
           targetId = alternativeTarget ? alternativeTarget.id : (cashAssets[0]?.id || '');
         }
         newFormData.target_asset_id = targetId;
       } else if (value === 'TRANSFER') {
         let targetAccId = newFormData.target_account_id;
-        if (!targetAccId || targetAccId.toString() === newFormData.account_id.toString()) {
-          const altAcc = accounts.find(a => a.id.toString() !== newFormData.account_id.toString());
+        if (!targetAccId || isSameId(targetAccId, newFormData.account_id)) {
+          const altAcc = accounts.find(a => !isSameId(a.id, newFormData.account_id));
           targetAccId = altAcc ? altAcc.id : '';
         }
         newFormData.target_account_id = targetAccId;
@@ -186,8 +202,8 @@ const TransactionsTab = () => {
         }
       }
     } else if (name === 'account_id' && newFormData.type === 'TRANSFER') {
-      if (newFormData.target_account_id.toString() === value.toString()) {
-        const altAcc = accounts.find(a => a.id.toString() !== value.toString());
+      if (isSameId(newFormData.target_account_id, value)) {
+        const altAcc = accounts.find(a => !isSameId(a.id, value));
         newFormData.target_account_id = altAcc ? altAcc.id : '';
       }
     }
@@ -210,13 +226,13 @@ const TransactionsTab = () => {
     } else if (name === 'asset_id') {
       newFormData.asset_id = value;
       if (newFormData.type === 'EXCHANGE') {
-        const cashAssets = assets.filter(a => a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW');
-        if (newFormData.target_asset_id && newFormData.target_asset_id.toString() === value.toString()) {
-          const altTarget = cashAssets.find(a => a.id.toString() !== value.toString());
+        const cashAssets = assets.filter(isCashAsset);
+        if (newFormData.target_asset_id && isSameId(newFormData.target_asset_id, value)) {
+          const altTarget = cashAssets.find(a => !isSameId(a.id, value));
           newFormData.target_asset_id = altTarget ? altTarget.id : '';
         }
       }
-      const selectedAsset = assets.find(a => a.id.toString() === value.toString());
+      const selectedAsset = assets.find(a => isSameId(a.id, value));
       if (selectedAsset) {
         let newCurrency = 'KRW';
         if (selectedAsset.ticker === 'USD' || selectedAsset.country === 'US') {
@@ -224,7 +240,7 @@ const TransactionsTab = () => {
         }
         newFormData.currency = newCurrency;
 
-        if (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') {
+        if (isCashAsset(selectedAsset)) {
           if (newFormData.type !== 'DEPOSIT' && newFormData.type !== 'WITHDRAW' && newFormData.type !== 'EXCHANGE' && newFormData.type !== 'TRANSFER') {
             newFormData.type = 'DEPOSIT';
           }
@@ -356,11 +372,11 @@ const TransactionsTab = () => {
   const resetForm = () => {
     setEditingId(null);
     const defaultAssetId = assets.length > 0 ? assets[0].id : '';
-    const defaultAsset = assets.find(a => a.id.toString() === defaultAssetId.toString());
-    const cashAssets = assets.filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH');
-    const defaultTarget = cashAssets.find(a => a.id.toString() !== defaultAssetId.toString()) || assets[1];
+    const defaultAsset = assets.find(a => isSameId(a.id, defaultAssetId));
+    const cashAssets = assets.filter(isCashAsset);
+    const defaultTarget = cashAssets.find(a => !isSameId(a.id, defaultAssetId)) || assets[1];
     const defaultAccountId = accounts.length > 0 ? accounts[0].id : '';
-    const altAcc = accounts.find(a => a.id.toString() !== defaultAccountId.toString());
+    const altAcc = accounts.find(a => !isSameId(a.id, defaultAccountId));
 
     let defaultCurrency = 'KRW';
     let defaultType = 'BUY';
@@ -370,7 +386,7 @@ const TransactionsTab = () => {
       if (defaultAsset.ticker === 'USD' || defaultAsset.country === 'US') {
         defaultCurrency = 'USD';
       }
-      if (defaultAsset.ticker === 'USD' || defaultAsset.ticker === 'KRW') {
+      if (isCashAsset(defaultAsset)) {
         defaultType = 'DEPOSIT';
         defaultPrice = '1';
       }
@@ -397,12 +413,12 @@ const TransactionsTab = () => {
   // 선택된 계좌 필터에 따른 목록 필터링
   const filteredTransactions = accountFilter === 'all' 
     ? transactions 
-    : transactions.filter(tx => tx.account_id.toString() === accountFilter);
+    : transactions.filter(tx => isSameId(tx.account_id, accountFilter));
 
   // 현재 선택된 자산 및 예수금 여부 판단
-  const selectedAsset = assets.find(a => a.id.toString() === formData.asset_id.toString());
-  const selectedTargetAsset = assets.find(a => a.id.toString() === formData.target_asset_id.toString());
-  const isCashAsset = selectedAsset ? (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') : false;
+  const selectedAsset = assets.find(a => isSameId(a.id, formData.asset_id));
+  const selectedTargetAsset = assets.find(a => isSameId(a.id, formData.target_asset_id));
+  const isCash = isCashAsset(selectedAsset);
   const isExchangeForm = formData.type === 'EXCHANGE';
   const isTransferForm = formData.type === 'TRANSFER';
   const sourceTicker = selectedAsset ? selectedAsset.ticker : '';
@@ -510,7 +526,7 @@ const TransactionsTab = () => {
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
             >
-              {(isExchangeForm ? assets.filter(a => a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW') : assets).map(asset => (
+              {(isExchangeForm ? assets.filter(isCashAsset) : assets).map(asset => (
                 <option key={asset.id} value={asset.id}>{asset.ticker} ({asset.name})</option>
               ))}
             </select>
@@ -525,7 +541,7 @@ const TransactionsTab = () => {
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
             >
-              {isCashAsset ? (
+              {isCash ? (
                 <>
                   <option value="DEPOSIT">입금 (DEPOSIT)</option>
                   <option value="WITHDRAW">출금 (WITHDRAW)</option>
@@ -563,7 +579,7 @@ const TransactionsTab = () => {
                 required
               >
                 {assets
-                  .filter(a => (a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW') && a.id.toString() !== formData.asset_id.toString())
+                  .filter(a => isCashAsset(a) && !isSameId(a.id, formData.asset_id))
                   .map(asset => (
                     <option key={asset.id} value={asset.id}>{asset.ticker} ({asset.name})</option>
                   ))}
@@ -576,7 +592,7 @@ const TransactionsTab = () => {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   {isExchangeForm
-                    ? `환전 도착 금액 (수령 수량)${targetTicker ? ` ${targetTicker}` : ''}`
+                    ? `환전 도착 금액 (수령 수량)${targetTicker ? ` ${targetTicker}` : ' 도착Ticker'}`
                     : '수량'}
                 </label>
                 <input
@@ -591,7 +607,7 @@ const TransactionsTab = () => {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   {isExchangeForm
-                    ? `적용 환율${targetTicker && sourceTicker ? ` (1 ${targetTicker} 당 ${sourceTicker})` : ''}`
+                    ? `적용 환율 (1 ${targetTicker || '도착Ticker'} 당 ${sourceTicker || '출발Ticker'})`
                     : '단가'}
                 </label>
                 <input
@@ -599,9 +615,9 @@ const TransactionsTab = () => {
                   name="price"
                   value={formatInputNumber(formData.price)}
                   onChange={handleInputChange}
-                  readOnly={isCashAsset && !isExchangeForm}
+                  readOnly={isCash && !isExchangeForm}
                   className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                    isCashAsset && !isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                    isCash && !isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
                   }`}
                   required
                 />
@@ -612,7 +628,7 @@ const TransactionsTab = () => {
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
               {isExchangeForm
-                ? `환전 출발 금액 (지불 금액)${sourceTicker ? ` ${sourceTicker}` : ''}`
+                ? `환전 출발 금액 (지불 금액)${sourceTicker ? ` ${sourceTicker}` : ' 출발Ticker'}`
                 : (isTransferForm ? '이체 금액' : '총 금액')}
             </label>
             <input
