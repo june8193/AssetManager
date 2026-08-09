@@ -58,6 +58,30 @@ const isCashAsset = (asset) => {
 };
 
 /**
+ * 쉼표가 포함된 숫자 문자열을 파싱하여 수치형(number)으로 반환합니다.
+ *
+ * @param {string|number} value - 변환할 값
+ * @returns {number} 파싱된 숫자
+ */
+const parseFormattedNumber = (value) => {
+  if (value === undefined || value === null || value === '') return 0;
+  const cleaned = value.toString().replace(/,/g, '');
+  return parseFloat(cleaned) || 0;
+};
+
+/**
+ * 목록에서 특정 ID를 제외한 첫 번째 항목(대체 항목)을 반환합니다.
+ *
+ * @param {Array} list - 검색할 목록 Array
+ * @param {string|number} excludeId - 제외할 ID
+ * @returns {Object|null} 발견된 대체 항목 객체
+ */
+const findAlternative = (list, excludeId) => {
+  if (!Array.isArray(list) || list.length === 0) return null;
+  return list.find(item => !isSameId(item.id, excludeId)) || null;
+};
+
+/**
  * 두 Entity ID(문자열/숫자)가 동일한지 안전하게 비교하는 헬퍼 함수입니다.
  *
  * @param {string|number} id1 - 첫 번째 ID
@@ -164,7 +188,7 @@ const TransactionsTab = () => {
         initialAccountId = accData[0].id;
       }
       if (accData.length > 1 && !initialTargetAccountId) {
-        const altAcc = accData.find(a => !isSameId(a.id, initialAccountId));
+        const altAcc = findAlternative(accData, initialAccountId);
         initialTargetAccountId = altAcc ? altAcc.id : accData[1].id;
       }
       if (assetData.length > 0 && !initialAssetId) {
@@ -172,7 +196,7 @@ const TransactionsTab = () => {
       }
       if (assetData.length > 1 && !initialTargetAssetId) {
         const cashAssets = assetData.filter(isCashAsset);
-        const defaultTarget = cashAssets.find(a => !isSameId(a.id, initialAssetId)) || assetData[1];
+        const defaultTarget = findAlternative(cashAssets, initialAssetId) || assetData[1];
         initialTargetAssetId = defaultTarget ? defaultTarget.id : '';
       }
 
@@ -198,7 +222,7 @@ const TransactionsTab = () => {
             }
             if (updated.type !== 'EXCHANGE' && updated.type !== 'TRANSFER') {
               updated.price = '1';
-              const q = parseFloat(updated.quantity.toString().replace(/,/g, '')) || 0;
+              const q = parseFormattedNumber(updated.quantity);
               updated.total_amount = q.toString();
             }
           }
@@ -233,20 +257,20 @@ const TransactionsTab = () => {
         }
         let targetId = newFormData.target_asset_id;
         if (!targetId || isSameId(targetId, newFormData.asset_id)) {
-          const alternativeTarget = cashAssets.find(a => !isSameId(a.id, newFormData.asset_id));
+          const alternativeTarget = findAlternative(cashAssets, newFormData.asset_id);
           targetId = alternativeTarget ? alternativeTarget.id : (cashAssets[0]?.id || '');
         }
         newFormData.target_asset_id = targetId;
 
-        const q = parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
-        const p = parseFloat(newFormData.price.toString().replace(/,/g, '')) || 0;
+        const q = parseFormattedNumber(newFormData.quantity);
+        const p = parseFormattedNumber(newFormData.price);
         if (q > 0 && p > 0) {
           newFormData.total_amount = (q * p).toString();
         }
       } else if (value === 'TRANSFER') {
         let targetAccId = newFormData.target_account_id;
         if (!targetAccId || isSameId(targetAccId, newFormData.account_id)) {
-          const altAcc = accounts.find(a => !isSameId(a.id, newFormData.account_id));
+          const altAcc = findAlternative(accounts, newFormData.account_id);
           targetAccId = altAcc ? altAcc.id : '';
         }
         newFormData.target_account_id = targetAccId;
@@ -258,7 +282,7 @@ const TransactionsTab = () => {
       }
     } else if (name === 'account_id' && newFormData.type === 'TRANSFER') {
       if (isSameId(newFormData.target_account_id, value)) {
-        const altAcc = accounts.find(a => !isSameId(a.id, value));
+        const altAcc = findAlternative(accounts, value);
         newFormData.target_account_id = altAcc ? altAcc.id : '';
       }
     }
@@ -274,16 +298,23 @@ const TransactionsTab = () => {
       }
 
       if (name === 'quantity' || name === 'price') {
-        const q = name === 'quantity' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
-        const p = name === 'price' ? parseFloat(cleanedValue) || 0 : parseFloat(newFormData.price.toString().replace(/,/g, '')) || 0;
-        newFormData.total_amount = (q * p).toString();
+        const qRaw = name === 'quantity' ? cleanedValue : newFormData.quantity.toString().replace(/,/g, '');
+        const pRaw = name === 'price' ? cleanedValue : newFormData.price.toString().replace(/,/g, '');
+
+        if (qRaw === '' || pRaw === '') {
+          newFormData.total_amount = '';
+        } else {
+          const q = parseFormattedNumber(qRaw);
+          const p = parseFormattedNumber(pRaw);
+          newFormData.total_amount = (q * p).toString();
+        }
       }
     } else if (name === 'asset_id') {
       newFormData.asset_id = value;
       if (newFormData.type === 'EXCHANGE') {
         const cashAssets = assets.filter(isCashAsset);
         if (newFormData.target_asset_id && isSameId(newFormData.target_asset_id, value)) {
-          const altTarget = cashAssets.find(a => !isSameId(a.id, value));
+          const altTarget = findAlternative(cashAssets, value);
           newFormData.target_asset_id = altTarget ? altTarget.id : '';
         }
       }
@@ -301,7 +332,7 @@ const TransactionsTab = () => {
           }
           if (newFormData.type !== 'EXCHANGE' && newFormData.type !== 'TRANSFER') {
             newFormData.price = '1';
-            const q = parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
+            const q = parseFormattedNumber(newFormData.quantity);
             newFormData.total_amount = q.toString();
           }
         }
@@ -324,7 +355,7 @@ const TransactionsTab = () => {
         source_account_id: parseInt(formData.account_id),
         target_account_id: parseInt(formData.target_account_id),
         asset_id: parseInt(formData.asset_id),
-        amount: parseFloat(formData.total_amount.toString().replace(/,/g, '')) || 0,
+        amount: parseFormattedNumber(formData.total_amount),
         transaction_date: formData.transaction_date,
         memo: formData.memo || null
       };
@@ -351,12 +382,12 @@ const TransactionsTab = () => {
 
     const payload = {
       ...formData,
-      quantity: parseFloat(formData.quantity.toString().replace(/,/g, '')) || 0,
-      price: parseFloat(formData.price.toString().replace(/,/g, '')) || 0,
-      total_amount: parseFloat(formData.total_amount.toString().replace(/,/g, '')) || 0,
+      quantity: parseFormattedNumber(formData.quantity),
+      price: parseFormattedNumber(formData.price),
+      total_amount: parseFormattedNumber(formData.total_amount),
       target_asset_id: isExchange && formData.target_asset_id ? parseInt(formData.target_asset_id) : null,
       exchange_rate: isExchange 
-        ? (parseFloat(formData.price.toString().replace(/,/g, '')) || null) 
+        ? (parseFormattedNumber(formData.price) || null) 
         : (formData.exchange_rate ? parseFloat(formData.exchange_rate) : null)
     };
 
@@ -429,9 +460,9 @@ const TransactionsTab = () => {
     const defaultAssetId = assets.length > 0 ? assets[0].id : '';
     const defaultAsset = assets.find(a => isSameId(a.id, defaultAssetId));
     const cashAssets = assets.filter(isCashAsset);
-    const defaultTarget = cashAssets.find(a => !isSameId(a.id, defaultAssetId)) || assets[1];
+    const defaultTarget = findAlternative(cashAssets, defaultAssetId) || assets[1];
     const defaultAccountId = accounts.length > 0 ? accounts[0].id : '';
-    const altAcc = accounts.find(a => !isSameId(a.id, defaultAccountId));
+    const altAcc = findAlternative(accounts, defaultAccountId);
 
     let defaultCurrency = 'KRW';
     let defaultType = 'BUY';
