@@ -2,6 +2,12 @@ import { chromium } from 'playwright';
 import path from 'path';
 import fs from 'fs';
 
+/**
+ * 상위 디렉토리를 재귀 탐색하여 프로젝트 루트(GEMINI.md가 존재하는 디렉토리)를 찾습니다.
+ *
+ * @param {string} dir - 시작 디렉토리 경로
+ * @returns {string} 프로젝트 루트 디렉토리 절대 경로
+ */
 function findProjectRoot(dir) {
   if (fs.existsSync(path.join(dir, 'GEMINI.md'))) return dir;
   const parent = path.dirname(dir);
@@ -12,12 +18,13 @@ function findProjectRoot(dir) {
 (async () => {
   const projectRoot = findProjectRoot(process.cwd());
   const now = new Date();
-  const timestampStr = now.getFullYear().toString() +
+  const dateStr = now.getFullYear().toString() +
     String(now.getMonth() + 1).padStart(2, '0') +
-    String(now.getDate()).padStart(2, '0') + '_' +
-    String(now.getHours()).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0');
+  const timeStr = String(now.getHours()).padStart(2, '0') +
     String(now.getMinutes()).padStart(2, '0') +
     String(now.getSeconds()).padStart(2, '0');
+  const timestampStr = `${dateStr}_${timeStr}`;
   const folderName = process.env.SCREENSHOT_FOLDER || `${timestampStr}_exchange_ui_verification`;
   const outputDir = path.join(projectRoot, 'screenshots', folderName);
 

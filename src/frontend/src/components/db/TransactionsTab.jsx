@@ -34,25 +34,68 @@ const getTypeBadgeProps = (tx) => {
 };
 
 /**
- * 라벨 기본값 상수
+ * 환전 도착 자산 Ticker 미선택 시 기본 표시 라벨입니다.
  */
 const DEFAULT_TARGET_TICKER_LABEL = '도착Ticker';
+
+/**
+ * 환전 출발 자산 Ticker 미선택 시 기본 표시 라벨입니다.
+ */
 const DEFAULT_SOURCE_TICKER_LABEL = '출발Ticker';
 
 /**
- * 현금(CASH) 카테고리 자산 또는 예수금 Ticker(KRW, USD)인지 판단하는 헬퍼 함수입니다.
+ * 현금(CASH) 카테고리 자산인지 판단하는 헬퍼 함수입니다.
+ *
+ * @param {Object} asset - 자산 객체
+ * @returns {boolean} 현금 카테고리 자산 여부
  */
 const isCashAsset = (asset) => {
   if (!asset) return false;
-  return asset.category === 'CASH' || asset.ticker === 'USD' || asset.ticker === 'KRW';
+  if (asset.category !== undefined) {
+    return asset.category === 'CASH';
+  }
+  return asset.ticker === 'USD' || asset.ticker === 'KRW';
 };
 
 /**
  * 두 Entity ID(문자열/숫자)가 동일한지 안전하게 비교하는 헬퍼 함수입니다.
+ *
+ * @param {string|number} id1 - 첫 번째 ID
+ * @param {string|number} id2 - 두 번째 ID
+ * @returns {boolean} ID 동일 여부
  */
 const isSameId = (id1, id2) => {
   if (id1 === undefined || id1 === null || id2 === undefined || id2 === null) return false;
   return String(id1) === String(id2);
+};
+
+/**
+ * 거래 유형 및 선택된 자산 Ticker에 따라 폼 입력 필드 라벨을 반환합니다.
+ *
+ * @param {string} type - 거래 유형 (EXCHANGE, TRANSFER, BUY 등)
+ * @param {string} sourceTicker - 출발 자산 Ticker
+ * @param {string} targetTicker - 도착 자산 Ticker
+ * @returns {Object} 필드별 라벨 텍스트 객체
+ */
+const getFieldLabels = (type, sourceTicker, targetTicker) => {
+  const isExchange = type === 'EXCHANGE';
+  const isTransfer = type === 'TRANSFER';
+  const targetText = targetTicker || DEFAULT_TARGET_TICKER_LABEL;
+  const sourceText = sourceTicker || DEFAULT_SOURCE_TICKER_LABEL;
+
+  if (isExchange) {
+    return {
+      quantity: `환전 도착 금액 (수령 수량) ${targetText}`,
+      price: `적용 환율 (1 ${targetText} 당 ${sourceText})`,
+      totalAmount: `환전 출발 금액 (지불 금액) ${sourceText}`
+    };
+  }
+
+  return {
+    quantity: '수량',
+    price: '단가',
+    totalAmount: isTransfer ? '이체 금액' : '총 금액'
+  };
 };
 
 /**
@@ -194,6 +237,12 @@ const TransactionsTab = () => {
           targetId = alternativeTarget ? alternativeTarget.id : (cashAssets[0]?.id || '');
         }
         newFormData.target_asset_id = targetId;
+
+        const q = parseFloat(newFormData.quantity.toString().replace(/,/g, '')) || 0;
+        const p = parseFloat(newFormData.price.toString().replace(/,/g, '')) || 0;
+        if (q > 0 && p > 0) {
+          newFormData.total_amount = (q * p).toString();
+        }
       } else if (value === 'TRANSFER') {
         let targetAccId = newFormData.target_account_id;
         if (!targetAccId || isSameId(targetAccId, newFormData.account_id)) {
@@ -430,6 +479,8 @@ const TransactionsTab = () => {
   const sourceTicker = selectedAsset ? selectedAsset.ticker : '';
   const targetTicker = selectedTargetAsset ? selectedTargetAsset.ticker : '';
 
+  const fieldLabels = getFieldLabels(formData.type, sourceTicker, targetTicker);
+
   return (
     <div className="p-6">
       {error && (
@@ -597,9 +648,7 @@ const TransactionsTab = () => {
             <>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
-                  {isExchangeForm
-                    ? `환전 도착 금액 (수령 수량)${targetTicker ? ` ${targetTicker}` : ` ${DEFAULT_TARGET_TICKER_LABEL}`}`
-                    : '수량'}
+                  {fieldLabels.quantity}
                 </label>
                 <input
                   type="text"
@@ -612,9 +661,7 @@ const TransactionsTab = () => {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
-                  {isExchangeForm
-                    ? `적용 환율 (1 ${targetTicker || DEFAULT_TARGET_TICKER_LABEL} 당 ${sourceTicker || DEFAULT_SOURCE_TICKER_LABEL})`
-                    : '단가'}
+                  {fieldLabels.price}
                 </label>
                 <input
                   type="text"
@@ -633,9 +680,7 @@ const TransactionsTab = () => {
 
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
-              {isExchangeForm
-                ? `환전 출발 금액 (지불 금액)${sourceTicker ? ` ${sourceTicker}` : ` ${DEFAULT_SOURCE_TICKER_LABEL}`}`
-                : (isTransferForm ? '이체 금액' : '총 금액')}
+              {fieldLabels.totalAmount}
             </label>
             <input
               type="text"
