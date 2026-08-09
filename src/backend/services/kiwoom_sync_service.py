@@ -112,6 +112,11 @@ class KiwoomTransactionService:
         start_date_str = (datetime.date.today() - datetime.timedelta(days=days - 1)).strftime("%Y%m%d")
 
         for account in accounts:
+            if isinstance(self.auth_manager.accounts_config, dict) and self.auth_manager.accounts_config:
+                if account.name not in self.auth_manager.accounts_config:
+                    logger.info(f"계좌 {account.name}은(는) settings.toml에 설정 정보가 없어 자동동기화 대상에서 제외(스킵)합니다.")
+                    continue
+
             logger.info(f"계좌 동기화 시작: {account.name} (ID: {account.id})")
             try:
                 # 해당 계좌에 대응하는 토큰 발급

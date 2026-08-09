@@ -238,6 +238,52 @@ async def test_sync_transactions_account_failure_reporting(mock_get_token, setup
 
 @pytest.mark.asyncio
 @patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+async def test_sync_transactions_skips_unconfigured_accounts(
+    mock_auth_class, db_session: Session, setup_test_data
+):
+    """settings.toml에 등록되지 않은 활성 계좌(예: 6106-8763)는 에러 보고서에 포함되지 않고 스킵되는지 검증합니다."""
+    # DB에 settings.toml 미등록 계좌(6106-8763) 추가 생성
+    user = setup_test_data["user"]
+    unconfigured_account = Account(
+        user_id=user.id,
+        name="6106-8763",
+        provider="키움증권",
+        alias="달러지갑",
+        account_type="BROKERAGE",
+        is_active=True
+    )
+    db_session.add(unconfigured_account)
+    db_session.commit()
+
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    # accounts_config에는 5526-9093, 6066-7729 만 포함 (6106-8763 누락)
+    mock_auth.accounts_config = {
+        "5526-9093": {"app_key": "k1", "secret_key": "s1"},
+        "6066-7729": {"app_key": "k2", "secret_key": "s2"},
+    }
+    mock_auth.get_valid_token = AsyncMock(return_value="mock_token")
+
+    service = KiwoomTransactionService()
+
+    with patch.object(service, "_fetch_domestic_executions", new_callable=AsyncMock, return_value=[]), \
+         patch.object(service, "_fetch_overseas_executions", new_callable=AsyncMock, return_value=[]), \
+         patch.object(service, "_fetch_comprehensive_ledger", new_callable=AsyncMock, return_value=[]):
+        result = await service.sync_transactions(db_session, days=1)
+
+    # 6106-8763은 failed_accounts에 포함되지 않아야 함
+    failed = result.get("failed_accounts", [])
+    failed_account_names = [f["account_name"] for f in failed]
+    assert "6106-8763" not in failed_account_names
+
+    # get_valid_token은 5526-9093, 6066-7729 에 대해서만 호출되어야 함 (6106-8763 제외)
+    called_accounts = [call.args[0] for call in mock_auth.get_valid_token.call_args_list]
+    assert "6106-8763" not in called_accounts
+
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
 @patch("httpx.AsyncClient.post")
 async def test_sync_with_a_prefix_ticker(
     mock_post, mock_auth_class, db_session: Session, setup_test_data

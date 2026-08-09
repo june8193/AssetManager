@@ -21,6 +21,8 @@ venv/
 assets.db
 test_*.db
 dev_assets.db
+file:gw*
+file:memdb*
 backups/
 
 
