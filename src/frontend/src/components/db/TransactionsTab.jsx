@@ -264,9 +264,7 @@ const TransactionsTab = () => {
 
         const q = parseFormattedNumber(newFormData.quantity);
         const p = parseFormattedNumber(newFormData.price);
-        if (q > 0 && p > 0) {
-          newFormData.total_amount = (q * p).toString();
-        }
+        newFormData.total_amount = (q * p).toString();
       } else if (value === 'TRANSFER') {
         let targetAccId = newFormData.target_account_id;
         if (!targetAccId || isSameId(targetAccId, newFormData.account_id)) {
