@@ -6,6 +6,9 @@ import { useMasking } from '../../contexts/MaskingContext';
 /**
  * 숫자를 3자리마다 쉼표가 들어간 포맷으로 변환합니다.
  * 소수점 이하 자리수도 그대로 유지합니다.
+ *
+ * @param {string|number} value - 변환할 값
+ * @returns {string} 쉼표가 포함된 포맷팅된 문자열
  */
 const formatInputNumber = (value) => {
   if (value === undefined || value === null || value === '') return '';
@@ -17,6 +20,9 @@ const formatInputNumber = (value) => {
 
 /**
  * 거래 유형 및 연동 여부에 따라 뱃지의 텍스트와 스타일 CSS를 반환합니다.
+ *
+ * @param {Object} tx - 거래 객체
+ * @returns {Object} 뱃지 라벨 및 스타일 객체
  */
 const getTypeBadgeProps = (tx) => {
   const isExchangeTx = tx.type === 'EXCHANGE';
@@ -51,7 +57,7 @@ const DEFAULT_SOURCE_TICKER_LABEL = '출발Ticker';
  */
 const isCashAsset = (asset) => {
   if (!asset) return false;
-  if (asset.category !== undefined) {
+  if (asset.category) {
     return asset.category === 'CASH';
   }
   return asset.ticker === 'USD' || asset.ticker === 'KRW';
@@ -402,8 +408,8 @@ const TransactionsTab = () => {
         if (editingId) {
           resetForm();
         } else {
-          const currentAsset = assets.find(a => a.id.toString() === formData.asset_id.toString());
-          const isCash = currentAsset ? (currentAsset.ticker === 'USD' || currentAsset.ticker === 'KRW') : false;
+          const currentAsset = assets.find(a => isSameId(a.id, formData.asset_id));
+          const isCash = isCashAsset(currentAsset);
           setFormData(prev => ({
             ...prev,
             quantity: '0',
