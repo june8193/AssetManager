@@ -330,7 +330,7 @@ describe('TransactionsTab', () => {
     // 출발 자산, 도착 자산 선택창 및 적용 환율 라벨 노출 확인
     expect(screen.getByText('출발 자산')).toBeInTheDocument();
     expect(screen.getByText('도착 자산')).toBeInTheDocument();
-    expect(screen.getByText('적용 환율')).toBeInTheDocument();
+    expect(screen.getByText(/적용 환율/)).toBeInTheDocument();
 
     const targetAssetSelect = container.querySelector('select[name="target_asset_id"]');
     const quantityInput = container.querySelector('input[name="quantity"]');
@@ -360,6 +360,97 @@ describe('TransactionsTab', () => {
       expect(requestBody.total_amount).toBe(1350000);
       expect(requestBody.exchange_rate).toBe(1350);
     });
+  });
+
+  it('환전(EXCHANGE) 선택 시 출발 및 도착 자산 드롭다운에 현금(CASH) 자산만 필터링되고 출발 자산이 도착 자산에서 제외되어야 한다', async () => {
+    const customAssets = [
+      { id: 1, ticker: 'KRW', name: '원화예수금', category: 'CASH', country: 'KR' },
+      { id: 2, ticker: 'USD', name: '달러예수금', category: 'CASH', country: 'US' },
+      { id: 3, ticker: 'AAPL', name: '애플 주식', category: 'STOCK', country: 'US' }
+    ];
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(customAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const typeSelect = container.querySelector('select[name="type"]');
+    fireEvent.change(typeSelect, { target: { value: 'EXCHANGE' } });
+
+    const sourceAssetSelect = container.querySelector('select[name="asset_id"]');
+    const targetAssetSelect = container.querySelector('select[name="target_asset_id"]');
+
+    // 출발 자산 옵션에 AAPL이 없어야 함
+    const sourceOptions = Array.from(sourceAssetSelect.querySelectorAll('option')).map(opt => opt.value);
+    expect(sourceOptions).toContain('1');
+    expect(sourceOptions).toContain('2');
+    expect(sourceOptions).not.toContain('3');
+
+    // 출발 자산이 1(KRW)일 때 도착 자산 옵션에는 2(USD)만 있고 1(KRW), 3(AAPL)은 없어야 함
+    const targetOptions = Array.from(targetAssetSelect.querySelectorAll('option')).map(opt => opt.value);
+    expect(targetOptions).toContain('2');
+    expect(targetOptions).not.toContain('1');
+    expect(targetOptions).not.toContain('3');
+  });
+
+  it('환전(EXCHANGE) 선택 시 Ticker 기반 라벨 변경, readOnly 비활성화 및 지불 금액 실시간 자동계산이 적용되어야 한다', async () => {
+    const customAssets = [
+      { id: 1, ticker: 'KRW', name: '원화예수금', category: 'CASH', country: 'KR' },
+      { id: 2, ticker: 'USD', name: '달러예수금', category: 'CASH', country: 'US' }
+    ];
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(customAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const typeSelect = container.querySelector('select[name="type"]');
+    fireEvent.change(typeSelect, { target: { value: 'EXCHANGE' } });
+
+    const targetAssetSelect = container.querySelector('select[name="target_asset_id"]');
+    fireEvent.change(targetAssetSelect, { target: { value: '2' } });
+
+    // 1. 라벨 변경 검증
+    expect(screen.getByText('환전 도착 금액 (수령 수량) USD')).toBeInTheDocument();
+    expect(screen.getByText('적용 환율 (1 USD 당 KRW)')).toBeInTheDocument();
+    expect(screen.getByText('환전 출발 금액 (지불 금액) KRW')).toBeInTheDocument();
+
+    // 2. readOnly 및 시각적 비활성화 스타일 검증
+    const totalInput = container.querySelector('input[name="total_amount"]');
+    expect(totalInput.readOnly).toBe(true);
+    expect(totalInput.className).toContain('bg-slate-100');
+    expect(totalInput.className).toContain('cursor-not-allowed');
+
+    // 3. 수량 * 환율 = 지불 금액 실시간 자동 계산 검증
+    const quantityInput = container.querySelector('input[name="quantity"]');
+    const priceInput = container.querySelector('input[name="price"]');
+
+    fireEvent.change(quantityInput, { target: { value: '500' } });
+    fireEvent.change(priceInput, { target: { value: '1,300' } });
+
+    expect(totalInput.value).toBe('650,000');
   });
 
   it('거래 목록 테이블에서 환전(EXCHANGE) 거래 항목이 [출발자산 ➔ 도착자산] 형식과 환율로 표시되어야 한다', async () => {

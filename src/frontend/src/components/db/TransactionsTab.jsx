@@ -161,7 +161,11 @@ const TransactionsTab = () => {
 
     if (name === 'type') {
       if (value === 'EXCHANGE') {
-        const cashAssets = assets.filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH');
+        const cashAssets = assets.filter(a => a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW');
+        let currentSource = assets.find(a => a.id.toString() === newFormData.asset_id.toString());
+        if (!currentSource || (currentSource.category !== 'CASH' && currentSource.ticker !== 'USD' && currentSource.ticker !== 'KRW')) {
+          newFormData.asset_id = cashAssets[0] ? cashAssets[0].id : newFormData.asset_id;
+        }
         let targetId = newFormData.target_asset_id;
         if (!targetId || targetId.toString() === newFormData.asset_id.toString()) {
           const alternativeTarget = cashAssets.find(a => a.id.toString() !== newFormData.asset_id.toString());
@@ -205,6 +209,13 @@ const TransactionsTab = () => {
       }
     } else if (name === 'asset_id') {
       newFormData.asset_id = value;
+      if (newFormData.type === 'EXCHANGE') {
+        const cashAssets = assets.filter(a => a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW');
+        if (newFormData.target_asset_id && newFormData.target_asset_id.toString() === value.toString()) {
+          const altTarget = cashAssets.find(a => a.id.toString() !== value.toString());
+          newFormData.target_asset_id = altTarget ? altTarget.id : '';
+        }
+      }
       const selectedAsset = assets.find(a => a.id.toString() === value.toString());
       if (selectedAsset) {
         let newCurrency = 'KRW';
@@ -390,9 +401,12 @@ const TransactionsTab = () => {
 
   // 현재 선택된 자산 및 예수금 여부 판단
   const selectedAsset = assets.find(a => a.id.toString() === formData.asset_id.toString());
+  const selectedTargetAsset = assets.find(a => a.id.toString() === formData.target_asset_id.toString());
   const isCashAsset = selectedAsset ? (selectedAsset.ticker === 'USD' || selectedAsset.ticker === 'KRW') : false;
   const isExchangeForm = formData.type === 'EXCHANGE';
   const isTransferForm = formData.type === 'TRANSFER';
+  const sourceTicker = selectedAsset ? selectedAsset.ticker : '';
+  const targetTicker = selectedTargetAsset ? selectedTargetAsset.ticker : '';
 
   return (
     <div className="p-6">
@@ -496,7 +510,7 @@ const TransactionsTab = () => {
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
             >
-              {assets.map(asset => (
+              {(isExchangeForm ? assets.filter(a => a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW') : assets).map(asset => (
                 <option key={asset.id} value={asset.id}>{asset.ticker} ({asset.name})</option>
               ))}
             </select>
@@ -549,7 +563,7 @@ const TransactionsTab = () => {
                 required
               >
                 {assets
-                  .filter(a => a.ticker === 'USD' || a.ticker === 'KRW' || a.category === 'CASH')
+                  .filter(a => (a.category === 'CASH' || a.ticker === 'USD' || a.ticker === 'KRW') && a.id.toString() !== formData.asset_id.toString())
                   .map(asset => (
                     <option key={asset.id} value={asset.id}>{asset.ticker} ({asset.name})</option>
                   ))}
@@ -560,7 +574,11 @@ const TransactionsTab = () => {
           {!isTransferForm && (
             <>
               <div>
-                <label className="block text-xs font-medium text-slate-500 mb-1">수량</label>
+                <label className="block text-xs font-medium text-slate-500 mb-1">
+                  {isExchangeForm
+                    ? `환전 도착 금액 (수령 수량)${targetTicker ? ` ${targetTicker}` : ''}`
+                    : '수량'}
+                </label>
                 <input
                   type="text"
                   name="quantity"
@@ -572,7 +590,9 @@ const TransactionsTab = () => {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
-                  {isExchangeForm ? '적용 환율' : '단가'}
+                  {isExchangeForm
+                    ? `적용 환율${targetTicker && sourceTicker ? ` (1 ${targetTicker} 당 ${sourceTicker})` : ''}`
+                    : '단가'}
                 </label>
                 <input
                   type="text"
@@ -591,14 +611,19 @@ const TransactionsTab = () => {
 
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
-              {isTransferForm ? '이체 금액' : '총 금액'}
+              {isExchangeForm
+                ? `환전 출발 금액 (지불 금액)${sourceTicker ? ` ${sourceTicker}` : ''}`
+                : (isTransferForm ? '이체 금액' : '총 금액')}
             </label>
             <input
               type="text"
               name="total_amount"
               value={formatInputNumber(formData.total_amount)}
               onChange={handleInputChange}
-              className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+              readOnly={isExchangeForm}
+              className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
+                isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+              }`}
               required
             />
           </div>
