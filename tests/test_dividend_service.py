@@ -129,3 +129,29 @@ def test_get_stock_dividend_analysis(db_session):
     assert new_st["sub_category"] == "국내배당주"
     assert new_st["annual_estimate"] == 0.0
     assert new_st["yield_current"] == 0.0
+
+
+def test_get_dividend_summary_with_tax(db_session):
+    """배당세(TAX)가 존재할 때 세후 배당금 차감 집계를 검증합니다."""
+    # SCHD에 대한 세금 13,500원 (USD 환율 1350 기준 10달러) 차감 적재
+    current_year = datetime.date.today().year
+    schd = db_session.query(Asset).filter(Asset.ticker == "SCHD").first()
+    acc_us = db_session.query(Account).filter(Account.alias == "미국증권").first()
+
+    tax_tx = Transaction(
+        account_id=acc_us.id, asset_id=schd.id,
+        transaction_date=datetime.date(current_year, 4, 10),
+        type="TAX", quantity=0.0, price=0.0, total_amount=13500.0,
+        currency="KRW", memo="SCHD 해외배당세출금"
+    )
+    db_session.add(tax_tx)
+    db_session.commit()
+
+    service = DividendService(db_session)
+    summary = service.get_dividend_summary()
+
+    # 세전 YTD = 275,000원, 세금 TAX = 13,500원 => 세후 YTD = 261,500원
+    assert summary["ytd_krw"] == 261500.0
+    # 세전 총 누적 = 335,000원, 세금 TAX = 13,500원 => 세후 총 누적 = 321,500원
+    assert summary["total_krw"] == 321500.0
+

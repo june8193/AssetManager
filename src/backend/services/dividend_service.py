@@ -23,8 +23,8 @@ class DividendService:
         usd_rate = self.get_latest_usd_rate()
         current_year = datetime.date.today().year
 
-        # 모든 INTEREST 거래내역 조회
-        transactions = self.db.query(Transaction).filter(Transaction.type == "INTEREST").all()
+        # 모든 INTEREST 및 TAX 거래내역 조회
+        transactions = self.db.query(Transaction).filter(Transaction.type.in_(["INTEREST", "TAX"])).all()
 
         total_krw = 0.0
         ytd_krw = 0.0
@@ -32,6 +32,9 @@ class DividendService:
 
         for tx in transactions:
             tx_amount_krw = tx.total_amount if tx.currency == "KRW" else tx.total_amount * usd_rate
+            if tx.type == "TAX":
+                tx_amount_krw = -tx_amount_krw
+
             total_krw += tx_amount_krw
 
             if tx.transaction_date.year == current_year:
@@ -88,10 +91,10 @@ class DividendService:
             # 통화 결정
             currency = "USD" if asset.country == "US" else "KRW"
 
-            # 해당 자산의 모든 INTEREST 거래내역
+            # 해당 자산의 모든 INTEREST 및 TAX 거래내역
             txs = self.db.query(Transaction).filter(
                 Transaction.asset_id == asset.id,
-                Transaction.type == "INTEREST"
+                Transaction.type.in_(["INTEREST", "TAX"])
             ).all()
 
             # 가장 최근 BUY 거래내역에서 매수가(buy_price) 추정 (없으면 0.0)
@@ -105,9 +108,10 @@ class DividendService:
             cumulative_amount = 0.0
 
             for tx in txs:
-                cumulative_amount += tx.total_amount
+                amt = tx.total_amount if tx.type == "INTEREST" else -tx.total_amount
+                cumulative_amount += amt
                 if tx.transaction_date.year == current_year:
-                    ytd_amount += tx.total_amount
+                    ytd_amount += amt
 
             # 연환산 추정 배당금: (YTD / current_month) * 12
             if ytd_amount > 0 and current_month > 0:

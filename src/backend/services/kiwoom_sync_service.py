@@ -174,21 +174,42 @@ class KiwoomTransactionService:
 
                     daily_ledger = await self._fetch_comprehensive_ledger(token, today_str, today_str)
                     for tx in daily_ledger:
-                        if "배당금" in tx.get("rmrk_nm", ""):
-                            ext_id = tx.get("seq") or tx.get("trde_no")
-                            trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
-                            tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
+                        rmrk = tx.get("rmrk_nm", "")
+                        ext_id = tx.get("seq") or tx.get("trde_no")
+                        trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
+                        tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
+                        stk_cd = tx.get("stk_cd")
+
+                        if "배당금" in rmrk:
+                            fc_amt = _safe_float(tx.get("fc_exct_amt") or tx.get("fc_trde_amt"))
+                            div_amt = fc_amt if fc_amt > 0 else _safe_float(tx.get("trde_amt"))
                             raw_transactions.append({
                                 "date": trde_dt,
                                 "traded_at": _parse_traded_at(trde_dt, tm_str),
-                                "ticker": tx.get("stk_cd"),
+                                "ticker": stk_cd,
                                 "name": tx.get("stk_nm", "배당금 입금"),
                                 "type": "INTEREST",
-                                "quantity": _safe_float(tx.get("trde_qty_jwa_cnt")),
-                                "price": _safe_float(tx.get("trde_amt")),
-                                "currency": "KRW",
+                                "quantity": 0.0,
+                                "price": 0.0,
+                                "total_amount": div_amt,
+                                "currency": tx.get("crnc_cd") or "KRW",
                                 "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (배당금)"
+                            })
+                        elif any(t_word in rmrk for t_word in ["배당세", "해외배당세출금", "원천징수"]):
+                            tax_amt = _safe_float(tx.get("trde_amt") or tx.get("fc_trde_amt") or tx.get("fc_exct_amt"))
+                            raw_transactions.append({
+                                "date": trde_dt,
+                                "traded_at": _parse_traded_at(trde_dt, tm_str),
+                                "ticker": stk_cd,
+                                "name": tx.get("stk_nm", "해외배당세"),
+                                "type": "TAX",
+                                "quantity": 0.0,
+                                "price": 0.0,
+                                "total_amount": tax_amt,
+                                "currency": tx.get("crnc_cd") or "KRW",
+                                "external_id": str(ext_id) if ext_id else None,
+                                "memo": f"키움 자동저장 (해외배당세)"
                             })
                 else:
                     ledger_data = await self._fetch_comprehensive_ledger(token, start_date_str, today_str)
@@ -197,20 +218,38 @@ class KiwoomTransactionService:
                         stk_cd = tx.get("stk_cd")
                         ext_id = tx.get("seq") or tx.get("trde_no")
                         tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
-                        
+                        trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
+
                         if "배당금" in rmrk:
-                            trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
+                            fc_amt = _safe_float(tx.get("fc_exct_amt") or tx.get("fc_trde_amt"))
+                            div_amt = fc_amt if fc_amt > 0 else _safe_float(tx.get("trde_amt"))
                             raw_transactions.append({
                                 "date": trde_dt,
                                 "traded_at": _parse_traded_at(trde_dt, tm_str),
                                 "ticker": stk_cd,
                                 "name": tx.get("stk_nm", "배당금 입금"),
                                 "type": "INTEREST",
-                                "quantity": _safe_float(tx.get("trde_qty_jwa_cnt")),
-                                "price": _safe_float(tx.get("trde_amt")),
-                                "currency": "KRW",
+                                "quantity": 0.0,
+                                "price": 0.0,
+                                "total_amount": div_amt,
+                                "currency": tx.get("crnc_cd") or "KRW",
                                 "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (소급 배당금)"
+                            })
+                        elif any(t_word in rmrk for t_word in ["배당세", "해외배당세출금", "원천징수"]):
+                            tax_amt = _safe_float(tx.get("trde_amt") or tx.get("fc_trde_amt") or tx.get("fc_exct_amt"))
+                            raw_transactions.append({
+                                "date": trde_dt,
+                                "traded_at": _parse_traded_at(trde_dt, tm_str),
+                                "ticker": stk_cd,
+                                "name": tx.get("stk_nm", "해외배당세"),
+                                "type": "TAX",
+                                "quantity": 0.0,
+                                "price": 0.0,
+                                "total_amount": tax_amt,
+                                "currency": tx.get("crnc_cd") or "KRW",
+                                "external_id": str(ext_id) if ext_id else None,
+                                "memo": f"키움 자동저장 (해외배당세)"
                             })
                         elif any(m in rmrk for m in ["장내매수", "장내매도", "매매", "매수", "매도"]):
                             cntr_dt_str = tx.get("cntr_dt") or tx.get("trde_dt")
@@ -228,6 +267,7 @@ class KiwoomTransactionService:
                                 "type": "BUY" if "매수" in rmrk else "SELL",
                                 "quantity": qty,
                                 "price": price,
+                                "total_amount": trde_amt,
                                 "currency": "KRW",
                                 "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (소급 매매)"
@@ -256,6 +296,7 @@ class KiwoomTransactionService:
                                 "type": "BUY" if is_buy else "SELL",
                                 "quantity": qty,
                                 "price": price_val,
+                                "total_amount": qty * price_val,
                                 "currency": "USD",
                                 "external_id": str(ext_id) if ext_id else None,
                                 "memo": f"키움 자동저장 (해외체결 소급)"
@@ -276,19 +317,19 @@ class KiwoomTransactionService:
                             "type": tx_data["type"],
                             "quantity": tx_data["quantity"],
                             "price": tx_data["price"],
-                            "total_amount": tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"],
-                            "currency": tx_data["currency"],
+                            "total_amount": tx_data.get("total_amount", tx_data["price"]),
+                            "currency": tx_data.get("currency", "USD" if asset and asset.country == "US" else "KRW"),
                             "traded_at": tx_data.get("traded_at")
                         })
                         logger.warning(f"미등록 자산 발견으로 저장 생략: {ticker} ({tx_data['name']})")
                         continue
 
-                    if asset.country == "US":
+                    if asset.country == "US" and tx_data["type"] not in ["TAX"]:
                         tx_data["currency"] = "USD"
-                    else:
-                        tx_data["currency"] = "KRW"
 
-                    total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
+                    total_amt = tx_data.get("total_amount")
+                    if total_amt is None:
+                        total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
                     ext_id = tx_data.get("external_id")
 
                     # 1) 동일 체결번호(external_id)가 이미 DB에 존재하는 경우 -> 100% 중복 스킵

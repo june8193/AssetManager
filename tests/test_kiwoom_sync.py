@@ -524,3 +524,90 @@ def test_parse_traded_at_helper():
     dt = datetime.datetime(2026, 8, 3, 14, 30)
     assert _parse_traded_at(dt.date(), "143000") == "2026-08-03 14:30"
 
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_overseas_dividend_and_tax(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """해외 배당금(정산금액 fc_exct_amt) 및 해외 배당세(TAX) 동기화 동작을 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": "20260807",
+                        "trde_no": "000000004",
+                        "rmrk_nm": "배당금(외화)입금",
+                        "stk_cd": "AAPL",
+                        "stk_nm": "Apple",
+                        "crnc_cd": "USD",
+                        "fc_trde_amt": "80.63",
+                        "fc_exct_amt": "80.63",
+                        "trde_amt": "000000000000000",
+                        "trde_qty_jwa_cnt": ""
+                    },
+                    {
+                        "trde_dt": "20260807",
+                        "trde_no": "000000005",
+                        "rmrk_nm": "해외배당세출금",
+                        "stk_cd": "AAPL",
+                        "stk_nm": "Apple",
+                        "crnc_cd": "KRW",
+                        "fc_trde_amt": "0.00",
+                        "trde_amt": "000000000017610",
+                        "trde_qty_jwa_cnt": ""
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=7)
+
+    assert result["status"] == "success"
+
+    apple_asset = setup_test_data["assets"]["AAPL"]
+    account = setup_test_data["accounts"]["5526-9093"]
+
+    # DB에 배당금(INTEREST) 및 배당세(TAX)가 정상 적재되었는지 검증
+    interest_tx = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.asset_id == apple_asset.id,
+        Transaction.type == "INTEREST"
+    ).first()
+    assert interest_tx is not None
+    assert interest_tx.total_amount == 80.63
+    assert interest_tx.price == 0.0
+    assert interest_tx.quantity == 0.0
+    assert interest_tx.currency == "USD"
+    assert interest_tx.external_id == "000000004"
+
+    tax_tx = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.asset_id == apple_asset.id,
+        Transaction.type == "TAX"
+    ).first()
+    assert tax_tx is not None
+    assert tax_tx.total_amount == 17610.0
+    assert tax_tx.price == 0.0
+    assert tax_tx.quantity == 0.0
+    assert tax_tx.currency == "KRW"
+    assert tax_tx.external_id == "000000005"
+
+
