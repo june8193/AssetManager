@@ -26,6 +26,7 @@ file:memdb*
 backups/
 
 
+
 # 에이전트 내부 메모리/로그 디렉토리
 brain/
 
@@ -47,3 +48,7 @@ node_modules/
 
 # GitHub Self-hosted Runner
 actions-runner/
+
+# Scratch 디렉토리
+.scratch/
+scratch/
