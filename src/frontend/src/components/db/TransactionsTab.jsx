@@ -34,7 +34,13 @@ const getTypeBadgeProps = (tx) => {
 };
 
 /**
- * 현금(CASH) 카테고리 또는 예수금 Ticker(KRW, USD) 자산인지 판단하는 헬퍼 함수입니다.
+ * 라벨 기본값 상수
+ */
+const DEFAULT_TARGET_TICKER_LABEL = '도착Ticker';
+const DEFAULT_SOURCE_TICKER_LABEL = '출발Ticker';
+
+/**
+ * 현금(CASH) 카테고리 자산 또는 예수금 Ticker(KRW, USD)인지 판단하는 헬퍼 함수입니다.
  */
 const isCashAsset = (asset) => {
   if (!asset) return false;
@@ -592,7 +598,7 @@ const TransactionsTab = () => {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   {isExchangeForm
-                    ? `환전 도착 금액 (수령 수량)${targetTicker ? ` ${targetTicker}` : ' 도착Ticker'}`
+                    ? `환전 도착 금액 (수령 수량)${targetTicker ? ` ${targetTicker}` : ` ${DEFAULT_TARGET_TICKER_LABEL}`}`
                     : '수량'}
                 </label>
                 <input
@@ -607,7 +613,7 @@ const TransactionsTab = () => {
               <div>
                 <label className="block text-xs font-medium text-slate-500 mb-1">
                   {isExchangeForm
-                    ? `적용 환율 (1 ${targetTicker || '도착Ticker'} 당 ${sourceTicker || '출발Ticker'})`
+                    ? `적용 환율 (1 ${targetTicker || DEFAULT_TARGET_TICKER_LABEL} 당 ${sourceTicker || DEFAULT_SOURCE_TICKER_LABEL})`
                     : '단가'}
                 </label>
                 <input
@@ -628,7 +634,7 @@ const TransactionsTab = () => {
           <div>
             <label className="block text-xs font-medium text-slate-500 mb-1">
               {isExchangeForm
-                ? `환전 출발 금액 (지불 금액)${sourceTicker ? ` ${sourceTicker}` : ' 출발Ticker'}`
+                ? `환전 출발 금액 (지불 금액)${sourceTicker ? ` ${sourceTicker}` : ` ${DEFAULT_SOURCE_TICKER_LABEL}`}`
                 : (isTransferForm ? '이체 금액' : '총 금액')}
             </label>
             <input
