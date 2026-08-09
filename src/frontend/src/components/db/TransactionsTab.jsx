@@ -256,7 +256,8 @@ const TransactionsTab = () => {
           newFormData.asset_id = cashAssets[0] ? cashAssets[0].id : newFormData.asset_id;
         }
         let targetId = newFormData.target_asset_id;
-        if (!targetId || isSameId(targetId, newFormData.asset_id)) {
+        const targetAsset = cashAssets.find(a => isSameId(a.id, targetId));
+        if (!targetId || !targetAsset || isSameId(targetId, newFormData.asset_id)) {
           const alternativeTarget = findAlternative(cashAssets, newFormData.asset_id);
           targetId = alternativeTarget ? alternativeTarget.id : (cashAssets[0]?.id || '');
         }
@@ -296,8 +297,8 @@ const TransactionsTab = () => {
       }
 
       if (name === 'quantity' || name === 'price') {
-        const qRaw = name === 'quantity' ? cleanedValue : newFormData.quantity.toString().replace(/,/g, '');
-        const pRaw = name === 'price' ? cleanedValue : newFormData.price.toString().replace(/,/g, '');
+        const qRaw = name === 'quantity' ? cleanedValue : newFormData.quantity;
+        const pRaw = name === 'price' ? cleanedValue : newFormData.price;
 
         if (qRaw === '' || pRaw === '') {
           newFormData.total_amount = '';
@@ -502,7 +503,7 @@ const TransactionsTab = () => {
   // 현재 선택된 자산 및 예수금 여부 판단
   const selectedAsset = assets.find(a => isSameId(a.id, formData.asset_id));
   const selectedTargetAsset = assets.find(a => isSameId(a.id, formData.target_asset_id));
-  const isCash = isCashAsset(selectedAsset);
+  const isSelectedAssetCash = isCashAsset(selectedAsset);
   const isExchangeForm = formData.type === 'EXCHANGE';
   const isTransferForm = formData.type === 'TRANSFER';
   const sourceTicker = selectedAsset ? selectedAsset.ticker : '';
@@ -627,7 +628,7 @@ const TransactionsTab = () => {
               className="w-full px-3 py-2 bg-white border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
               required
             >
-              {isCash ? (
+              {isSelectedAssetCash ? (
                 <>
                   <option value="DEPOSIT">입금 (DEPOSIT)</option>
                   <option value="WITHDRAW">출금 (WITHDRAW)</option>
@@ -697,9 +698,9 @@ const TransactionsTab = () => {
                   name="price"
                   value={formatInputNumber(formData.price)}
                   onChange={handleInputChange}
-                  readOnly={isCash && !isExchangeForm}
+                  readOnly={isSelectedAssetCash && !isExchangeForm}
                   className={`w-full px-3 py-2 border border-slate-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none ${
-                    isCash && !isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
+                    isSelectedAssetCash && !isExchangeForm ? 'bg-slate-100 text-slate-500 cursor-not-allowed' : 'bg-white'
                   }`}
                   required
                 />
