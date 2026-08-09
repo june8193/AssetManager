@@ -202,7 +202,7 @@ const TransactionsTab = () => {
       }
       if (assetData.length > 1 && !initialTargetAssetId) {
         const cashAssets = assetData.filter(isCashAsset);
-        const defaultTarget = findAlternative(cashAssets, initialAssetId) || assetData[1];
+        const defaultTarget = findAlternative(cashAssets, initialAssetId) || (cashAssets.length > 0 ? cashAssets[0] : (assetData[1] || assetData[0]));
         initialTargetAssetId = defaultTarget ? defaultTarget.id : '';
       }
 
@@ -465,7 +465,7 @@ const TransactionsTab = () => {
     const defaultAssetId = assets.length > 0 ? assets[0].id : '';
     const defaultAsset = assets.find(a => isSameId(a.id, defaultAssetId));
     const cashAssets = assets.filter(isCashAsset);
-    const defaultTarget = findAlternative(cashAssets, defaultAssetId) || assets[1];
+    const defaultTarget = findAlternative(cashAssets, defaultAssetId) || (cashAssets.length > 0 ? cashAssets[0] : (assets[1] || assets[0]));
     const defaultAccountId = accounts.length > 0 ? accounts[0].id : '';
     const altAcc = findAlternative(accounts, defaultAccountId);
 
