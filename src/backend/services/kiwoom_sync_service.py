@@ -178,105 +178,10 @@ class KiwoomTransactionService:
                         })
 
                     daily_ledger = await self._fetch_comprehensive_ledger(token, today_str, today_str)
-                    for tx in daily_ledger:
-                        rmrk = tx.get("rmrk_nm", "")
-                        ext_id = tx.get("seq") or tx.get("trde_no")
-                        trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
-                        tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
-                        stk_cd = tx.get("stk_cd")
-
-                        if "배당금" in rmrk:
-                            fc_amt = _safe_float(tx.get("fc_exct_amt") or tx.get("fc_trde_amt"))
-                            div_amt = fc_amt if fc_amt > 0 else _safe_float(tx.get("trde_amt"))
-                            raw_transactions.append({
-                                "date": trde_dt,
-                                "traded_at": _parse_traded_at(trde_dt, tm_str),
-                                "ticker": stk_cd,
-                                "name": tx.get("stk_nm", "배당금 입금"),
-                                "type": "INTEREST",
-                                "quantity": 0.0,
-                                "price": 0.0,
-                                "total_amount": div_amt,
-                                "currency": tx.get("crnc_cd") or "KRW",
-                                "external_id": str(ext_id) if ext_id else None,
-                                "memo": f"키움 자동저장 (배당금)"
-                            })
-                        elif any(t_word in rmrk for t_word in ["배당세", "해외배당세출금", "원천징수"]):
-                            tax_amt = _safe_float(tx.get("trde_amt") or tx.get("fc_trde_amt") or tx.get("fc_exct_amt"))
-                            raw_transactions.append({
-                                "date": trde_dt,
-                                "traded_at": _parse_traded_at(trde_dt, tm_str),
-                                "ticker": stk_cd,
-                                "name": tx.get("stk_nm", "해외배당세"),
-                                "type": "TAX",
-                                "quantity": 0.0,
-                                "price": 0.0,
-                                "total_amount": tax_amt,
-                                "currency": tx.get("crnc_cd") or "KRW",
-                                "external_id": str(ext_id) if ext_id else None,
-                                "memo": f"키움 자동저장 (해외배당세)"
-                            })
+                    raw_transactions.extend(self._parse_ledger_entries(daily_ledger, is_retroactive=False))
                 else:
                     ledger_data = await self._fetch_comprehensive_ledger(token, start_date_str, today_str)
-                    for tx in ledger_data:
-                        rmrk = tx.get("rmrk_nm", "")
-                        stk_cd = tx.get("stk_cd")
-                        ext_id = tx.get("seq") or tx.get("trde_no")
-                        tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
-                        trde_dt = datetime.datetime.strptime(tx.get("trde_dt"), "%Y%m%d").date()
-
-                        if "배당금" in rmrk:
-                            fc_amt = _safe_float(tx.get("fc_exct_amt") or tx.get("fc_trde_amt"))
-                            div_amt = fc_amt if fc_amt > 0 else _safe_float(tx.get("trde_amt"))
-                            raw_transactions.append({
-                                "date": trde_dt,
-                                "traded_at": _parse_traded_at(trde_dt, tm_str),
-                                "ticker": stk_cd,
-                                "name": tx.get("stk_nm", "배당금 입금"),
-                                "type": "INTEREST",
-                                "quantity": 0.0,
-                                "price": 0.0,
-                                "total_amount": div_amt,
-                                "currency": tx.get("crnc_cd") or "KRW",
-                                "external_id": str(ext_id) if ext_id else None,
-                                "memo": f"키움 자동저장 (소급 배당금)"
-                            })
-                        elif any(t_word in rmrk for t_word in ["배당세", "해외배당세출금", "원천징수"]):
-                            tax_amt = _safe_float(tx.get("trde_amt") or tx.get("fc_trde_amt") or tx.get("fc_exct_amt"))
-                            raw_transactions.append({
-                                "date": trde_dt,
-                                "traded_at": _parse_traded_at(trde_dt, tm_str),
-                                "ticker": stk_cd,
-                                "name": tx.get("stk_nm", "해외배당세"),
-                                "type": "TAX",
-                                "quantity": 0.0,
-                                "price": 0.0,
-                                "total_amount": tax_amt,
-                                "currency": tx.get("crnc_cd") or "KRW",
-                                "external_id": str(ext_id) if ext_id else None,
-                                "memo": f"키움 자동저장 (해외배당세)"
-                            })
-                        elif any(m in rmrk for m in ["장내매수", "장내매도", "매매", "매수", "매도"]):
-                            cntr_dt_str = tx.get("cntr_dt") or tx.get("trde_dt")
-                            cntr_date = datetime.datetime.strptime(cntr_dt_str, "%Y%m%d").date()
-                            
-                            qty = _safe_float(tx.get("trde_qty_jwa_cnt"))
-                            trde_amt = _safe_float(tx.get("trde_amt"))
-                            price = trde_amt / qty if qty > 0 else 0
-                            
-                            raw_transactions.append({
-                                "date": cntr_date,
-                                "traded_at": _parse_traded_at(cntr_date, tm_str),
-                                "ticker": stk_cd,
-                                "name": tx.get("stk_nm"),
-                                "type": "BUY" if "매수" in rmrk else "SELL",
-                                "quantity": qty,
-                                "price": price,
-                                "total_amount": trde_amt,
-                                "currency": "KRW",
-                                "external_id": str(ext_id) if ext_id else None,
-                                "memo": f"키움 자동저장 (소급 매매)"
-                            })
+                    raw_transactions.extend(self._parse_ledger_entries(ledger_data, is_retroactive=True))
 
                     for d in range(days):
                         dt_obj = datetime.date.today() - datetime.timedelta(days=d)
@@ -310,7 +215,12 @@ class KiwoomTransactionService:
                 # DB 적재 및 검증 처리
                 success_count = 0
                 for tx_data in raw_transactions:
-                    ticker = normalize_ticker(tx_data["ticker"])
+                    if tx_data["type"] == "EXCHANGE":
+                        if self._sync_exchange_transaction(db, account, tx_data, unregistered_list, synced_list):
+                            success_count += 1
+                        continue
+
+                    ticker = normalize_ticker(tx_data.get("ticker"))
                     if not ticker:
                         continue
 
@@ -349,17 +259,24 @@ class KiwoomTransactionService:
                             continue
 
                     # 2) 수동 입력 거래중 1:1 매칭 가능한 건(external_id가 NULL인 MANUAL 거래) 찾기
-                    manual_tx = db.query(Transaction).filter(
+                    manual_candidates = db.query(Transaction).filter(
                         Transaction.account_id == account.id,
                         Transaction.asset_id == asset.id,
                         Transaction.transaction_date == tx_data["date"],
                         Transaction.type == tx_data["type"],
-                        Transaction.quantity == tx_data["quantity"],
-                        Transaction.price == tx_data["price"],
-                        Transaction.total_amount == total_amt,
                         Transaction.source == "MANUAL",
                         Transaction.external_id.is_(None)
-                    ).first()
+                    ).all()
+
+                    manual_tx = next(
+                        (
+                            m for m in manual_candidates
+                            if m.quantity == tx_data["quantity"]
+                            and m.price == tx_data["price"]
+                            and m.total_amount == total_amt
+                        ),
+                        None
+                    )
 
                     if manual_tx:
                         manual_tx.external_id = ext_id
@@ -378,7 +295,7 @@ class KiwoomTransactionService:
                         logger.info(f"기존 수동 거래와 키움 체결 매칭 완료: {asset.name} ({ext_id})")
                         continue
 
-                    # 3) external_id도 없고 수동 거래 매칭 대상도 없는 경우: 단순 중복 체크 (external_id 없는 레코드 중복 방지)
+                    # 3) external_id도 없고 수동 거래 매칭 대상도 없는 경우: 단순 중복 체크
                     if not ext_id:
                         exists_legacy = db.query(Transaction).filter(
                             Transaction.account_id == account.id,
@@ -442,6 +359,283 @@ class KiwoomTransactionService:
             "unregistered_assets": unregistered_list,
             "failed_accounts": failed_accounts_list
         }
+
+    def _sync_exchange_transaction(
+        self,
+        db: Session,
+        account: Account,
+        tx_data: dict,
+        unregistered_list: list,
+        synced_list: list
+    ) -> bool:
+        """개별 환전(EXCHANGE) 트랜잭션의 유효성 검증, 중복 검사 및 DB 저장을 처리합니다.
+
+        Args:
+            db (Session): SQLAlchemy 세션
+            account (Account): 동기화 대상 계좌
+            tx_data (dict): 파싱된 환전 거래 딕셔너리
+            unregistered_list (list): 미등록 자산 목록 누적 리스트
+            synced_list (list): 동기화 성공 내역 누적 리스트
+
+        Returns:
+            bool: 신규 적재 또는 기존 수동 거래 매칭 성공 여부
+        """
+        source_ticker = normalize_ticker(tx_data.get("source_ticker"))
+        target_ticker = normalize_ticker(tx_data.get("target_ticker"))
+        source_asset = db.query(Asset).filter(Asset.ticker == source_ticker).first()
+        target_asset = db.query(Asset).filter(Asset.ticker == target_ticker).first()
+
+        if not source_asset or not target_asset:
+            missing_name = source_ticker if not source_asset else target_ticker
+            unregistered_list.append({
+                "ticker": missing_name,
+                "name": tx_data.get("name", "환전 예수금"),
+                "type": "EXCHANGE",
+                "quantity": tx_data["quantity"],
+                "price": tx_data["price"],
+                "total_amount": tx_data["total_amount"],
+                "currency": tx_data["currency"],
+                "traded_at": tx_data.get("traded_at")
+            })
+            logger.warning(f"환전 필수 현금 자산 미등록으로 저장 생략: {source_ticker} -> {target_ticker}")
+            return False
+
+        ext_id = tx_data.get("external_id")
+
+        # 1) 동일 거래번호(external_id) 중복 체크
+        if ext_id:
+            exists_by_ext_id = db.query(Transaction).filter(
+                Transaction.account_id == account.id,
+                Transaction.type == "EXCHANGE",
+                Transaction.external_id == ext_id
+            ).first()
+            if exists_by_ext_id:
+                logger.info(f"이미 존재(환전 거래번호 중복)하여 저장 스킵: {ext_id}")
+                return False
+
+        # 2) 수동 입력 환전 거래 중 1:1 매칭 가능한 건 찾기
+        manual_candidates = db.query(Transaction).filter(
+            Transaction.account_id == account.id,
+            Transaction.asset_id == source_asset.id,
+            Transaction.target_asset_id == target_asset.id,
+            Transaction.transaction_date == tx_data["date"],
+            Transaction.type == "EXCHANGE",
+            Transaction.source == "MANUAL",
+            Transaction.external_id.is_(None)
+        ).all()
+
+        manual_tx = next(
+            (
+                m for m in manual_candidates
+                if abs(m.total_amount - tx_data["total_amount"]) < 10.0
+                or abs(m.quantity - tx_data["quantity"]) < 0.01
+            ),
+            None
+        )
+
+        if manual_tx:
+            manual_tx.external_id = ext_id
+            manual_tx.source = "AUTO_KIWOOM"
+            synced_list.append({
+                "type": "EXCHANGE",
+                "asset_name": f"{source_asset.name} ➔ {target_asset.name}",
+                "quantity": tx_data["quantity"],
+                "price": tx_data["price"],
+                "total_amount": tx_data["total_amount"],
+                "currency": tx_data["currency"],
+                "is_manual_matched": True,
+                "traded_at": tx_data.get("traded_at")
+            })
+            logger.info(f"기존 수동 환전 거래와 키움 체결 매칭 완료: {ext_id}")
+            return True
+
+        # 3) external_id 없고 수동 매칭 대상도 없는 경우 단순 중복 체크
+        if not ext_id:
+            exists_legacy = db.query(Transaction).filter(
+                Transaction.account_id == account.id,
+                Transaction.asset_id == source_asset.id,
+                Transaction.target_asset_id == target_asset.id,
+                Transaction.transaction_date == tx_data["date"],
+                Transaction.type == "EXCHANGE",
+                Transaction.quantity == tx_data["quantity"],
+                Transaction.total_amount == tx_data["total_amount"]
+            ).first()
+            if exists_legacy:
+                logger.info(f"이미 존재하는 환전 거래로 저장 스킵: {tx_data['date']}")
+                return False
+
+        # 4) 신규 환전 거래 생성
+        new_tx = Transaction(
+            account_id=account.id,
+            asset_id=source_asset.id,
+            target_asset_id=target_asset.id,
+            transaction_date=tx_data["date"],
+            type="EXCHANGE",
+            quantity=tx_data["quantity"],
+            price=tx_data["price"],
+            total_amount=tx_data["total_amount"],
+            currency=tx_data["currency"],
+            exchange_rate=tx_data.get("exchange_rate"),
+            memo=tx_data["memo"],
+            source="AUTO_KIWOOM",
+            external_id=ext_id
+        )
+        db.add(new_tx)
+        synced_list.append({
+            "type": "EXCHANGE",
+            "asset_name": f"{source_asset.name} ➔ {target_asset.name}",
+            "quantity": tx_data["quantity"],
+            "price": tx_data["price"],
+            "total_amount": tx_data["total_amount"],
+            "currency": tx_data["currency"],
+            "is_manual_matched": False,
+            "traded_at": tx_data.get("traded_at")
+        })
+        return True
+
+    def _parse_ledger_entries(self, ledger_entries: list, is_retroactive: bool = False) -> list:
+        """종합거래내역(kt00015) 응답 리스트에서 배당금, 배당세, 소급매매 및 환전(정산 합산) 거래를 파싱합니다.
+
+        Args:
+            ledger_entries (list): kt00015 API 응답 trst_ovrl_trde_prps_array 리스트
+            is_retroactive (bool): 소급 조회 여부 (소급일 때만 장내매수/매도 파싱)
+
+        Returns:
+            list: 정제된 raw_transaction 딕셔너리 리스트
+        """
+        raw_txs = []
+        # 1. 일자별 환전정산 차액 맵 구축: {일자: 원화_차액} (입금은 차감 음수, 출금은 가산 양수)
+        settlements = {}
+        for tx in ledger_entries:
+            rmrk = tx.get("rmrk_nm", "")
+            if any(k in rmrk for k in ["환전정산", "정산입금", "정산출금"]):
+                dt_str = tx.get("trde_dt")
+                if not dt_str:
+                    continue
+                trde_dt = datetime.datetime.strptime(dt_str, "%Y%m%d").date()
+                amt = _safe_float(tx.get("trde_amt") or tx.get("exct_amt"))
+                io_tp_nm = tx.get("io_tp_nm", "")
+                is_deposit = "입금" in io_tp_nm or "입금" in rmrk
+                diff = -amt if is_deposit else amt
+                settlements[trde_dt] = settlements.get(trde_dt, 0.0) + diff
+
+        # 2. 거래 항목별 파싱
+        for tx in ledger_entries:
+            rmrk = tx.get("rmrk_nm", "")
+            trde_kind = tx.get("trde_kind_nm", "")
+            io_tp_nm = tx.get("io_tp_nm", "")
+            ext_id = tx.get("seq") or tx.get("trde_no")
+            dt_str = tx.get("trde_dt")
+            if not dt_str:
+                continue
+            trde_dt = datetime.datetime.strptime(dt_str, "%Y%m%d").date()
+            tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
+            stk_cd = tx.get("stk_cd")
+
+            # A. 배당금 (환전/정산 키워드 제외)
+            if "배당금" in rmrk and not any(k in rmrk for k in ["환전", "정산"]):
+                fc_amt = _safe_float(tx.get("fc_exct_amt") or tx.get("fc_trde_amt"))
+                div_amt = fc_amt if fc_amt > 0 else _safe_float(tx.get("trde_amt"))
+                memo_str = "키움 자동저장 (소급 배당금)" if is_retroactive else "키움 자동저장 (배당금)"
+                raw_txs.append({
+                    "date": trde_dt,
+                    "traded_at": _parse_traded_at(trde_dt, tm_str),
+                    "ticker": stk_cd,
+                    "name": tx.get("stk_nm", "배당금 입금"),
+                    "type": "INTEREST",
+                    "quantity": 0.0,
+                    "price": 0.0,
+                    "total_amount": div_amt,
+                    "currency": tx.get("crnc_cd") or "KRW",
+                    "external_id": str(ext_id) if ext_id else None,
+                    "memo": memo_str
+                })
+
+            # B. 배당세
+            elif any(t_word in rmrk for t_word in ["배당세", "해외배당세출금", "원천징수"]):
+                tax_amt = _safe_float(tx.get("trde_amt") or tx.get("fc_trde_amt") or tx.get("fc_exct_amt"))
+                raw_txs.append({
+                    "date": trde_dt,
+                    "traded_at": _parse_traded_at(trde_dt, tm_str),
+                    "ticker": stk_cd,
+                    "name": tx.get("stk_nm", "해외배당세"),
+                    "type": "TAX",
+                    "quantity": 0.0,
+                    "price": 0.0,
+                    "total_amount": tax_amt,
+                    "currency": tx.get("crnc_cd") or "KRW",
+                    "external_id": str(ext_id) if ext_id else None,
+                    "memo": "키움 자동저장 (해외배당세)"
+                })
+
+            # C. 환전 거래 (정산 거래 및 배당 제외)
+            elif (
+                trde_kind == "환전" or any(w in rmrk for w in ["외화매수", "외화매도", "환전", "원화주문"])
+            ) and not any(w in rmrk for w in ["환전정산", "정산입금", "정산출금", "배당"]):
+                raw_krw_amt = _safe_float(tx.get("trde_amt") or tx.get("exct_amt"))
+                fc_amt = _safe_float(tx.get("fc_trde_amt") or tx.get("fc_exct_amt"))
+                unit_rate_str = str(tx.get("trde_unit", "0")).replace(",", "").strip()
+                unit_rate = _safe_float(unit_rate_str)
+
+                # 해당 일자의 정산 차액 1회 소비 (동일 일자 복수 환전 시 중복 가산 방지)
+                settlement_diff = settlements.pop(trde_dt, 0.0)
+                final_krw_amt = raw_krw_amt + settlement_diff
+                final_rate = (final_krw_amt / fc_amt) if fc_amt > 0 else unit_rate
+
+                is_sell_foreign = "외화매도" in rmrk or "외화매도" in io_tp_nm
+
+                if not is_sell_foreign:
+                    # 원화 -> 외화 (외화 매수 환전)
+                    source_ticker, target_ticker = "KRW", "USD"
+                    tot_amt, qty = final_krw_amt, fc_amt
+                    curr = "KRW"
+                    name_str = "외화매수환전 (KRW ➔ USD)"
+                else:
+                    # 외화 -> 원화 (외화 매도 환전)
+                    source_ticker, target_ticker = "USD", "KRW"
+                    tot_amt, qty = fc_amt, final_krw_amt
+                    curr = "USD"
+                    name_str = "외화매도환전 (USD ➔ KRW)"
+
+                raw_txs.append({
+                    "date": trde_dt,
+                    "traded_at": _parse_traded_at(trde_dt, tm_str),
+                    "type": "EXCHANGE",
+                    "source_ticker": source_ticker,
+                    "target_ticker": target_ticker,
+                    "name": name_str,
+                    "quantity": qty,
+                    "price": final_rate,
+                    "total_amount": tot_amt,
+                    "currency": curr,
+                    "exchange_rate": final_rate,
+                    "external_id": str(ext_id) if ext_id else None,
+                    "memo": "키움 자동저장 (환전)"
+                })
+
+            # D. 소급 주식 매매
+            elif is_retroactive and any(m in rmrk for m in ["장내매수", "장내매도", "매매", "매수", "매도"]):
+                cntr_dt_str = tx.get("cntr_dt") or tx.get("trde_dt")
+                cntr_date = datetime.datetime.strptime(cntr_dt_str, "%Y%m%d").date()
+                qty = _safe_float(tx.get("trde_qty_jwa_cnt"))
+                trde_amt = _safe_float(tx.get("trde_amt"))
+                price = trde_amt / qty if qty > 0 else 0
+
+                raw_txs.append({
+                    "date": cntr_date,
+                    "traded_at": _parse_traded_at(cntr_date, tm_str),
+                    "ticker": stk_cd,
+                    "name": tx.get("stk_nm"),
+                    "type": "BUY" if "매수" in rmrk else "SELL",
+                    "quantity": qty,
+                    "price": price,
+                    "total_amount": trde_amt,
+                    "currency": "KRW",
+                    "external_id": str(ext_id) if ext_id else None,
+                    "memo": "키움 자동저장 (소급 매매)"
+                })
+
+        return raw_txs
 
     async def _fetch_domestic_executions(self, token: str) -> list:
         """국내 주식 당일 체결 내역을 조회합니다 (ka10076)."""

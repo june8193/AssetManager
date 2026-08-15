@@ -12,52 +12,25 @@ from src.backend.main import app
 from src.backend.database import get_db
 from sqlalchemy.pool import StaticPool
 
-@pytest.fixture
-def db_session():
-    """테스트용 공유 인메모리 SQLite DB 세션을 생성합니다."""
-    engine = create_engine(
-        "sqlite:///file:memdb_exchange?mode=memory&cache=shared",
-        connect_args={"check_same_thread": False, "uri": True},
-        poolclass=StaticPool
-    )
-    Base.metadata.create_all(bind=engine)
-    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-    db = TestingSessionLocal()
-
+@pytest.fixture(autouse=True)
+def setup_exchange_data(db_session):
+    """테스트용 기본 사용자, 계좌, 자산 데이터를 생성합니다."""
     user = User(name="테스터")
-    db.add(user)
-    db.commit()
+    db_session.add(user)
+    db_session.commit()
 
     account = Account(user_id=user.id, name="5526-9093", provider="KB증권", alias="주식계좌")
-    db.add(account)
-    db.commit()
+    db_session.add(account)
+    db_session.commit()
 
     krw_asset = Asset(ticker="KRW", name="원화예수금", major_category="현금", sub_category="원화예수금", country="KR")
     usd_asset = Asset(ticker="USD", name="달러예수금", major_category="현금", sub_category="달러예수금", country="US")
-    db.add_all([krw_asset, usd_asset])
-    db.commit()
+    db_session.add_all([krw_asset, usd_asset])
+    db_session.commit()
 
     ex_rate = ExchangeRate(date=datetime.date(2026, 5, 1), currency="USD", rate=1350.0)
-    db.add(ex_rate)
-    db.commit()
-
-    try:
-        yield db
-    finally:
-        db.close()
-        Base.metadata.drop_all(bind=engine)
-
-
-@pytest.fixture
-def client(db_session):
-    """FastAPI TestClient 픽스처"""
-    def _get_db_override():
-        return db_session
-
-    app.dependency_overrides[get_db] = _get_db_override
-    with TestClient(app) as c:
-        yield c
-    app.dependency_overrides.clear()
+    db_session.add(ex_rate)
+    db_session.commit()
 
 
 def test_transaction_model_supports_target_asset_id_and_exchange_type(db_session):

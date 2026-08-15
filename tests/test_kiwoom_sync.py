@@ -35,6 +35,20 @@ def setup_test_data(db_session: Session):
     db_session.add_all([account1, account2])
     
     # 3. 테스트용 등록 자산 생성
+    krw_cash = Asset(
+        ticker="KRW",
+        name="원화예수금",
+        major_category="현금",
+        sub_category="원화예수금",
+        country="KR"
+    )
+    usd_cash = Asset(
+        ticker="USD",
+        name="달러예수금",
+        major_category="현금",
+        sub_category="달러예수금",
+        country="US"
+    )
     samsung = Asset(
         ticker="005930",
         name="삼성전자",
@@ -56,7 +70,7 @@ def setup_test_data(db_session: Session):
         sub_category="국내배당주",
         country="KR"
     )
-    db_session.add_all([samsung, apple, macquarie])
+    db_session.add_all([krw_cash, usd_cash, samsung, apple, macquarie])
     db_session.commit()
     
     return {
@@ -66,6 +80,8 @@ def setup_test_data(db_session: Session):
             "6066-7729": account2
         },
         "assets": {
+            "KRW": krw_cash,
+            "USD": usd_cash,
             "005930": samsung,
             "AAPL": apple,
             "001230": macquarie
@@ -655,5 +671,250 @@ async def test_sync_overseas_dividend_and_tax(
     assert tax_tx.quantity == 0.0
     assert tax_tx.currency == "KRW"
     assert tax_tx.external_id == "000000005"
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_exchange_transaction_with_settlement(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """원화주문 외화매수(가환전) 및 환전정산입금(차액 환급) 합산 환전 트랜잭션 동기화를 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": "20260804",
+                        "trde_no": "000000002",
+                        "rmrk_nm": "원화주문 외화매수",
+                        "trde_kind_nm": "환전",
+                        "io_tp_nm": "외화매수",
+                        "crnc_cd": "USD",
+                        "trde_amt": "000000005892502",
+                        "fc_trde_amt": "3997.41",
+                        "trde_unit": "1,474.08",
+                        "proc_tm": "08:19:53"
+                    },
+                    {
+                        "trde_dt": "20260804",
+                        "trde_no": "000000003",
+                        "rmrk_nm": "환전정산입금",
+                        "trde_kind_nm": "입출금",
+                        "io_tp_nm": "입금",
+                        "crnc_cd": "KRW",
+                        "trde_amt": "000000000161216",
+                        "fc_trde_amt": "0.00",
+                        "proc_tm": "16:24:02"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=7)
+
+    assert result["status"] == "success"
+    assert result["success_count"] >= 1
+
+    krw_asset = setup_test_data["assets"]["KRW"]
+    usd_asset = setup_test_data["assets"]["USD"]
+    account = setup_test_data["accounts"]["5526-9093"]
+
+    exchange_tx = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.type == "EXCHANGE",
+        Transaction.transaction_date == datetime.date(2026, 8, 4)
+    ).first()
+
+    assert exchange_tx is not None
+    assert exchange_tx.asset_id == krw_asset.id
+    assert exchange_tx.target_asset_id == usd_asset.id
+    # 5,892,502 - 161,216 = 5,731,286
+    assert abs(exchange_tx.total_amount - 5731286.0) < 1.0
+    assert exchange_tx.quantity == 3997.41
+    # 환율 = 5,731,286 / 3,997.41 = 1433.75
+    assert abs(exchange_tx.price - 1433.75) < 0.01
+    assert abs(exchange_tx.exchange_rate - 1433.75) < 0.01
+    assert exchange_tx.currency == "KRW"
+    assert exchange_tx.source == "AUTO_KIWOOM"
+    assert exchange_tx.external_id == "000000002"
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_exchange_transaction_manual_match(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """기존 수동 입력된 환전 거래(MANUAL, external_id=None)와의 1:1 매칭 업데이트를 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    krw_asset = setup_test_data["assets"]["KRW"]
+    usd_asset = setup_test_data["assets"]["USD"]
+    account = setup_test_data["accounts"]["5526-9093"]
+
+    # 수동 환전 거래 미리 등록
+    manual_tx = Transaction(
+        account_id=account.id,
+        asset_id=krw_asset.id,
+        target_asset_id=usd_asset.id,
+        transaction_date=datetime.date(2026, 8, 4),
+        type="EXCHANGE",
+        quantity=3997.41,
+        price=1433.75,
+        total_amount=5731286.5875,
+        currency="KRW",
+        exchange_rate=1433.75,
+        memo="수동 등록 환전",
+        source="MANUAL",
+        external_id=None
+    )
+    db_session.add(manual_tx)
+    db_session.commit()
+    db_session.refresh(manual_tx)
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": "20260804",
+                        "trde_no": "000000002",
+                        "rmrk_nm": "원화주문 외화매수",
+                        "trde_kind_nm": "환전",
+                        "io_tp_nm": "외화매수",
+                        "crnc_cd": "USD",
+                        "trde_amt": "000000005892502",
+                        "fc_trde_amt": "3997.41",
+                        "trde_unit": "1,474.08",
+                        "proc_tm": "08:19:53"
+                    },
+                    {
+                        "trde_dt": "20260804",
+                        "trde_no": "000000003",
+                        "rmrk_nm": "환전정산입금",
+                        "trde_kind_nm": "입출금",
+                        "io_tp_nm": "입금",
+                        "crnc_cd": "KRW",
+                        "trde_amt": "000000000161216",
+                        "fc_trde_amt": "0.00",
+                        "proc_tm": "16:24:02"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=7)
+
+    assert result["status"] == "success"
+
+    db_session.refresh(manual_tx)
+    assert manual_tx.source == "AUTO_KIWOOM"
+    assert manual_tx.external_id == "000000002"
+
+    # 중복 생성 없이 총 EXCHANGE 트랜잭션은 1건이어야 함
+    all_exchanges = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.type == "EXCHANGE"
+    ).all()
+    assert len(all_exchanges) == 1
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_exchange_transaction_sell_usd(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """달러 매도 환전(USD -> KRW) 동기화를 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = AsyncMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": "20260810",
+                        "trde_no": "000000010",
+                        "rmrk_nm": "외화매도환전",
+                        "trde_kind_nm": "환전",
+                        "io_tp_nm": "외화매도",
+                        "crnc_cd": "USD",
+                        "trde_amt": "000000001400000",
+                        "fc_trde_amt": "1000.00",
+                        "trde_unit": "1,400.00",
+                        "proc_tm": "10:30:00"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=7)
+
+    assert result["status"] == "success"
+
+    krw_asset = setup_test_data["assets"]["KRW"]
+    usd_asset = setup_test_data["assets"]["USD"]
+    account = setup_test_data["accounts"]["5526-9093"]
+
+    exchange_tx = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.type == "EXCHANGE",
+        Transaction.transaction_date == datetime.date(2026, 8, 10)
+    ).first()
+
+    assert exchange_tx is not None
+    # USD -> KRW 매도 환전
+    assert exchange_tx.asset_id == usd_asset.id
+    assert exchange_tx.target_asset_id == krw_asset.id
+    assert exchange_tx.total_amount == 1000.0
+    assert exchange_tx.quantity == 1400000.0
+    assert exchange_tx.price == 1400.0
+    assert exchange_tx.exchange_rate == 1400.0
+    assert exchange_tx.currency == "USD"
+    assert exchange_tx.source == "AUTO_KIWOOM"
+    assert exchange_tx.external_id == "000000010"
+
 
 
