@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Dict, Any
 
 from ..database import get_db
@@ -14,20 +14,41 @@ router = APIRouter(
 
 # --- Pydantic Schema --- #
 class WatchlistCreate(BaseModel):
+    """관심종목 생성 요청 스키마입니다.
+
+    Attributes:
+        stock_code (str): 종목 코드 또는 티커
+        stock_name (str): 종목명
+        country (str): 국가 코드 (KR, US)
+    """
     stock_code: str
     stock_name: str
     country: str = "KR"
 
 class WatchlistResponse(BaseModel):
+    """관심종목 응답 스키마입니다.
+
+    Attributes:
+        id (int): 관심종목 ID
+        stock_code (str): 종목 코드 또는 티커
+        stock_name (str): 종목명
+        country (str): 국가 코드 (KR, US)
+    """
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     stock_code: str
     stock_name: str
     country: str
 
-    class Config:
-        from_attributes = True
-
 class PriceResponse(BaseModel):
+    """관심종목 시세 응답 스키마입니다.
+
+    Attributes:
+        stock_code (str): 종목 코드
+        current_price (float): 현재가
+        change_rate (float): 등락률 (%)
+    """
     stock_code: str
     current_price: float
     change_rate: float

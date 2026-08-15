@@ -1,23 +1,40 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from ..database import get_db
 from ..services.ratio_service import RatioService
 
 router = APIRouter(prefix="/api/ratios", tags=["ratios"])
 
 class TargetRatioSchema(BaseModel):
+    """목표 비중 설정 스키마입니다.
+
+    Attributes:
+        category_name (str): 자산 분류명
+        category_type (str): 분류 유형 ('major', 'sub')
+        target_percentage (float): 목표 비중 (%)
+        parent_category (Optional[str]): 상위 분류명
+        mode (Optional[str]): 비중 모드 ('absolute', 'relative')
+    """
+    model_config = ConfigDict(from_attributes=True)
+
     category_name: str
     category_type: str # 'major', 'sub'
     target_percentage: float
     parent_category: Optional[str] = None
     mode: Optional[str] = 'absolute' # 'absolute', 'relative'
 
-    class Config:
-        from_attributes = True
-
 class RebalancingResultSchema(BaseModel):
+    """리밸런싱 계산 결과 스키마입니다.
+
+    Attributes:
+        total_valuation (float): 총 평가액
+        total_target (float): 목표 총액
+        additional_cash (float): 추가 투자금
+        major_results (List[dict]): 대분류 리밸런싱 결과 목록
+        sub_results (List[dict]): 중분류 리밸런싱 결과 목록
+    """
     total_valuation: float
     total_target: float
     additional_cash: float

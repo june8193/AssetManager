@@ -1,7 +1,7 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 from typing import List, Optional, Literal
 from datetime import date, datetime
 
@@ -49,6 +49,8 @@ class AccountSchema(BaseModel):
         account_type (str): 계좌 종류 (BROKERAGE, BANK)
         is_active (bool): 계좌 활성 여부
     """
+    model_config = ConfigDict(from_attributes=True)
+
     id: Optional[int] = None
     user_id: int
     user_name: Optional[str] = None
@@ -57,9 +59,6 @@ class AccountSchema(BaseModel):
     alias: Optional[str] = None
     account_type: str = "BROKERAGE"
     is_active: bool = True
-
-    class Config:
-        from_attributes = True
 
 class AssetSchema(BaseModel):
     """자산 마스터 정보를 담는 스키마입니다.
@@ -72,6 +71,8 @@ class AssetSchema(BaseModel):
         sub_category (str): 중분류
         country (str): 국가 코드 (KR, US 등)
     """
+    model_config = ConfigDict(from_attributes=True)
+
     id: Optional[int] = None
     ticker: str
     name: str
@@ -98,9 +99,6 @@ class AssetSchema(BaseModel):
             
         return self
 
-    class Config:
-        from_attributes = True
-
 class TransactionSchema(BaseModel):
     """거래 내역 정보를 담는 스키마입니다.
 
@@ -126,6 +124,8 @@ class TransactionSchema(BaseModel):
         target_asset_ticker (Optional[str]): 환전 상대 자산 티커
         account_display_name (Optional[str]): 계좌 표시 이름
     """
+    model_config = ConfigDict(from_attributes=True)
+
     id: Optional[int] = None
     account_id: int
     asset_id: int
@@ -146,9 +146,6 @@ class TransactionSchema(BaseModel):
     target_asset_name: Optional[str] = None
     target_asset_ticker: Optional[str] = None
     account_display_name: Optional[str] = None
-
-    class Config:
-        from_attributes = True
 
 class TransferTransactionRequest(BaseModel):
     """계좌 간 이체 생성 요청 스키마입니다."""
@@ -171,6 +168,8 @@ class SnapshotSchema(BaseModel):
         total_valuation (float): 총 평가액
         total_profit (float): 누적 수익
     """
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     account_id: int
     snapshot_date: date
@@ -178,16 +177,12 @@ class SnapshotSchema(BaseModel):
     total_valuation: float
     total_profit: float
 
-    class Config:
-        from_attributes = True
-
 class UserSchema(BaseModel):
     """사용자 정보를 담는 스키마입니다."""
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
-
-    class Config:
-        from_attributes = True
 
 class BrokerageCalculateRequest(BaseModel):
     account_id: int
@@ -296,7 +291,7 @@ def update_account(account_id: int, account: AccountSchema, db: Session = Depend
     """기존 계좌 정보를 수정합니다."""
     db_account = db.query(Account).filter(Account.id == account_id).first()
     if not db_account:
-        raise HTTPException(status_code=404, detail="Account not found")
+        raise HTTPException(status_code=404, detail="계좌를 찾을 수 없습니다.")
     data = account.model_dump(exclude={"id", "user_name"})
     for key, value in data.items():
         setattr(db_account, key, value)
@@ -309,10 +304,10 @@ def delete_account(account_id: int, db: Session = Depends(get_db)):
     """계좌를 삭제합니다."""
     db_account = db.query(Account).filter(Account.id == account_id).first()
     if not db_account:
-        raise HTTPException(status_code=404, detail="Account not found")
+        raise HTTPException(status_code=404, detail="계좌를 찾을 수 없습니다.")
     db.delete(db_account)
     db.commit()
-    return {"message": "Deleted"}
+    return {"message": "삭제되었습니다."}
 
 # Assets
 @router.get("/assets", response_model=List[AssetSchema])
@@ -368,7 +363,7 @@ def update_asset(asset_id: int, asset: AssetSchema, db: Session = Depends(get_db
     """기존 자산 마스터 정보를 수정합니다."""
     db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not db_asset:
-        raise HTTPException(status_code=404, detail="Asset not found")
+        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
     data = asset.model_dump(exclude={"id"})
     for key, value in data.items():
         setattr(db_asset, key, value)
@@ -381,10 +376,10 @@ def delete_asset(asset_id: int, db: Session = Depends(get_db)):
     """자산 마스터를 삭제합니다."""
     db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
     if not db_asset:
-        raise HTTPException(status_code=404, detail="Asset not found")
+        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
     db.delete(db_asset)
     db.commit()
-    return {"message": "Deleted"}
+    return {"message": "삭제되었습니다."}
 
 # Transactions
 @router.get("/transactions", response_model=List[TransactionSchema])
@@ -571,7 +566,7 @@ def _process_brokerage_accounts_logic(
             elif data['currency'] == 'USD':
                 data['asset_id'] = usd_asset_id
             else:
-                raise HTTPException(status_code=400, detail=f"Unsupported currency: {data['currency']}")
+                raise HTTPException(status_code=400, detail=f"지원하지 않는 통화입니다: {data['currency']}")
             
             if data['quantity'] == 0 and data['total_amount'] != 0:
                 data['quantity'] = data['total_amount']
@@ -946,7 +941,7 @@ async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depe
     usd_asset = db.query(Asset).filter(Asset.ticker == "USD").first()
     
     if not krw_asset or not usd_asset:
-        raise HTTPException(status_code=500, detail="KRW or USD asset not found in database")
+        raise HTTPException(status_code=500, detail="데이터베이스에서 KRW 또는 USD 자산을 찾을 수 없습니다.")
 
     try:
         _save_exchange_rate_logic(db, req.snapshot_date, req.exchange_rate)
@@ -965,7 +960,7 @@ async def save_brokerage_snapshots(req: BrokerageSaveRequest, db: Session = Depe
         db.rollback()
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=f"Error during brokerage snapshot save: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"증권 스냅샷 저장 중 오류 발생: {str(e)}")
 
 @router.post("/snapshots/bank/save", response_model=List[SnapshotSchema])
 async def save_bank_snapshots(req: BankSaveRequest, db: Session = Depends(get_db)):
@@ -980,7 +975,7 @@ async def save_bank_snapshots(req: BankSaveRequest, db: Session = Depends(get_db
     """
     krw_asset = db.query(Asset).filter(Asset.ticker == "KRW").first()
     if not krw_asset:
-        raise HTTPException(status_code=500, detail="KRW asset not found in database")
+        raise HTTPException(status_code=500, detail="데이터베이스에서 KRW 자산을 찾을 수 없습니다.")
 
     try:
         latest_rate_obj = db.query(ExchangeRate).order_by(ExchangeRate.date.desc()).first()
@@ -1003,7 +998,7 @@ async def save_bank_snapshots(req: BankSaveRequest, db: Session = Depends(get_db
         db.rollback()
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=f"Error during bank snapshot save: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"은행 스냅샷 저장 중 오류 발생: {str(e)}")
 
 @router.post("/snapshots/unified/save", response_model=List[SnapshotSchema])
 async def save_unified_snapshots(req: UnifiedSaveRequest, db: Session = Depends(get_db)):
@@ -1020,7 +1015,7 @@ async def save_unified_snapshots(req: UnifiedSaveRequest, db: Session = Depends(
     usd_asset = db.query(Asset).filter(Asset.ticker == "USD").first()
     
     if not krw_asset or not usd_asset:
-        raise HTTPException(status_code=500, detail="KRW or USD asset not found in database")
+        raise HTTPException(status_code=500, detail="데이터베이스에서 KRW 또는 USD 자산을 찾을 수 없습니다.")
 
     try:
         _save_exchange_rate_logic(db, req.snapshot_date, req.exchange_rate)
@@ -1042,5 +1037,5 @@ async def save_unified_snapshots(req: UnifiedSaveRequest, db: Session = Depends(
         db.rollback()
         if isinstance(e, HTTPException):
             raise e
-        raise HTTPException(status_code=500, detail=f"Error during unified snapshot save: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"통합 스냅샷 저장 중 오류 발생: {str(e)}")
 

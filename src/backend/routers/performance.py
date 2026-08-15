@@ -9,11 +9,11 @@ router = APIRouter(prefix="/api/v1/performance", tags=["performance"])
 
 
 class RiskFreeRateRequest(BaseModel):
-    rate: float = Field(..., description="연율 무위험 수익률 (%)", example=3.5)
+    rate: float = Field(..., description="연율 무위험 수익률 (%)", json_schema_extra={"example": 3.5})
 
 
 class RiskFreeRateResponse(BaseModel):
-    rate: float = Field(..., description="연율 무위험 수익률 (%)", example=3.5)
+    rate: float = Field(..., description="연율 무위험 수익률 (%)", json_schema_extra={"example": 3.5})
 
 
 @router.get("/settings/risk-free-rate", response_model=RiskFreeRateResponse)

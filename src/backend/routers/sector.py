@@ -1,7 +1,7 @@
 import datetime
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Dict, Any, Optional
 
 from ..database import get_db
@@ -15,47 +15,92 @@ router = APIRouter(
 # --- Pydantic Schemas --- #
 
 class ETFCreate(BaseModel):
+    """ETF 등록 요청 스키마입니다.
+
+    Attributes:
+        ticker (str): ETF 티커
+        name (Optional[str]): ETF 명칭
+        country (str): 국가 코드 (KR, US)
+    """
     ticker: str
     name: Optional[str] = None
     country: str = "KR"
 
 class ETFResponse(BaseModel):
+    """ETF 응답 스키마입니다.
+
+    Attributes:
+        id (int): ETF ID
+        ticker (str): ETF 티커
+        name (str): ETF 명칭
+        country (str): 국가 코드
+    """
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     ticker: str
     name: str
     country: str
 
-    class Config:
-        from_attributes = True
-
 class SectorCreate(BaseModel):
+    """커스텀 섹터 생성 요청 스키마입니다.
+
+    Attributes:
+        name (str): 섹터 이름
+        country (str): 국가 코드
+    """
     name: str
     country: str = "KR"
 
 class SectorUpdate(BaseModel):
+    """커스텀 섹터 수정 요청 스키마입니다.
+
+    Attributes:
+        name (str): 수정할 섹터 이름
+    """
     name: str
 
 class SectorStockCreate(BaseModel):
+    """섹터 종목 추가 요청 스키마입니다.
+
+    Attributes:
+        stock_code (str): 종목 코드
+        stock_name (Optional[str]): 종목명
+        shares_outstanding (Optional[float]): 상장 주식 수
+    """
     stock_code: str
     stock_name: Optional[str] = None
     shares_outstanding: Optional[float] = None
 
 class SectorStockResponse(BaseModel):
+    """섹터 종목 응답 스키마입니다.
+
+    Attributes:
+        stock_code (str): 종목 코드
+        stock_name (str): 종목명
+        shares_outstanding (float): 상장 주식 수
+    """
+    model_config = ConfigDict(from_attributes=True)
+
     stock_code: str
     stock_name: str
     shares_outstanding: float
 
-    class Config:
-        from_attributes = True
-
 class SectorResponse(BaseModel):
+    """커스텀 섹터 응답 스키마입니다.
+
+    Attributes:
+        id (int): 섹터 ID
+        name (str): 섹터 이름
+        country (str): 국가 코드
+        stocks (List[SectorStockResponse]): 구성 종목 목록
+    """
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     name: str
     country: str
     stocks: List[SectorStockResponse]
-
-    class Config:
-        from_attributes = True
 
 # --- API Endpoints --- #
 

@@ -60,7 +60,7 @@ async def test_token_refresh_on_expiration():
     }
     
     with patch("httpx.AsyncClient.post") as mock_post:
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.status_code = 200
         mock_response.json = Mock(return_value={
             "return_code": 0,

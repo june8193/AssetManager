@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from ..database import get_db
 from ..models import ExchangeRate
@@ -14,13 +14,12 @@ router = APIRouter(
 
 class ExchangeRateSchema(BaseModel):
     """환율 정보 스키마입니다."""
+    model_config = ConfigDict(from_attributes=True)
+
     date: date
     currency: str = "USD"
     rate: float
     created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 class ExchangeRateCreate(BaseModel):
     """환율 생성 요청 스키마입니다."""
@@ -33,7 +32,15 @@ def get_exchange_rates(
     limit: int = Query(30, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
-    """최근 입력된 환율 목록을 가져옵니다."""
+    """최근 입력된 환율 목록을 가져옵니다.
+
+    Args:
+        limit (int): 조회할 최대 개수 (1~100)
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        List[ExchangeRateSchema]: 환율 목록
+    """
     return db.query(ExchangeRate).order_by(ExchangeRate.date.desc()).limit(limit).all()
 
 @router.post("/rates", response_model=ExchangeRateSchema)
@@ -43,9 +50,17 @@ def add_exchange_rate(
     db: Session = Depends(get_db)
 ):
     """새로운 환율을 입력합니다.
-    
-    이미 해당 날짜에 환율이 존재하고 force가 False이면 409 Conflict를 반환합니다.
-    force가 True이면 기존 데이터를 업데이트합니다.
+
+    Args:
+        rate_data (ExchangeRateCreate): 생성할 환율 정보
+        force (bool): 이미 존재하는 경우 덮어쓸지 여부
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        ExchangeRateSchema: 저장된 환율 정보
+
+    Raises:
+        HTTPException: 이미 존재하는 날짜이고 force가 False인 경우 (409)
     """
     existing_rate = db.query(ExchangeRate).filter(
         ExchangeRate.date == rate_data.date,

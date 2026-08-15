@@ -41,7 +41,7 @@ def get_date_range(period: str) -> tuple[datetime.date, datetime.date]:
 
 @router.get("")
 async def get_benchmark_dashboard(
-    period: str = Query("YTD", regex="^(YTD|1M|3M|1Y)$"),
+    period: str = Query("YTD", pattern="^(YTD|1M|3M|1Y)$"),
     force_update: bool = Query(False),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
@@ -195,7 +195,7 @@ async def get_benchmark_dashboard(
 @router.get("/historical")
 async def get_watchlist_historical(
     ticker: str = Query(..., description="조회할 주식/지수 티커"),
-    period: str = Query("YTD", regex="^(YTD|1M|3M|1Y)$"),
+    period: str = Query("YTD", pattern="^(YTD|1M|3M|1Y)$"),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """특정 관심 종목의 기간별 정규화된 수익률 시계열을 반환합니다. (차트 비교용 Lazy Loading)

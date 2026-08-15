@@ -1,6 +1,6 @@
 import datetime
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from src.backend.main import app
@@ -116,7 +116,7 @@ async def test_sync_transactions_multi_accounts(
         api_id = headers.get("api-id")
         auth_header = headers.get("authorization", "")
         
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status_code = 200
         
         if auth_header == "Bearer token_5526":
@@ -312,7 +312,7 @@ async def test_sync_with_a_prefix_ticker(
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status = lambda: None
 
         if api_id == "ka10076":
@@ -383,7 +383,7 @@ async def test_sync_binding_manual_transaction(
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status = lambda: None
 
         if api_id == "ka10076":
@@ -430,7 +430,7 @@ async def test_sync_split_executions(
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status = lambda: None
 
         if api_id == "ka10076":
@@ -493,7 +493,7 @@ async def test_sync_transactions_traded_at_field(
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
         
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.status_code = 200
         
         if api_id == "ka10076": # 국내 체결 (시간 14:30:15 포함)
@@ -601,7 +601,7 @@ async def test_sync_overseas_dividend_and_tax(
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status = lambda: None
 
         if api_id == "kt00015":
@@ -687,7 +687,7 @@ async def test_sync_exchange_transaction_with_settlement(
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status = lambda: None
 
         if api_id == "kt00015":
@@ -793,7 +793,7 @@ async def test_sync_exchange_transaction_manual_match(
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status = lambda: None
 
         if api_id == "kt00015":
@@ -862,7 +862,7 @@ async def test_sync_exchange_transaction_sell_usd(
     def mock_api_responses(url, *args, **kwargs):
         headers = kwargs.get("headers", {})
         api_id = headers.get("api-id")
-        mock_response = AsyncMock()
+        mock_response = MagicMock()
         mock_response.raise_for_status = lambda: None
 
         if api_id == "kt00015":
