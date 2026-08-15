@@ -8,6 +8,7 @@ from datetime import date, datetime
 from ..database import get_db
 from ..models import Account, Asset, Transaction, AccountSnapshot, User, ExchangeRate, VALID_CATEGORIES
 from ..services.dashboard_service import DashboardService
+from ..services.ledger_engine import LedgerEngine
 from ..services.price_service import price_service
 from ..services.snapshot_service import SnapshotService
 from ..services.transaction_service import TransactionService
@@ -671,28 +672,14 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
     Returns:
         BrokerageCalculateResponse: 이론적 잔액 및 실제 잔액과의 차액 결과
     """
-    dashboard_service = DashboardService(db)
-    
-    # 1. 기존 DB 기반 이론상 현금 계산
-    theoretical = dashboard_service.calculate_theoretical_cash(req.account_id, req.snapshot_date)
+    # 1. 기존 DB 기반 이론상 현금 계산 (LedgerEngine 단일 원장 엔진 활용)
+    base_state = LedgerEngine.get_positions(db, account_id=req.account_id, as_of=req.snapshot_date)
     
     # 2. 사용자가 새로 입력한 입출금 내역 반영
-    new_krw_net = 0.0
-    new_usd_net = 0.0
-    for tx in req.new_transactions:
-        if tx.currency == 'KRW':
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
-                new_krw_net += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'TAX', 'BUY']:
-                new_krw_net -= tx.total_amount
-        elif tx.currency == 'USD':
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT', 'SELL']:
-                new_usd_net += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'TAX', 'BUY']:
-                new_usd_net -= tx.total_amount
+    new_state = LedgerEngine.replay(req.new_transactions)
     
-    theoretical_krw = theoretical['KRW'] + new_krw_net
-    theoretical_usd = theoretical['USD'] + new_usd_net
+    theoretical_krw = base_state.cash_krw + new_state.cash_krw
+    theoretical_usd = base_state.cash_usd + new_state.cash_usd
     
     # 3. 차액 계산
     diff_krw = req.current_krw - theoretical_krw
@@ -816,6 +803,7 @@ async def calculate_brokerage_snapshot(req: BrokerageCalculateRequest, db: Sessi
 
 
     # 6. 비현금 자산 평가액 및 기간 수익 계산
+    dashboard_service = DashboardService(db)
     holdings = dashboard_service.get_holdings()
     acc_holdings = [h for h in holdings if h['account'].id == req.account_id and h['asset'].ticker not in ['KRW', 'USD']]
     
@@ -859,24 +847,12 @@ async def calculate_bank_snapshot(req: BankCalculateRequest, db: Session = Depen
     Returns:
         BankCalculateResponse: 계산된 최종 잔액
     """
-    dashboard_service = DashboardService(db)
-    
-    # 1. 기존 DB 기반 이론상 현금 계산 (KRW만 사용)
-    theoretical = dashboard_service.calculate_theoretical_cash(req.account_id, req.snapshot_date)
+    # 1. 기존 DB 기반 이론상 현금 계산 (LedgerEngine 단일 원장 엔진 활용)
+    base_state = LedgerEngine.get_positions(db, account_id=req.account_id, as_of=req.snapshot_date)
     
     # 2. 사용자가 새로 입력한 내역 반영
-    new_krw_net = 0.0
-    for tx in req.new_transactions:
-        if tx.type in ['DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
-            new_krw_net += tx.total_amount
-        elif tx.type in ['WITHDRAW', 'TAX']:
-            new_krw_net -= tx.total_amount
-        elif tx.type == 'BUY':
-            new_krw_net -= tx.total_amount
-        elif tx.type == 'SELL':
-            new_krw_net += tx.total_amount
-            
-    final_balance = theoretical['KRW'] + new_krw_net
+    new_state = LedgerEngine.replay(req.new_transactions)
+    final_balance = base_state.cash_krw + new_state.cash_krw
 
     # 3. 마지막 스냅샷 이후의 기존 트랜잭션 조회
     last_snapshot = db.query(AccountSnapshot).filter(

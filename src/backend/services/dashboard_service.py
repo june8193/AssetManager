@@ -1,6 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from ..models import Account, Asset, Transaction, ExchangeRate, AccountSnapshot, HistoricalPrice
+from .ledger_engine import LedgerEngine
 import yfinance as yf
 from typing import Dict, List, Any
 import datetime
@@ -216,72 +217,40 @@ class DashboardService:
         """모든 활성 계좌의 자산별 보유량을 계산합니다.
         
         대시보드의 '계좌별 현황' 등 현재 보유 자산을 보여주는 기능에서 사용되며,
-        사용자 요청에 따라 비활성(is_active=False) 계좌는 제외됩니다.
+        비활성(is_active=False) 계좌는 제외됩니다.
         """
-        # 활성 계좌의 트랜잭션만 가져와서 (계좌, 자산) 별로 합산
-        transactions = (
-            self.db.query(Transaction)
-            .join(Account, Transaction.account_id == Account.id)
-            .filter(Account.is_active == True)
-            .all()
-        )
-        # 현금 자산 ID 매핑 구축 (KRW, USD)
-        cash_assets = self.db.query(Asset).filter(Asset.ticker.in_(['KRW', 'USD'])).all()
-        ticker_to_asset_id = {asset.ticker: asset.id for asset in cash_assets}
-        
-        holdings = {} # (account_id, asset_id) -> quantity
+        active_accounts = self.db.query(Account).filter(Account.is_active == True).all()
+        assets = self.db.query(Asset).all()
+        ticker_map = {asset.ticker: asset for asset in assets}
+        krw_asset = ticker_map.get("KRW")
+        usd_asset = ticker_map.get("USD")
 
-        for tx in transactions:
-            # (1) 원래 자산의 수량 증감 처리
-            key = (tx.account_id, tx.asset_id)
-            if key not in holdings:
-                holdings[key] = 0.0
-            
-            if tx.type == 'EXCHANGE':
-                holdings[key] -= tx.total_amount
-                if tx.target_asset_id:
-                    target_key = (tx.account_id, tx.target_asset_id)
-                    if target_key not in holdings:
-                        holdings[target_key] = 0.0
-                    holdings[target_key] += tx.quantity
-            elif tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'INTEREST', 'CASH_ADJUSTMENT']:
-                holdings[key] += tx.quantity
-            elif tx.type in ['SELL', 'WITHDRAW', 'TAX']:
-                holdings[key] -= tx.quantity
-
-            # (2) 현금 자산에 대한 상대적 증감 동적 반영
-            if tx.type != 'EXCHANGE':
-                cash_asset_id = ticker_to_asset_id.get(tx.currency)
-                if cash_asset_id and tx.asset_id != cash_asset_id:
-                    cash_key = (tx.account_id, cash_asset_id)
-                    if cash_key not in holdings:
-                        holdings[cash_key] = 0.0
-                    
-                    if tx.type in ['BUY', 'TAX']:
-                        holdings[cash_key] -= tx.total_amount
-                    elif tx.type in ['SELL', 'INTEREST']:
-                        holdings[cash_key] += tx.total_amount
-        
-        # 결과 정리
         results = []
-        for (acc_id, asset_id), qty in holdings.items():
-            if qty == 0:
-                continue
-            
-            # 이미 활성 계좌만 필터링했으므로 Account 조회 시 is_active 필터는 유지하되 
-            # 트랜잭션에서 이미 필터링되었으므로 성능이 향상됨
-            account = self.db.query(Account).filter(Account.id == acc_id).first()
-            asset = self.db.query(Asset).filter(Asset.id == asset_id).first()
-            
-            if not account or not asset:
-                continue
-                
-            results.append({
-                "account": account,
-                "asset": asset,
-                "quantity": qty
-            })
-            
+        for account in active_accounts:
+            state = LedgerEngine.get_positions(self.db, account_id=account.id)
+            # 1. 현금 잔액 (KRW, USD)
+            if abs(state.cash_krw) > 0.000001 and krw_asset:
+                results.append({
+                    "account": account,
+                    "asset": krw_asset,
+                    "quantity": state.cash_krw,
+                })
+            if abs(state.cash_usd) > 0.000001 and usd_asset:
+                results.append({
+                    "account": account,
+                    "asset": usd_asset,
+                    "quantity": state.cash_usd,
+                })
+            # 2. 주식 등 보유 자산
+            for ticker, qty in state.holdings.items():
+                asset = ticker_map.get(ticker)
+                if asset and qty > 0.000001:
+                    results.append({
+                        "account": account,
+                        "asset": asset,
+                        "quantity": qty,
+                    })
+
         return results
 
     def get_latest_exchange_rate(self) -> Dict[str, Any]:
@@ -721,51 +690,5 @@ class DashboardService:
         Returns:
             Dict[str, float]: 통화별(KRW, USD) 이론상 잔액 딕셔너리
         """
-        transactions = (
-            self.db.query(Transaction)
-            .filter(Transaction.account_id == account_id)
-            .filter(Transaction.transaction_date <= snapshot_date)
-            .all()
-        )
-        
-        # 통화별 INITIAL_BALANCE 적용 날짜 수집
-        initial_balance_dates = {}
-        for tx in transactions:
-            if tx.type == 'INITIAL_BALANCE':
-                curr = tx.currency
-                if curr not in initial_balance_dates or tx.transaction_date > initial_balance_dates[curr]:
-                    initial_balance_dates[curr] = tx.transaction_date
-        
-        theoretical = {"KRW": 0.0, "USD": 0.0}
-        
-        for tx in transactions:
-            currency = tx.currency
-            if currency not in theoretical:
-                continue # KRW, USD 외 통화는 일단 제외
-
-            # 해당 통화의 INITIAL_BALANCE 설정 날짜 이전(미만)의 거래는 스킵
-            ib_date = initial_balance_dates.get(currency)
-            if ib_date and tx.transaction_date < ib_date:
-                continue
-
-            if tx.type == 'EXCHANGE':
-                if tx.asset and tx.asset.ticker in theoretical:
-                    theoretical[tx.asset.ticker] -= tx.total_amount
-                if tx.target_asset and tx.target_asset.ticker in theoretical:
-                    theoretical[tx.target_asset.ticker] += tx.quantity
-            elif tx.type in ['DEPOSIT', 'INTEREST', 'CASH_ADJUSTMENT']:
-                theoretical[currency] += tx.total_amount
-            elif tx.type == 'INITIAL_BALANCE':
-                # INITIAL_BALANCE는 자산이 현금(KRW, USD)인 경우에만 더합니다.
-                if tx.asset and tx.asset.ticker in ['KRW', 'USD']:
-                    theoretical[currency] += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'TAX']:
-                theoretical[currency] -= tx.total_amount
-            elif tx.type == 'BUY':
-                # 주식 매수는 해당 통화 현금 감소
-                theoretical[currency] -= tx.total_amount
-            elif tx.type == 'SELL':
-                # 주식 매도는 해당 통화 현금 증가
-                theoretical[currency] += tx.total_amount
-                
-        return theoretical
+        state = LedgerEngine.get_positions(self.db, account_id=account_id, as_of=snapshot_date)
+        return state.cash_balances

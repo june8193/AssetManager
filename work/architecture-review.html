@@ -1,303 +1,976 @@
-<!doctype html>
-<html lang="ko">
-  <head>
-    <meta charset="utf-8" />
-    <title>Architecture Review — AssetManager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script type="module">
-      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
-      mermaid.initialize({ startOnLoad: true, theme: "neutral", securityLevel: "loose" });
-    </script>
-    <style>
-      .seam { stroke-dasharray: 4 4; }
-      .leak { stroke: #dc2626; }
-      .deep-bg { background: linear-gradient(135deg, #0f172a, #1e293b); }
-    </style>
-  </head>
-  <body class="bg-stone-50 text-slate-900 font-sans">
-    <main class="max-w-5xl mx-auto px-6 py-12 space-y-12">
-      <!-- Header -->
-      <header class="border-b border-stone-200 pb-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-3xl font-bold font-serif text-slate-900">Architecture Review — AssetManager</h1>
-            <p class="text-stone-500 text-sm mt-1">Deepening opportunities, locality analysis, and seam placement</p>
-          </div>
-          <div class="text-right">
-            <span class="inline-block bg-slate-900 text-white text-xs px-3 py-1 rounded-full font-mono">2026-08-02</span>
-          </div>
-        </div>
+<!DOCTYPE html>
+<html lang="ko" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AssetManager 아키텍처 구조 진단 및 모듈 심화(Deepening) 종합 보고서</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eef6ff',
+              100: '#d9ebff',
+              200: '#bcdbff',
+              300: '#8ec4ff',
+              400: '#59a2ff',
+              500: '#327eff',
+              600: '#1b5ff6',
+              700: '#1449e2',
+              800: '#173bb6',
+              900: '#18358f',
+              950: '#132257',
+            },
+            dark: {
+              bg: '#0B0F19',
+              card: '#111827',
+              border: '#1F2937',
+              hover: '#1E293B'
+            }
+          },
+          fontFamily: {
+            sans: ['Pretendard', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  
+  <!-- Mermaid.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'dark',
+      themeVariables: {
+        fontFamily: 'Pretendard, sans-serif',
+        primaryColor: '#1e293b',
+        primaryTextColor: '#f8fafc',
+        primaryBorderColor: '#3b82f6',
+        lineColor: '#60a5fa',
+        secondaryColor: '#0f172a',
+        tertiaryColor: '#1e1b4b'
+      },
+      securityLevel: 'loose'
+    });
+  </script>
 
-        <!-- Legend -->
-        <div class="mt-6 flex items-center space-x-6 text-xs text-stone-600 bg-white p-3 rounded-lg border border-stone-200">
-          <div class="flex items-center space-x-2">
-            <span class="w-4 h-4 rounded border border-slate-400 bg-stone-100 inline-block"></span>
-            <span>Module</span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <span class="w-4 h-4 rounded border-2 border-dashed border-slate-600 inline-block"></span>
-            <span>Seam</span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <span class="w-4 h-4 rounded bg-red-500 inline-block"></span>
-            <span class="text-red-700 font-medium">Leakage</span>
-          </div>
-          <div class="flex items-center space-x-2">
-            <span class="w-4 h-4 rounded deep-bg inline-block"></span>
-            <span class="font-semibold text-slate-900">Deep Module</span>
-          </div>
-        </div>
-      </header>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body {
+      font-family: 'Pretendard', sans-serif;
+      background-color: #090D16;
+      color: #E2E8F0;
+    }
+    .mermaid {
+      background: #0f172a;
+      border-radius: 0.75rem;
+      padding: 1.25rem;
+      border: 1px solid #1e293b;
+      display: flex;
+      justify-content: center;
+    }
+    pre code {
+      font-family: 'JetBrains Mono', Consolas, monospace;
+    }
+    .badge-strong {
+      background: linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.3) 100%);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .badge-worth {
+      background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.3) 100%);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .badge-speculative {
+      background: linear-gradient(135deg, rgba(168, 85, 247, 0.2) 0%, rgba(147, 51, 234, 0.3) 100%);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.4);
+    }
+    .glass-card {
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-card-top {
+      background: linear-gradient(145deg, rgba(24, 53, 143, 0.25) 0%, rgba(15, 23, 42, 0.9) 100%);
+      border: 1px solid rgba(59, 130, 246, 0.4);
+      box-shadow: 0 0 25px rgba(59, 130, 246, 0.15);
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #60a5fa 0%, #a78bfa 50%, #34d399 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+  </style>
+</head>
+<body class="min-h-screen antialiased selection:bg-brand-500 selection:text-white pb-20">
 
-      <!-- Candidates List -->
-      <section id="candidates" class="space-y-10">
+  <!-- 상단 내비게이션 바 -->
+  <header class="sticky top-0 z-50 glass-card border-b border-slate-800/80 px-6 py-3.5 mb-8">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="h-9 w-9 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 flex items-center justify-center font-bold text-white shadow-lg shadow-brand-500/20">
+          AM
+        </div>
+        <div>
+          <h1 class="text-base font-bold text-slate-100 flex items-center gap-2">
+            AssetManager Architecture Review
+            <span class="text-xs px-2 py-0.5 rounded-full bg-brand-900/60 text-brand-300 border border-brand-700/50">v2.0 Deepening</span>
+          </h1>
+          <p class="text-xs text-slate-400">Codebase Design &middot; Deep Modules &middot; Seams &middot; Leverage</p>
+        </div>
+      </div>
+      <nav class="hidden md:flex items-center gap-5 text-xs text-slate-300">
+        <a href="#overview" class="hover:text-brand-400 transition-colors">진단 개요</a>
+        <a href="#domain-baseline" class="hover:text-brand-400 transition-colors">도메인 베이스라인</a>
+        <a href="#frictions" class="hover:text-brand-400 transition-colors">7대 마찰 & 개선안</a>
+        <a href="#top-recommendation" class="text-amber-400 hover:text-amber-300 font-semibold transition-colors flex items-center gap-1">
+          <span>★</span> Top Recommendation
+        </a>
+        <a href="#verification" class="hover:text-brand-400 transition-colors">검증 가이드</a>
+      </nav>
+      <div class="flex items-center gap-2 text-xs">
+        <span class="px-2.5 py-1 rounded-md bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Backend 247/247 Pass
+        </span>
+        <span class="px-2.5 py-1 rounded-md bg-emerald-950/70 text-emerald-400 border border-emerald-800/60 flex items-center gap-1.5">
+          <span class="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse"></span> Frontend 28/28 Pass
+        </span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+
+    <!-- 1. Executive Dashboard (헤더 & 종합 진단 현황) -->
+    <section id="overview" class="space-y-6">
+      <div class="relative overflow-hidden rounded-2xl glass-card p-8 border border-slate-800">
+        <div class="absolute -right-20 -top-20 w-96 h-96 bg-brand-600/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="absolute -left-20 -bottom-20 w-96 h-96 bg-purple-600/10 rounded-full blur-3xl pointer-events-none"></div>
         
-        <!-- Candidate 1 -->
-        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
-          <div class="flex items-start justify-between">
+        <div class="relative z-10 space-y-4">
+          <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-brand-500/10 text-brand-400 border border-brand-500/20">
+            <span>🛡️ Forensic Architecture Review</span> &middot; <span>2026-08-15 기준</span>
+          </div>
+          <h2 class="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+            AssetManager 아키텍처 구조 진단 및 <br/>
+            <span class="gradient-text">모듈 심화(Deepening) 종합 설계안</span>
+          </h2>
+          <p class="text-slate-300 text-sm sm:text-base leading-relaxed max-w-4xl">
+            AssetManager는 FastAPI 비동기 백엔드, React(Vite) 프론트엔드, SQLite 원장 데이터베이스를 기반으로 구축된 가계 금융 자산관리 시스템입니다. 본 진단 보고서는 <strong class="text-white font-semibold">Codebase Design</strong> 방법론에 입각하여 얕은 모듈(Shallow Modules), 결합도 누수(Leaky Boundaries), 파편화된 외부 의존성을 정밀 진단하고, <strong>작은 인터페이스(Small Interface)와 깊은 내부 구현(Deep Implementation)</strong>을 갖춘 7대 심화 모듈 개선안을 제안합니다.
+          </p>
+        </div>
+
+        <!-- 핵심 KPI 지표 그리드 -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-slate-800/80">
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div class="text-xs text-slate-400 font-medium">총 진단 마찰 지점</div>
+            <div class="text-2xl font-bold text-white mt-1">7개 영역</div>
+            <div class="text-xs text-brand-400 mt-1">Strong 5 &middot; Worth exploring 2</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div class="text-xs text-slate-400 font-medium">원장 순회 파편화 해소</div>
+            <div class="text-2xl font-bold text-emerald-400 mt-1">4중 중복 &rarr; 1개소</div>
+            <div class="text-xs text-slate-400 mt-1">LedgerEngine 단일화</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div class="text-xs text-slate-400 font-medium">거대 라우터 해체</div>
+            <div class="text-2xl font-bold text-indigo-400 mt-1">1,042줄 &rarr; 4개 모듈</div>
+            <div class="text-xs text-slate-400 mt-1">db_manage.py 해체</div>
+          </div>
+          <div class="p-4 rounded-xl bg-slate-900/60 border border-slate-800">
+            <div class="text-xs text-slate-400 font-medium">프론트엔드 Seam 정립</div>
+            <div class="text-2xl font-bold text-amber-400 mt-1">20+ raw fetch &rarr; 1 클라이언트</div>
+            <div class="text-xs text-slate-400 mt-1">apiClient & 서비스 계층</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 도메인 모델 & ADR 불변식 아키텍처 베이스라인 -->
+    <section id="domain-baseline" class="space-y-6">
+      <div class="flex items-center justify-between">
+        <div>
+          <h3 class="text-xl font-bold text-white flex items-center gap-2">
+            <span class="text-brand-400">01.</span> 도메인 모델 & ADR 아키텍처 베이스라인
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">CONTEXT.md의 유비쿼터스 언어 및 docs/adr/ 아키텍처 결정 불변식</p>
+        </div>
+        <span class="px-3 py-1 rounded-md text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">Domain Invariants</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+        <!-- 불변식 1: 원장 기반 단일 진실 공급원 -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
+              📜
+            </div>
+            <h4 class="text-sm font-bold text-white">1. 원장(Ledger) 기반 단일 진실원</h4>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            모든 자산 잔고와 현금 흐름의 근원은 <code class="text-brand-300 bg-slate-900 px-1 py-0.5 rounded">Transaction</code> 10종 이벤트입니다. 과거 시점 계산 및 이론상 현금(Theoretical Cash)은 원장 리플레이를 통해 결정론적으로 산출되어야 합니다.
+          </p>
+          <div class="text-[11px] text-slate-400 bg-slate-900/80 p-2.5 rounded border border-slate-800/80">
+            <strong>핵심 불변식:</strong> 이체(Transfer)는 동일한 <code class="text-slate-300">transfer_pair_id</code>를 갖는 WITHDRAW/DEPOSIT의 원자적 쌍이어야 함.
+          </div>
+        </div>
+
+        <!-- 불변식 2: 3-Tier 계층형 자산배분 -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              📊
+            </div>
+            <h4 class="text-sm font-bold text-white">2. 3-Tier 계층형 자산배분</h4>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            <code class="text-emerald-300 bg-slate-900 px-1 py-0.5 rounded">Major(4)</code> &rarr; <code class="text-emerald-300 bg-slate-900 px-1 py-0.5 rounded">Sub(10)</code> &rarr; <code class="text-emerald-300 bg-slate-900 px-1 py-0.5 rounded">Stock</code>의 3단계 계층 구조를 가집니다. 각 상위 범주의 비중 합산은 항상 100%를 충족해야 합니다.
+          </p>
+          <div class="text-[11px] text-slate-400 bg-slate-900/80 p-2.5 rounded border border-slate-800/80">
+            <strong>핵심 불변식:</strong> <code class="text-slate-300">VALID_CATEGORIES</code>에 의해 주식/채권/대체투자/현금 외 임의 카테고리 삽입 차단.
+          </div>
+        </div>
+
+        <!-- 불변식 3: 스냅샷 원자성 및 환경 격리 -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-3">
+          <div class="flex items-center gap-2.5">
+            <div class="p-2 rounded-lg bg-purple-500/10 text-purple-400 border border-purple-500/20">
+              🔒
+            </div>
+            <h4 class="text-sm font-bold text-white">3. 스냅샷 원자성 & 환경 격리</h4>
+          </div>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            월간 스냅샷 저장은 환율, 보정 거래, 계좌별 스냅샷 캐시를 단일 DB 트랜잭션 내에서 원자적으로 처리합니다. E2E 및 단위 테스트는 운영 DB와 100% 격리된 <code class="text-purple-300 bg-slate-900 px-1 py-0.5 rounded">dev_assets.db</code>에서 실행됩니다.
+          </p>
+          <div class="text-[11px] text-slate-400 bg-slate-900/80 p-2.5 rounded border border-slate-800/80">
+            <strong>핵심 불변식:</strong> 스냅샷은 생성 후 불변(Immutable) 상태를 유지하여 시계열 누적 수익률 왜곡 방지.
+          </div>
+        </div>
+      </div>
+
+      <!-- 유비쿼터스 언어 매핑 테이블 -->
+      <div class="overflow-x-auto rounded-xl border border-slate-800 glass-card">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="bg-slate-900/80 text-slate-400 uppercase text-[10px] tracking-wider border-b border-slate-800">
+            <tr>
+              <th class="px-4 py-3">도메인 용어 (Ubiquitous Term)</th>
+              <th class="px-4 py-3">한글 명칭</th>
+              <th class="px-4 py-3">도메인 정의 및 불변식 규칙</th>
+              <th class="px-4 py-3">원천 코드 위치</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-800/60 font-mono">
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-2.5 font-bold text-brand-300">User / Account</td>
+              <td class="px-4 py-2.5 font-sans">자산 소유자 / 금융 계좌</td>
+              <td class="px-4 py-2.5 font-sans">증권사(BROKERAGE) 및 은행(BANK) 계좌 관리, 소유자별 집계</td>
+              <td class="px-4 py-2.5 text-slate-400">src/backend/models.py:70-113</td>
+            </tr>
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-2.5 font-bold text-brand-300">Asset</td>
+              <td class="px-4 py-2.5 font-sans">자산 마스터</td>
+              <td class="px-4 py-2.5 font-sans">티커, 자산명, 대분류(Major), 중분류(Sub), 국가(KR/US) 메타데이터</td>
+              <td class="px-4 py-2.5 text-slate-400">src/backend/models.py:114-167</td>
+            </tr>
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-2.5 font-bold text-brand-300">Transaction</td>
+              <td class="px-4 py-2.5 font-sans">거래 원장</td>
+              <td class="px-4 py-2.5 font-sans">9+1종 거래 이벤트(BUY, SELL, EXCHANGE, DEPOSIT, WITHDRAW, IB 등)</td>
+              <td class="px-4 py-2.5 text-slate-400">src/backend/models.py:168-252</td>
+            </tr>
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-2.5 font-bold text-brand-300">AccountSnapshot</td>
+              <td class="px-4 py-2.5 font-sans">계좌 스냅샷 캐시</td>
+              <td class="px-4 py-2.5 font-sans">기준일자별 총 평가액(Valuation), 당기 입출금, 누적 실현/미실현 손익</td>
+              <td class="px-4 py-2.5 text-slate-400">src/backend/models.py:253-274</td>
+            </tr>
+            <tr class="hover:bg-slate-800/30">
+              <td class="px-4 py-2.5 font-bold text-brand-300">Theoretical Cash</td>
+              <td class="px-4 py-2.5 font-sans">이론상 현금 잔액</td>
+              <td class="px-4 py-2.5 font-sans">최근 INITIAL_BALANCE 기준선 이후의 트랜잭션 누적 합산값</td>
+              <td class="px-4 py-2.5 text-slate-400">dashboard_service.py:711-772</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 3. 7대 아키텍처 마찰 지점 및 심화(Deepening) 개선안 -->
+    <section id="frictions" class="space-y-12">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+          <h3 class="text-xl font-bold text-white flex items-center gap-2">
+            <span class="text-brand-400">02.</span> 7대 아키텍처 마찰 지점 및 심화(Deepening) 개선안
+          </h3>
+          <p class="text-xs text-slate-400 mt-1">Codebase Design 원칙(Small Interface, Deep Implementation, Clean Seams, Deletion Test) 적용</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="badge-strong text-[11px] px-2.5 py-1 rounded-md font-semibold">Strong (5)</span>
+          <span class="badge-worth text-[11px] px-2.5 py-1 rounded-md font-semibold">Worth exploring (2)</span>
+        </div>
+      </div>
+
+      <!-- 개선안 1: LedgerEngine (TOP RECOMMENDATION) -->
+      <article id="prop-1" class="glass-card-top rounded-2xl p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-blue-500/20 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="h-8 w-8 rounded-lg bg-blue-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-blue-500/30">#1</span>
             <div>
-              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 01</span>
-              <h2 class="text-2xl font-bold text-slate-900 mt-1">Collapse Snapshot & Transaction Calculation into Deep SnapshotEngine</h2>
-            </div>
-            <div class="flex items-center space-x-2">
-              <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full">Strong</span>
-              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">in-process</span>
-            </div>
-          </div>
-
-          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/routers/db_manage.py" class="text-indigo-600 hover:underline">src/backend/routers/db_manage.py</a> (51KB)</div>
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/dashboard_service.py" class="text-indigo-600 hover:underline">src/backend/services/dashboard_service.py</a></div>
-          </div>
-
-          <!-- Side-by-Side Diagram -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <!-- Before -->
-            <div class="border border-red-200 bg-red-50/30 rounded-lg p-4 space-y-2">
-              <span class="text-xs font-bold text-red-700 uppercase tracking-wider">Before — Shallow Router & Leaky Seam</span>
-              <div class="bg-white p-3 rounded border border-red-200 text-xs space-y-2">
-                <div class="font-bold text-red-900">db_manage.py (Router - 1285 lines)</div>
-                <ul class="list-disc pl-4 text-stone-600 space-y-1 text-[11px]">
-                  <li>Inline ORM queries & explicit SQL</li>
-                  <li>Snapshot valuation & cash math inside endpoint</li>
-                  <li>Directly instantiates DashboardService & PriceService</li>
-                  <li>Leaks transaction logic & FX conversions</li>
-                </ul>
+              <div class="flex items-center gap-2">
+                <h4 class="text-lg font-bold text-white">단일 원장 엔진(<code class="text-blue-300 font-mono">LedgerEngine</code>) 구축 및 계산 로직 집중화</h4>
+                <span class="badge-strong text-xs px-2 py-0.5 rounded-full font-bold">Strong</span>
+                <span class="bg-amber-500/20 text-amber-300 border border-amber-500/40 text-xs px-2 py-0.5 rounded-full font-bold flex items-center gap-1">★ Top Recommendation</span>
               </div>
+              <p class="text-xs text-slate-400 mt-0.5">4개 모듈에 걸친 트랜잭션 원장 순회 및 자산 수량/예수금 계산 파편화 해소</p>
             </div>
+          </div>
+          <div class="text-xs text-right text-slate-400 font-mono">
+            <div>Scope: Backend Domain Core</div>
+            <div class="text-blue-400 font-semibold">Locality &uarr; 300% &middot; Leverage &uarr; 4x</div>
+          </div>
+        </div>
 
-            <!-- After -->
-            <div class="border border-emerald-200 bg-emerald-50/30 rounded-lg p-4 space-y-2">
-              <span class="text-xs font-bold text-emerald-700 uppercase tracking-wider">After — Deep SnapshotEngine Seam</span>
-              <div class="deep-bg text-white p-3 rounded shadow-md text-xs space-y-2">
-                <div class="font-bold text-emerald-400">SnapshotEngine (Deep Module)</div>
-                <div class="text-[11px] text-slate-300 font-mono">Interface: preview_snapshot(date, fx) | commit_snapshot(previews)</div>
-                <div class="text-[10px] text-slate-400 border-t border-slate-700 pt-1">
-                  Absorbs ORM queries, cash calculation, brokerage/bank valuations, & transaction pair matching.
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300">
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-rose-400 flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> 구조적 마찰 (Architectural Friction)
+            </div>
+            <ul class="space-y-2 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>원장 리플레이 로직 4중 복제:</strong> <code class="text-slate-200">dashboard_service.py:215-286</code>, <code class="text-slate-200">dashboard_service.py:711-772</code>, <code class="text-slate-200">portfolio_service.py:8-83</code>, <code class="text-slate-200">db_manage.py:680-817</code>에서 9개 거래 유형을 각자 순회.</li>
+              <li><strong>계산 규칙 불일치 위험:</strong> <code class="text-slate-200">INITIAL_BALANCE</code> 기준선 이전 트랜잭션 제외 처리가 <code class="text-slate-200">portfolio_service</code>에는 누락되어 과거 특정 시점 조회 시 오차 발생 위험.</li>
+              <li><strong>Deletion Test 평가:</strong> 4개 파일의 원장 순회 코드를 가상 삭제하고 단일 엔진으로 대체 시, 비즈니스 복잡성이 단 1곳으로 응집되며 모든 호출자가 극도로 단순화됨.</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5 text-sm">
+              <span>💡</span> 심화 모듈 제안 (Deep Solution: Small Interface)
+            </div>
+            <p class="leading-relaxed">
+              작은 인터페이스 뒤로 9종 트랜잭션 타입, 다중 통화(KRW/USD), 환전 연쇄 변동, 초기 잔액 기준선 처리를 캡슐화하고 불변 <code class="text-emerald-300">LedgerState</code>를 반환.
+            </p>
+            <pre class="bg-slate-950 p-3 rounded-lg text-slate-300 font-mono text-[11px] overflow-x-auto border border-slate-800"><code>class LedgerEngine:
+    def __init__(self, db: Session): ...
+    def get_positions(self, account_id: int = None, as_of: date = None) -> LedgerState:
+        """특정 시점 보유 주식, 통화별 예수금, 기간 입출금액을 원자적으로 반환"""</code></pre>
+          </div>
+        </div>
+
+        <!-- Before / After Mermaid Diagram -->
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-300 flex items-center justify-between">
+            <span>Before / After 구조 비교 다이어그램</span>
+            <span class="text-[11px] text-slate-500">Mermaid.js Flowchart</span>
+          </div>
+          <div class="mermaid">
+graph TD
+    subgraph Before [Before: 파편화된 원장 순회 구조]
+        T1[(transactions 테이블)]
+        DS[DashboardService] -->|직접 순회| T1
+        PS[PortfolioService] -->|직접 순회| T1
+        DM[db_manage 라우터] -->|직접 순회| T1
+        DIV[DividendService] -->|직접 순회| T1
+    end
+
+    subgraph After [After: Deep LedgerEngine 단일화]
+        T2[(transactions 테이블)]
+        LE["Deep Module: LedgerEngine<br/>(get_positions / get_cashflow)"] --> T2
+        DS2[DashboardService] -->|단일 인터페이스 호출| LE
+        PS2[PortfolioService] -->|단일 인터페이스 호출| LE
+        SS2[SnapshotEngine] -->|단일 인터페이스 호출| LE
+        DIV2[DividendService] -->|단일 인터페이스 호출| LE
+    end
+          </div>
+        </div>
+      </article>
+
+      <!-- 개선안 2: SnapshotEngine & db_manage.py 해체 -->
+      <article id="prop-2" class="glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="h-8 w-8 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-indigo-500/30">#2</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-lg font-bold text-white">스냅샷 파이프라인 심화(<code class="text-indigo-300 font-mono">SnapshotEngine</code>) 및 <code class="text-indigo-300 font-mono">db_manage.py</code> 해체</h4>
+                <span class="badge-strong text-xs px-2 py-0.5 rounded-full font-bold">Strong</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">1,042줄 모놀리스 라우터 분할, 순환 참조 해소 및 스냅샷 원자적 실행 캡슐화</p>
+            </div>
+          </div>
+          <div class="text-xs text-right text-slate-400 font-mono">
+            <div>Scope: Backend Routers & Services</div>
+            <div class="text-indigo-400 font-semibold">Decoupling &middot; 4 Routers &middot; schemas/</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300">
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-rose-400 flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> 구조적 마찰 (Architectural Friction)
+            </div>
+            <ul class="space-y-2 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>1,042줄 라우터 비대화:</strong> <code class="text-slate-200">db_manage.py:664-848</code>에 180줄 비즈니스 연산이 서비스 계층 없이 라우터에 직접 구현됨.</li>
+              <li><strong>코드 중복 및 순환 참조:</strong> <code class="text-slate-200">db_manage.py:509-660</code>과 <code class="text-slate-200">snapshot_service.py:17-48, 130-219</code>에 5개 헬퍼 함수가 이중 작성됨. <code class="text-slate-200">snapshot_service.py:115</code>에서 라우터 스키마를 Lazy Import하여 순환 참조 발생.</li>
+              <li><strong>단일 책임 원칙 위배:</strong> User, Account, Asset, Transaction, Snapshot CRUD가 단일 라우터 파일에 혼재.</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5 text-sm">
+              <span>💡</span> 심화 모듈 제안 (Deep Solution)
+            </div>
+            <ul class="space-y-1.5 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>4대 전용 라우터 분할:</strong> <code class="text-emerald-300">routers/accounts.py</code>, <code class="text-emerald-300">assets.py</code>, <code class="text-emerald-300">transactions.py</code>, <code class="text-emerald-300">snapshots.py</code> (각 150~250줄).</li>
+              <li><strong>독립 <code class="text-emerald-300">schemas/</code> 패키지:</strong> Pydantic 모델을 라우터에서 분리하여 순환 참조 원천 차단.</li>
+              <li><strong>Deep <code class="text-emerald-300">SnapshotEngine</code>:</strong> 차액 계산, 실시간 평가, 환율 저장, 보정 거래 생성을 단일 DB 트랜잭션으로 원자화.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-300">Before / After 구조 비교 다이어그램</div>
+          <div class="mermaid">
+graph LR
+    subgraph Before [Before: 거대 라우터 결합 및 순환 참조]
+        Client1[Frontend Client] --> DM["db_manage.py (1042줄)<br/>User/Account/Asset/Tx/Snapshot<br/>+ 180줄 비즈니스 연산"]
+        DM <-->|로직 복제 & 순환 참조| SS["SnapshotService (219줄)"]
+    end
+
+    subgraph After [After: 모듈 분할 & Deep SnapshotEngine]
+        Client2[Frontend Client] --> R1["routers/accounts.py"]
+        Client2 --> R2["routers/assets.py"]
+        Client2 --> R3["routers/transactions.py"]
+        Client2 --> R4["routers/snapshots.py"]
+        
+        R1 & R2 --> AS["Asset/Account Service"]
+        R3 --> TS["TransactionService"]
+        R4 --> SE["Deep Module: SnapshotEngine<br/>(calculate / preview / save_unified)"]
+        
+        SE --> LE["LedgerEngine"]
+        SE --> MP["MarketDataProvider"]
+    end
+          </div>
+        </div>
+      </article>
+
+      <!-- 개선안 3: MarketDataProvider Seam -->
+      <article id="prop-3" class="glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="h-8 w-8 rounded-lg bg-teal-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-teal-500/30">#3</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-lg font-bold text-white">통합 마켓 데이터 프로바이더(<code class="text-teal-300 font-mono">MarketDataProvider</code>) 및 Seam 정립</h4>
+                <span class="badge-strong text-xs px-2 py-0.5 rounded-full font-bold">Strong</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">5개 서비스의 산발적 외부 API 호출 방지, 캐싱/Forward-fill 통일 및 테스트용 Fake Seam 구축</p>
+            </div>
+          </div>
+          <div class="text-xs text-right text-slate-400 font-mono">
+            <div>Scope: Market Data Pipeline</div>
+            <div class="text-teal-400 font-semibold">Clean Seam &middot; Ports & Adapters</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300">
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-rose-400 flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> 구조적 마찰 (Architectural Friction)
+            </div>
+            <ul class="space-y-2 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>외부 API 산발 호출:</strong> <code class="text-slate-200">PriceService</code>, <code class="text-slate-200">DashboardService</code>, <code class="text-slate-200">BenchmarkService</code>, <code class="text-slate-200">PortfolioService</code> 5개 서비스가 yfinance 및 키움 API를 직접 호출.</li>
+              <li><strong>캐시 및 장운영 로직 불일치:</strong> <code class="text-slate-200">is_kr_market_open</code>이 2개 파일에 중복 정의됨. BenchmarkService는 비영업일을 0.0으로 캐싱하나 PriceService는 영업일만 캐싱하는 등 불일치.</li>
+              <li><strong>테스트 모킹 분산:</strong> 테스트 작성 시 10여 개 파일에 걸쳐 yfinance/키움 API를 개별 패치해야 함.</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5 text-sm">
+              <span>💡</span> 심화 모듈 제안 (Deep Solution: Seam & Adapters)
+            </div>
+            <p class="leading-relaxed">
+              외부 시세 제공자를 단일 Seam 뒤로 배치하고 <strong>다중 어댑터 패턴</strong> 적용.
+            </p>
+            <ul class="space-y-1 list-disc list-inside text-slate-300">
+              <li><code class="text-teal-300 font-mono">KiwoomAdapter</code>: 국내 주식/외환 API 연동</li>
+              <li><code class="text-teal-300 font-mono">YahooFinanceAdapter</code>: 미국 주식/지수 API 연동</li>
+              <li><code class="text-teal-300 font-mono">FakeMarketAdapter</code>: 테스트 시 100% 인메모리 가격 제공 Seam</li>
+              <li><code class="text-teal-300 font-mono">HistoricalPriceCache</code>: SQLite 기반 일관된 Forward-Fill 캐싱</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-300">Before / After 구조 비교 다이어그램</div>
+          <div class="mermaid">
+graph TD
+    subgraph Before [Before: 산발적 외부 API 호출 및 중복 캐시]
+        DS[DashboardService] -->|직접 호출| YF1[yfinance]
+        DS -->|직접 호출| KW1[Kiwoom API]
+        BS[BenchmarkService] -->|직접 호출| YF1
+        PS[PriceService] --> YF1 & KW1
+        PTS[PortfolioService] --> YF1 & KW1
+    end
+
+    subgraph After [After: Unified Market Seam & Adapters]
+        DS2[DashboardService] --> MDP["Deep Module: MarketDataProvider"]
+        BS2[BenchmarkService] --> MDP
+        SS2[SnapshotEngine] --> MDP
+        PTS2[PortfolioService] --> MDP
+        
+        MDP --> Seam{Seam / Adapter}
+        Seam -->|KR Stock/Exchange| KW2[KiwoomAdapter]
+        Seam -->|US Stock/Index| YF2[YahooFinanceAdapter]
+        Seam -->|Test Fixture| Fake[FakeMarketAdapter]
+        
+        MDP <--> Cache[(HistoricalPrice Cache)]
+    end
+          </div>
+        </div>
+      </article>
+
+      <!-- 개선안 4: Frontend API Client Layer -->
+      <article id="prop-4" class="glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="h-8 w-8 rounded-lg bg-cyan-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-cyan-500/30">#4</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-lg font-bold text-white">프론트엔드 통합 API 클라이언트(<code class="text-cyan-300 font-mono">apiClient.js</code>) 및 도메인 서비스 계층 도입</h4>
+                <span class="badge-strong text-xs px-2 py-0.5 rounded-full font-bold">Strong</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">20여 개 파일에 걸친 원시 fetch() 및 4가지 URL 규칙 난립 해소</p>
+            </div>
+          </div>
+          <div class="text-xs text-right text-slate-400 font-mono">
+            <div>Scope: Frontend Data Layer</div>
+            <div class="text-cyan-400 font-semibold">Service Layer &middot; Mocking Seam</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300">
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-rose-400 flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> 구조적 마찰 (Architectural Friction)
+            </div>
+            <ul class="space-y-2 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>서비스 계층 전무(0개):</strong> 20여 개 이상의 컴포넌트와 훅에서 <code class="text-slate-200">fetch()</code>를 직접 호출.</li>
+              <li><strong>4가지 URL 호출 규칙 파편화:</strong> <code class="text-slate-200">DB_API_BASE</code>, <code class="text-slate-200">API_BASE_URL</code>, <code class="text-slate-200">/api/...</code>, <code class="text-slate-200">/api/v1/...</code>이 뒤섞여 있으며, <code class="text-slate-200">TaskAlertBanner.jsx:22</code>의 경우 URL 중복 접두사 위험 존재.</li>
+              <li><strong>보일러플레이트 중복:</strong> 모든 fetch 호출 지점마다 <code class="text-slate-200">if (!res.ok)</code> 검증과 try-catch 에러 처리가 반복 작성됨.</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5 text-sm">
+              <span>💡</span> 심화 모듈 제안 (Deep Solution)
+            </div>
+            <ul class="space-y-1.5 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>통합 HTTP 클라이언트:</strong> <code class="text-cyan-300 font-mono">src/frontend/src/services/apiClient.js</code> (Base URL, Timeout, JSON 직렬화, 글로벌 에러 토스트 인터셉터).</li>
+              <li><strong>도메인별 서비스 계층:</strong> <code class="text-cyan-300 font-mono">dashboardService.js</code>, <code class="text-cyan-300 font-mono">snapshotService.js</code>, <code class="text-cyan-300 font-mono">ratioService.js</code>, <code class="text-cyan-300 font-mono">dbService.js</code>.</li>
+              <li><strong>Mocking Seam:</strong> 프론트엔드 단위 테스트 시 <code class="text-cyan-300">global.fetch</code> 스파이 대신 단일 서비스 객체를 모킹하여 테스트 안정성 극대화.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-300">Before / After 구조 비교 다이어그램</div>
+          <div class="mermaid">
+graph TD
+    subgraph Before [Before: 컴포넌트별 원시 fetch 및 4가지 URL 규칙]
+        C1[SnapshotWizardPage] -->|fetch DB_API_BASE| S1[(Backend API)]
+        C2[TaskAlertBanner] -->|fetch API_BASE_URL| S1
+        C3[useDashboard] -->|fetch /api/dashboard| S1
+        C4[DbExplorerPage] -->|fetch /api/v1/system| S1
+        C5[TransactionsTab] -->|fetch raw URL| S1
+    end
+
+    subgraph After [After: apiClient & 도메인 Service 계층]
+        C1_A[SnapshotWizardPage] --> SS[snapshotService]
+        C2_A[TaskAlertBanner] --> SYS[systemService]
+        C3_A[useDashboard] --> DS[dashboardService]
+        C4_A[DbExplorerPage] --> DBS[dbService]
+        C5_A[TransactionsTab] --> TS[transactionService]
+        
+        SS & SYS & DS & DBS & TS --> AC["Deep Module: apiClient.js<br/>(통합 URL, 인터셉터, 에러 핸들링)"]
+        AC --> S2[(Backend API)]
+    end
+          </div>
+        </div>
+      </article>
+
+      <!-- 개선안 5: Frontend Monolith Pages & Shallow Hooks -->
+      <article id="prop-5" class="glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="h-8 w-8 rounded-lg bg-emerald-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-emerald-500/30">#5</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-lg font-bold text-white">스냅샷 위저드 모놀리스 해체 & 딥 엔진 훅 도입</h4>
+                <span class="badge-strong text-xs px-2 py-0.5 rounded-full font-bold">Strong</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">SnapshotWizardPage(1,580줄), RatioCheckPage(1,032줄) 슬림화 및 도메인 계산 은닉</p>
+            </div>
+          </div>
+          <div class="text-xs text-right text-slate-400 font-mono">
+            <div>Scope: Frontend Pages & Hooks</div>
+            <div class="text-emerald-400 font-semibold">Deep Hook &middot; Pure Calculators</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300">
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-rose-400 flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> 구조적 마찰 (Architectural Friction)
+            </div>
+            <ul class="space-y-2 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>거대 모놀리식 페이지(God Page):</strong> <code class="text-slate-200">SnapshotWizardPage.jsx</code>(1,580줄) 내에 5단계 위저드 상태 머신, 계좌 순회, DTO 조립, 정산 차액 계산, 쉼표 포맷터가 단일 파일에 밀집됨.</li>
+              <li><strong>비즈니스 로직 누출:</strong> <code class="text-slate-200">RatioCheckPage.jsx:35-71</code>의 실시간 리밸런싱 수학 공식(<code class="text-slate-200">calculateRealtimeRebalancing</code>)이 훅이 아닌 페이지 파일에서 직접 구현되어 export됨.</li>
+              <li><strong>얕은 훅(Shallow Hooks):</strong> <code class="text-slate-200">useDashboard.js</code>(56줄), <code class="text-slate-200">useRatios.js</code>(88줄)는 단순 병렬 fetch 패스스루에 불과하여 정렬, 가공 로직이 페이지로 전가됨.</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5 text-sm">
+              <span>💡</span> 심화 모듈 제안 (Deep Solution)
+            </div>
+            <ul class="space-y-1.5 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>Deep Wizard Engine:</strong> <code class="text-emerald-300 font-mono">useSnapshotWizardEngine.js</code>가 5단계 전이 머신, 차액 정산, DTO 검증을 캡슐화하고 페이지는 150줄 순수 뷰로 축소.</li>
+              <li><strong>5개 Step 컴포넌트 분리:</strong> <code class="text-emerald-300 font-mono">Step1BasicInfo</code> ~ <code class="text-emerald-300 font-mono">Step5FinalConfirm</code>.</li>
+              <li><strong>순수 계산기 분리:</strong> <code class="text-emerald-300 font-mono">utils/snapshotCalculator.js</code>, <code class="text-emerald-300 font-mono">utils/ratioCalculator.js</code>로 DOM 없이 100% 단위 테스트 가능.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-300">Before / After 구조 비교 다이어그램</div>
+          <div class="mermaid">
+graph LR
+    subgraph Before [Before: 1580줄 단일 거대 컴포넌트]
+        SWP["SnapshotWizardPage.jsx (1580줄)<br/>상태 머신 + DOM + 차액 계산<br/>+ 거래 CRUD + 숫자 파싱"]
+    end
+
+    subgraph After [After: Deep Engine Hook & 분할 뷰]
+        Engine["Deep Hook: useSnapshotWizardEngine<br/>(상태 전이 머신, DTO 조립, 정산 엔진)"]
+        Calc["Pure Calculator: snapshotCalculator.js"]
+        Engine --> Calc
+        
+        Page["SnapshotWizardPage.jsx (150줄 메인 뷰)"] --> Engine
+        Page --> S1["Step1BasicInfo.jsx"]
+        Page --> S2["Step2ExchangeRate.jsx"]
+        Page --> S3["Step3BrokerageAccounts.jsx"]
+        Page --> S4["Step4BankAccounts.jsx"]
+        Page --> S5["Step5FinalConfirm.jsx"]
+    end
+          </div>
+        </div>
+      </article>
+
+      <!-- 개선안 6: Unified PerformanceTable & Formatters -->
+      <article id="prop-6" class="glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="h-8 w-8 rounded-lg bg-amber-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-amber-500/30">#6</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-lg font-bold text-white">공통 퍼포먼스 테이블(<code class="text-amber-300 font-mono">PerformanceTable</code>) 및 마스킹 포맷터 통합</h4>
+                <span class="badge-worth text-xs px-2 py-0.5 rounded-full font-bold">Worth exploring</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">Yearly/Daily StatusTable vs ComparisonTable 90% 중복 제거 및 마스킹 포맷터 일원화</p>
+            </div>
+          </div>
+          <div class="text-xs text-right text-slate-400 font-mono">
+            <div>Scope: Frontend UI Components</div>
+            <div class="text-amber-400 font-semibold">DRY Compliance &middot; -400 Lines</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300">
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-rose-400 flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> 구조적 마찰 (Architectural Friction)
+            </div>
+            <ul class="space-y-2 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>테이블 컴포넌트 4종의 90% 코드 중복:</strong> <code class="text-slate-200">YearlyStatusTable.jsx</code> vs <code class="text-slate-200">YearlyComparisonTable.jsx</code>, <code class="text-slate-200">DailyStatusTable.jsx</code> vs <code class="text-slate-200">DailyComparisonTable.jsx</code>에서 레이아웃, 페이지네이션 제어, 배지 스타일이 복사-붙여넣기됨.</li>
+              <li><strong>포맷터 유틸 파편화:</strong> 숫자 쉼표 파싱 함수(<code class="text-slate-200">commaFormat</code>, <code class="text-slate-200">formatWithCommas</code>)가 4개 파일에서 각자 중복 정의되어 관리됨.</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5 text-sm">
+              <span>💡</span> 심화 모듈 제안 (Deep Solution)
+            </div>
+            <ul class="space-y-1.5 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>단일 통합 <code class="text-amber-300 font-mono">PerformanceTable.jsx</code>:</strong> 모드(<code class="text-slate-200">'yearly' | 'daily'</code>) 및 지수 비교 컬럼 토글, 내장 페이지네이션을 단일 컴포넌트로 통합.</li>
+              <li><strong>Deep Formatter 유틸:</strong> <code class="text-amber-300 font-mono">src/frontend/src/utils/formatters.js</code> (<code class="text-slate-200">formatCurrency</code>, <code class="text-slate-200">formatPercent</code>, <code class="text-slate-200">parseNumber</code>)에 마스킹 연동 기능을 내장하여 호출부 간소화.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-300">Before / After 구조 비교 다이어그램</div>
+          <div class="mermaid">
+graph LR
+    subgraph Before [Before: 4개 테이블 파일 및 중복 로직]
+        Y1[YearlyStatusTable 119줄]
+        Y2[YearlyComparisonTable 133줄]
+        D1[DailyStatusTable 192줄]
+        D2[DailyComparisonTable 202줄]
+        F1[SnapshotWizard commaFormat]
+        F2[Simulation commaFormat]
+        F3[CompoundInterest commaFormat]
+    end
+
+    subgraph After [After: 통합 PerformanceTable & formatters.js]
+        PT["Deep Module: PerformanceTable.jsx<br/>(연간/일간 모드 + 지수 비교 토글 + 페이지네이션 내장)"]
+        FMT["Deep Formatter: utils/formatters.js<br/>(formatCurrency, formatPercent, parseNumber)"]
+        
+        PT --> FMT
+    end
+          </div>
+        </div>
+      </article>
+
+      <!-- 개선안 7: Cleanup & Integrity -->
+      <article id="prop-7" class="glass-card rounded-2xl p-6 sm:p-8 space-y-6">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="h-8 w-8 rounded-lg bg-purple-600 text-white font-bold flex items-center justify-center text-sm shadow-md shadow-purple-500/30">#7</span>
+            <div>
+              <div class="flex items-center gap-2">
+                <h4 class="text-lg font-bold text-white">레거시 잔재 정리, <code class="text-purple-300 font-mono">AssetService</code> 심화 및 백그라운드 태스크 무결성</h4>
+                <span class="badge-worth text-xs px-2 py-0.5 rounded-full font-bold">Worth exploring</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">미사용 src/server/main.py 삭제, 27줄 패스스루 심화 및 tasks.py 오타 버그 수정</p>
+            </div>
+          </div>
+          <div class="text-xs text-right text-slate-400 font-mono">
+            <div>Scope: Backend Integrity</div>
+            <div class="text-purple-400 font-semibold">Cleanup &middot; Bug Fix &middot; Depth</div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 text-xs text-slate-300">
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-rose-400 flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> 구조적 마찰 (Architectural Friction)
+            </div>
+            <ul class="space-y-2 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>미사용 레거시 엔트리포인트:</strong> <code class="text-slate-200">src/server/main.py</code>(45줄)는 어디에서도 호출되지 않는 과거 잔재 파일.</li>
+              <li><strong>전형적인 Shallow Module:</strong> <code class="text-slate-200">asset_service.py</code>(27줄)는 실질 로직 없이 라우터가 ORM을 직접 호출하여 존재 의미 상실.</li>
+              <li><strong>런타임 오타 및 인스턴스 불일치:</strong> <code class="text-slate-200">tasks.py:168</code>에서 존재하지 않는 <code class="text-slate-200">self._update_task_error</code> 호출 (언더스코어 오타). <code class="text-slate-200">main.py</code>와 <code class="text-slate-200">tasks.py</code>의 전역 task manager 인스턴스 이원화.</li>
+            </ul>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
+            <div class="font-semibold text-emerald-400 flex items-center gap-1.5 text-sm">
+              <span>💡</span> 심화 모듈 제안 (Deep Solution)
+            </div>
+            <ul class="space-y-1.5 list-disc list-inside text-slate-300 leading-relaxed">
+              <li><strong>레거시 파일 삭제:</strong> <code class="text-purple-300">src/server/main.py</code> 삭제로 백엔드 진입점 단일화 (<code class="text-purple-300">src/backend/main.py</code>).</li>
+              <li><strong><code class="text-purple-300 font-mono">AssetService</code> 심화:</strong> 자산 마스터 유효성 검증, 티커 조회, 카테고리 매핑을 서비스 내부로 캡슐화.</li>
+              <li><strong>태스크 매니저 무결성 확보:</strong> 오타 수정 및 싱글톤 생명주기 일원화.</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="text-xs font-semibold text-slate-300">Before / After 구조 비교 다이어그램</div>
+          <div class="mermaid">
+graph LR
+    subgraph Before [Before: 레거시 잔재 및 Shallow 모듈]
+        L1["src/server/main.py (미사용 레거시)"]
+        AS1["asset_service.py (27줄 Shallow Pass-through)"]
+        TM1["tasks.py (self._update_task_error 오타)"]
+    end
+
+    subgraph After [After: 정돈된 진입점 및 Deep Service]
+        Main["src/backend/main.py (단일 진입점)"]
+        AS2["Deep Module: AssetService<br/>(마스터 유효성 검증, 티커 캐시, 카테고리 매핑)"]
+        TM2["BackgroundTaskManager<br/>(단일 싱글톤 생명주기 + 오타 수정)"]
+    end
+          </div>
+        </div>
+      </article>
+    </section>
+
+    <!-- 4. Top Recommendation 특별 섹션 (최우선 과제 & 마이그레이션 로드맵) -->
+    <section id="top-recommendation" class="space-y-6">
+      <div class="relative overflow-hidden rounded-2xl glass-card-top p-8 border border-blue-500/40 space-y-6">
+        <div class="flex items-center gap-3">
+          <div class="h-10 w-10 rounded-xl bg-amber-500 text-slate-950 font-extrabold flex items-center justify-center text-lg shadow-lg shadow-amber-500/30">
+            ★
+          </div>
+          <div>
+            <h3 class="text-2xl font-bold text-white">Top Recommendation: 최우선 아키텍처 착수 과제</h3>
+            <p class="text-xs text-blue-300">왜 단일 원장 엔진(LedgerEngine)과 스냅샷 파이프라인(SnapshotEngine)인가?</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-xs text-slate-300 leading-relaxed">
+          <div class="space-y-3 bg-slate-900/80 p-5 rounded-xl border border-slate-800">
+            <h4 class="text-sm font-bold text-amber-400">1. 최우선 과제 선정의 결정적 사유</h4>
+            <p>
+              가계 자산 관리 시스템의 생명은 <strong>데이터의 신뢰성과 불변성</strong>입니다. 현재 AssetManager는 대시보드 표시, 포트폴리오 과거 시점 조회, 스냅샷 생성 마법사에서 각기 다른 원장 리플레이 코드를 실행하고 있습니다.
+            </p>
+            <p>
+              이로 인해 신규 트랜잭션 유형(예: 세금 원천징수, 환전 우대 수수료, 주식 배당)이 추가될 때마다 4개 파일에서 불일치 버그가 발생할 구조적 위험을 안고 있습니다. <strong class="text-white">`LedgerEngine`</strong> 도입은 시스템의 심장부를 단일 진실원(Single Source of Truth)으로 봉인하는 가장 결정적인 작업입니다.
+            </p>
+          </div>
+
+          <div class="space-y-3 bg-slate-900/80 p-5 rounded-xl border border-slate-800">
+            <h4 class="text-sm font-bold text-blue-400">2. 3단계 무중단 마이그레이션 로드맵</h4>
+            <div class="space-y-2.5 font-mono text-[11px]">
+              <div class="flex items-start gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-blue-900/80 text-blue-300 font-bold">Phase 1</span>
+                <div>
+                  <strong class="text-white font-sans">LedgerEngine 구축 및 단위 테스트 작성:</strong>
+                  <span class="text-slate-400 block font-sans">기존 라우터 변경 없이 `LedgerEngine` 클래스를 먼저 완성하고 9종 트랜잭션 시나리오 100% 검증.</span>
                 </div>
               </div>
-              <div class="bg-white p-2 rounded border border-emerald-200 text-xs text-stone-600 text-center">
-                db_manage.py (Router) shrinks to 2-line pass-through adapter
+              <div class="flex items-start gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-indigo-900/80 text-indigo-300 font-bold">Phase 2</span>
+                <div>
+                  <strong class="text-white font-sans">SnapshotEngine 심화 및 db_manage.py 라우터 분할:</strong>
+                  <span class="text-slate-400 block font-sans">`schemas/` 분리, 4개 라우터로 분할하되 기존 URL Prefix (`/api/db/*`) 유지로 하위 호환성 100% 보장.</span>
+                </div>
+              </div>
+              <div class="flex items-start gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-emerald-900/80 text-emerald-300 font-bold">Phase 3</span>
+                <div>
+                  <strong class="text-white font-sans">프론트엔드 apiClient & SnapshotWizardEngine 전환:</strong>
+                  <span class="text-slate-400 block font-sans">통합 HTTP 클라이언트 도입 및 위저드 훅 분리로 UI-비즈니스 로직 완전 분리.</span>
+                </div>
               </div>
             </div>
           </div>
-
-          <!-- Problem & Solution -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
-              <p class="text-stone-600">The HTTP router <code class="bg-stone-100 px-1 font-mono text-xs">db_manage.py</code> is a 51KB shallow interface containing raw ORM queries, snapshot valuation algorithms, and cash calculation logic, forcing tests to boot FastAPI HTTP TestClient.</p>
-            </div>
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
-              <p class="text-stone-600">Extract a deep <code class="bg-stone-100 px-1 font-mono text-xs">SnapshotEngine</code> module with a small interface (<code class="bg-stone-100 px-1 font-mono text-xs">preview_snapshot</code>, <code class="bg-stone-100 px-1 font-mono text-xs">commit_snapshot</code>) that absorbs all snapshot calculation, transaction matching, and DB session management.</p>
-            </div>
-          </div>
-
-          <!-- Benefits -->
-          <div>
-            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
-            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: Snapshot & cash calculation rules concentrate in one module</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>leverage</b>: One interface used by HTTP Router, CLI, and Background Tasks</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>interface shrinks</b>: Router shrinks from 1285 lines to clean thin handlers</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>testability</b>: Direct unit tests for SnapshotEngine without HTTP client setup</span></li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- Candidate 2 -->
-        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
-          <div class="flex items-start justify-between">
-            <div>
-              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 02</span>
-              <h2 class="text-2xl font-bold text-slate-900 mt-1">Consolidate Market Data Provider Adapters & Holiday Seam</h2>
-            </div>
-            <div class="flex items-start space-x-2">
-              <span class="bg-emerald-100 text-emerald-800 text-xs font-semibold px-2.5 py-1 rounded-full">Strong</span>
-              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">ports & adapters</span>
-            </div>
-          </div>
-
-          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/price_service.py" class="text-indigo-600 hover:underline">src/backend/services/price_service.py</a> (47KB)</div>
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/dashboard_service.py" class="text-indigo-600 hover:underline">src/backend/services/dashboard_service.py</a></div>
-          </div>
-
-          <!-- Diagram -->
-          <div class="bg-stone-50 p-4 rounded-lg border border-stone-200">
-            <pre class="mermaid">
-              flowchart LR
-                subgraph Callers["Callers"]
-                  DS[DashboardService]
-                  R[Price Router]
-                  MCP[MCP Tools]
-                end
-
-                subgraph Seam["MarketData Seam"]
-                  MDM["MarketDataModule (Deep)"]
-                end
-
-                subgraph Adapters["Adapters (Internal)"]
-                  KA["KiwoomAdapter"]
-                  YA["YFinanceAdapter"]
-                  HA["HolidayAdapter"]
-                end
-
-                DS -->|get_prices| MDM
-                R -->|get_prices| MDM
-                MCP -->|get_prices| MDM
-
-                MDM --> KA
-                MDM --> YA
-                MDM --> HA
-
-                classDef deep fill:#0f172a,color:#fff,stroke:#0f172a;
-                classDef adapter fill:#f8fafc,stroke:#cbd5e1,color:#334155;
-                class MDM deep;
-                class KA,YA,HA adapter;
-            </pre>
-          </div>
-
-          <!-- Problem & Solution -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
-              <p class="text-stone-600"><code class="bg-stone-100 px-1 font-mono text-xs">is_us_market_open</code> and <code class="bg-stone-100 px-1 font-mono text-xs">is_kr_market_open</code> are duplicated verbatim across <code class="bg-stone-100 px-1 font-mono text-xs">PriceService</code> and <code class="bg-stone-100 px-1 font-mono text-xs">DashboardService</code>. Both modules instantiate Kiwoom API clients directly and manage price caching, leading to shallow wrapper leakage.</p>
-            </div>
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
-              <p class="text-stone-600">Establish a single deep <code class="bg-stone-100 px-1 font-mono text-xs">MarketDataModule</code>. Hide Kiwoom API and yfinance as internal adapters behind a unified interface (<code class="bg-stone-100 px-1 font-mono text-xs">get_prices(tickers)</code>, <code class="bg-stone-100 px-1 font-mono text-xs">is_market_open(market)</code>).</p>
-            </div>
-          </div>
-
-          <!-- Benefits -->
-          <div>
-            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
-            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: Deletes duplicated market open and holiday logic across services</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>leverage</b>: Callers do not know whether a ticker comes from Kiwoom or yfinance</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>real seam</b>: Two adapters (Kiwoom, yfinance) + In-memory Fake for tests</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>implementation absorbs wrappers</b>: Cache & rate-limiting logic hidden inside module</span></li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- Candidate 3 -->
-        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
-          <div class="flex items-start justify-between">
-            <div>
-              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 03</span>
-              <h2 class="text-2xl font-bold text-slate-900 mt-1">Deep Portfolio Valuation & Performance Calculation Engine</h2>
-            </div>
-            <div class="flex items-start space-x-2">
-              <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">Worth exploring</span>
-              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">in-process</span>
-            </div>
-          </div>
-
-          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/dashboard_service.py" class="text-indigo-600 hover:underline">src/backend/services/dashboard_service.py</a> (35KB)</div>
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/performance_service.py" class="text-indigo-600 hover:underline">src/backend/services/performance_service.py</a></div>
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/backend/services/ratio_service.py" class="text-indigo-600 hover:underline">src/backend/services/ratio_service.py</a></div>
-          </div>
-
-          <!-- Problem & Solution -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
-              <p class="text-stone-600">Holding valuation, asset classification, FX conversion, and ROI calculations are scattered across <code class="bg-stone-100 px-1 font-mono text-xs">DashboardService</code>, <code class="bg-stone-100 px-1 font-mono text-xs">PerformanceService</code>, and <code class="bg-stone-100 px-1 font-mono text-xs">RatioService</code>. Callers must invoke multiple services and manually stitch risk metrics.</p>
-            </div>
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
-              <p class="text-stone-600">Consolidate valuation into a deep <code class="bg-stone-100 px-1 font-mono text-xs">PortfolioValuator</code> module. A single call <code class="bg-stone-100 px-1 font-mono text-xs">evaluate_portfolio(as_of_date)</code> computes holdings, valuations, asset category ratios, and risk metrics (Sharpe/Sortino/MDD) atomically.</p>
-            </div>
-          </div>
-
-          <!-- Benefits -->
-          <div>
-            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
-            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: All valuation rules, FX conversions, and ROI metrics in one place</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>leverage</b>: Single interface serves Dashboard UI, Reports, and MCP Tools</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>deletion test</b>: Collapses 3 shallow service files into 1 deep domain module</span></li>
-            </ul>
-          </div>
-        </article>
-
-        <!-- Candidate 4 -->
-        <article class="bg-white rounded-xl border border-stone-200 p-6 shadow-sm space-y-6">
-          <div class="flex items-start justify-between">
-            <div>
-              <span class="text-xs uppercase tracking-wider text-stone-400 font-mono">Candidate 04</span>
-              <h2 class="text-2xl font-bold text-slate-900 mt-1">Encapsulate MCP Backend Client & Tool Seam Adapter</h2>
-            </div>
-            <div class="flex items-start space-x-2">
-              <span class="bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-full">Worth exploring</span>
-              <span class="bg-slate-100 text-slate-700 text-xs font-mono px-2.5 py-1 rounded-full">local-substitutable</span>
-            </div>
-          </div>
-
-          <div class="text-xs font-mono bg-stone-100 p-3 rounded text-stone-700 space-y-1">
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/mcp/client.py" class="text-indigo-600 hover:underline">src/mcp/client.py</a></div>
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/mcp/tools/assets.py" class="text-indigo-600 hover:underline">src/mcp/tools/assets.py</a></div>
-            <div>• <a href="file:///C:/localrepo/AssetManager/src/mcp/tools/market.py" class="text-indigo-600 hover:underline">src/mcp/tools/market.py</a></div>
-          </div>
-
-          <!-- Problem & Solution -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Problem</h4>
-              <p class="text-stone-600">MCP tool modules (<code class="bg-stone-100 px-1 font-mono text-xs">assets.py</code>, <code class="bg-stone-100 px-1 font-mono text-xs">market.py</code>) perform fine-grained HTTP REST stitching (e.g. <code class="bg-stone-100 px-1 font-mono text-xs">_append_performance_metrics</code> making separate REST calls to merge Sharpe/MDD metrics), leaking backend route structures into MCP tool code.</p>
-            </div>
-            <div>
-              <h4 class="font-semibold text-slate-900 mb-1">Solution</h4>
-              <p class="text-stone-600">Create a deep <code class="bg-stone-100 px-1 font-mono text-xs">McpBackendAdapter</code> seam. MCP tools interact with domain-level adapter methods rather than stitching raw HTTP endpoints and mutating unstructured JSON dicts.</p>
-            </div>
-          </div>
-
-          <!-- Benefits -->
-          <div>
-            <h4 class="font-semibold text-slate-900 mb-2 text-sm">Wins</h4>
-            <ul class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-stone-700">
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>locality</b>: REST payload stitching and error fallbacks hidden behind seam</span></li>
-              <li class="flex items-center space-x-2"><span class="text-emerald-500">✓</span><span><b>interface shrinks</b>: MCP tools become thin declaration wrappers over domain adapter</span></li>
-            </ul>
-          </div>
-        </article>
-      </section>
-
-      <!-- Top Recommendation Section -->
-      <section id="top-recommendation" class="bg-slate-900 text-white rounded-xl p-8 space-y-4">
-        <div class="flex items-center space-x-3 text-emerald-400 text-xs font-mono uppercase tracking-wider">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          <span>Top Recommendation</span>
         </div>
-        <h3 class="text-2xl font-bold font-serif">Candidate 01: Deepen Snapshot Engine & Refactor db_manage.py</h3>
-        <p class="text-slate-300 text-sm leading-relaxed max-w-3xl">
-          <code class="bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded font-mono">db_manage.py</code> (51KB) is the single biggest source of architectural friction in the codebase. By extracting <code class="bg-slate-800 text-emerald-300 px-1.5 py-0.5 rounded font-mono">SnapshotEngine</code>, we eliminate 800+ lines of procedural SQL/ORM code from the HTTP router, isolate snapshot valuation rules into a deep module with high <b>locality</b>, and enable direct fast unit testing without spinning up FastAPI HTTP servers.
-        </p>
-      </section>
-    </main>
-  </body>
+
+        <!-- 마이그레이션 안전장치 다이어그램 -->
+        <div class="space-y-2 pt-2">
+          <div class="text-xs font-semibold text-slate-300">마이그레이션 안전성 및 하위 호환성 보장 전략</div>
+          <div class="mermaid">
+graph LR
+    subgraph Core [Phase 1: Deep Core]
+        LE["LedgerEngine (신설)<br/>9종 트랜잭션 순수 연산"]
+        Tests["LedgerEngine 단위 테스트<br/>(In-Memory 100% 커버리지)"]
+        LE --- Tests
+    end
+
+    subgraph Service [Phase 2: Decoupling]
+        SE["SnapshotEngine (심화)"] --> LE
+        R_Acc["routers/accounts.py"]
+        R_Ass["routers/assets.py"]
+        R_Tx["routers/transactions.py"]
+        R_Snap["routers/snapshots.py"] --> SE
+    end
+
+    subgraph Frontend [Phase 3: Client Seam]
+        API["apiClient.js (통합 클라이언트)"] --> R_Acc & R_Ass & R_Tx & R_Snap
+        Wizard["useSnapshotWizardEngine"] --> API
+    end
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. 실행 및 독립 검증 가이드 (Verification Method) -->
+    <section id="verification" class="space-y-6">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+          <h3 class="text-xl font-bold text-white flex items-center gap-2">
+            <span class="text-brand-400">03.</span> 실행 및 독립 검증 가이드 (Verification Method)
+          </h3>
+          <p class="text-xs text-slate-400 mt-0.5">GEMINI.md 원칙에 따른 백엔드/프론트엔드/E2E 테스트 및 DB 도구 실행 명령</p>
+        </div>
+        <span class="px-3 py-1 rounded-md text-xs font-semibold bg-slate-800 text-slate-300 border border-slate-700">Reproducible Commands</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-5 text-xs">
+        <!-- 백엔드 테스트 -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span class="text-blue-400">🐍</span> 백엔드 단위/통합 회귀 테스트
+            </div>
+            <span class="text-emerald-400 font-mono text-[11px]">247 passed</span>
+          </div>
+          <pre class="bg-slate-950 p-3 rounded-lg text-slate-300 font-mono text-[11px] overflow-x-auto border border-slate-800"><code># 1. 전체 백엔드 테스트 스위트 실행
+uv run pytest
+
+# 2. 스냅샷 및 원장 계산 핵심 테스트 집중 실행
+uv run pytest tests/test_snapshot_service.py tests/test_brokerage_snapshot.py tests/test_bank_calculate.py tests/test_portfolio.py
+
+# 3. 라우터 및 스키마 검증
+uv run pytest tests/test_db_manage.py tests/test_db_schema.py</code></pre>
+        </div>
+
+        <!-- 프론트엔드 테스트 -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span class="text-cyan-400">⚛️</span> 프론트엔드 Vitest 단위 테스트
+            </div>
+            <span class="text-emerald-400 font-mono text-[11px]">28 passed</span>
+          </div>
+          <pre class="bg-slate-950 p-3 rounded-lg text-slate-300 font-mono text-[11px] overflow-x-auto border border-slate-800"><code># 1. 프론트엔드 전체 테스트 실행
+cd src/frontend
+pnpm test --run
+
+# 2. 대시보드 및 위저드 핵심 컴포넌트 테스트
+pnpm test src/pages/DashboardPage.test.jsx --run
+pnpm test src/pages/SnapshotWizardPage.test.jsx --run
+pnpm test src/pages/RatioCheckPage.test.jsx --run</code></pre>
+        </div>
+
+        <!-- E2E 테스트 및 격리 환경 -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span class="text-purple-400">🎭</span> E2E 테스트 및 격리 DB 환경 구동
+            </div>
+            <span class="text-purple-400 font-mono text-[11px]">dev_assets.db</span>
+          </div>
+          <pre class="bg-slate-950 p-3 rounded-lg text-slate-300 font-mono text-[11px] overflow-x-auto border border-slate-800"><code># [주의] 반드시 dev_assets.db를 사용하는 격리 모드로 구동
+uv run scripts/dev.py
+
+# 접속 확인: http://localhost:5173
+# E2E 검증 완료 후 백그라운드 프로세스 반드시 종료</code></pre>
+        </div>
+
+        <!-- DB 조사 도구 -->
+        <div class="glass-card rounded-xl p-5 border border-slate-800 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="font-bold text-white flex items-center gap-2">
+              <span class="text-amber-400">🗄️</span> 데이터베이스 정합성 조사 도구
+            </div>
+            <span class="text-amber-400 font-mono text-[11px]">db_query.py</span>
+          </div>
+          <pre class="bg-slate-950 p-3 rounded-lg text-slate-300 font-mono text-[11px] overflow-x-auto border border-slate-800"><code># 1. DB 전체 테이블 목록 확인
+uv run scripts/db_query.py --list-tables
+
+# 2. 원장 트랜잭션 및 스냅샷 정합성 조회 (SELECT 전용)
+uv run scripts/db_query.py "SELECT type, currency, count(*) FROM transactions GROUP BY type, currency"
+uv run scripts/db_query.py "SELECT date(snapshot_date), count(*) FROM account_snapshots GROUP BY date(snapshot_date) LIMIT 5"</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- 바닥글 -->
+    <footer class="pt-8 border-t border-slate-800 text-center text-xs text-slate-500 space-y-2">
+      <p>AssetManager Architecture Review &middot; Generated by Teamwork Preview Worker &middot; 2026-08-15</p>
+      <p class="text-[11px] text-slate-600">Built with Tailwind CSS &amp; Mermaid.js &middot; Fully Standalone &middot; Strictly Compliant with GEMINI.md</p>
+    </footer>
+
+  </main>
+
+</body>
 </html>

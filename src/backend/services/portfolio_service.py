@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from src.backend.models import Transaction, Asset, ExchangeRate, HistoricalPrice
 from src.backend.services.price_service import price_service
+from src.backend.services.ledger_engine import LedgerEngine
 
 async def get_portfolio_status(db: Session, date_str: Optional[str] = None) -> Dict[str, Any]:
     """지정된 과거/현재 일자의 자산 보유 현황(예수금 및 보유 주식 목록)을 정확하게 조회합니다.
@@ -21,57 +22,14 @@ async def get_portfolio_status(db: Session, date_str: Optional[str] = None) -> D
     else:
         target_date = datetime.date.today()
 
-    # 2. 기준일 이하의 모든 트랜잭션을 시간 순서로 가져옴
-    transactions = (
-        db.query(Transaction)
-        .filter(Transaction.transaction_date <= target_date)
-        .order_by(Transaction.transaction_date.asc(), Transaction.id.asc())
-        .all()
-    )
+    # 2. LedgerEngine을 통해 특정 시점의 보유 주식 수량 및 예수금 잔액 일괄 조회
+    state = LedgerEngine.get_positions(db, as_of=target_date)
+    active_holdings = state.holdings
+    cash_balances = state.cash_balances
 
-    # 3. 거래원장을 순차적으로 시뮬레이션하여 보유량(수량) 및 예수금(KRW, USD) 계산
-    holdings_qty = {}  # ticker -> quantity
-    cash_balances = {"KRW": 0.0, "USD": 0.0}
-
-    # 자산 ID에 따른 마스터 매핑 구축
     assets = db.query(Asset).all()
-    asset_map = {asset.id: asset for asset in assets}
 
-    for tx in transactions:
-        asset = asset_map.get(tx.asset_id)
-        if not asset:
-            continue
-
-        # 예수금 자산 변동 처리 (KRW, USD)
-        if tx.type == 'EXCHANGE':
-            if asset.ticker in cash_balances:
-                cash_balances[asset.ticker] -= tx.total_amount
-            if tx.target_asset_id:
-                target_asset = asset_map.get(tx.target_asset_id)
-                if target_asset and target_asset.ticker in cash_balances:
-                    cash_balances[target_asset.ticker] += tx.quantity
-        elif tx.currency in cash_balances:
-            if tx.type in ['DEPOSIT', 'INTEREST', 'CASH_ADJUSTMENT']:
-                cash_balances[tx.currency] += tx.total_amount
-            elif tx.type == 'INITIAL_BALANCE' and asset.ticker in ['KRW', 'USD']:
-                cash_balances[tx.currency] += tx.total_amount
-            elif tx.type in ['WITHDRAW', 'TAX', 'BUY']:
-                cash_balances[tx.currency] -= tx.total_amount
-            elif tx.type == 'SELL':
-                cash_balances[tx.currency] += tx.total_amount
-
-        # 주식 등 일반 자산 수량 변동 처리
-        if asset.ticker not in ['KRW', 'USD']:
-            ticker = asset.ticker
-            if tx.type in ['BUY', 'DEPOSIT', 'INITIAL_BALANCE', 'CASH_ADJUSTMENT']:
-                holdings_qty[ticker] = holdings_qty.get(ticker, 0.0) + tx.quantity
-            elif tx.type in ['SELL', 'WITHDRAW', 'TAX']:
-                holdings_qty[ticker] = holdings_qty.get(ticker, 0.0) - tx.quantity
-
-    # 수량이 0보다 큰 종목만 최종 보유 종목으로 필터링
-    active_holdings = {ticker: qty for ticker, qty in holdings_qty.items() if qty > 0.0}
-
-    # 4. 기준일 기준의 최근 환율 조회 (1차 폴백: 기준일 이하의 가장 최근 환율)
+    # 3. 기준일 기준의 최근 환율 조회 (1차 폴백: 기준일 이하의 가장 최근 환율)
     rate_record = (
         db.query(ExchangeRate)
         .filter(ExchangeRate.date <= target_date)
