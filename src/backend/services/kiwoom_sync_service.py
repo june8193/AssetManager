@@ -111,83 +111,50 @@ class KiwoomTransactionService:
         today_str = datetime.date.today().strftime("%Y%m%d")
         start_date_str = (datetime.date.today() - datetime.timedelta(days=days - 1)).strftime("%Y%m%d")
 
-        for account in accounts:
-            if isinstance(self.auth_manager.accounts_config, dict) and self.auth_manager.accounts_config:
-                if account.name not in self.auth_manager.accounts_config:
-                    logger.info(f"계좌 {account.name}은(는) settings.toml에 설정 정보가 없어 자동동기화 대상에서 제외(스킵)합니다.")
+        async with httpx.AsyncClient() as http_client:
+            for account in accounts:
+                if isinstance(self.auth_manager.accounts_config, dict) and self.auth_manager.accounts_config:
+                    if account.name not in self.auth_manager.accounts_config:
+                        logger.info(f"계좌 {account.name}은(는) settings.toml에 설정 정보가 없어 자동동기화 대상에서 제외(스킵)합니다.")
+                        continue
+
+                logger.info(f"계좌 동기화 시작: {account.name} (ID: {account.id})")
+                try:
+                    # 해당 계좌에 대응하는 토큰 발급
+                    token = await self.auth_manager.get_valid_token(account.name)
+                except Exception as e:
+                    logger.error(f"계좌 {account.name} 인증 토큰 획득 실패 (동기화 생략): {e}")
+                    failed_accounts_list.append({
+                        "account_name": account.name,
+                        "error": str(e)
+                    })
                     continue
 
-            logger.info(f"계좌 동기화 시작: {account.name} (ID: {account.id})")
-            try:
-                # 해당 계좌에 대응하는 토큰 발급
-                token = await self.auth_manager.get_valid_token(account.name)
-            except Exception as e:
-                logger.error(f"계좌 {account.name} 인증 토큰 획득 실패 (동기화 생략): {e}")
-                failed_accounts_list.append({
-                    "account_name": account.name,
-                    "error": str(e)
-                })
-                continue
+                raw_transactions = []
 
-            raw_transactions = []
+                try:
+                    # ... 데이터 수집 및 DB 저장 로직 ...
+                    if days == 1:
+                        # 당일 동기화 (체결요청 + 당일 배당금)
+                        domestic_executions = await self._fetch_domestic_executions(token, client=http_client)
+                        for exe in domestic_executions:
+                            ext_id = exe.get("ord_no") or exe.get("cntr_no")
+                            tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
+                            raw_transactions.append({
+                                "date": datetime.date.today(),
+                                "traded_at": _parse_traded_at(datetime.date.today(), tm_str),
+                                "ticker": exe.get("stk_cd"),
+                                "name": exe.get("stk_nm"),
+                                "type": "BUY" if "매수" in exe.get("io_tp_nm", "") else "SELL",
+                                "quantity": _safe_float(exe.get("cntr_qty")),
+                                "price": _safe_float(exe.get("cntr_pric")),
+                                "currency": "KRW",
+                                "external_id": str(ext_id) if ext_id else None,
+                                "memo": f"키움 자동저장 (체결)"
+                            })
 
-            try:
-                # ... 데이터 수집 및 DB 저장 로직 ...
-                if days == 1:
-                    # 당일 동기화 (체결요청 + 당일 배당금)
-                    domestic_executions = await self._fetch_domestic_executions(token)
-                    for exe in domestic_executions:
-                        ext_id = exe.get("ord_no") or exe.get("cntr_no")
-                        tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
-                        raw_transactions.append({
-                            "date": datetime.date.today(),
-                            "traded_at": _parse_traded_at(datetime.date.today(), tm_str),
-                            "ticker": exe.get("stk_cd"),
-                            "name": exe.get("stk_nm"),
-                            "type": "BUY" if "매수" in exe.get("io_tp_nm", "") else "SELL",
-                            "quantity": _safe_float(exe.get("cntr_qty")),
-                            "price": _safe_float(exe.get("cntr_pric")),
-                            "currency": "KRW",
-                            "external_id": str(ext_id) if ext_id else None,
-                            "memo": f"키움 자동저장 (체결)"
-                        })
-
-                    overseas_executions = await self._fetch_overseas_executions(token, target_date=today_str)
-                    for exe in overseas_executions:
-                        qty = _safe_float(exe.get("cntr_qty"))
-                        if qty <= 0:
-                            continue
-                        slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
-                        slby_tp = str(exe.get("slby_tp", ""))
-                        is_buy = "매수" in slby_nm or slby_tp == "2"
-                        price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
-                        ext_id = exe.get("ord_no") or exe.get("cntr_no")
-                        tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
-
-                        raw_transactions.append({
-                            "date": datetime.date.today(),
-                            "traded_at": _parse_traded_at(datetime.date.today(), tm_str),
-                            "ticker": exe.get("stk_cd"),
-                            "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
-                            "type": "BUY" if is_buy else "SELL",
-                            "quantity": qty,
-                            "price": price_val,
-                            "currency": "USD",
-                            "external_id": str(ext_id) if ext_id else None,
-                            "memo": f"키움 자동저장 (해외체결)"
-                        })
-
-                    daily_ledger = await self._fetch_comprehensive_ledger(token, today_str, today_str)
-                    raw_transactions.extend(self._parse_ledger_entries(daily_ledger, is_retroactive=False))
-                else:
-                    ledger_data = await self._fetch_comprehensive_ledger(token, start_date_str, today_str)
-                    raw_transactions.extend(self._parse_ledger_entries(ledger_data, is_retroactive=True))
-
-                    for d in range(days):
-                        dt_obj = datetime.date.today() - datetime.timedelta(days=d)
-                        dt_str = dt_obj.strftime("%Y%m%d")
-                        overseas_exes = await self._fetch_overseas_executions(token, target_date=dt_str)
-                        for exe in overseas_exes:
+                        overseas_executions = await self._fetch_overseas_executions(token, target_date=today_str, client=http_client)
+                        for exe in overseas_executions:
                             qty = _safe_float(exe.get("cntr_qty"))
                             if qty <= 0:
                                 continue
@@ -199,88 +166,166 @@ class KiwoomTransactionService:
                             tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
 
                             raw_transactions.append({
-                                "date": dt_obj,
-                                "traded_at": _parse_traded_at(dt_obj, tm_str),
+                                "date": datetime.date.today(),
+                                "traded_at": _parse_traded_at(datetime.date.today(), tm_str),
                                 "ticker": exe.get("stk_cd"),
                                 "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
                                 "type": "BUY" if is_buy else "SELL",
                                 "quantity": qty,
                                 "price": price_val,
-                                "total_amount": qty * price_val,
                                 "currency": "USD",
                                 "external_id": str(ext_id) if ext_id else None,
-                                "memo": f"키움 자동저장 (해외체결 소급)"
+                                "memo": f"키움 자동저장 (해외체결)"
                             })
 
-                # DB 적재 및 검증 처리
-                success_count = 0
-                for tx_data in raw_transactions:
-                    if tx_data["type"] == "EXCHANGE":
-                        if self._sync_exchange_transaction(db, account, tx_data, unregistered_list, synced_list):
-                            success_count += 1
-                        continue
+                        daily_ledger = await self._fetch_comprehensive_ledger(token, today_str, today_str, client=http_client)
+                        raw_transactions.extend(self._parse_ledger_entries(daily_ledger, is_retroactive=False))
+                    else:
+                        ledger_data = await self._fetch_comprehensive_ledger(token, start_date_str, today_str, client=http_client)
+                        raw_transactions.extend(self._parse_ledger_entries(ledger_data, is_retroactive=True))
 
-                    ticker = normalize_ticker(tx_data.get("ticker"))
-                    if not ticker:
-                        continue
+                        for d in range(days):
+                            dt_obj = datetime.date.today() - datetime.timedelta(days=d)
+                            dt_str = dt_obj.strftime("%Y%m%d")
+                            overseas_exes = await self._fetch_overseas_executions(token, target_date=dt_str, client=http_client)
+                            for exe in overseas_exes:
+                                qty = _safe_float(exe.get("cntr_qty"))
+                                if qty <= 0:
+                                    continue
+                                slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
+                                slby_tp = str(exe.get("slby_tp", ""))
+                                is_buy = "매수" in slby_nm or slby_tp == "2"
+                                price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
+                                ext_id = exe.get("ord_no") or exe.get("cntr_no")
+                                tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
 
-                    asset = db.query(Asset).filter(Asset.ticker == ticker).first()
-                    if not asset:
-                        unregistered_list.append({
-                            "ticker": ticker,
-                            "name": tx_data["name"],
-                            "type": tx_data["type"],
-                            "quantity": tx_data["quantity"],
-                            "price": tx_data["price"],
-                            "total_amount": tx_data.get("total_amount", tx_data["price"]),
-                            "currency": tx_data.get("currency", "USD" if asset and asset.country == "US" else "KRW"),
-                            "traded_at": tx_data.get("traded_at")
-                        })
-                        logger.warning(f"미등록 자산 발견으로 저장 생략: {ticker} ({tx_data['name']})")
-                        continue
+                                raw_transactions.append({
+                                    "date": dt_obj,
+                                    "traded_at": _parse_traded_at(dt_obj, tm_str),
+                                    "ticker": exe.get("stk_cd"),
+                                    "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
+                                    "type": "BUY" if is_buy else "SELL",
+                                    "quantity": qty,
+                                    "price": price_val,
+                                    "total_amount": qty * price_val,
+                                    "currency": "USD",
+                                    "external_id": str(ext_id) if ext_id else None,
+                                    "memo": f"키움 자동저장 (해외체결 소급)"
+                                })
 
-                    if asset.country == "US" and tx_data["type"] not in ["TAX"]:
-                        tx_data["currency"] = "USD"
-
-                    total_amt = tx_data.get("total_amount")
-                    if total_amt is None:
-                        total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
-                    ext_id = tx_data.get("external_id")
-
-                    # 1) 동일 체결번호(external_id)가 이미 DB에 존재하는 경우 -> 100% 중복 스킵
-                    if ext_id:
-                        exists_by_ext_id = db.query(Transaction).filter(
-                            Transaction.account_id == account.id,
-                            Transaction.asset_id == asset.id,
-                            Transaction.external_id == ext_id
-                        ).first()
-                        if exists_by_ext_id:
-                            logger.info(f"이미 존재(체결번호 중복)하여 저장 스킵: {asset.name} ({ext_id})")
+                    # DB 적재 및 검증 처리
+                    success_count = 0
+                    for tx_data in raw_transactions:
+                        if tx_data["type"] == "EXCHANGE":
+                            if self._sync_exchange_transaction(db, account, tx_data, unregistered_list, synced_list):
+                                success_count += 1
                             continue
 
-                    # 2) 수동 입력 거래중 1:1 매칭 가능한 건(external_id가 NULL인 MANUAL 거래) 찾기
-                    manual_candidates = db.query(Transaction).filter(
-                        Transaction.account_id == account.id,
-                        Transaction.asset_id == asset.id,
-                        Transaction.transaction_date == tx_data["date"],
-                        Transaction.type == tx_data["type"],
-                        Transaction.source == "MANUAL",
-                        Transaction.external_id.is_(None)
-                    ).all()
+                        ticker = normalize_ticker(tx_data.get("ticker"))
+                        if not ticker:
+                            continue
 
-                    manual_tx = next(
-                        (
-                            m for m in manual_candidates
-                            if m.quantity == tx_data["quantity"]
-                            and m.price == tx_data["price"]
-                            and m.total_amount == total_amt
-                        ),
-                        None
-                    )
+                        asset = db.query(Asset).filter(Asset.ticker == ticker).first()
+                        if not asset:
+                            unregistered_list.append({
+                                "ticker": ticker,
+                                "name": tx_data["name"],
+                                "type": tx_data["type"],
+                                "quantity": tx_data["quantity"],
+                                "price": tx_data["price"],
+                                "total_amount": tx_data.get("total_amount", tx_data["price"]),
+                                "currency": tx_data.get("currency", "USD" if asset and asset.country == "US" else "KRW"),
+                                "traded_at": tx_data.get("traded_at")
+                            })
+                            logger.warning(f"미등록 자산 발견으로 저장 생략: {ticker} ({tx_data['name']})")
+                            continue
 
-                    if manual_tx:
-                        manual_tx.external_id = ext_id
-                        manual_tx.source = "AUTO_KIWOOM"
+                        if asset.country == "US" and tx_data["type"] not in ["TAX"]:
+                            tx_data["currency"] = "USD"
+
+                        total_amt = tx_data.get("total_amount")
+                        if total_amt is None:
+                            total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
+                        ext_id = tx_data.get("external_id")
+
+                        # 1) 동일 체결번호(external_id)가 이미 DB에 존재하는 경우 -> 100% 중복 스킵
+                        if ext_id:
+                            exists_by_ext_id = db.query(Transaction).filter(
+                                Transaction.account_id == account.id,
+                                Transaction.asset_id == asset.id,
+                                Transaction.external_id == ext_id
+                            ).first()
+                            if exists_by_ext_id:
+                                logger.info(f"이미 존재(체결번호 중복)하여 저장 스킵: {asset.name} ({ext_id})")
+                                continue
+
+                        # 2) 수동 입력 거래중 1:1 매칭 가능한 건(external_id가 NULL인 MANUAL 거래) 찾기
+                        manual_candidates = db.query(Transaction).filter(
+                            Transaction.account_id == account.id,
+                            Transaction.asset_id == asset.id,
+                            Transaction.transaction_date == tx_data["date"],
+                            Transaction.type == tx_data["type"],
+                            Transaction.source == "MANUAL",
+                            Transaction.external_id.is_(None)
+                        ).all()
+
+                        manual_tx = next(
+                            (
+                                m for m in manual_candidates
+                                if m.quantity == tx_data["quantity"]
+                                and m.price == tx_data["price"]
+                                and m.total_amount == total_amt
+                            ),
+                            None
+                        )
+
+                        if manual_tx:
+                            manual_tx.external_id = ext_id
+                            manual_tx.source = "AUTO_KIWOOM"
+                            success_count += 1
+                            synced_list.append({
+                                "type": tx_data["type"],
+                                "asset_name": asset.name,
+                                "quantity": tx_data["quantity"],
+                                "price": tx_data["price"],
+                                "total_amount": total_amt,
+                                "currency": tx_data["currency"],
+                                "is_manual_matched": True,
+                                "traded_at": tx_data.get("traded_at")
+                            })
+                            logger.info(f"기존 수동 거래와 키움 체결 매칭 완료: {asset.name} ({ext_id})")
+                            continue
+
+                        # 3) external_id도 없고 수동 거래 매칭 대상도 없는 경우: 단순 중복 체크
+                        if not ext_id:
+                            exists_legacy = db.query(Transaction).filter(
+                                Transaction.account_id == account.id,
+                                Transaction.asset_id == asset.id,
+                                Transaction.transaction_date == tx_data["date"],
+                                Transaction.type == tx_data["type"],
+                                Transaction.quantity == tx_data["quantity"],
+                                Transaction.price == tx_data["price"],
+                                Transaction.total_amount == total_amt
+                            ).first()
+                            if exists_legacy:
+                                logger.info(f"이미 존재하는 거래내역으로 저장 스킵: {asset.name} ({tx_data['date']})")
+                                continue
+
+                        # 4) 신규 거래 적재(Insert)
+                        new_tx = Transaction(
+                            account_id=account.id,
+                            asset_id=asset.id,
+                            transaction_date=tx_data["date"],
+                            type=tx_data["type"],
+                            quantity=tx_data["quantity"],
+                            price=tx_data["price"],
+                            total_amount=total_amt,
+                            currency=tx_data["currency"],
+                            memo=tx_data["memo"],
+                            source="AUTO_KIWOOM",
+                            external_id=ext_id
+                        )
+                        db.add(new_tx)
                         success_count += 1
                         synced_list.append({
                             "type": tx_data["type"],
@@ -289,67 +334,23 @@ class KiwoomTransactionService:
                             "price": tx_data["price"],
                             "total_amount": total_amt,
                             "currency": tx_data["currency"],
-                            "is_manual_matched": True,
+                            "is_manual_matched": False,
                             "traded_at": tx_data.get("traded_at")
                         })
-                        logger.info(f"기존 수동 거래와 키움 체결 매칭 완료: {asset.name} ({ext_id})")
-                        continue
 
-                    # 3) external_id도 없고 수동 거래 매칭 대상도 없는 경우: 단순 중복 체크
-                    if not ext_id:
-                        exists_legacy = db.query(Transaction).filter(
-                            Transaction.account_id == account.id,
-                            Transaction.asset_id == asset.id,
-                            Transaction.transaction_date == tx_data["date"],
-                            Transaction.type == tx_data["type"],
-                            Transaction.quantity == tx_data["quantity"],
-                            Transaction.price == tx_data["price"],
-                            Transaction.total_amount == total_amt
-                        ).first()
-                        if exists_legacy:
-                            logger.info(f"이미 존재하는 거래내역으로 저장 스킵: {asset.name} ({tx_data['date']})")
-                            continue
+                    if success_count > 0:
+                        db.commit()
+                        logger.info(f"계좌 {account.name} 동기화 성공: {success_count}건 저장 완료.")
+                        total_success_count += success_count
 
-                    # 4) 신규 거래 적재(Insert)
-                    new_tx = Transaction(
-                        account_id=account.id,
-                        asset_id=asset.id,
-                        transaction_date=tx_data["date"],
-                        type=tx_data["type"],
-                        quantity=tx_data["quantity"],
-                        price=tx_data["price"],
-                        total_amount=total_amt,
-                        currency=tx_data["currency"],
-                        memo=tx_data["memo"],
-                        source="AUTO_KIWOOM",
-                        external_id=ext_id
-                    )
-                    db.add(new_tx)
-                    success_count += 1
-                    synced_list.append({
-                        "type": tx_data["type"],
-                        "asset_name": asset.name,
-                        "quantity": tx_data["quantity"],
-                        "price": tx_data["price"],
-                        "total_amount": total_amt,
-                        "currency": tx_data["currency"],
-                        "is_manual_matched": False,
-                        "traded_at": tx_data.get("traded_at")
+                except Exception as e:
+                    db.rollback()
+                    logger.error(f"계좌 {account.name} 동기화 처리 중 예외 발생 (스킵): {str(e)}")
+                    failed_accounts_list.append({
+                        "account_name": account.name,
+                        "error": str(e)
                     })
-
-                if success_count > 0:
-                    db.commit()
-                    logger.info(f"계좌 {account.name} 동기화 성공: {success_count}건 저장 완료.")
-                    total_success_count += success_count
-
-            except Exception as e:
-                db.rollback()
-                logger.error(f"계좌 {account.name} 동기화 처리 중 예외 발생 (스킵): {str(e)}")
-                failed_accounts_list.append({
-                    "account_name": account.name,
-                    "error": str(e)
-                })
-                continue
+                    continue
 
         return {
             "status": "success",
@@ -637,7 +638,35 @@ class KiwoomTransactionService:
 
         return raw_txs
 
-    async def _fetch_domestic_executions(self, token: str) -> list:
+    async def _post_api(
+        self,
+        url: str,
+        headers: dict,
+        payload: dict,
+        client: httpx.AsyncClient | None = None
+    ) -> dict:
+        """키움 API POST 요청을 수행하고 JSON 결과를 반환하는 공통 헬퍼 메서드입니다.
+
+        Args:
+            url (str): API 엔드포인트 URL
+            headers (dict): 요청 헤더
+            payload (dict): 요청 바디 (JSON)
+            client (httpx.AsyncClient | None, optional): 재사용할 HTTP 클라이언트. 기본값 None.
+
+        Returns:
+            dict: 파싱된 JSON 응답 딕셔너리
+        """
+        if client is not None:
+            response = await client.post(url, headers=headers, json=payload, timeout=15)
+            response.raise_for_status()
+            return response.json()
+
+        async with httpx.AsyncClient() as new_client:
+            response = await new_client.post(url, headers=headers, json=payload, timeout=15)
+            response.raise_for_status()
+            return response.json()
+
+    async def _fetch_domestic_executions(self, token: str, client: httpx.AsyncClient | None = None) -> list:
         """국내 주식 당일 체결 내역을 조회합니다 (ka10076)."""
         url = f"{self.base_url}/api/dostk/acnt"
         headers = {
@@ -650,21 +679,23 @@ class KiwoomTransactionService:
             "sell_tp": "0",  # 전체
             "stex_tp": "0"   # 통합
         }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, json=payload, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("return_code") in [0, "0"]:
-                return data.get("cntr", [])
-            return []
+        data = await self._post_api(url, headers=headers, payload=payload, client=client)
+        if data.get("return_code") in [0, "0"]:
+            return data.get("cntr", [])
+        return []
 
-    async def _fetch_overseas_executions(self, token: str, target_date: str = None) -> list:
+    async def _fetch_overseas_executions(
+        self,
+        token: str,
+        target_date: str | None = None,
+        client: httpx.AsyncClient | None = None
+    ) -> list:
         """미국 주식 체결 내역을 조회합니다 (ust21510).
         
         Args:
             token (str): Bearer 인증 토큰
-            target_date (str, optional): 조회일자 (YYYYMMDD 형식). 생략 시 당일 체결 조회.
+            target_date (str | None, optional): 조회일자 (YYYYMMDD 형식). 생략 시 당일 체결 조회.
+            client (httpx.AsyncClient | None, optional): 재사용할 HTTP 비동기 클라이언트
         """
         url = f"{self.base_url}/api/us/acnt"
         headers = {
@@ -678,16 +709,19 @@ class KiwoomTransactionService:
         }
         if target_date:
             payload["ord_dt"] = target_date
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, json=payload, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("return_code") in [0, "0"]:
-                return data.get("result_list", [])
-            return []
 
-    async def _fetch_comprehensive_ledger(self, token: str, start_dt: str, end_dt: str) -> list:
+        data = await self._post_api(url, headers=headers, payload=payload, client=client)
+        if data.get("return_code") in [0, "0"]:
+            return data.get("result_list", [])
+        return []
+
+    async def _fetch_comprehensive_ledger(
+        self,
+        token: str,
+        start_dt: str,
+        end_dt: str,
+        client: httpx.AsyncClient | None = None
+    ) -> list:
         """종합거래내역을 조회합니다 (kt00015)."""
         url = f"{self.base_url}/api/dostk/acnt"
         headers = {
@@ -703,11 +737,8 @@ class KiwoomTransactionService:
             "dmst_stex_tp": "%",   # 전체
             "qry_sort_tp": "2"     # 과거거래순
         }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.post(url, headers=headers, json=payload, timeout=15)
-            response.raise_for_status()
-            data = response.json()
-            if data.get("return_code") in [0, "0"]:
-                return data.get("trst_ovrl_trde_prps_array", [])
-            return []
+
+        data = await self._post_api(url, headers=headers, payload=payload, client=client)
+        if data.get("return_code") in [0, "0"]:
+            return data.get("trst_ovrl_trde_prps_array", [])
+        return []

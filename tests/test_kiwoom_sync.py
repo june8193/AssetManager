@@ -243,6 +243,10 @@ async def test_sync_transactions_account_failure_reporting(mock_get_token, setup
     mock_get_token.side_effect = Exception("인증 토큰 오류 발생")
 
     service = KiwoomTransactionService()
+    service.auth_manager.accounts_config = {
+        "5526-9093": {"app_key": "k1", "secret_key": "s1"},
+        "6066-7729": {"app_key": "k2", "secret_key": "s2"}
+    }
     result = await service.sync_transactions(db_session, days=1)
 
     assert result["status"] == "success"

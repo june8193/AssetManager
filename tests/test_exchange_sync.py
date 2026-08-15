@@ -78,8 +78,12 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
     # 1. 오전 9시 30분 이전(오전 9시 00분) 실행 시 -> 환율 수집 미실행
     now_kst_9am = datetime.datetime(2026, 7, 20, 9, 0, 0)
     mock_fetch = AsyncMock(return_value=1350.0)
+    mock_kr_prices = AsyncMock(return_value=[])
+    mock_us_prices = AsyncMock(return_value=[])
     
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "get_kr_prices", mock_kr_prices), \
+         patch.object(price_service, "get_us_prices", mock_us_prices), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
          patch.object(price_service, "_get_now", return_value=now_kst_9am), \
          patch.object(price_service, "_get_today", return_value=today):
@@ -94,6 +98,8 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
     mock_fetch.reset_mock()
     now_kst_930am = datetime.datetime(2026, 7, 20, 9, 30, 0)
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "get_kr_prices", mock_kr_prices), \
+         patch.object(price_service, "get_us_prices", mock_us_prices), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
          patch.object(price_service, "_get_now", return_value=now_kst_930am), \
          patch.object(price_service, "_get_today", return_value=today):
@@ -112,6 +118,8 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
     
     now_kst_10am = datetime.datetime(2026, 7, 20, 10, 0, 0)
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "get_kr_prices", mock_kr_prices), \
+         patch.object(price_service, "get_us_prices", mock_us_prices), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
          patch.object(price_service, "_get_now", return_value=now_kst_10am), \
          patch.object(price_service, "_get_today", return_value=today):
@@ -127,6 +135,8 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
     db_session.commit()
     
     with patch.object(price_service, "fetch_and_save_exchange_rate", mock_fetch), \
+         patch.object(price_service, "get_kr_prices", mock_kr_prices), \
+         patch.object(price_service, "get_us_prices", mock_us_prices), \
          patch.object(price_service, "is_market_holiday", new_callable=AsyncMock, return_value=False), \
          patch.object(price_service, "_get_now", return_value=now_kst_930am), \
          patch.object(price_service, "_get_today", return_value=today):
@@ -135,4 +145,5 @@ async def test_update_all_market_prices_exchange_trigger(db_session: Session):
         
         # 수동 갱신이므로 환율 수집 안 됨
         assert not mock_fetch.called
+
 

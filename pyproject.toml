@@ -23,7 +23,8 @@ dependencies = [
 pythonpath = ["."]
 testpaths = ["tests"]
 norecursedirs = [".venv", "scratch", "scripts"]
-addopts = "-n auto"
+addopts = "-v --tb=short"
+
 
 [tool.pyright]
 include = ["src"]
