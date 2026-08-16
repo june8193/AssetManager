@@ -52,10 +52,10 @@
 ## 5. 데이터베이스 조사 및 환경 규칙
 - **원칙**: 데이터베이스 테이블 구조나 데이터를 확인하기 위해 매번 일회성 파이썬 스크립트를 작성하지 않습니다.
 - **데이터베이스 위치**: `src/assets.db` (SQLite)
-- **도구**: 프로젝트 루트에 있는 `scripts/db_query.py`를 사용하여 쿼리를 실행합니다.
-- **사용 방법**:
+- **로컬 DB 조회 도구**: 프로젝트 루트에 있는 `scripts/db_query.py`를 사용하여 로컬 DB 쿼리를 실행합니다.
   - 테이블 목록 조회: `uv run scripts/db_query.py --list-tables`
   - 특정 쿼리 실행: `uv run scripts/db_query.py "SELECT * FROM assets LIMIT 5"`
+- **서버/운영 DB 조회 (AssetManager MCP)**: 개발하는 PC와 서버를 실제로 구동하는 PC는 다를 수 있습니다. 따라서 실제 서버의 정확한 DB 정보를 확인하고 싶을 때는 `assetmanager` MCP 도구(예: `get_db_tables`, `get_db_schema`, `execute_db_query` 등)를 사용합니다.
 - **주의 사항**: AI 에이전트는 데이터 조사를 목적으로 **SELECT** 쿼리만 수행하는 것을 권장하며, 데이터 변경(INSERT, UPDATE, DELETE)이 필요한 경우 반드시 관련 서비스 코드나 마이그레이션 스크립트를 통해 진행해야 합니다.
 
 ## 6. Python 실행 규칙
@@ -71,16 +71,6 @@
   - `ls -d` -> `Test-Path` 또는 `Get-Item`
   - `rm -rf` -> `Remove-Item -Recurse -Force`
 - **원칙**: 복잡한 파이프라인보다는 `wait_for_previous: true` 옵션을 활용하여 단계별로 실행하는 것을 권장합니다.
-
-## 8. Git Worktree 및 환경 설정 규칙
-- **원칙**: 신규 워크트리 생성 시 반드시 환경 설정 파일(`settings.json`)을 복사하고 의존성을 동기화합니다.
-- **절차**:
-  1. 워크트리 생성 직후 루트 디렉토리의 `settings.json`을 해당 워크트리 루트로 복사합니다. (`settings.json`은 `.gitignore` 대상이므로 자동 복사되지 않음)
-  2. 워크트리 디렉토리 내에서 `uv sync`를 실행하여 가상환경(`.venv`)을 구축합니다.
-  3. `uv run pytest` 등을 통해 기본 환경이 정상인지 확인합니다.
-- **주의 사항**:
-  - `settings.json` 내의 데이터베이스 경로나 API 설정이 워크트리 환경에서도 유효한지 확인하십시오.
-  - `uv sync` 중 오류가 발생할 경우 `uv lock` 파일의 변경 사항이 있는지 확인하고, 필요시 `uv clean` 후 재시도합니다.
 
 ## 9. Scratch 스크립트 관리 규칙
 - **원칙**: 임시 테스트나 데이터 분석 등을 위해 `scratch` 폴더 내에 작성한 스크립트도 변경 이력 관리와 협업을 위해 Git에 커밋하여 관리합니다.
