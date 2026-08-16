@@ -39,215 +39,31 @@ router = APIRouter(
 )
 
 
-# --- API Endpoints ---
+# --- Re-exported Handlers for Backward Compatibility ---
+from .accounts import (
+    get_users,
+    get_accounts,
+    create_account,
+    update_account,
+    delete_account,
+)
+from .assets import (
+    get_assets,
+    get_categories,
+    verify_asset,
+    create_asset,
+    update_asset,
+    delete_asset,
+)
+from .transactions import (
+    get_transactions,
+    create_transaction,
+    create_transfer_transaction,
+    update_transaction,
+    delete_transaction,
+    get_period_transactions,
+)
 
-# Users (For dropdowns)
-@router.get("/users", response_model=List[UserSchema])
-def get_users(db: Session = Depends(get_db)):
-    """전체 사용자 목록을 조회합니다."""
-    return db.query(User).all()
-
-# Accounts
-@router.get("/accounts", response_model=List[AccountSchema])
-def get_accounts(db: Session = Depends(get_db)):
-    """전체 계좌 목록을 조회합니다 (소유자 이름 포함)."""
-    results = db.query(Account, User.name.label("user_name")) \
-                .join(User, Account.user_id == User.id) \
-                .order_by(Account.id.desc()).all()
-    
-    accounts = []
-    for acc, user_name in results:
-        # Pydantic schema expects user_name to be present in the dict/object
-        acc_dict = {c.name: getattr(acc, c.name) for c in acc.__table__.columns}
-        acc_dict['user_name'] = user_name
-        accounts.append(AccountSchema(**acc_dict))
-    return accounts
-
-@router.post("/accounts", response_model=AccountSchema)
-def create_account(account: AccountSchema, db: Session = Depends(get_db)):
-    """새로운 계좌를 생성합니다."""
-    data = account.model_dump(exclude={"id", "user_name"})
-    db_account = Account(**data)
-    db.add(db_account)
-    db.commit()
-    db.refresh(db_account)
-    return db_account
-
-@router.put("/accounts/{account_id}", response_model=AccountSchema)
-def update_account(account_id: int, account: AccountSchema, db: Session = Depends(get_db)):
-    """기존 계좌 정보를 수정합니다."""
-    db_account = db.query(Account).filter(Account.id == account_id).first()
-    if not db_account:
-        raise HTTPException(status_code=404, detail="계좌를 찾을 수 없습니다.")
-    data = account.model_dump(exclude={"id", "user_name"})
-    for key, value in data.items():
-        setattr(db_account, key, value)
-    db.commit()
-    db.refresh(db_account)
-    return db_account
-
-@router.delete("/accounts/{account_id}")
-def delete_account(account_id: int, db: Session = Depends(get_db)):
-    """계좌를 삭제합니다."""
-    db_account = db.query(Account).filter(Account.id == account_id).first()
-    if not db_account:
-        raise HTTPException(status_code=404, detail="계좌를 찾을 수 없습니다.")
-    db.delete(db_account)
-    db.commit()
-    return {"message": "삭제되었습니다."}
-
-# Assets
-@router.get("/assets", response_model=List[AssetSchema])
-def get_assets(db: Session = Depends(get_db)):
-    """전체 자산 마스터 목록을 조회합니다."""
-    return db.query(Asset).order_by(Asset.id.desc()).all()
-
-@router.get("/assets/categories")
-def get_categories():
-    """자산 대분류 및 중분류 목록을 조회합니다."""
-    return VALID_CATEGORIES
-
-@router.get("/assets/verify")
-async def verify_asset(ticker: str, country: str, major_category: str, db: Session = Depends(get_db)):
-    """티커와 국가를 기반으로 종목의 실시간 존재 여부를 검증하고 공식 자산명을 반환합니다."""
-    # 1. DB에 이미 존재하는 티커인지 먼저 확인
-    existing = db.query(Asset).filter(Asset.ticker == ticker).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="이미 등록된 자산(티커)입니다.")
-
-    if major_category == "현금":
-        if ticker == "KRW":
-            return {"name": "원화예수금"}
-        elif ticker == "USD":
-            return {"name": "달러예수금"}
-        else:
-            raise HTTPException(status_code=400, detail="지원하지 않는 현금 티커입니다.")
-            
-    name = await price_service.get_stock_name(ticker, country)
-    if not name:
-        raise HTTPException(status_code=404, detail="해당 국가의 주식시장에서 종목을 찾을 수 없습니다.")
-        
-    return {"name": name}
-
-
-@router.post("/assets", response_model=AssetSchema)
-def create_asset(asset: AssetSchema, db: Session = Depends(get_db)):
-    """새로운 자산 마스터를 생성합니다."""
-    # 1. 중복 티커가 이미 존재하는지 검사
-    existing = db.query(Asset).filter(Asset.ticker == asset.ticker).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="이미 등록된 자산(티커)입니다.")
-
-    data = asset.model_dump(exclude={"id"})
-    db_asset = Asset(**data)
-    db.add(db_asset)
-    db.commit()
-    db.refresh(db_asset)
-    return db_asset
-
-@router.put("/assets/{asset_id}", response_model=AssetSchema)
-def update_asset(asset_id: int, asset: AssetSchema, db: Session = Depends(get_db)):
-    """기존 자산 마스터 정보를 수정합니다."""
-    db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
-    if not db_asset:
-        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
-    data = asset.model_dump(exclude={"id"})
-    for key, value in data.items():
-        setattr(db_asset, key, value)
-    db.commit()
-    db.refresh(db_asset)
-    return db_asset
-
-@router.delete("/assets/{asset_id}")
-def delete_asset(asset_id: int, db: Session = Depends(get_db)):
-    """자산 마스터를 삭제합니다."""
-    db_asset = db.query(Asset).filter(Asset.id == asset_id).first()
-    if not db_asset:
-        raise HTTPException(status_code=404, detail="자산을 찾을 수 없습니다.")
-    db.delete(db_asset)
-    db.commit()
-    return {"message": "삭제되었습니다."}
-
-# Transactions
-@router.get("/transactions", response_model=List[TransactionSchema])
-def get_transactions(
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    db: Session = Depends(get_db)
-):
-    """전체 또는 필터링된 거래 내역을 조회합니다."""
-    return TransactionService(db).get_transactions(start_date, end_date)
-
-def _validate_and_extract_transaction_data(transaction: TransactionSchema, db: Session) -> dict:
-    """트랜잭션 입력값의 유효성을 검증하고 DB 모델용 딕셔너리를 추출합니다."""
-    try:
-        return TransactionService(db).validate_and_extract_transaction_data(transaction)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-@router.post("/transactions", response_model=TransactionSchema)
-def create_transaction(transaction: TransactionSchema, db: Session = Depends(get_db)):
-    """새로운 거래 내역을 생성합니다."""
-    try:
-        return TransactionService(db).create_transaction(transaction)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
-
-def _build_transfer_pair(req: TransferTransactionRequest, currency: str, transfer_pair_id: str) -> List[Transaction]:
-    """이체 쌍(출금 및 입금) Transaction 인스턴스를 생성하는 헬퍼 함수입니다."""
-    base_kwargs = {
-        "asset_id": req.asset_id,
-        "transaction_date": req.transaction_date,
-        "quantity": req.amount,
-        "price": 1.0,
-        "total_amount": req.amount,
-        "currency": currency,
-        "memo": req.memo,
-        "transfer_pair_id": transfer_pair_id
-    }
-    tx_withdraw = Transaction(account_id=req.source_account_id, type="WITHDRAW", **base_kwargs)
-    tx_deposit = Transaction(account_id=req.target_account_id, type="DEPOSIT", **base_kwargs)
-    return [tx_withdraw, tx_deposit]
-
-@router.post("/transactions/transfer", response_model=List[TransactionSchema])
-def create_transfer_transaction(req: TransferTransactionRequest, db: Session = Depends(get_db)):
-    """계좌 이체 트랜잭션(WITHDRAW + DEPOSIT 쌍)을 원자적으로 생성합니다."""
-    try:
-        return TransactionService(db).create_transfer_pair(req)
-    except ValueError as e:
-        err_msg = str(e)
-        if "동일할 수 없습니다" in err_msg:
-            raise HTTPException(status_code=400, detail=err_msg)
-        if "찾을 수 없습니다" in err_msg:
-            raise HTTPException(status_code=404, detail=err_msg)
-        raise HTTPException(status_code=422, detail=err_msg)
-
-@router.put("/transactions/{transaction_id}", response_model=TransactionSchema)
-def update_transaction(transaction_id: int, transaction: TransactionSchema, db: Session = Depends(get_db)):
-    """기존 거래 내역 정보를 수정합니다."""
-    try:
-        return TransactionService(db).update_transaction(transaction_id, transaction)
-    except ValueError as e:
-        raise HTTPException(status_code=404 if "찾을 수 없습니다" in str(e) else 422, detail=str(e))
-
-@router.delete("/transactions/{transaction_id}")
-def delete_transaction(transaction_id: int, db: Session = Depends(get_db)):
-    """거래 내역을 삭제합니다."""
-    try:
-        TransactionService(db).delete_transaction(transaction_id)
-        return {"message": "Deleted"}
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-@router.get("/accounts/{account_id}/transactions/period", response_model=List[TransactionSchema])
-def get_period_transactions(
-    account_id: int,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None,
-    db: Session = Depends(get_db)
-):
-    """특정 계좌의 특정 기간 내 기존 거래 내역을 조회합니다."""
-    return TransactionService(db).get_period_transactions(account_id, start_date, end_date)
 
 
 

@@ -3,7 +3,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from .database import engine, Base
-from .routers import watchlist, stocks, exchange, dashboard, db_manage, connection, ratios, benchmark, sector, market, simulation, portfolio, kiwoom, system, dividend, performance
+from .routers import (
+    accounts,
+    assets,
+    transactions,
+    watchlist,
+    stocks,
+    exchange,
+    dashboard,
+    db_manage,
+    connection,
+    ratios,
+    benchmark,
+    sector,
+    market,
+    simulation,
+    portfolio,
+    kiwoom,
+    system,
+    dividend,
+    performance,
+)
 import os
 import sys
 import asyncio
@@ -49,6 +69,9 @@ app.add_middleware(
 )
 
 # 모듈화된 라우터 연결
+app.include_router(accounts.router)
+app.include_router(assets.router)
+app.include_router(transactions.router)
 app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(exchange.router)
