@@ -11,7 +11,7 @@ client = TestClient(app)
 @pytest.fixture
 def mock_yfinance():
     """yfinance.Tickers 호출을 모킹하기 위한 픽스처입니다."""
-    with patch("src.backend.routers.market.yf.Tickers") as mock_tickers_cls:
+    with patch("yfinance.Tickers") as mock_tickers_cls:
         # Mock Tickers 인스턴스
         mock_instance = MagicMock()
         mock_tickers_cls.return_value = mock_instance

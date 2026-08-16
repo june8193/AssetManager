@@ -261,6 +261,20 @@ class PriceService:
         """오늘 날짜를 반환합니다. 테스트 시 모킹 편의성을 위해 분리되었습니다."""
         return datetime.date.today()
 
+    async def get_market_indices(self, country: str = "KR") -> List[Dict[str, Any]]:
+        """국가별 주요 시장 지수 목록을 조회합니다.
+
+        Args:
+            country (str): 국가 코드 ('KR' 또는 'US')
+
+        Returns:
+            List[Dict[str, Any]]: 시장 지수 리스트
+        """
+        from src.backend.database import SessionLocal
+        with SessionLocal() as db:
+            provider = self._get_provider(db)
+            return await provider.get_market_indices(country=country)
+
     async def is_market_holiday(self, target_date: datetime.date, country: str) -> bool:
         """지정된 날짜가 해당 국가 주식 시장의 휴장일(주말 또는 공휴일)인지 판별합니다.
 

@@ -435,4 +435,14 @@ class MarketDataProvider:
         """
         country_upper = (country or "KR").strip().upper()
         adapter = self.get_adapter(country_upper)
-        return await adapter.get_market_indices(country=country_upper)
+        indices = await adapter.get_market_indices(country=country_upper)
+
+        # 어댑터에서 가격이 모두 0.0이거나 비어있을 경우 YahooFinance(us_adapter) fallback 시도
+        if not indices or all(item.get("current_price", 0.0) == 0.0 for item in indices):
+            us_adapter = self.get_adapter("US")
+            if us_adapter != adapter:
+                fallback_indices = await us_adapter.get_market_indices(country=country_upper)
+                if fallback_indices and any(item.get("current_price", 0.0) > 0.0 for item in fallback_indices):
+                    return fallback_indices
+
+        return indices
