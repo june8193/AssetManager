@@ -13,6 +13,14 @@ from src.backend.models import Watchlist, AccountSnapshot, HistoricalPrice, User
 client = TestClient(app)
 
 
+@pytest.fixture(autouse=True)
+def mock_external_market_adapters():
+    """테스트 실행 중 외부 yfinance/키움 통신을 방지하기 위해 어댑터를 모킹합니다."""
+    with patch("src.backend.market.adapters.yfinance.YahooFinanceAdapter.get_historical_prices", return_value=[]), \
+         patch("src.backend.market.adapters.kiwoom.KiwoomAdapter.get_historical_prices", return_value=[]):
+        yield
+
+
 @pytest.fixture
 def setup_benchmark_data(db_session):
     """테스트를 위한 벤치마크 데이터를 세팅하는 픽스처입니다."""

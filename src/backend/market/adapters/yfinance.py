@@ -45,7 +45,11 @@ class YahooFinanceAdapter(MarketAdapterBase):
 
             for symbol in tickers:
                 try:
-                    ticker = tickers_obj.tickers.get(symbol)
+                    if hasattr(tickers_obj.tickers, "get"):
+                        ticker = tickers_obj.tickers.get(symbol)
+                    else:
+                        ticker = tickers_obj.tickers[symbol]
+
                     if not ticker:
                         results.append({"stock_code": symbol, "current_price": 0.0, "change_rate": 0.0})
                         continue

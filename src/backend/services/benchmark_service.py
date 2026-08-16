@@ -25,7 +25,16 @@ class BenchmarkService:
             provider (Optional[MarketDataProvider]): 마켓 데이터 프로바이더 인스턴스
         """
         self.db = db
-        self.provider = provider or MarketDataProvider(db=db)
+        if provider is not None:
+            self.provider = provider
+        else:
+            from src.backend.market.adapters.kiwoom import KiwoomAdapter
+            from src.backend.market.adapters.yfinance import YahooFinanceAdapter
+            self.provider = MarketDataProvider(
+                db=db,
+                kr_adapter=KiwoomAdapter(),
+                us_adapter=YahooFinanceAdapter(),
+            )
 
     async def get_historical_prices(
         self,

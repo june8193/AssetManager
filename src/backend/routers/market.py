@@ -8,10 +8,7 @@
 import datetime
 import zoneinfo
 from typing import List, Optional, Dict
-import yfinance as yf
-import holidays
 from fastapi import APIRouter, HTTPException, Query, Depends
-from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from ..database import get_db
@@ -271,16 +268,12 @@ async def get_market_history(
         ]
 
         # 4. 실시간 병합 처리
-        # 오늘 날짜가 조회 기간 내에 있고, 오늘 날짜의 데이터가 DB에 없거나 종가가 0인 경우 실시간 yfinance 조회
+        # 오늘 날짜가 조회 기간 내에 있고, 오늘 날짜의 데이터가 DB에 없거나 종가가 0인 경우 실시간 시세 조회
         has_today_data = any(p.price_date == today for p in valid_prices)
         if s_date <= today <= e_date and not has_today_data:
             try:
-                # yfinance 호출은 스레드풀에서 실행
-                tickers_obj = await run_in_threadpool(yf.Tickers, ticker)
-                ticker_obj = tickers_obj.tickers[ticker]
-                info = ticker_obj.fast_info
-                
-                last_price = float(info.get('last_price', info.get('lastPrice', 0.0)))
+                live_price_data = await benchmark_service.provider.get_current_price(ticker, force_update=True)
+                last_price = float(live_price_data.get("current_price", 0.0))
                 if last_price > 0.0:
                     history_items.append(MarketHistoryItem(
                         date=today.strftime("%Y-%m-%d"),

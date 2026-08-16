@@ -105,7 +105,7 @@ def test_get_market_indices_us_success(mock_yfinance):
 
 def test_get_market_indices_failure_kr():
     """KR 지수 호출 실패 시 KOSPI/KOSDAQ 기본값이 정상적으로 반환되는지 확인합니다."""
-    with patch("src.backend.routers.market.yf.Tickers", side_effect=Exception("API Error")):
+    with patch("yfinance.Tickers", side_effect=Exception("API Error")):
         response = client.get("/api/market/indices?country=KR")
         assert response.status_code == 200
         
@@ -120,7 +120,7 @@ def test_get_market_indices_failure_kr():
 
 def test_get_market_indices_failure_us():
     """US 지수 호출 실패 시 미국 3대 지수 기본값이 정상적으로 반환되는지 확인합니다."""
-    with patch("src.backend.routers.market.yf.Tickers", side_effect=Exception("API Error")):
+    with patch("yfinance.Tickers", side_effect=Exception("API Error")):
         response = client.get("/api/market/indices?country=US")
         assert response.status_code == 200
         

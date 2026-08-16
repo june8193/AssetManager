@@ -156,6 +156,14 @@ class MarketDataProvider:
         adapter = self.get_adapter(resolved_country)
         res_list = await adapter.get_current_prices([ticker])
 
+        # KR 지수 심볼(^)의 경우 주 어댑터 실패 시 US 어댑터(YahooFinance)로 fallback
+        if (not res_list or res_list[0].get("current_price", 0.0) == 0.0) and resolved_country == "KR" and ticker.startswith("^"):
+            us_adapter = self.get_adapter("US")
+            if us_adapter != adapter:
+                fallback_res = await us_adapter.get_current_prices([ticker])
+                if fallback_res and fallback_res[0].get("current_price", 0.0) > 0.0:
+                    res_list = fallback_res
+
         if res_list:
             item = res_list[0]
             price = float(item.get("current_price", 0.0))
@@ -283,6 +291,10 @@ class MarketDataProvider:
             adapter = self.get_adapter(resolved_country)
             for r_start, r_end in missing_ranges:
                 fetched = await adapter.get_historical_prices(ticker, r_start, r_end)
+                if not fetched and resolved_country == "KR" and ticker.startswith("^"):
+                    us_adapter = self.get_adapter("US")
+                    if us_adapter != adapter:
+                        fetched = await us_adapter.get_historical_prices(ticker, r_start, r_end)
                 if fetched:
                     self.cache.upsert_prices(ticker, fetched)
 

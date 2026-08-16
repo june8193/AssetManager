@@ -28,6 +28,7 @@ def test_get_market_history_success(db_session: Session):
         HistoricalPrice(ticker="^KS11", price_date=datetime.date(2026, 6, 3), close_price=2720.0),
         HistoricalPrice(ticker="^GSPC", price_date=datetime.date(2026, 6, 1), close_price=5300.0),
         HistoricalPrice(ticker="^GSPC", price_date=datetime.date(2026, 6, 2), close_price=5310.0),
+        HistoricalPrice(ticker="^GSPC", price_date=datetime.date(2026, 6, 3), close_price=5320.0),
     ]
     for d in dummy_data:
         db_session.add(d)
@@ -52,9 +53,10 @@ def test_get_market_history_success(db_session: Session):
     assert ks11_list[2] == {"date": "2026-06-03", "close_price": 2720.0}
 
     gspc_list = data["^GSPC"]
-    assert len(gspc_list) == 2
+    assert len(gspc_list) == 3
     assert gspc_list[0] == {"date": "2026-06-01", "close_price": 5300.0}
     assert gspc_list[1] == {"date": "2026-06-02", "close_price": 5310.0}
+    assert gspc_list[2] == {"date": "2026-06-03", "close_price": 5320.0}
 
 
 def test_get_market_history_with_realtime(db_session: Session):
@@ -67,7 +69,7 @@ def test_get_market_history_with_realtime(db_session: Session):
     db_session.commit()
 
     # 2. yfinance Tickers 모킹
-    with patch("src.backend.routers.market.yf.Tickers") as mock_tickers_cls:
+    with patch("yfinance.Tickers") as mock_tickers_cls:
         # 실시간 Tickers mock 인스턴스 설정
         mock_instance = MagicMock()
         mock_tickers_cls.return_value = mock_instance

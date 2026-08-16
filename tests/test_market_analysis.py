@@ -14,6 +14,15 @@ from src.backend.services.market_analysis_service import MarketAnalysisService
 
 client = TestClient(app)
 
+
+@pytest.fixture(autouse=True)
+def mock_external_market_adapters():
+    """테스트 실행 중 외부 yfinance/키움 통신을 방지하기 위해 어댑터를 모킹합니다."""
+    with patch("src.backend.market.adapters.yfinance.YahooFinanceAdapter.get_historical_prices", return_value=[]), \
+         patch("src.backend.market.adapters.kiwoom.KiwoomAdapter.get_historical_prices", return_value=[]):
+        yield
+
+
 def create_dummy_prices(db: Session, ticker: str, start_date: datetime.date, end_date: datetime.date, base_price: float, daily_change: float = 0.0):
     """테스트용 더미 지수 데이터를 생성합니다."""
     curr_date = start_date
