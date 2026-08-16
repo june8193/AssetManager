@@ -52,3 +52,6 @@ actions-runner/
 # Scratch 디렉토리
 .scratch/
 scratch/
+
+# 안티그래비티 설정폴더
+.agents
