@@ -50,3 +50,41 @@ def override_get_db(db_session):
     app.dependency_overrides[get_db] = _override_get_db
     yield
     app.dependency_overrides.clear()
+
+@pytest.fixture
+def fake_market_adapter():
+    """테스트용 FakeMarketAdapter 인스턴스를 기본 시세/환율/지수 데이터와 함께 제공합니다."""
+    from src.backend.market.adapters.fake import FakeMarketAdapter
+
+    adapter = FakeMarketAdapter()
+    # 기본 환율 설정
+    adapter.set_exchange_rate(1350.0, "USD", "KRW")
+    # 기본 국내/해외 종목 시세 설정
+    adapter.set_current_price("005930", 70000.0, 1.5)
+    adapter.set_stock_name("005930", "삼성전자")
+    adapter.set_current_price("AAPL", 180.0, -0.5)
+    adapter.set_stock_name("AAPL", "Apple Inc.")
+    # 기본 시장 지수 설정
+    adapter.set_market_indices([
+        {"index_name": "KOSPI", "current_price": 2600.0, "change_rate": 0.5},
+        {"index_name": "KOSDAQ", "current_price": 850.0, "change_rate": -0.2},
+    ], country="KR")
+    adapter.set_market_indices([
+        {"index_name": "S&P 500", "current_price": 5000.0, "change_rate": 0.3},
+        {"index_name": "NASDAQ", "current_price": 16000.0, "change_rate": 0.7},
+        {"index_name": "DOW JONES", "current_price": 39000.0, "change_rate": -0.1},
+    ], country="US")
+    return adapter
+
+@pytest.fixture
+def fake_market_provider(db_session, fake_market_adapter):
+    """db_session 및 fake_market_adapter를 주입받은 격리된 MarketDataProvider 인스턴스를 제공합니다."""
+    from src.backend.market.provider import MarketDataProvider
+
+    provider = MarketDataProvider(
+        db=db_session,
+        kr_adapter=fake_market_adapter,
+        us_adapter=fake_market_adapter,
+    )
+    return provider
+
