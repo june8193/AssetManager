@@ -33,32 +33,28 @@ def test_get_market_history_success(db_session: Session):
         db_session.add(d)
     db_session.commit()
 
-    # yfinance.download 모킹 (캐시 업데이트 트리거 시 API 에러 방지)
-    with patch("src.backend.services.benchmark_service.yf.download") as mock_download:
-        mock_download.return_value = MagicMock()
+    # 2. API 호출
+    response = client.get(
+        "/api/market/history?tickers=^KS11,^GSPC&start_date=2026-06-01&end_date=2026-06-03"
+    )
+    assert response.status_code == 200
 
-        # 2. API 호출
-        response = client.get(
-            "/api/market/history?tickers=^KS11,^GSPC&start_date=2026-06-01&end_date=2026-06-03"
-        )
-        assert response.status_code == 200
+    data = response.json()
 
-        data = response.json()
+    # 3. 결과 검증
+    assert "^KS11" in data
+    assert "^GSPC" in data
 
-        # 3. 결과 검증
-        assert "^KS11" in data
-        assert "^GSPC" in data
+    ks11_list = data["^KS11"]
+    assert len(ks11_list) == 3
+    assert ks11_list[0] == {"date": "2026-06-01", "close_price": 2700.0}
+    assert ks11_list[1] == {"date": "2026-06-02", "close_price": 2710.0}
+    assert ks11_list[2] == {"date": "2026-06-03", "close_price": 2720.0}
 
-        ks11_list = data["^KS11"]
-        assert len(ks11_list) == 3
-        assert ks11_list[0] == {"date": "2026-06-01", "close_price": 2700.0}
-        assert ks11_list[1] == {"date": "2026-06-02", "close_price": 2710.0}
-        assert ks11_list[2] == {"date": "2026-06-03", "close_price": 2720.0}
-
-        gspc_list = data["^GSPC"]
-        assert len(gspc_list) == 2
-        assert gspc_list[0] == {"date": "2026-06-01", "close_price": 5300.0}
-        assert gspc_list[1] == {"date": "2026-06-02", "close_price": 5310.0}
+    gspc_list = data["^GSPC"]
+    assert len(gspc_list) == 2
+    assert gspc_list[0] == {"date": "2026-06-01", "close_price": 5300.0}
+    assert gspc_list[1] == {"date": "2026-06-02", "close_price": 5310.0}
 
 
 def test_get_market_history_with_realtime(db_session: Session):
@@ -70,17 +66,12 @@ def test_get_market_history_with_realtime(db_session: Session):
     db_session.add(HistoricalPrice(ticker="^KS11", price_date=yesterday, close_price=2700.0))
     db_session.commit()
 
-    # 2. yfinance Tickers와 download 모킹
-    with patch("src.backend.routers.market.yf.Tickers") as mock_tickers_cls, \
-         patch("src.backend.services.benchmark_service.yf.download") as mock_download:
-        
-        # yfinance.download는 비어있는 df 반환
-        mock_download.return_value = MagicMock()
-
+    # 2. yfinance Tickers 모킹
+    with patch("src.backend.routers.market.yf.Tickers") as mock_tickers_cls:
         # 실시간 Tickers mock 인스턴스 설정
         mock_instance = MagicMock()
         mock_tickers_cls.return_value = mock_instance
-        
+
         mock_ticker_obj = MagicMock()
         mock_ticker_obj.fast_info = {
             "last_price": 2750.0,
@@ -91,7 +82,7 @@ def test_get_market_history_with_realtime(db_session: Session):
         # 3. 오늘을 포함하여 API 호출
         start_str = yesterday.strftime("%Y-%m-%d")
         end_str = today.strftime("%Y-%m-%d")
-        
+
         response = client.get(
             f"/api/market/history?tickers=^KS11&start_date={start_str}&end_date={end_str}"
         )
@@ -104,6 +95,6 @@ def test_get_market_history_with_realtime(db_session: Session):
         # 어제와 오늘 데이터 두 개가 와야 함
         assert len(ks11_list) == 2
         assert ks11_list[0] == {"date": yesterday.strftime("%Y-%m-%d"), "close_price": 2700.0}
-        
+
         # 오늘 날짜에 실시간 조회한 2750.0이 들어와야 함
         assert ks11_list[1] == {"date": today.strftime("%Y-%m-%d"), "close_price": 2750.0}

@@ -1,30 +1,41 @@
+# -*- coding: utf-8 -*-
+"""포트폴리오 수익률과 시장 주요 지수 및 관심 종목의 성과를 비교 분석하는 서비스 모듈입니다.
+
+시세 수집 및 캐싱을 통합 마켓 데이터 프로바이더(MarketDataProvider)로 위임하여 처리합니다.
+"""
+
 import datetime
 import asyncio
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert
-import yfinance as yf
-from fastapi.concurrency import run_in_threadpool
-import pandas as pd
 
 from src.backend.models import HistoricalPrice, AccountSnapshot, Asset, Stock
+from src.backend.market import MarketDataProvider
 
 
 class BenchmarkService:
     """포트폴리오 수익률과 시장 주요 지수 및 관심 종목의 성과를 비교 분석하는 서비스 클래스입니다."""
 
-    def __init__(self, db: Session):
+    def __init__(self, db: Session, provider: Optional[MarketDataProvider] = None) -> None:
         """BenchmarkService를 초기화합니다.
 
         Args:
             db (Session): 데이터베이스 세션 객체
+            provider (Optional[MarketDataProvider]): 마켓 데이터 프로바이더 인스턴스
         """
         self.db = db
+        self.provider = provider or MarketDataProvider(db=db)
 
-    async def get_historical_prices(self, ticker: str, start_date: datetime.date, end_date: datetime.date) -> List[HistoricalPrice]:
+    async def get_historical_prices(
+        self,
+        ticker: str,
+        start_date: datetime.date,
+        end_date: datetime.date
+    ) -> List[HistoricalPrice]:
         """지정된 기간 동안의 티커 가격 데이터를 가져옵니다.
 
-        로컬 DB 캐시에 데이터가 없거나 오래된 경우 yfinance에서 가져와 캐싱합니다.
+        MarketDataProvider를 통해 누락된 구간을 자동으로 수집/캐싱한 후 DB 모델 리스트를 반환합니다.
 
         Args:
             ticker (str): 자산 티커 (예: '^KS11', 'AAPL')
@@ -32,9 +43,17 @@ class BenchmarkService:
             end_date (date): 종료일
 
         Returns:
-            List[HistoricalPrice]: 역사적 가격 객체 리스트
+            List[HistoricalPrice]: 역사적 가격 객체 리스트 (날짜 오름차순)
         """
-        # 1. DB에서 먼저 조회
+        # Provider를 통해 캐시 확인 및 필요한 외부 시세 동기화 (결측치 보정 없이 원본 적재 데이터 쿼리)
+        await self.provider.get_historical_prices(
+            ticker=ticker,
+            start_date=start_date,
+            end_date=end_date,
+            fill_missing=False
+        )
+
+        # DB에서 캐싱된 모델 객체 목록 조회 및 반환
         db_prices = (
             self.db.query(HistoricalPrice)
             .filter(
@@ -46,122 +65,14 @@ class BenchmarkService:
             .all()
         )
 
-        # 2. 캐시 보완 여부 판단
-        needs_fetch = False
-        if not db_prices:
-            needs_fetch = True
-        else:
-            latest_date = db_prices[-1].price_date
-            today = datetime.date.today()
-            effective_end = min(end_date, today)
-            
-            # 마지막 저장 날짜가 요청 종료일보다 1일 이상 전이면 fetch (목/금 시세 수집 및 캐싱 보장)
-            if latest_date < effective_end - datetime.timedelta(days=1):
-                needs_fetch = True
-            
-            # 최초 저장 날짜가 요청 시작일보다 늦되, 그 차이가 7일을 초과하는 경우에만 fetch 필요 (휴장/주말 고려)
-            first_date = db_prices[0].price_date
-            if first_date - start_date > datetime.timedelta(days=7):
-                needs_fetch = True
-
-        if needs_fetch:
-            await self._fetch_and_cache(ticker, start_date, end_date)
-            # 캐싱 후 DB에서 재조회
-            db_prices = (
-                self.db.query(HistoricalPrice)
-                .filter(
-                    HistoricalPrice.ticker == ticker,
-                    HistoricalPrice.price_date >= start_date,
-                    HistoricalPrice.price_date <= end_date
-                )
-                .order_by(HistoricalPrice.price_date.asc())
-                .all()
-            )
-
         return db_prices
 
-    async def _fetch_and_cache(self, ticker: str, start_date: datetime.date, end_date: datetime.date):
-        """yfinance에서 데이터를 다운로드하여 DB에 적재합니다.
-
-        비영업일(주말, 공휴일)은 직전 영업일의 종가를 그대로 사용하는 Forward Fill 방식으로 채웁니다.
-
-        Args:
-            ticker (str): 자산 티커
-            start_date (date): 시작일
-            end_date (date): 종료일
-        """
-        yf_ticker = ticker
-        
-        # 1. 국내 주식 티커 변환 처리 (6자리 숫자)
-        if ticker.isdigit() and len(ticker) == 6:
-            # 주식 마스터(stocks) 테이블에서 KOSDAQ인지 KOSPI인지 판단
-            stock = self.db.query(Stock).filter(Stock.stock_code == ticker).first()
-            if stock and "KOSDAQ" in stock.market:
-                yf_ticker = f"{ticker}.KQ"
-            else:
-                yf_ticker = f"{ticker}.KS"
-
-        # yfinance download는 블로킹이므로 threadpool에서 실행
-        try:
-            # yfinance는 시작일의 가격 변화를 제대로 계산하기 위해 며칠 앞당겨 조회
-            delta_start = start_date - datetime.timedelta(days=10)
-            delta_end = end_date + datetime.timedelta(days=2)
-            query_start = delta_start.strftime("%Y-%m-%d")
-            query_end = delta_end.strftime("%Y-%m-%d")
-            
-            df = await run_in_threadpool(
-                yf.download, 
-                yf_ticker, 
-                start=query_start, 
-                end=query_end, 
-                progress=False
-            )
-            
-            if df.empty:
-                return
-
-            # MultiIndex 컬럼 대응 (yf.download 결과 대응)
-            close_col = 'Close'
-            if isinstance(df.columns, pd.MultiIndex):
-                if 'Close' in df.columns.levels[0]:
-                    close_col = ('Close', yf_ticker)
-
-            # 다운로드된 데이터의 날짜별 맵핑 작성
-            price_map = {}
-            for date_stamp, row in df.iterrows():
-                p_date = date_stamp.date()
-                try:
-                    val = float(row[close_col])
-                    if not pd.isna(val):
-                        price_map[p_date] = val
-                except (KeyError, ValueError):
-                    continue
-
-            # query_start부터 query_end까지 하루씩 증가하며 데이터 저장 (오늘 이전인 경우만 저장하며, 비영업일은 0.0으로 저장)
-            curr_date = delta_start
-            today = datetime.date.today()
-            while curr_date <= delta_end:
-                val_to_save = 0.0
-                if curr_date in price_map:
-                    val_to_save = price_map[curr_date]
-
-                if curr_date <= today:
-                    # sqlite insert ignore 구현
-                    stmt = insert(HistoricalPrice).values(
-                        ticker=ticker,
-                        price_date=curr_date,
-                        close_price=val_to_save
-                    )
-                    stmt = stmt.on_conflict_do_nothing(index_elements=['ticker', 'price_date'])
-                    self.db.execute(stmt)
-
-                curr_date += datetime.timedelta(days=1)
-            
-            self.db.commit()
-        except Exception as e:
-            print(f"⚠️ yfinance 데이터 수집 실패 ({ticker} -> {yf_ticker}): {e}")
-
-    async def calculate_cumulative_returns(self, start_date: datetime.date, end_date: datetime.date, tickers: List[str]) -> Dict[str, Any]:
+    async def calculate_cumulative_returns(
+        self,
+        start_date: datetime.date,
+        end_date: datetime.date,
+        tickers: List[str]
+    ) -> Dict[str, Any]:
         """포트폴리오와 시장 지수들의 정규화된 일별 누적 수익률(%) 및 초과수익률을 계산합니다.
 
         Args:
@@ -186,7 +97,7 @@ class BenchmarkService:
             for p in prices:
                 if p.close_price > 0.0:  # 휴장일(0.0)은 영업일 판단에서 제외
                     dates_set.add(p.price_date)
-        
+
         # 시작~종료 범위 내 영업일 필터링 및 정렬
         sorted_dates = sorted([d for d in dates_set if start_date <= d <= end_date])
         if not sorted_dates:
@@ -196,7 +107,6 @@ class BenchmarkService:
         labels = [d.isoformat() for d in sorted_dates]
 
         # 3. 포트폴리오 일자별 평가액 및 입출금액 계산
-        # 전체 계좌 스냅샷 조회
         snapshots = (
             self.db.query(AccountSnapshot)
             .filter(AccountSnapshot.snapshot_date >= start_date, AccountSnapshot.snapshot_date <= end_date)
@@ -288,7 +198,6 @@ class BenchmarkService:
                     roi = 0.0
                 portfolio_returns.append(round(roi, 2))
 
-
         datasets = [
             {
                 "label": "내 포트폴리오",
@@ -322,11 +231,11 @@ class BenchmarkService:
         for ticker in tickers:
             prices = prices_by_ticker.get(ticker, [])
             price_map = {p.price_date: p.close_price for p in prices}
-            
+
             # X축 영업일에 매칭하여 가격 리스트 구축 및 보간(Forward fill)
             ticker_prices = []
             last_price = 0.0
-            
+
             # 시작일 직전의 가격 찾기
             if sorted_dates[0] in price_map and price_map[sorted_dates[0]] > 0.0:
                 last_price = price_map[sorted_dates[0]]
@@ -371,7 +280,6 @@ class BenchmarkService:
             })
 
             # 초과수익률 요약 정보 계산 (최종일 기준)
-            # 최종일에 포트폴리오 스냅샷이 누락된 경우를 고려하여 가장 최근의 유효한(None이 아닌) 수익률을 사용합니다.
             p_final = 0.0
             if portfolio_returns:
                 for val in reversed(portfolio_returns):
@@ -399,7 +307,12 @@ class BenchmarkService:
             "portfolio_final_valuation": portfolio_final_valuation
         }
 
-    async def get_watchlist_returns(self, ticker: str, start_date: datetime.date, end_date: datetime.date) -> Dict[str, Any]:
+    async def get_watchlist_returns(
+        self,
+        ticker: str,
+        start_date: datetime.date,
+        end_date: datetime.date
+    ) -> Dict[str, Any]:
         """관심 종목의 과거 시계열 데이터를 조회하여 시작일 기준 정규화된 누적 수익률(%)을 반환합니다.
 
         Args:
@@ -414,8 +327,7 @@ class BenchmarkService:
         prices = await self.get_historical_prices(ticker, start_date, end_date)
         price_map = {p.price_date: p.close_price for p in prices}
 
-        # 2. 영업일 기준 날짜 정합 (KOSPI 영업일 기준 등으로 처리하기 위해 KOSPI 데이터를 가져옴)
-        # 지수의 영업일 리스트를 X축 기준으로 삼습니다.
+        # 2. 영업일 기준 날짜 정합 (지수의 영업일 리스트를 X축 기준으로 삼음)
         kospi_prices = await self.get_historical_prices("^KS11", start_date, end_date)
         sorted_dates = sorted(list(set(p.price_date for p in kospi_prices if p.close_price > 0.0)))
         if not sorted_dates:
@@ -501,7 +413,6 @@ class BenchmarkService:
             start_date = datetime.date(today.year, 1, 1)
 
         prices = await self.get_historical_prices(ticker, start_date, today)
-        # 휴장일(0.0)이 아닌 실질 영업일 시세만 필터링합니다.
         valid_prices = [p for p in prices if p.close_price > 0.0]
         if len(valid_prices) >= 2:
             base_price = valid_prices[0].close_price
@@ -510,12 +421,8 @@ class BenchmarkService:
                 return round(((last_price - base_price) / base_price) * 100, 2)
         return 0.0
 
-
     async def get_comparison_tables(self) -> Dict[str, Any]:
         """포트폴리오와 4대 시장 지수의 연간 및 일간 수익률 비교 데이터를 계산합니다.
-
-        대시보드와 동일한 표 구성을 지원하기 위해 포트폴리오의 연간/일간 성과 통계를 기반으로
-        지수의 수익률을 매핑합니다.
 
         Returns:
             Dict[str, Any]: 연간 및 일간 비교 테이블 데이터
@@ -524,11 +431,11 @@ class BenchmarkService:
         """
         from .dashboard_service import DashboardService
         dash_svc = DashboardService(self.db)
-        
-        # 1. 포트폴리오의 연도별, 일자별 데이터 로딩 (내림차순 정렬되어 반환됨)
+
+        # 1. 포트폴리오의 연도별, 일자별 데이터 로딩
         yearly_stats = dash_svc.get_yearly_stats()
         daily_stats = dash_svc.get_daily_stats(all_data=True)
-        
+
         tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
         ticker_names = {
             "^KS11": "kospi",
@@ -536,25 +443,22 @@ class BenchmarkService:
             "^GSPC": "sp500",
             "^IXIC": "nasdaq"
         }
-        
+
         # 2. 일간 수익률 비교 계산
         daily_comparison = []
         if daily_stats:
-            # 날짜 정렬 (오름차순)
             sorted_daily = sorted(daily_stats, key=lambda x: x["date"])
             sorted_dates = [item["date"] for item in sorted_daily]
-            
+
             min_date = sorted_dates[0]
             max_date = sorted_dates[-1]
-            
+
             # 4대 지수 전체 구간 시세 일괄 수집/캐싱 보장
             for ticker in tickers:
                 await self.get_historical_prices(ticker, min_date, max_date)
-                
-            # DB 쿼리 부하 최소화를 위해 메모리에 가격 리스트 로드
+
             prices_cache = {}
             for ticker in tickers:
-                # 시작일 이전 보간을 고려하여 여유있게 조회
                 db_prices = (
                     self.db.query(HistoricalPrice)
                     .filter(
@@ -568,7 +472,6 @@ class BenchmarkService:
                 )
                 prices_cache[ticker] = db_prices
 
-            # 특정 날짜 이하의 가장 최근 유효 종가를 구하는 헬퍼 함수
             def get_cached_price_at_date(ticker: str, target_date: datetime.date) -> float:
                 plist = prices_cache.get(ticker, [])
                 last_val = 0.0
@@ -579,7 +482,6 @@ class BenchmarkService:
                         break
                 return last_val
 
-            # 일간 비교 데이터 매핑
             for i, item in enumerate(sorted_daily):
                 curr_date = item["date"]
                 row = {
@@ -591,46 +493,43 @@ class BenchmarkService:
                     "sp500": 0.0,
                     "nasdaq": 0.0
                 }
-                
+
                 if i > 0:
                     prev_date = sorted_dates[i-1]
                     for ticker in tickers:
                         p_prev = get_cached_price_at_date(ticker, prev_date)
                         p_curr = get_cached_price_at_date(ticker, curr_date)
                         name = ticker_names[ticker]
-                        
+
                         if p_prev > 0.0:
                             ret = ((p_curr - p_prev) / p_prev) * 100
                             row[name] = round(ret, 2)
                         else:
                             row[name] = 0.0
                 else:
-                    # 최초 날짜는 변동률 0.0
                     for ticker in tickers:
                         name = ticker_names[ticker]
                         row[name] = 0.0
-                        
+
                 daily_comparison.append(row)
-                
-            # 최신순(내림차순) 정렬
+
             daily_comparison.reverse()
 
-        # 3. 연간 수익률 비교 계산 (달력 기준)
+        # 3. 연간 수익률 비교 계산
         yearly_comparison = []
         if yearly_stats:
-            # 연도별 정렬 (오름차순)
             sorted_yearly = sorted(yearly_stats, key=lambda x: x["year"])
-            
+
             for item in sorted_yearly:
                 year = item["year"]
                 start_date = datetime.date(year, 1, 1)
-                
+
                 today = datetime.date.today()
                 if year == today.year:
                     end_date = today
                 else:
                     end_date = datetime.date(year, 12, 31)
-                    
+
                 row = {
                     "year": year,
                     "assets": item["assets"],
@@ -640,13 +539,12 @@ class BenchmarkService:
                     "sp500": 0.0,
                     "nasdaq": 0.0
                 }
-                
+
                 for ticker in tickers:
-                    # 지수 가격 수집 및 로컬 캐시 갱신 보장
                     prices = await self.get_historical_prices(ticker, start_date, end_date)
                     valid_prices = [p for p in prices if p.close_price > 0.0]
                     name = ticker_names[ticker]
-                    
+
                     if len(valid_prices) >= 2:
                         base_price = valid_prices[0].close_price
                         last_price = valid_prices[-1].close_price
@@ -655,15 +553,12 @@ class BenchmarkService:
                             row[name] = round(ret, 2)
                     else:
                         row[name] = 0.0
-                        
+
                 yearly_comparison.append(row)
-                
-            # 최신순(내림차순) 정렬
+
             yearly_comparison.reverse()
-            
+
         return {
             "yearly": yearly_comparison,
             "daily": daily_comparison
         }
-
-

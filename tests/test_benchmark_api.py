@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """벤치마크 비교 대시보드 API 엔드포인트 테스트 모듈입니다."""
 
 import pytest
@@ -49,59 +50,58 @@ def setup_benchmark_data(db_session):
     # 1. 포트폴리오 스냅샷 생성
     dates = [d1, d2, d3]
     for i, d in enumerate(dates):
-        # 5/1: 평가액 100만, 추가액 110만
         snapshot = AccountSnapshot(
             account_id=account.id,
             snapshot_date=d,
             period_deposit=1100000.0 if i == 0 else 0.0,
-            total_valuation=1000000 + i * 50000,  # 100만, 105만, 110만
+            total_valuation=1000000 + i * 50000,
             total_profit=0.0
         )
         db_session.add(snapshot)
 
-    # 2. 지수 가격 데이터 주입
+    # 2. 지수 및 관심종목 가격 데이터 주입
     tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
     for t in tickers:
         for i, d in enumerate(dates):
             p = HistoricalPrice(
                 ticker=t,
                 price_date=d,
-                close_price=2000.0 + i * 100  # 2000, 2100, 2200
+                close_price=2000.0 + i * 100
             )
             db_session.add(p)
+
+    # 관심종목 005930 시세 주입 (5/1: 70000, 5/4: 71000, 5/5: 72000)
+    for i, d in enumerate(dates):
+        db_session.add(HistoricalPrice(
+            ticker="005930",
+            price_date=d,
+            close_price=70000.0 + i * 1000.0
+        ))
+        db_session.add(HistoricalPrice(
+            ticker="AAPL",
+            price_date=d,
+            close_price=170.0 + i * 5.0
+        ))
 
     # 3. 관심종목 추가
     db_session.add(Watchlist(stock_code="005930", stock_name="삼성전자", country="KR"))
     db_session.add(Watchlist(stock_code="AAPL", stock_name="Apple", country="US"))
-    
+
     db_session.commit()
 
 
 @pytest.mark.asyncio
-@patch("yfinance.download")
 @patch("src.backend.services.price_service.price_service.get_kr_prices")
 @patch("src.backend.services.price_service.price_service.get_us_prices")
 async def test_get_benchmark_dashboard_api(
     mock_get_us_prices,
     mock_get_kr_prices,
-    mock_yf_download,
     setup_benchmark_data,
     db_session
 ):
     """대시보드 API 엔드포인트(/api/benchmark)가 정상 데이터를 반환하는지 테스트합니다."""
-    
     today = datetime.date.today()
-    d1 = datetime.datetime.combine(today - datetime.timedelta(days=4), datetime.time.min)
-    d2 = datetime.datetime.combine(today - datetime.timedelta(days=1), datetime.time.min)
-    d3 = datetime.datetime.combine(today, datetime.time.min)
-
-    # yfinance download 모킹
-    mock_df = pd.DataFrame(
-        data={"Close": [70000.0, 71000.0, 72000.0]},
-        index=pd.DatetimeIndex([d1, d2, d3])
-    )
-    mock_df.index.name = "Date"
-    mock_yf_download.return_value = mock_df
+    d3 = today
 
     # 실시간 현재가 모킹
     mock_get_kr_prices.return_value = [
@@ -111,7 +111,6 @@ async def test_get_benchmark_dashboard_api(
         {"stock_code": "AAPL", "current_price": 180.0}
     ]
 
-    # API 호출 (1M 기간으로 조회하여 셋업한 5/1 데이터가 캐시 히트 범위(7일 이내)에 들도록 함)
     response = client.get("/api/benchmark?period=1M")
 
     assert response.status_code == 200
@@ -130,7 +129,6 @@ async def test_get_benchmark_dashboard_api(
     assert res_data["portfolio"]["total_valuation"] == 1100000
     assert res_data["portfolio"]["actual_latest_valuation"] == 1100000
     assert res_data["portfolio"]["actual_latest_date"] == d3.strftime("%Y-%m-%d")
-    # 선택된 1M 기간(5/1~5/5)의 정규화 누적 수익률: -47.62%
     assert res_data["portfolio"]["ytd_return"] == -47.62
 
     # 지수 카드 정보 검증
@@ -141,22 +139,20 @@ async def test_get_benchmark_dashboard_api(
     # 관심 종목 검증
     watchlist = res_data["watchlist"]
     assert len(watchlist) == 2
-    
+
     samsung = next(w for w in watchlist if w["stock_code"] == "005930")
     assert samsung["stock_name"] == "삼성전자"
     assert samsung["current_price"] == 72000.0
-    # YTD return: 5/1(70000) 대비 5/5(72000) -> ((72000 - 70000) / 70000) * 100 = 2.86%
+    # YTD return: 70000 대비 72000 -> ((72000 - 70000) / 70000) * 100 = 2.86%
     assert samsung["ytd_return"] == 2.86
 
 
 @pytest.mark.asyncio
-@patch("yfinance.download")
 @patch("src.backend.services.price_service.price_service.get_kr_prices")
 @patch("src.backend.services.price_service.price_service.get_us_prices")
 async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
     mock_get_us_prices,
     mock_get_kr_prices,
-    mock_yf_download,
     db_session
 ):
     """최종일에 포트폴리오 스냅샷이 누락된 경우, API 응답의 portfolio.ytd_return이 None이 아니라 최근 유효값을 반환하는지 테스트합니다."""
@@ -178,9 +174,6 @@ async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
     d2 = today - datetime.timedelta(days=1)
     d3 = today
 
-    # 5/1: 스냅샷 존재 (val = 1,000,000)
-    # 5/4: 스냅샷 존재 (val = 1,100,000 -> 10%)
-    # 5/5: 스냅샷 누락 (None)
     snapshots = [
         AccountSnapshot(account_id=account.id, snapshot_date=d1, period_deposit=0.0, total_valuation=1000000.0, total_profit=0.0),
         AccountSnapshot(account_id=account.id, snapshot_date=d2, period_deposit=0.0, total_valuation=1100000.0, total_profit=0.0),
@@ -188,7 +181,6 @@ async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
     for s in snapshots:
         db_session.add(s)
 
-    # 지수 데이터 주입 (5/1, 5/4, 5/5 모두 존재)
     dates = [d1, d2, d3]
     tickers = ["^KS11"]
     for t in tickers:
@@ -198,10 +190,6 @@ async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
 
     db_session.commit()
 
-    # yfinance / 실시간 가격 모킹
-    mock_df = pd.DataFrame(data={"Close": [70000.0, 71000.0, 72000.0]}, index=pd.DatetimeIndex(dates))
-    mock_df.index.name = "Date"
-    mock_yf_download.return_value = mock_df
     mock_get_kr_prices.return_value = []
     mock_get_us_prices.return_value = []
 
@@ -209,8 +197,6 @@ async def test_get_benchmark_dashboard_api_with_missing_last_snapshot(
     assert response.status_code == 200
     res_data = response.json()
 
-    # 5/5에는 스냅샷이 없었으므로 portfolio.ytd_return은 5/4의 유효값인 10.0이어야 함
     assert res_data["portfolio"]["ytd_return"] == 10.0
     assert res_data["portfolio"]["actual_latest_valuation"] == 1100000.0
     assert res_data["portfolio"]["actual_latest_date"] == d2.strftime("%Y-%m-%d")
-
