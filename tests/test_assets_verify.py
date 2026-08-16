@@ -17,7 +17,7 @@ def test_get_categories():
     assert "국내주식" in data["일반주식"]
     assert data == VALID_CATEGORIES
 
-@patch("src.backend.routers.db_manage.price_service.get_stock_name", new_callable=AsyncMock)
+@patch("src.backend.routers.assets.price_service.get_stock_name", new_callable=AsyncMock)
 def test_verify_asset_success(mock_get_name):
     """실제 주식시장에 존재하는 종목에 대해 200 응답과 함께 올바른 자산명을 반환하는지 테스트합니다."""
     # Mocking price_service.get_stock_name to return a name
@@ -28,7 +28,7 @@ def test_verify_asset_success(mock_get_name):
     assert response.json() == {"name": "삼성전자"}
     mock_get_name.assert_called_once_with("005930", "KR")
 
-@patch("src.backend.routers.db_manage.price_service.get_stock_name", new_callable=AsyncMock)
+@patch("src.backend.routers.assets.price_service.get_stock_name", new_callable=AsyncMock)
 def test_verify_asset_not_found(mock_get_name):
     """존재하지 않는 티커에 대해 404 Not Found를 반환하는지 테스트합니다."""
     # Mocking price_service.get_stock_name to return None

@@ -7,11 +7,11 @@ from .routers import (
     accounts,
     assets,
     transactions,
+    snapshots,
     watchlist,
     stocks,
     exchange,
     dashboard,
-    db_manage,
     connection,
     ratios,
     benchmark,
@@ -72,11 +72,11 @@ app.add_middleware(
 app.include_router(accounts.router)
 app.include_router(assets.router)
 app.include_router(transactions.router)
+app.include_router(snapshots.router)
 app.include_router(watchlist.router)
 app.include_router(stocks.router)
 app.include_router(exchange.router)
 app.include_router(dashboard.router)
-app.include_router(db_manage.router)
 app.include_router(connection.router)
 app.include_router(ratios.router)
 app.include_router(benchmark.router)

@@ -3,11 +3,13 @@ import datetime
 from unittest.mock import patch, AsyncMock
 from src.backend.models import Account, Asset, Transaction, AccountSnapshot, ExchangeRate
 from src.backend.services.dashboard_service import DashboardService
-from src.backend.routers.db_manage import BrokerageCalculateRequest, TransactionSchema, BrokerageSaveRequest, BrokerageSaveAccountRequest, calculate_brokerage_snapshot, save_brokerage_snapshots
+from src.backend.schemas import BrokerageCalculateRequest, TransactionSchema, BrokerageSaveRequest, BrokerageSaveAccountRequest
+from src.backend.routers.snapshots import calculate_brokerage_snapshot, save_brokerage_snapshots
 
 
 @pytest.fixture
 def setup_assets(db_session):
+    """증권 스냅샷 테스트용 기본 현금 및 주식 자산을 생성합니다."""
     krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
     usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="달러예수금", country="US")
     stock = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
@@ -319,8 +321,8 @@ async def test_get_transactions_period_api(db_session, setup_assets):
     ))
     db_session.commit()
     
-    # db_manage 라우터의 get_period_transactions 엔드포인트 직접 호출
-    from src.backend.routers.db_manage import get_period_transactions
+    # transactions 라우터의 get_period_transactions 엔드포인트 직접 호출
+    from src.backend.routers.transactions import get_period_transactions
     
     # 10일 전 ~ 오늘
     res = get_period_transactions(

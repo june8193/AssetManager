@@ -1,10 +1,12 @@
 import pytest
 import datetime
 from src.backend.models import Account, Asset, Transaction, AccountSnapshot
-from src.backend.routers.db_manage import BankSaveRequest, BankSaveAccountRequest, TransactionSchema, save_bank_snapshots
+from src.backend.schemas import BankSaveRequest, BankSaveAccountRequest, TransactionSchema
+from src.backend.routers.snapshots import save_bank_snapshots
 
 @pytest.fixture
 def setup_bank_assets(db_session):
+    """은행 스냅샷 테스트용 기본 현금(KRW) 자산을 생성합니다."""
     krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
     db_session.add(krw)
     db_session.commit()

@@ -16,6 +16,7 @@ def test_user(db_session):
     return user
 
 def test_get_users(test_user):
+    """전체 사용자 목록 조회 API 동작을 검증합니다."""
     response = client.get("/api/db/users")
     assert response.status_code == 200
     data = response.json()
@@ -52,6 +53,7 @@ def test_get_accounts_includes_user_name(db_session, test_user):
     assert target_acc["user_name"] == "Test User"
 
 def test_create_and_get_account(test_user):
+    """계좌 생성, 조회, 수정, 삭제(CRUD) 플로우를 검증합니다."""
     user_id = test_user.id
 
     # 계좌 생성
@@ -87,6 +89,7 @@ def test_create_and_get_account(test_user):
     assert del_res.status_code == 200
 
 def test_create_and_get_asset():
+    """자산 마스터 생성, 수정, 삭제 플로우를 검증합니다."""
     payload = {
         "ticker": "TEST_TICKER",
         "name": "Test Asset",
@@ -207,7 +210,8 @@ def test_calculate_returns_existing_transactions(db_session, test_user):
 @pytest.mark.asyncio
 async def test_save_unified_snapshots_integration(db_session, test_user):
     """통합 스냅샷 저장 API가 증권 및 은행 계좌를 올바르게 처리하는지 테스트합니다."""
-    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest, BrokerageSaveAccountRequest, BankSaveAccountRequest, TransactionSchema
+    from src.backend.schemas import UnifiedSaveRequest, BrokerageSaveAccountRequest, BankSaveAccountRequest, TransactionSchema
+    from src.backend.routers.snapshots import save_unified_snapshots
     import datetime
     
     today = datetime.date.today()
@@ -269,7 +273,8 @@ async def test_save_unified_snapshots_integration(db_session, test_user):
 @pytest.mark.asyncio
 async def test_save_unified_snapshots_bank_none_valuation(db_session, test_user):
     """은행 계좌의 total_valuation이 None일 경우 계산된 값을 사용하는지 테스트합니다."""
-    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest, BankSaveAccountRequest
+    from src.backend.schemas import UnifiedSaveRequest, BankSaveAccountRequest
+    from src.backend.routers.snapshots import save_unified_snapshots
     import datetime
     
     today = datetime.date.today()
@@ -318,7 +323,8 @@ async def test_save_unified_snapshots_bank_none_valuation(db_session, test_user)
 @pytest.mark.asyncio
 async def test_preview_snapshots_excludes_initial_balance(db_session, test_user):
     """INITIAL_BALANCE 트랜잭션이 스냅샷의 period_deposit에 포함되지 않음을 검증합니다."""
-    from src.backend.routers.db_manage import preview_snapshots, SaveSnapshotRequest
+    from src.backend.schemas import SaveSnapshotRequest
+    from src.backend.routers.snapshots import preview_snapshots
     
     # 1. 기초 자산 생성
     krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
@@ -358,7 +364,8 @@ async def test_preview_snapshots_excludes_initial_balance(db_session, test_user)
 @pytest.mark.asyncio
 async def test_save_unified_snapshots_saves_exchange_rate(db_session, test_user):
     """Unified 스냅샷 저장 시 입력받은 환율이 exchange_rates 테이블에 저장되는지 검증합니다."""
-    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest
+    from src.backend.schemas import UnifiedSaveRequest
+    from src.backend.routers.snapshots import save_unified_snapshots
     from src.backend.models import ExchangeRate
     import datetime
 
@@ -393,7 +400,8 @@ async def test_save_unified_snapshots_saves_exchange_rate(db_session, test_user)
 @pytest.mark.asyncio
 async def test_save_unified_snapshots_updates_existing_exchange_rate(db_session, test_user):
     """Unified 스냅샷 저장 시 이미 동일 날짜/통화의 환율이 존재할 경우 업데이트되는지 검증합니다."""
-    from src.backend.routers.db_manage import save_unified_snapshots, UnifiedSaveRequest
+    from src.backend.schemas import UnifiedSaveRequest
+    from src.backend.routers.snapshots import save_unified_snapshots
     from src.backend.models import ExchangeRate
     import datetime
 

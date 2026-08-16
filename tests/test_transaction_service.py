@@ -1,10 +1,8 @@
-"""TransactionService 단위 테스트 모듈입니다."""
-
 import pytest
 from datetime import date
 from src.backend.models import User, Account, Asset, Transaction
 from src.backend.services.transaction_service import TransactionService
-from src.backend.routers.db_manage import TransactionSchema, TransferTransactionRequest
+from src.backend.schemas import TransactionSchema, TransferTransactionRequest
 
 
 @pytest.fixture

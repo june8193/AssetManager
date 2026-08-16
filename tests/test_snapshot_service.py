@@ -1,10 +1,8 @@
-"""SnapshotService 단위 테스트 모듈입니다."""
-
 import pytest
 from datetime import date
 from src.backend.models import User, Account, Asset, Transaction, AccountSnapshot
 from src.backend.services.snapshot_service import SnapshotService
-from src.backend.routers.db_manage import SnapshotPreviewSchema, SaveSnapshotRequest
+from src.backend.schemas import SnapshotPreviewSchema, SaveSnapshotRequest
 
 
 @pytest.fixture

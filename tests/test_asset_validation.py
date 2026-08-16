@@ -1,6 +1,6 @@
 import pytest
 from src.backend.models import Asset
-from src.backend.routers.db_manage import AssetSchema
+from src.backend.schemas import AssetSchema
 from pydantic import ValidationError
 
 def test_db_model_asset_category_validation_invalid_major(db_session):
