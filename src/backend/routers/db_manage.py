@@ -1,12 +1,31 @@
 import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session, joinedload
-from pydantic import BaseModel, ConfigDict, model_validator
 from typing import List, Optional, Literal
 from datetime import date, datetime
 
 from ..database import get_db
 from ..models import Account, Asset, Transaction, AccountSnapshot, User, ExchangeRate, VALID_CATEGORIES
+from ..schemas import (
+    UserSchema,
+    AccountSchema,
+    AssetSchema,
+    TransactionSchema,
+    TransferTransactionRequest,
+    SaveSnapshotRequest,
+    SnapshotPreviewSchema,
+    SnapshotSchema,
+    BrokerageCalculateRequest,
+    BrokerageCalculateResponse,
+    BrokerageSaveAccountRequest,
+    BrokerageSaveRequest,
+    BankCalculateRequest,
+    BankCalculateResponse,
+    BankSaveAccountRequest,
+    BankSaveRequest,
+    UnifiedSaveRequest,
+    LatestSnapshotDateResponse,
+)
 from ..services.dashboard_service import DashboardService
 from ..services.ledger_engine import LedgerEngine
 from ..services.price_service import price_service
@@ -19,239 +38,6 @@ router = APIRouter(
     tags=["db_manage"]
 )
 
-# --- Pydantic Schemas ---
-
-class SaveSnapshotRequest(BaseModel):
-    snapshot_date: date
-    exchange_rate: float
-
-class SnapshotPreviewSchema(BaseModel):
-    account_id: int
-    account_name: str
-    snapshot_date: date
-    period_deposit: float
-    total_valuation: float
-    total_profit: float
-    period_profit: float = 0.0
-    calculated_return_rate: float = 0.0
-    current_cash: float = 0.0
-
-
-class AccountSchema(BaseModel):
-    """계좌 정보를 담는 스키마입니다.
-
-    Attributes:
-        id (Optional[int]): 계좌 식별자 (생성 시 생략 가능)
-        user_id (int): 사용자 식별자 (FK)
-        user_name (Optional[str]): 사용자 이름 (추가)
-        name (str): 계좌 이름/번호
-        provider (str): 금융 기관 이름
-        alias (Optional[str]): 계좌 별칭
-        account_type (str): 계좌 종류 (BROKERAGE, BANK)
-        is_active (bool): 계좌 활성 여부
-    """
-    model_config = ConfigDict(from_attributes=True)
-
-    id: Optional[int] = None
-    user_id: int
-    user_name: Optional[str] = None
-    name: str
-    provider: str
-    alias: Optional[str] = None
-    account_type: str = "BROKERAGE"
-    is_active: bool = True
-
-class AssetSchema(BaseModel):
-    """자산 마스터 정보를 담는 스키마입니다.
-
-    Attributes:
-        id (Optional[int]): 자산 식별자
-        ticker (str): 티커 또는 심볼
-        name (str): 자산 이름
-        major_category (str): 대분류
-        sub_category (str): 중분류
-        country (str): 국가 코드 (KR, US 등)
-    """
-    model_config = ConfigDict(from_attributes=True)
-
-    id: Optional[int] = None
-    ticker: str
-    name: str
-    major_category: str
-    sub_category: str
-    country: str = "KR"
-
-    @model_validator(mode='after')
-    def validate_categories(self) -> 'AssetSchema':
-        """대분류와 중분류의 조합이 유효한 범위 내에 있는지 검증합니다.
-        
-        Raises:
-            ValueError: 유효하지 않은 카테고리 조합인 경우.
-        """
-        major = self.major_category
-        sub = self.sub_category
-        
-        if major not in VALID_CATEGORIES:
-            raise ValueError(f"유효하지 않은 대분류입니다: '{major}'. 허용 범위: {list(VALID_CATEGORIES.keys())}")
-            
-        valid_subs = VALID_CATEGORIES[major]
-        if sub not in valid_subs:
-            raise ValueError(f"유효하지 않은 카테고리 조합입니다: '{sub}'. 대분류 '{major}'에 허용된 중분류: {valid_subs}")
-            
-        return self
-
-class TransactionSchema(BaseModel):
-    """거래 내역 정보를 담는 스키마입니다.
-
-    Attributes:
-        id (Optional[int]): 거래 식별자
-        account_id (int): 계좌 식별자
-        asset_id (int): 거래 자산 식별자
-        target_asset_id (Optional[int]): 환전 상대 자산 식별자
-        transaction_date (date): 거래 일자
-        type (str): 거래 유형 (BUY, SELL, EXCHANGE 등)
-        quantity (float): 수량
-        price (float): 단가
-        total_amount (float): 총 거래 금액
-        currency (str): 통화 (KRW, USD)
-        exchange_rate (Optional[float]): 환율
-        memo (Optional[str]): 메모
-        source (Literal["MANUAL", "AUTO_KIWOOM"]): 거래 출처 (MANUAL, AUTO_KIWOOM)
-        external_id (Optional[str]): 외부 시스템 연동 식별자
-        transfer_pair_id (Optional[str]): 이체 연동 식별자 (UUID)
-        asset_name (Optional[str]): 자산명
-        asset_ticker (Optional[str]): 자산 티커
-        target_asset_name (Optional[str]): 환전 상대 자산명
-        target_asset_ticker (Optional[str]): 환전 상대 자산 티커
-        account_display_name (Optional[str]): 계좌 표시 이름
-    """
-    model_config = ConfigDict(from_attributes=True)
-
-    id: Optional[int] = None
-    account_id: int
-    asset_id: int
-    target_asset_id: Optional[int] = None
-    transaction_date: date
-    type: Literal["INITIAL_BALANCE", "DEPOSIT", "WITHDRAW", "BUY", "SELL", "INTEREST", "TAX", "CASH_ADJUSTMENT", "EXCHANGE", "TRANSFER"]
-    quantity: float = 0.0
-    price: float = 0.0
-    total_amount: float
-    currency: str
-    exchange_rate: Optional[float] = None
-    memo: Optional[str] = None
-    source: Literal["MANUAL", "AUTO_KIWOOM"] = "MANUAL"
-    external_id: Optional[str] = None
-    transfer_pair_id: Optional[str] = None
-    asset_name: Optional[str] = None
-    asset_ticker: Optional[str] = None
-    target_asset_name: Optional[str] = None
-    target_asset_ticker: Optional[str] = None
-    account_display_name: Optional[str] = None
-
-class TransferTransactionRequest(BaseModel):
-    """계좌 간 이체 생성 요청 스키마입니다."""
-    source_account_id: int
-    target_account_id: int
-    asset_id: int
-    amount: float
-    transaction_date: date
-    memo: Optional[str] = None
-
-
-class SnapshotSchema(BaseModel):
-    """계좌 상태 스냅샷 정보를 담는 스키마입니다.
-
-    Attributes:
-        id (int): 스냅샷 식별자
-        account_id (int): 계좌 식별자
-        snapshot_date (date): 기준 일자
-        period_deposit (float): 해당 기간 추가 입금액
-        total_valuation (float): 총 평가액
-        total_profit (float): 누적 수익
-    """
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    account_id: int
-    snapshot_date: date
-    period_deposit: float
-    total_valuation: float
-    total_profit: float
-
-class UserSchema(BaseModel):
-    """사용자 정보를 담는 스키마입니다."""
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    name: str
-
-class BrokerageCalculateRequest(BaseModel):
-    account_id: int
-    snapshot_date: date
-    new_transactions: List[TransactionSchema]
-    current_krw: float
-    current_usd: float
-    exchange_rate: float
-
-class BrokerageCalculateResponse(BaseModel):
-    theoretical_krw: float
-    theoretical_usd: float
-    diff_krw: float
-    diff_usd: float
-    existing_transactions: List[TransactionSchema] = []
-    period_deposit: float = 0.0
-    period_profit: float = 0.0
-    need_last_exchange_rate: bool = False
-    last_snapshot_date: Optional[date] = None
-
-
-class BrokerageSaveAccountRequest(BaseModel):
-    account_id: int
-    new_transactions: List[TransactionSchema]
-    diff_krw: float # 원화 차액 (배당 또는 수수료)
-    diff_usd: float # 달러 차액 (배당 또는 수수료)
-
-class BrokerageSaveRequest(BaseModel):
-    snapshot_date: date
-    exchange_rate: float
-    accounts: List[BrokerageSaveAccountRequest]
-
-class BankCalculateRequest(BaseModel):
-    """은행계좌 잔액 계산을 위한 요청 스키마입니다."""
-    account_id: int
-    snapshot_date: date
-    new_transactions: List[TransactionSchema]
-
-class BankCalculateResponse(BaseModel):
-    """은행계좌 잔액 계산 결과 스키마입니다."""
-    theoretical_krw: float
-    existing_transactions: List[TransactionSchema] = []
-    total_deposit: float = 0.0
-    total_withdraw: float = 0.0
-    total_interest: float = 0.0
-    total_tax: float = 0.0
-    total_adjustment: float = 0.0
-
-
-# Bank Snapshot Wizard Schemas
-class BankSaveAccountRequest(BaseModel):
-    account_id: int
-    new_transactions: List[TransactionSchema]
-    total_valuation: Optional[float] = None # 은행 계좌는 현재 잔액이 곧 총 평가액 (선택 사항)
-
-class BankSaveRequest(BaseModel):
-    snapshot_date: date
-    accounts: List[BankSaveAccountRequest]
-
-class UnifiedSaveRequest(BaseModel):
-    snapshot_date: date
-    exchange_rate: float
-    brokerage_accounts: List[BrokerageSaveAccountRequest]
-    bank_accounts: List[BankSaveAccountRequest]
-
-class LatestSnapshotDateResponse(BaseModel):
-    """최신 스냅샷 날짜 정보를 담는 스키마입니다."""
-    latest_date: Optional[date] = None
 
 # --- API Endpoints ---
 

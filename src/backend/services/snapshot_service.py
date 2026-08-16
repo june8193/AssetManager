@@ -4,6 +4,7 @@ from typing import List, Dict, Any, Optional
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
 from ..models import Account, Asset, Transaction, AccountSnapshot, ExchangeRate
+from ..schemas import SnapshotPreviewSchema
 from .dashboard_service import DashboardService
 
 
@@ -111,8 +112,6 @@ class SnapshotService:
             )
             current_cash_krw = cash_balances.get('KRW', 0.0) + (cash_balances.get('USD', 0.0) * exchange_rate)
 
-            # Lazy import schema to avoid circular imports
-            from ..routers.db_manage import SnapshotPreviewSchema
             previews.append(SnapshotPreviewSchema(
                 account_id=acc.id,
                 account_name=acc.alias or acc.name,
