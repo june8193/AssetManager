@@ -157,13 +157,15 @@ class YahooFinanceAdapter(MarketAdapterBase):
     async def get_exchange_rate(
         self,
         sell_currency: str = "USD",
-        buy_currency: str = "KRW"
+        buy_currency: str = "KRW",
+        target_date: Optional[datetime.date] = None,
     ) -> Optional[float]:
         """환율을 조회합니다.
 
         Args:
             sell_currency (str): 매도 통화 (기본값: 'USD')
             buy_currency (str): 매수 통화 (기본값: 'KRW')
+            target_date (Optional[datetime.date]): 조회 기준 일자 (None일 경우 실시간)
 
         Returns:
             Optional[float]: 환율 값 (조회 실패 시 None)
@@ -178,6 +180,15 @@ class YahooFinanceAdapter(MarketAdapterBase):
 
         try:
             ticker_obj = await run_in_threadpool(yf.Ticker, pair_symbol)
+            if target_date is not None:
+                start_str = (target_date - datetime.timedelta(days=5)).strftime("%Y-%m-%d")
+                end_str = (target_date + datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+                hist = await run_in_threadpool(ticker_obj.history, start=start_str, end=end_str)
+                if hist is not None and not hist.empty:
+                    close_val = float(hist["Close"].iloc[-1])
+                    if close_val > 0.0:
+                        return close_val
+
             info = ticker_obj.fast_info
             last_price = self._extract_float(info, ["last_price", "lastPrice", "regular_market_price"])
             if last_price > 0.0:

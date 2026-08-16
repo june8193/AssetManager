@@ -301,6 +301,54 @@ class MarketDataProvider:
         fallback = self.cache.get_last_known_price(ticker, start_date - datetime.timedelta(days=1))
         return self.cache.apply_forward_fill(raw_prices, trading_days, fallback_price=fallback)
 
+    async def get_historical_price_on_date(
+        self,
+        ticker: str,
+        target_date: datetime.date,
+        country: Optional[str] = None,
+        fill_missing: bool = True,
+    ) -> float:
+        """특정 일자의 종가를 조회합니다.
+
+        비영업일/휴일 요청 시 정책(fill_missing=True)에 따라 직전 영업일 종가로 보정하여 반환합니다.
+
+        Args:
+            ticker (str): 종목 코드 또는 티커
+            target_date (datetime.date): 조회 대상 일자
+            country (Optional[str]): 국가 코드
+            fill_missing (bool): 결측치 직전 영업일 종가 보정 여부 (기본값: True)
+
+        Returns:
+            float: 종가 (조회 실패 시 0.0)
+        """
+        # start_date를 target_date보다 여유 있게 설정하여 Forward-fill 기준점을 확보
+        if fill_missing:
+            # 7일 전부터 조회하여 직전 거래일 가격을 확보
+            lookback_start = target_date - datetime.timedelta(days=7)
+            prices = await self.get_historical_prices(
+                ticker=ticker,
+                start_date=lookback_start,
+                end_date=target_date,
+                country=country,
+                fill_missing=True,
+            )
+            # target_date에 해당하는 데이터 또는 가장 최근 데이터 반환
+            for p in reversed(prices):
+                if p["price_date"] <= target_date:
+                    return float(p.get("close_price", 0.0))
+            return 0.0
+        else:
+            prices = await self.get_historical_prices(
+                ticker=ticker,
+                start_date=target_date,
+                end_date=target_date,
+                country=country,
+                fill_missing=False,
+            )
+            if prices:
+                return float(prices[0].get("close_price", 0.0))
+            return 0.0
+
     async def get_stock_name(self, ticker: str, country: Optional[str] = None) -> Optional[str]:
         """종목명을 조회합니다.
 
@@ -318,19 +366,63 @@ class MarketDataProvider:
     async def get_exchange_rate(
         self,
         sell_currency: str = "USD",
-        buy_currency: str = "KRW"
+        buy_currency: str = "KRW",
+        target_date: Optional[datetime.date] = None,
+        force_update: bool = False,
     ) -> Optional[float]:
-        """환율을 조회합니다.
+        """환율을 조회합니다. 기준 일자가 지정되면 DB 캐시를 우선 조회하고 캐싱합니다.
 
         Args:
             sell_currency (str): 매도 통화 (기본값: 'USD')
             buy_currency (str): 매수 통화 (기본값: 'KRW')
+            target_date (Optional[datetime.date]): 환율 기준 일자 (None일 경우 실시간)
+            force_update (bool): DB 캐시 무시 및 강제 갱신 여부
 
         Returns:
             Optional[float]: 환율 또는 None
         """
+        sell = sell_currency.upper()
+        buy = buy_currency.upper()
+
+        if sell == buy:
+            return 1.0
+
+        from src.backend.models import ExchangeRate
+
+        # 1. 특정 일자 환율 조회 시 DB 캐시 확인 (force_update가 아닐 때)
+        if not force_update and target_date is not None and self.db is not None:
+            db_rate = (
+                self.db.query(ExchangeRate)
+                .filter(ExchangeRate.date == target_date, ExchangeRate.currency == sell)
+                .first()
+            )
+            if db_rate and db_rate.rate > 0.0:
+                return float(db_rate.rate)
+
+        # 2. 어댑터에서 환율 조회
         adapter = self.get_adapter("KR")
-        return await adapter.get_exchange_rate(sell_currency=sell_currency, buy_currency=buy_currency)
+        rate = await adapter.get_exchange_rate(sell_currency=sell, buy_currency=buy, target_date=target_date)
+        if rate is None or rate <= 0.0:
+            us_adapter = self.get_adapter("US")
+            rate = await us_adapter.get_exchange_rate(sell_currency=sell, buy_currency=buy, target_date=target_date)
+
+        # 3. 조회 성공 시 DB 캐시 저장
+        if rate is not None and rate > 0.0 and target_date is not None and self.db is not None:
+            try:
+                existing = (
+                    self.db.query(ExchangeRate)
+                    .filter(ExchangeRate.date == target_date, ExchangeRate.currency == sell)
+                    .first()
+                )
+                if existing:
+                    existing.rate = rate
+                else:
+                    self.db.add(ExchangeRate(date=target_date, currency=sell, rate=rate))
+                self.db.commit()
+            except Exception:
+                self.db.rollback()
+
+        return rate
 
     async def get_market_indices(self, country: str = "KR") -> List[Dict[str, Any]]:
         """국가별 주요 시장 지수 목록을 조회합니다.

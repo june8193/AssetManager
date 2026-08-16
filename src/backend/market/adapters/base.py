@@ -73,13 +73,15 @@ class MarketAdapterBase(ABC):
     async def get_exchange_rate(
         self,
         sell_currency: str = "USD",
-        buy_currency: str = "KRW"
+        buy_currency: str = "KRW",
+        target_date: Optional[datetime.date] = None
     ) -> Optional[float]:
         """환율을 조회합니다.
 
         Args:
             sell_currency (str): 매도 통화 (기본값: 'USD')
             buy_currency (str): 매수 통화 (기본값: 'KRW')
+            target_date (Optional[datetime.date]): 조회 기준 일자 (None일 경우 실시간/최근 환율)
 
         Returns:
             Optional[float]: 환율 값 (조회 실패 시 None)

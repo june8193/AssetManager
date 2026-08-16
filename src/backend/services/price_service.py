@@ -120,7 +120,7 @@ class PriceService:
             return await provider.get_current_prices_bulk(symbols, country="US", force_update=force_update)
 
     async def get_kr_historical_price(self, code: str, qry_dt: str) -> float:
-        """특정 일자의 국내 주식 종가를 조회합니다.
+        """특정 일자의 국내 주식 종가를 조회합니다 (비영업일/휴일 시 직전 영업일 종가 반환).
 
         Args:
             code (str): 종목 코드
@@ -141,15 +141,12 @@ class PriceService:
         from src.backend.database import SessionLocal
         with SessionLocal() as db:
             provider = self._get_provider(db)
-            prices = await provider.get_historical_prices(
-                code, target_date, target_date, country="KR", fill_missing=False
+            return await provider.get_historical_price_on_date(
+                code, target_date, country="KR", fill_missing=True
             )
-            if prices:
-                return float(prices[0].get("close_price", 0.0))
-        return 0.0
 
     async def get_us_historical_price(self, symbol: str, qry_dt: str) -> float:
-        """특정 일자의 미국 주식 종가를 조회합니다.
+        """특정 일자의 미국 주식 종가를 조회합니다 (비영업일/휴일 시 직전 영업일 종가 반환).
 
         Args:
             symbol (str): 티커
@@ -170,12 +167,9 @@ class PriceService:
         from src.backend.database import SessionLocal
         with SessionLocal() as db:
             provider = self._get_provider(db)
-            prices = await provider.get_historical_prices(
-                symbol, target_date, target_date, country="US", fill_missing=False
+            return await provider.get_historical_price_on_date(
+                symbol, target_date, country="US", fill_missing=True
             )
-            if prices:
-                return float(prices[0].get("close_price", 0.0))
-        return 0.0
 
     async def get_stock_name(self, ticker: str, country: str) -> Optional[str]:
         """국가 및 티커를 기준으로 공식 종목명을 조회합니다.
@@ -236,7 +230,7 @@ class PriceService:
         """
         country_upper = (country or "KR").strip().upper()
 
-        # 1. 주말 판정 (토요일: 5, 일요일: 6)
+        # 1. 주말 판정
         if target_date.weekday() >= 5:
             return "주말"
 
@@ -252,93 +246,8 @@ class PriceService:
             return None
 
     async def _query_kiwoom_holiday_api(self, target_date: datetime.date, country: str) -> Optional[bool]:
-        """키움 일봉 차트 API를 호출하여 해당 날짜가 영업일인지 판단합니다.
-
-        영업일이면 False, 휴장일이면 True, 호출 실패 시 None을 반환합니다.
-        """
-        import httpx
-
-        auth_manager = KiwoomAuthManager()
-        base_url = auth_manager.base_url if auth_manager.base_url else "https://api.kiwoom.com"
-
-        try:
-            token = await auth_manager.get_valid_token()
-        except Exception as e:
-            print(f"[ERROR] 키움 API 토큰 획득 실패: {e}")
-            return None
-
-        date_str = target_date.strftime("%Y%m%d")
-
-        async with httpx.AsyncClient() as client:
-            if country == "KR":
-                url = f"{base_url}/api/dostk/chart"
-                headers = {
-                    "Content-Type": "application/json;charset=UTF-8",
-                    "api-id": "ka10081",
-                    "authorization": f"Bearer {token}"
-                }
-                payload = {
-                    "stk_cd": "069500",  # KODEX 200
-                    "base_dt": date_str,
-                    "upd_stkpc_tp": "1"
-                }
-                try:
-                    response = await client.post(url, headers=headers, json=payload, timeout=5.0)
-                    response.raise_for_status()
-                    data = response.json()
-                    if str(data.get("return_code")) != "0":
-                        print(f"[ERROR] 키움 국내 일봉 차트 API 오류: {data.get('return_msg')}")
-                        return None
-
-                    chart_list = data.get("stk_dt_pole_chart_qry", [])
-                    if not chart_list:
-                        return True  # 데이터가 전혀 없으면 휴장일로 간주
-
-                    latest_date = chart_list[0].get("dt")
-                    if latest_date == date_str:
-                        return False  # 영업일
-                    else:
-                        return True  # 휴장일
-                except Exception as e:
-                    print(f"[ERROR] 키움 국내 일봉 API 호출 중 예외 발생: {e}")
-                    return None
-
-            elif country == "US":
-                url = f"{base_url}/api/us/chart"
-                headers = {
-                    "Content-Type": "application/json;charset=UTF-8",
-                    "api-id": "usa06012",
-                    "authorization": f"Bearer {token}"
-                }
-                payload = {
-                    "stex_tp": "NY",
-                    "stk_cd": "SPY",
-                    "strt_dt": date_str,
-                    "upd_stkpc_tp": "1",
-                    "exrt_appl_tp": "0"
-                }
-                try:
-                    response = await client.post(url, headers=headers, json=payload, timeout=5.0)
-                    response.raise_for_status()
-                    data = response.json()
-                    if str(data.get("return_code")) != "0":
-                        print(f"[ERROR] 키움 미국 일 차트 API 오류: {data.get('return_msg')}")
-                        return None
-
-                    chart_list = data.get("result_list", [])
-                    if not chart_list:
-                        return True
-
-                    latest_date = chart_list[0].get("dt")
-                    if latest_date == date_str:
-                        return False  # 영업일
-                    else:
-                        return True  # 휴장일
-                except Exception as e:
-                    print(f"[ERROR] 키움 미국 일봉 API 호출 중 예외 발생: {e}")
-                    return None
-
-        return None
+        """키움 일봉 차트 API를 호출하여 해당 날짜가 영업일인지 판단합니다. (호환성 메서드)"""
+        return await self.calendar.query_kiwoom_holiday_api(target_date, country=country)
 
     def _get_holiday_reason_backup(self, target_date: datetime.date, country: str) -> Optional[str]:
         """휴장 사유 백업 판단 로직입니다."""
@@ -376,32 +285,15 @@ class PriceService:
         """
         try:
             provider = self._get_provider(db)
-            sell_rate = await provider.get_exchange_rate(sell_currency="USD", buy_currency="KRW")
-
-            if sell_rate is not None and sell_rate > 0.0:
-                from src.backend.models import ExchangeRate
-                existing_rate = db.query(ExchangeRate).filter(
-                    ExchangeRate.date == target_date,
-                    ExchangeRate.currency == "USD"
-                ).first()
-
-                if existing_rate:
-                    existing_rate.rate = sell_rate
-                else:
-                    new_rate = ExchangeRate(
-                        date=target_date,
-                        currency="USD",
-                        rate=sell_rate
-                    )
-                    db.add(new_rate)
-                db.commit()
-                print(f"[INFO] {target_date} 환율 저장 완료: {sell_rate}")
-                return sell_rate
-            else:
-                print(f"[WARNING] 조회된 환율이 0 이하이거나 없습니다: {sell_rate}")
+            return await provider.get_exchange_rate(
+                sell_currency="USD",
+                buy_currency="KRW",
+                target_date=target_date,
+                force_update=True,
+            )
         except Exception as e:
             print(f"[ERROR] 환율 조회 및 저장 중 오류 발생: {e}")
-        return None
+            return None
 
     async def update_all_market_prices(self, is_manual: bool = False) -> None:
         """1시간마다 지수, 보유 자산, 관심 종목의 시세를 외부 API로부터 조회하여 DB를 업데이트합니다.

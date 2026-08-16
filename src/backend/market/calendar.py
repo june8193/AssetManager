@@ -140,6 +140,127 @@ class MarketCalendar:
         return None
 
     @classmethod
+    async def query_kiwoom_holiday_api(cls, target_date: datetime.date, country: str = "KR") -> Optional[bool]:
+        """키움 일봉 차트 API를 호출하여 해당 날짜가 영업일인지 판단합니다.
+
+        Args:
+            target_date (datetime.date): 대상 일자
+            country (str): 국가 코드 ('KR' 또는 'US')
+
+        Returns:
+            Optional[bool]: 영업일이면 False, 휴장일이면 True, 호출 실패 시 None
+        """
+        import httpx
+        from src.kiwoom.auth import KiwoomAuthManager
+
+        country_upper = country.upper()
+        auth_manager = KiwoomAuthManager()
+        base_url = auth_manager.base_url if auth_manager.base_url else "https://api.kiwoom.com"
+
+        try:
+            token = await auth_manager.get_valid_token()
+        except Exception:
+            return None
+
+        date_str = target_date.strftime("%Y%m%d")
+
+        async with httpx.AsyncClient() as client:
+            if country_upper == "KR":
+                url = f"{base_url}/api/dostk/chart"
+                headers = {
+                    "Content-Type": "application/json;charset=UTF-8",
+                    "api-id": "ka10081",
+                    "authorization": f"Bearer {token}"
+                }
+                payload = {
+                    "stk_cd": "069500",  # KODEX 200
+                    "base_dt": date_str,
+                    "upd_stkpc_tp": "1"
+                }
+                try:
+                    response = await client.post(url, headers=headers, json=payload, timeout=5.0)
+                    response.raise_for_status()
+                    data = response.json()
+                    if str(data.get("return_code")) != "0":
+                        return None
+
+                    chart_list = data.get("stk_dt_pole_chart_qry", [])
+                    if not chart_list:
+                        return True
+
+                    latest_date = chart_list[0].get("dt")
+                    return latest_date != date_str
+                except Exception:
+                    return None
+
+            elif country_upper == "US":
+                url = f"{base_url}/api/us/chart"
+                headers = {
+                    "Content-Type": "application/json;charset=UTF-8",
+                    "api-id": "usa06012",
+                    "authorization": f"Bearer {token}"
+                }
+                payload = {
+                    "stex_tp": "NY",
+                    "stk_cd": "SPY",
+                    "strt_dt": date_str,
+                    "upd_stkpc_tp": "1",
+                    "exrt_appl_tp": "0"
+                }
+                try:
+                    response = await client.post(url, headers=headers, json=payload, timeout=5.0)
+                    response.raise_for_status()
+                    data = response.json()
+                    if str(data.get("return_code")) != "0":
+                        return None
+
+                    chart_list = data.get("result_list", [])
+                    if not chart_list:
+                        return True
+
+                    latest_date = chart_list[0].get("dt")
+                    return latest_date != date_str
+                except Exception:
+                    return None
+
+        return None
+
+    @classmethod
+    async def get_market_holiday_info_with_api(
+        cls,
+        target_date: datetime.date,
+        country: str = "KR",
+        use_api: bool = True
+    ) -> Optional[str]:
+        """주말/공휴일 판정 및 외부 API 검증을 종합하여 휴장 사유를 반환합니다.
+
+        Args:
+            target_date (datetime.date): 판별 대상 날짜
+            country (str): 국가 코드 ('KR' 또는 'US')
+            use_api (bool): 외부 API 질의 수행 여부
+
+        Returns:
+            Optional[str]: 휴장 사유 또는 None
+        """
+        country_upper = country.upper()
+
+        if target_date.weekday() >= 5:
+            return "주말"
+
+        if use_api:
+            is_holiday = await cls.query_kiwoom_holiday_api(target_date, country_upper)
+            if is_holiday is None:
+                raise RuntimeError(f"키움 API를 통한 휴장일 판단에 실패했습니다. (국가: {country_upper}, 일자: {target_date})")
+
+            if is_holiday:
+                backup = cls.get_market_holiday_info(target_date, country=country_upper)
+                return backup or "공휴일"
+            else:
+                return None
+
+        return cls.get_market_holiday_info(target_date, country=country_upper)
+
+    @classmethod
     def is_market_holiday(cls, target_date: datetime.date, country: str = "KR") -> bool:
         """지정된 날짜가 휴장일(주말 또는 공휴일)인지 판별합니다.
 

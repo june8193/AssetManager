@@ -117,7 +117,8 @@ class FakeMarketAdapter(MarketAdapterBase):
         self,
         rate: float,
         sell_currency: str = "USD",
-        buy_currency: str = "KRW"
+        buy_currency: str = "KRW",
+        target_date: Optional[datetime.date] = None,
     ) -> None:
         """특정 통화쌍의 환율을 주입합니다.
 
@@ -125,8 +126,15 @@ class FakeMarketAdapter(MarketAdapterBase):
             rate (float): 환율
             sell_currency (str, optional): 매도 통화 (기본값: 'USD')
             buy_currency (str, optional): 매수 통화 (기본값: 'KRW')
+            target_date (Optional[datetime.date], optional): 특정 일자 (지정 시 해당 일자 환율로 주입)
         """
-        self._exchange_rates[(sell_currency.upper(), buy_currency.upper())] = float(rate)
+        pair = (sell_currency.upper(), buy_currency.upper())
+        if target_date is not None:
+            if not hasattr(self, "_date_exchange_rates"):
+                self._date_exchange_rates: Dict[Tuple[Tuple[str, str], datetime.date], float] = {}
+            self._date_exchange_rates[(pair, target_date)] = float(rate)
+        else:
+            self._exchange_rates[pair] = float(rate)
 
     def set_market_indices(
         self,
@@ -147,6 +155,8 @@ class FakeMarketAdapter(MarketAdapterBase):
         self._historical_prices.clear()
         self._stock_names.clear()
         self._exchange_rates.clear()
+        if hasattr(self, "_date_exchange_rates"):
+            self._date_exchange_rates.clear()
         self._market_indices.clear()
 
     async def get_current_prices(self, tickers: List[str]) -> List[Dict[str, Any]]:
@@ -211,13 +221,15 @@ class FakeMarketAdapter(MarketAdapterBase):
     async def get_exchange_rate(
         self,
         sell_currency: str = "USD",
-        buy_currency: str = "KRW"
+        buy_currency: str = "KRW",
+        target_date: Optional[datetime.date] = None,
     ) -> Optional[float]:
         """환율을 조회합니다. 동일 통화는 1.0, 미등록 통화쌍은 None을 반환합니다.
 
         Args:
             sell_currency (str, optional): 매도 통화 (기본값: 'USD')
             buy_currency (str, optional): 매수 통화 (기본값: 'KRW')
+            target_date (Optional[datetime.date], optional): 조회 기준 일자
 
         Returns:
             Optional[float]: 환율 또는 None
@@ -226,7 +238,13 @@ class FakeMarketAdapter(MarketAdapterBase):
         buy = buy_currency.upper()
         if sell == buy:
             return 1.0
-        return self._exchange_rates.get((sell, buy))
+
+        pair = (sell, buy)
+        if target_date is not None and hasattr(self, "_date_exchange_rates"):
+            if (pair, target_date) in self._date_exchange_rates:
+                return self._date_exchange_rates[(pair, target_date)]
+
+        return self._exchange_rates.get(pair)
 
     async def get_market_indices(self, country: str = "KR") -> List[Dict[str, Any]]:
         """국가별 주요 시장 지수를 조회합니다.

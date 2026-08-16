@@ -203,3 +203,65 @@ async def test_benchmark_service_cumulative_returns_with_provider(db_session: Se
     assert "datasets" in result
     assert "alpha_summaries" in result
     assert len(result["datasets"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_price_service_get_historical_price_forward_fill_on_weekend(fake_provider: MarketDataProvider):
+    """주말(2026-06-20 토요일) 단일 일자 종가 요청 시 직전 금요일(2026-06-19) 종가가 Forward-fill되어 반환되는지 검증."""
+    # 금요일 종가 주입
+    fri_date = datetime.date(2026, 6, 19)
+    sat_date = datetime.date(2026, 6, 20)
+    adapter = fake_provider.get_adapter("KR")
+    if isinstance(adapter, FakeMarketAdapter):
+        adapter.set_historical_price("005930", fri_date, 73500.0)
+
+    service = PriceService(provider=fake_provider)
+    price = await service.get_kr_historical_price("005930", "2026-06-20")
+    assert price == 73500.0
+
+
+@pytest.mark.asyncio
+async def test_provider_exchange_rate_with_target_date_and_db_cache(db_session: Session, fake_provider: MarketDataProvider):
+    """MarketDataProvider가 특정 일자 환율을 DB 캐시에서 우선 조회하고, 없을 시 어댑터에서 가져와 DB에 캐싱하는지 검증."""
+    target_date = datetime.date(2026, 6, 25)
+    adapter = fake_provider.get_adapter("KR")
+    if isinstance(adapter, FakeMarketAdapter):
+        adapter.set_exchange_rate(1395.0, sell_currency="USD", buy_currency="KRW", target_date=target_date)
+
+    # 1. 처음 조회 시 어댑터에서 가져와 DB에 저장
+    rate = await fake_provider.get_exchange_rate(sell_currency="USD", buy_currency="KRW", target_date=target_date)
+    assert rate == 1395.0
+
+    db_record = db_session.query(ExchangeRate).filter_by(date=target_date, currency="USD").first()
+    assert db_record is not None
+    assert db_record.rate == 1395.0
+
+    # 2. DB에 이미 존재하는 경우 어댑터 없이 DB 값 반환
+    rate_cached = await fake_provider.get_exchange_rate(sell_currency="USD", buy_currency="KRW", target_date=target_date)
+    assert rate_cached == 1395.0
+
+
+@pytest.mark.asyncio
+async def test_market_calendar_query_kiwoom_holiday_api():
+    """MarketCalendar.query_kiwoom_holiday_api가 정상 영업일/휴장일을 올바르게 판별하는지 검증."""
+    calendar = MarketCalendar()
+
+    # 모킹된 API 응답 테스트
+    with patch("httpx.AsyncClient.post") as mock_post, \
+         patch("src.kiwoom.auth.KiwoomAuthManager.get_valid_token", new_callable=AsyncMock, return_value="token"):
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "return_code": "0",
+            "stk_dt_pole_chart_qry": [{"dt": "20260616"}]
+        }
+        mock_post.return_value = mock_response
+
+        # 당일 데이터 존재 -> 영업일(False)
+        is_holiday = await calendar.query_kiwoom_holiday_api(datetime.date(2026, 6, 16), "KR")
+        assert is_holiday is False
+
+        # 당일 데이터 없음 -> 휴장일(True)
+        is_holiday_other = await calendar.query_kiwoom_holiday_api(datetime.date(2026, 6, 17), "KR")
+        assert is_holiday_other is True
+

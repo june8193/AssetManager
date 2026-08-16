@@ -55,6 +55,28 @@ class KiwoomAdapter(MarketAdapterBase):
             logger.warning("키움 토큰 발급 중 예외 발생: %s", e)
             return None
 
+    @staticmethod
+    def _clean_price(val: Any) -> float:
+        """문자열 등 원시 시세 데이터를 정제하여 float 가격으로 변환합니다."""
+        if val is None:
+            return 0.0
+        raw = str(val).replace(",", "").strip("+- ")
+        try:
+            return float(raw) if raw else 0.0
+        except ValueError:
+            return 0.0
+
+    @staticmethod
+    def _clean_rate(val: Any) -> float:
+        """문자열 등 원시 등락률 데이터를 정제하여 float 등락률로 변환합니다."""
+        if val is None:
+            return 0.0
+        raw = str(val).replace(",", "").replace("+", "").strip()
+        try:
+            return float(raw) if raw else 0.0
+        except ValueError:
+            return 0.0
+
     async def get_current_prices(self, tickers: List[str]) -> List[Dict[str, Any]]:
         """복수 종목의 실시간 현재가 및 등락률을 조회합니다.
 
@@ -96,13 +118,8 @@ class KiwoomAdapter(MarketAdapterBase):
                             if not code:
                                 continue
 
-                            # 가격: 부호 (+/-) 및 쉼표 제거 후 절대값 float 변환
-                            raw_price = str(out.get("cur_prc", "0")).replace(",", "").strip("+- ")
-                            price_val = float(raw_price) if raw_price else 0.0
-
-                            # 등락률: 쉼표 및 '+' 제거 후 float 변환 (음수 부호는 유지)
-                            raw_rate = str(out.get("flu_rt", "0")).replace(",", "").replace("+", "").strip()
-                            change_rate = float(raw_rate) if raw_rate else 0.0
+                            price_val = self._clean_price(out.get("cur_prc"))
+                            change_rate = self._clean_rate(out.get("flu_rt"))
 
                             results.append({
                                 "stock_code": code,
@@ -135,10 +152,8 @@ class KiwoomAdapter(MarketAdapterBase):
             api = self._get_api()
             res = await run_in_threadpool(api.get_stock_info, token, ticker)
             if res and res.get("return_code") == 0:
-                raw_price = str(res.get("cur_prc") or res.get("now_pric") or "0").replace(",", "").strip("+- ")
-                raw_rate = str(res.get("flu_rt") or res.get("fluc_rt") or "0").replace(",", "").replace("+", "").strip()
-                price_val = float(raw_price) if raw_price else 0.0
-                change_rate = float(raw_rate) if raw_rate else 0.0
+                price_val = self._clean_price(res.get("cur_prc") or res.get("now_pric"))
+                change_rate = self._clean_rate(res.get("flu_rt") or res.get("fluc_rt"))
                 return {
                     "stock_code": ticker,
                     "current_price": price_val,
@@ -199,8 +214,7 @@ class KiwoomAdapter(MarketAdapterBase):
                     continue
 
                 if start_date <= p_date <= end_date:
-                    raw_price = str(day_data.get("close_pric", "0")).replace(",", "").strip("+- ")
-                    close_p = float(raw_price) if raw_price else 0.0
+                    close_p = self._clean_price(day_data.get("close_pric"))
                     if close_p > 0:
                         results.append({
                             "price_date": p_date,
@@ -243,13 +257,15 @@ class KiwoomAdapter(MarketAdapterBase):
     async def get_exchange_rate(
         self,
         sell_currency: str = "USD",
-        buy_currency: str = "KRW"
+        buy_currency: str = "KRW",
+        target_date: Optional[datetime.date] = None,
     ) -> Optional[float]:
         """환율을 조회합니다.
 
         Args:
             sell_currency (str): 매도 통화 (기본값: 'USD')
             buy_currency (str): 매수 통화 (기본값: 'KRW')
+            target_date (Optional[datetime.date]): 조회 기준 일자
 
         Returns:
             Optional[float]: 환율 값 (조회 실패 시 None)
@@ -269,8 +285,7 @@ class KiwoomAdapter(MarketAdapterBase):
             res = await run_in_threadpool(api.get_exchange_rate, token, sell, buy, "2")
             if res and res.get("return_code") == 0:
                 raw_rate = res.get("sell_aplc_exrt") or res.get("aplc_exrt") or res.get("buy_aplc_exrt") or "0"
-                rate_str = str(raw_rate).replace(",", "").strip()
-                rate = float(rate_str) if rate_str else 0.0
+                rate = self._clean_price(raw_rate)
                 if rate > 0.0:
                     return rate
         except Exception as e:
