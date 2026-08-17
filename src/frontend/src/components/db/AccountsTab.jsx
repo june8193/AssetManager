@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Edit2, Trash2, X, Check } from 'lucide-react';
-import { DB_API_BASE } from '../../config';
+import { Plus, Edit2, Trash2, Check } from 'lucide-react';
+import { dbService } from '../../services';
 import { useMasking } from '../../contexts/MaskingContext';
+
+const INITIAL_FORM_STATE = {
+  user_id: '',
+  name: '',
+  provider: '',
+  alias: '',
+  account_type: 'BROKERAGE',
+  is_active: true
+};
 
 /**
  * 계좌 관리 탭 컴포넌트입니다.
@@ -15,14 +24,7 @@ const AccountsTab = () => {
   const { maskValue } = useMasking();
   
   // 입력 폼 데이터 상태
-  const [formData, setFormData] = useState({
-    user_id: '',
-    name: '',
-    provider: '',
-    alias: '',
-    account_type: 'BROKERAGE',
-    is_active: true
-  });
+  const [formData, setFormData] = useState(INITIAL_FORM_STATE);
 
   /**
    * 서버에서 계좌 및 사용자 데이터를 가져옵니다.
@@ -30,17 +32,15 @@ const AccountsTab = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [accRes, userRes] = await Promise.all([
-        fetch(`${DB_API_BASE}/accounts`),
-        fetch(`${DB_API_BASE}/users`)
+      const [accData, userData] = await Promise.all([
+        dbService.getAccounts(),
+        dbService.getUsers(),
       ]);
-      const accData = await accRes.json();
-      const userData = await userRes.json();
-      setAccounts(accData);
-      setUsers(userData);
+      setAccounts(accData || []);
+      setUsers(userData || []);
       
       // 사용자 데이터가 있고 선택된 사용자가 없으면 첫 번째 사용자 선택
-      if (userData.length > 0 && !formData.user_id) {
+      if (userData && userData.length > 0 && !formData.user_id) {
         setFormData(prev => ({ ...prev, user_id: userData[0].id }));
       }
     } catch (error) {
@@ -70,22 +70,14 @@ const AccountsTab = () => {
    */
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const url = editingId 
-      ? `${DB_API_BASE}/accounts/${editingId}`
-      : `${DB_API_BASE}/accounts`;
-    const method = editingId ? 'PUT' : 'POST';
-
     try {
-      const response = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-
-      if (response.ok) {
-        fetchData();
-        resetForm();
+      if (editingId) {
+        await dbService.updateAccount(editingId, formData);
+      } else {
+        await dbService.createAccount(formData);
       }
+      await fetchData();
+      resetForm();
     } catch (error) {
       console.error('계좌 저장 중 오류 발생:', error);
     }
@@ -112,8 +104,8 @@ const AccountsTab = () => {
   const handleDelete = async (id) => {
     if (!window.confirm('정말 삭제하시겠습니까?')) return;
     try {
-      const response = await fetch(`${DB_API_BASE}/accounts/${id}`, { method: 'DELETE' });
-      if (response.ok) fetchData();
+      await dbService.deleteAccount(id);
+      await fetchData();
     } catch (error) {
       console.error('계좌 삭제 중 오류 발생:', error);
     }
@@ -125,12 +117,8 @@ const AccountsTab = () => {
   const resetForm = () => {
     setEditingId(null);
     setFormData({
+      ...INITIAL_FORM_STATE,
       user_id: users.length > 0 ? users[0].id : '',
-      name: '',
-      provider: '',
-      alias: '',
-      account_type: 'BROKERAGE',
-      is_active: true
     });
   };
 

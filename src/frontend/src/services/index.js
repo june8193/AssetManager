@@ -6,3 +6,5 @@ export { dashboardService } from './dashboardService';
 export { systemService } from './systemService';
 export { ratioService } from './ratioService';
 export { marketService } from './marketService';
+export { dbService } from './dbService';
+export { snapshotService } from './snapshotService';
