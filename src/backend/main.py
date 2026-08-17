@@ -28,8 +28,6 @@ import os
 import sys
 import asyncio
 
-# 전역 태스크 매니저 선언 (종료 시 접근하기 위함)
-task_manager = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,17 +41,15 @@ async def lifespan(app: FastAPI):
 
     # 백그라운드 주기적 태스크 매니저 가동 (테스트 환경인 경우 기동 생략)
     is_testing = "pytest" in sys.modules or os.environ.get("PYTEST_CURRENT_TEST") is not None
-    global task_manager
     if not is_testing:
-        from .tasks import BackgroundTaskManager
-        task_manager = BackgroundTaskManager()
-        task_manager.start()
+        from .tasks import task_manager_instance
+        task_manager_instance.start()
 
     yield
 
     # Shutdown: 백그라운드 태스크 정지
-    if not is_testing and task_manager is not None:
-        await task_manager.stop()
+    if not is_testing:
+        await task_manager_instance.stop()
 
 app = FastAPI(title="AssetManager Backend API", lifespan=lifespan)
 

@@ -165,7 +165,7 @@ class BackgroundTaskManager:
                 break
             except Exception as e:
                 error_msg = str(e)
-                self._update_task_error("stock_sync", error_msg)
+                self.update_task_error("stock_sync", error_msg)
                 logger.error(f"유지보수 루프 - 주식 종목 동기화 중 예외 발생: {e}")
 
             try:
