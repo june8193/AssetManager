@@ -3,29 +3,9 @@
  * React나 DOM 의존성이 없는 순수 자바스크립트 함수로 구성됩니다.
  */
 
-/**
- * 천단위 쉼표 포맷터 함수
- * @param {string|number} val
- * @returns {string}
- */
-export const formatWithCommas = (val) => {
-  if (val === undefined || val === null || val === '') return '';
-  const str = val.toString().replace(/,/g, '');
-  if (isNaN(str)) return val;
-  const parts = str.split('.');
-  parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return parts.join('.');
-};
+import { formatWithCommas, parseCommas } from './formatters';
 
-/**
- * 천단위 쉼표가 포함된 문자열을 실수(Number)로 파싱합니다.
- * @param {string|number} val
- * @returns {number}
- */
-export const parseCommas = (val) => {
-  if (val === undefined || val === null || val === '') return 0;
-  return parseFloat(val.toString().replace(/,/g, '')) || 0;
-};
+export { formatWithCommas, parseCommas };
 
 /**
  * 계좌의 표시용 이름을 반환합니다. 별칭이 있는 경우 '계좌명 (별칭)' 형식으로 반환합니다.

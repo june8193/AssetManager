@@ -8,14 +8,8 @@ import {
   Check, Percent, DollarSign, Calendar, Info 
 } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
+import { formatWithCommas } from '../utils/formatters';
 import { API_BASE_URL } from '../config';
-
-
-// 천 단위 구분 쉼표 포맷 유틸리티 (순수 헬퍼 함수)
-const commaFormat = (num) => {
-  if (num === null || num === undefined) return '';
-  return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-};
 
 const CompoundInterestPage = () => {
   const { maskValue, isMasked } = useMasking();
@@ -230,7 +224,7 @@ const CompoundInterestPage = () => {
     if (isMasked) {
       return maskValue(value) + ' 원';
     }
-    return commaFormat(value) + ' 원';
+    return formatWithCommas(value) + ' 원';
   }
 
   // 나이 연산 정보
@@ -608,7 +602,7 @@ const CompoundInterestPage = () => {
                       tickFormatter={(value) => {
                         const valMan = Math.round(value / 10000);
                         if (isMasked) return maskValue(valMan) + '만';
-                        return commaFormat(valMan) + '만';
+                        return formatWithCommas(valMan) + '만';
                       }}
                     />
                     <ChartTooltip 

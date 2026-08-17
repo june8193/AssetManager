@@ -5,6 +5,7 @@ import {
   RefreshCw, AlertCircle, ArrowUpRight, TrendingDown, Info, Trash 
 } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
+import { formatWithCommas } from '../utils/formatters';
 import { API_BASE_URL } from '../config';
 
 // 차트 렌더링에 사용될 고유 테마 색상들
@@ -28,11 +29,6 @@ const INITIAL_ALLOCATIONS = [
   { name: '주식 60% / 현금 40%', stock_ratio: 60.0, isVisible: true, isDefault: true },
   { name: '주식 50% / 현금 50%', stock_ratio: 50.0, isVisible: true, isDefault: true },
 ];
-
-const commaFormat = (num) => {
-  if (num === null || num === undefined) return '';
-  return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-};
 
 const AssetAllocationSimulationPage = () => {
   const { maskValue, isMasked } = useMasking();
@@ -63,7 +59,7 @@ const AssetAllocationSimulationPage = () => {
     if (isMasked) {
       return maskValue(value) + ' 원';
     }
-    return commaFormat(value) + ' 원';
+    return formatWithCommas(Math.round(value)) + ' 원';
   };
 
   // 1. 시뮬레이션 계산 API 요청
@@ -502,7 +498,7 @@ const AssetAllocationSimulationPage = () => {
                       if (activeTab === 'recurring') {
                         const valMan = Math.round(val / 10000);
                         if (isMasked) return maskValue(valMan) + '만';
-                        return commaFormat(valMan) + '만';
+                        return formatWithCommas(valMan) + '만';
                       }
                       return `${val}%`;
                     }}
