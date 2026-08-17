@@ -21,6 +21,8 @@ class SnapshotPreviewSchema(BaseModel):
     period_profit: float = 0.0
     calculated_return_rate: float = 0.0
     current_cash: float = 0.0
+    integrity_warnings: List[str] = []
+
 
 
 class SnapshotSchema(BaseModel):
@@ -63,6 +65,7 @@ class BrokerageCalculateResponse(BaseModel):
     period_profit: float = 0.0
     need_last_exchange_rate: bool = False
     last_snapshot_date: Optional[date] = None
+    integrity_warnings: List[str] = []
 
 
 class BrokerageSaveAccountRequest(BaseModel):
@@ -96,6 +99,8 @@ class BankCalculateResponse(BaseModel):
     total_adjustment: float = 0.0
     period_deposit: float = 0.0
     period_profit: float = 0.0
+    integrity_warnings: List[str] = []
+
 
 
 class BankSaveAccountRequest(BaseModel):

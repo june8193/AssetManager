@@ -173,6 +173,13 @@ class SnapshotEngine:
             )
             current_cash_krw = cash_balances.get('KRW', 0.0) + (cash_balances.get('USD', 0.0) * exchange_rate)
 
+            # 정합성 검증 (은행/예금 계좌에서 비정상 수익 발생 감지)
+            integrity_warnings = []
+            if acc.account_type == 'BANK' and abs(period_profit) > 0.01:
+                integrity_warnings.append(
+                    f"[{acc.alias or acc.name}] 매매손익이 없는 은행 계좌에서 기간 수익({round(period_profit):,}원)이 발생했습니다. 입출금 또는 이자/세금 내역 누락 여부를 확인해주세요."
+                )
+
             previews.append(SnapshotPreviewSchema(
                 account_id=acc.id,
                 account_name=acc.alias or acc.name,
@@ -182,7 +189,8 @@ class SnapshotEngine:
                 total_profit=total_profit,
                 period_profit=period_profit,
                 calculated_return_rate=round(calculated_return_rate, 2),
-                current_cash=current_cash_krw
+                current_cash=current_cash_krw,
+                integrity_warnings=integrity_warnings
             ))
 
         return previews
@@ -239,6 +247,17 @@ class SnapshotEngine:
         last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
         period_profit = total_valuation - last_valuation - period_deposit
 
+        # 7. 정합성 경고 산출
+        integrity_warnings = []
+        if abs(diff_krw) > 0.01:
+            integrity_warnings.append(
+                f"원화 차액({round(diff_krw):,}원)이 감지되었습니다. 예수금 보정 거래(CASH_ADJUSTMENT)가 생성됩니다."
+            )
+        if abs(diff_usd) > 0.01:
+            integrity_warnings.append(
+                f"달러 차액(${round(diff_usd, 2):,})이 감지되었습니다. 예수금 보정 거래(CASH_ADJUSTMENT)가 생성됩니다."
+            )
+
         return BrokerageCalculateResponse(
             theoretical_krw=theoretical_krw,
             theoretical_usd=theoretical_usd,
@@ -246,7 +265,8 @@ class SnapshotEngine:
             diff_usd=diff_usd,
             existing_transactions=existing_transactions,
             period_deposit=period_deposit,
-            period_profit=period_profit
+            period_profit=period_profit,
+            integrity_warnings=integrity_warnings
         )
 
     async def calculate_bank(self, req: BankCalculateRequest) -> BankCalculateResponse:
@@ -300,6 +320,13 @@ class SnapshotEngine:
         period_deposit = total_deposit - total_withdraw
         last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
         period_profit = final_balance - last_valuation - period_deposit
+
+        # 정합성 경고 산출
+        integrity_warnings = []
+        if abs(period_profit) > 0.01:
+            integrity_warnings.append(
+                f"은행 계좌에서 기간 수익({round(period_profit):,}원)이 발생했습니다. 이자/세금 외 입출금 누락 여부를 확인해주세요."
+            )
                 
         return BankCalculateResponse(
             theoretical_krw=final_balance,
@@ -310,8 +337,10 @@ class SnapshotEngine:
             total_tax=total_tax,
             total_adjustment=total_adjustment,
             period_deposit=period_deposit,
-            period_profit=period_profit
+            period_profit=period_profit,
+            integrity_warnings=integrity_warnings
         )
+
 
     def _save_exchange_rate(self, target_date: date, rate: float):
         """환율 레코드를 저장하거나 갱신합니다.

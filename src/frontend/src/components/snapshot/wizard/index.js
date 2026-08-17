@@ -5,3 +5,5 @@ export { Step2BrokerageDetail } from './Step2BrokerageDetail';
 export { Step3BankSelect } from './Step3BankSelect';
 export { Step4BankDetail } from './Step4BankDetail';
 export { Step5FinalConfirm } from './Step5FinalConfirm';
+export { WizardIntegrityWarningCard } from './WizardIntegrityWarningCard';
+

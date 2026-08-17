@@ -1,7 +1,9 @@
-import React from 'react';
-import { Check, Landmark, RefreshCw } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Landmark, RefreshCw, AlertTriangle } from 'lucide-react';
 import { formatWithCommas, getAccountDisplayName } from '../../../utils/snapshotCalculator';
 import { TransactionTable } from './TransactionTable';
+import { WizardIntegrityWarningCard } from './WizardIntegrityWarningCard';
+
 
 /**
  * 4단계: 은행 계좌 상세 입력 (신규 거래 내역, 예상 잔액 계산 및 실제 최종 잔액 입력, 확정)
@@ -22,12 +24,31 @@ export const Step4BankDetail = ({
   calculateBankDiff,
   handleConfirmAccount,
 }) => {
+  const [warningConfirmed, setWarningConfirmed] = useState(false);
   const accId = selectedBankIds[currentAccIdx];
   const acc = accounts.find((a) => a.id === accId);
+
+  // 계좌가 변경되면 경고 확인 체크박스 초기화
+  useEffect(() => {
+    setWarningConfirmed(false);
+  }, [accId]);
+
   if (!acc) return null;
 
   const data = accountsFormData[accId] || { newTransactions: [], totalValuation: '0' };
   const calc = data.calcResult;
+
+  const theoreticalVal = calc?.theoretical_krw || 0;
+  const currentVal = data.totalValuation ? parseFloat(data.totalValuation.replace(/,/g, '') || 0) : theoreticalVal;
+  const valuationDiff = currentVal - theoreticalVal;
+
+  const hasIntegrityWarning = Boolean(
+    calc && (
+      (calc.integrity_warnings && calc.integrity_warnings.length > 0) ||
+      Math.abs(calc.period_profit || 0) > 0.01 ||
+      Math.abs(valuationDiff) > 0.01
+    )
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500" data-testid="step-4-bank-detail">
@@ -255,15 +276,39 @@ export const Step4BankDetail = ({
                       <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
                     </div>
                   </div>
+
+                  {/* 정합성 이상 발생 시 빨간색 경고 카드 및 체크박스 가드 */}
+                  {hasIntegrityWarning && (
+                    <WizardIntegrityWarningCard
+                      title="정합성 이상 감지 (비정상 수익 또는 잔액 오차 발생)"
+                      warnings={
+                        calc.integrity_warnings && calc.integrity_warnings.length > 0
+                          ? calc.integrity_warnings
+                          : [
+                              Math.abs(calc.period_profit || 0) > 0.01
+                                ? `은행 계좌에서 기간 수익(${Math.round(calc.period_profit).toLocaleString()}원)이 발생했습니다. 이자/세금 외 입출금 누락 여부를 확인해주세요.`
+                                : null,
+                              Math.abs(valuationDiff) > 0.01
+                                ? `시스템 예상 잔액과 입력 잔액 간 ${Math.round(Math.abs(valuationDiff)).toLocaleString()}원의 차액이 발생했습니다.`
+                                : null,
+                            ].filter(Boolean)
+                      }
+                      confirmed={warningConfirmed}
+                      onConfirmChange={setWarningConfirmed}
+                      testId="integrity-warning-card"
+                    />
+                  )}
                 </div>
 
                 <button
                   type="button"
                   onClick={() => handleConfirmAccount?.(accId)}
-                  className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2"
+                  disabled={hasIntegrityWarning && !warningConfirmed}
+                  className="w-full py-4 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold shadow-lg shadow-amber-200 transition-all flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
                 >
                   <Check size={20} /> 이 결과로 확정
                 </button>
+
               </div>
             </div>
           </>
@@ -272,3 +317,4 @@ export const Step4BankDetail = ({
     </div>
   );
 };
+

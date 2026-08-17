@@ -1,7 +1,9 @@
-import React from 'react';
-import { Check, Wallet, RefreshCw, HelpCircle, CheckCircle2 } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Check, Wallet, RefreshCw, HelpCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { formatWithCommas, getAccountDisplayName } from '../../../utils/snapshotCalculator';
 import { TransactionTable } from './TransactionTable';
+import { WizardIntegrityWarningCard } from './WizardIntegrityWarningCard';
+
 
 /**
  * 2단계: 증권 계좌 상세 입력 (거래 내역, 원화/달러 예수금 잔액, 정산 계산 및 확정)
@@ -22,12 +24,27 @@ export const Step2BrokerageDetail = ({
   calculateAccountDiff,
   handleConfirmAccount,
 }) => {
+  const [warningConfirmed, setWarningConfirmed] = useState(false);
   const accId = selectedBrokerageIds[currentAccIdx];
   const acc = accounts.find((a) => a.id === accId);
+
+  // 계좌가 바뀌면 체크박스 상태 초기화
+  useEffect(() => {
+    setWarningConfirmed(false);
+  }, [accId]);
+
   if (!acc) return null;
 
   const data = accountsFormData[accId] || { newTransactions: [], currentKrw: '0', currentUsd: '0' };
   const calc = data.calcResult;
+
+  const hasIntegrityWarning = Boolean(
+    calc && (
+      (calc.integrity_warnings && calc.integrity_warnings.length > 0) ||
+      Math.abs(calc.diff_krw || 0) > 0.01 ||
+      Math.abs(calc.diff_usd || 0) > 0.01
+    )
+  );
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500" data-testid="step-2-brokerage-detail">
@@ -270,13 +287,38 @@ export const Step2BrokerageDetail = ({
                       </p>
                     </div>
                   </div>
+
+                  {/* 정합성 이상 발생 시 빨간색 경고 카드 및 체크박스 가드 */}
+                  {hasIntegrityWarning && (
+                    <WizardIntegrityWarningCard
+                      title="정합성 이상 감지 (차액 발생)"
+                      warnings={
+                        calc.integrity_warnings && calc.integrity_warnings.length > 0
+                          ? calc.integrity_warnings
+                          : [
+                              Math.abs(calc.diff_krw || 0) > 0.01
+                                ? `원화 차액(${Math.round(calc.diff_krw).toLocaleString()}원)이 감지되었습니다.`
+                                : null,
+                              Math.abs(calc.diff_usd || 0) > 0.01
+                                ? `달러 차액($${calc.diff_usd})이 감지되었습니다.`
+                                : null,
+                            ].filter(Boolean)
+                      }
+                      confirmed={warningConfirmed}
+                      onConfirmChange={setWarningConfirmed}
+                      testId="integrity-warning-card"
+                    />
+                  )}
+
                   <button
                     type="button"
                     onClick={() => handleConfirmAccount?.(accId)}
-                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2"
+                    disabled={hasIntegrityWarning && !warningConfirmed}
+                    className="w-full py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:bg-slate-300 disabled:cursor-not-allowed"
                   >
                     <Check size={20} /> 이 결과로 확정
                   </button>
+
                 </div>
               )}
             </div>
@@ -286,3 +328,4 @@ export const Step2BrokerageDetail = ({
     </div>
   );
 };
+

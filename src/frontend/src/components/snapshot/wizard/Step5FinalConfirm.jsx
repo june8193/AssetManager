@@ -1,6 +1,7 @@
 import React from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { parseCommas, getAccountDisplayName } from '../../../utils/snapshotCalculator';
+import { WizardIntegrityWarningCard } from './WizardIntegrityWarningCard';
 
 /**
  * 5단계: 전체 계좌 정산 요약 검토 및 최종 확인 화면
@@ -9,11 +10,52 @@ export const Step5FinalConfirm = ({
   accounts = [],
   selectedAccountIds = [],
   accountsFormData = {},
+  warningConfirmed = false,
+  onWarningConfirmChange,
 }) => {
   const selectedAccounts = accounts.filter((acc) => selectedAccountIds.includes(acc.id));
 
+  // 정합성 경고 목록 수집
+  const allWarnings = [];
+  selectedAccounts.forEach((acc) => {
+    const data = accountsFormData[acc.id] || {};
+    const calc = data.calcResult;
+    if (!calc) return;
+    const accName = getAccountDisplayName(acc);
+    if (calc.integrity_warnings && calc.integrity_warnings.length > 0) {
+      calc.integrity_warnings.forEach((w) => allWarnings.push(`[${accName}] ${w}`));
+    } else if (acc.account_type === 'BROKERAGE') {
+      if (Math.abs(calc.diff_krw || 0) > 0.01) {
+        allWarnings.push(`[${accName}] 원화 차액(${Math.round(calc.diff_krw).toLocaleString()}원) 감지`);
+      }
+      if (Math.abs(calc.diff_usd || 0) > 0.01) {
+        allWarnings.push(`[${accName}] 달러 차액($${calc.diff_usd}) 감지`);
+      }
+    } else {
+      const theoreticalVal = calc.theoretical_krw || 0;
+      const currentVal = data.totalValuation ? parseFloat(data.totalValuation.replace(/,/g, '') || 0) : theoreticalVal;
+      if (Math.abs(calc.period_profit || 0) > 0.01) {
+        allWarnings.push(`[${accName}] 기간 수익(${Math.round(calc.period_profit).toLocaleString()}원) 발생`);
+      }
+      if (Math.abs(currentVal - theoreticalVal) > 0.01) {
+        allWarnings.push(`[${accName}] 예상 잔액과 입력 잔액 차액(${Math.round(Math.abs(currentVal - theoreticalVal)).toLocaleString()}원) 발생`);
+      }
+    }
+  });
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500" data-testid="step-5-final-confirm">
+      {allWarnings.length > 0 && (
+        <WizardIntegrityWarningCard
+          title={`일부 계좌에서 정합성 경고가 감지되었습니다 (${allWarnings.length}건)`}
+          warnings={allWarnings}
+          confirmed={warningConfirmed}
+          onConfirmChange={onWarningConfirmChange}
+          checkboxLabel="모든 정합성 경고 사항 및 차액을 확인하였으며 최종 저장을 진행합니다"
+          testId="step5-integrity-warning"
+        />
+      )}
+
       <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex gap-3">
         <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
         <div className="text-sm text-emerald-800">
@@ -24,6 +66,8 @@ export const Step5FinalConfirm = ({
           </p>
         </div>
       </div>
+
+
 
       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
         <table className="w-full text-left text-sm border-collapse">
@@ -114,9 +158,9 @@ export const Step5FinalConfirm = ({
                   const pWithdraw = Math.round(data.calcResult.total_withdraw || 0);
                   const pInterest = Math.round(data.calcResult.total_interest || 0);
                   const pTax = Math.round(data.calcResult.total_tax || 0);
-                  const pFee = Math.round(data.calcResult.total_fee || 0);
                   const pAdjustment = Math.round(data.calcResult.total_adjustment || 0);
-                  const pProfit = pInterest - pTax - pFee + pAdjustment;
+                  const pProfit = pInterest - pTax + pAdjustment;
+
 
                   periodElement = (
                     <div className="flex flex-col items-end">

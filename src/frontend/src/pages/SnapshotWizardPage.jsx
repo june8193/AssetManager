@@ -18,6 +18,7 @@ import {
 const SnapshotWizardPage = () => {
   const navigate = useNavigate();
   const engine = useSnapshotWizardEngine();
+  const [step5WarningConfirmed, setStep5WarningConfirmed] = React.useState(false);
 
   const handleCancel = () => {
     if (window.confirm('스냅샷 생성을 취소하시겠습니까? 입력 중인 데이터는 저장되지 않습니다.')) {
@@ -35,10 +36,30 @@ const SnapshotWizardPage = () => {
     }
   };
 
+  // Step 5에서 정합성 경고가 있는지 여부 확인
+  const hasStep5Warnings = React.useMemo(() => {
+    return engine.selectedAccountIds.some((id) => {
+      const data = engine.accountsFormData[id] || {};
+      const calc = data.calcResult;
+      if (!calc) return false;
+      if (calc.integrity_warnings && calc.integrity_warnings.length > 0) return true;
+      const acc = engine.accounts.find((a) => a.id === id);
+      if (acc?.account_type === 'BROKERAGE') {
+        return Math.abs(calc.diff_krw || 0) > 0.01 || Math.abs(calc.diff_usd || 0) > 0.01;
+      } else {
+        const theoreticalVal = calc.theoretical_krw || 0;
+        const currentVal = data.totalValuation ? parseFloat(data.totalValuation.replace(/,/g, '') || 0) : theoreticalVal;
+        return Math.abs(calc.period_profit || 0) > 0.01 || Math.abs(currentVal - theoreticalVal) > 0.01;
+      }
+    });
+  }, [engine.selectedAccountIds, engine.accountsFormData, engine.accounts]);
+
   const isSaveDisabled =
     engine.processing ||
     engine.selectedAccountIds.length === 0 ||
-    !engine.selectedAccountIds.every((id) => engine.accountsFormData[id]?.isConfirmed);
+    !engine.selectedAccountIds.every((id) => engine.accountsFormData[id]?.isConfirmed) ||
+    (hasStep5Warnings && !step5WarningConfirmed);
+
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" data-testid="snapshot-wizard-page">
@@ -137,8 +158,11 @@ const SnapshotWizardPage = () => {
             accounts={engine.accounts}
             selectedAccountIds={engine.selectedAccountIds}
             accountsFormData={engine.accountsFormData}
+            warningConfirmed={step5WarningConfirmed}
+            onWarningConfirmChange={setStep5WarningConfirmed}
           />
         )}
+
       </div>
 
       {/* 네비게이션 버튼 */}

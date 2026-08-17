@@ -166,4 +166,94 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(screen.getByText('미래에셋증권')).toBeInTheDocument();
     expect(screen.getByText('KB국민은행')).toBeInTheDocument();
   });
+
+  it('Step2BrokerageDetail: 차액 또는 정합성 경고 발생 시 빨간색 경고 카드 및 확인 체크박스 가드를 렌더링한다', () => {
+    const confirmMock = vi.fn();
+
+    render(
+      <Step2BrokerageDetail
+        currentAccIdx={0}
+        selectedBrokerageIds={[1]}
+        accounts={[mockBrokerageAccount]}
+        accountsFormData={{
+          1: {
+            newTransactions: [],
+            currentKrw: '1,050,000',
+            currentUsd: '0',
+            calcResult: {
+              diff_krw: 50000,
+              diff_usd: 0,
+              period_deposit: 0,
+              period_profit: 50000,
+              integrity_warnings: ['원화 차액(50,000원)이 감지되었습니다.'],
+            },
+            isConfirmed: false,
+          },
+        }}
+        inputDate="2026-08-17"
+        handleConfirmAccount={confirmMock}
+      />
+    );
+
+    // 경고 카드 표시 확인
+    expect(screen.getByTestId('integrity-warning-card')).toBeInTheDocument();
+    expect(screen.getByText(/원화 차액\(50,000원\)이 감지되었습니다/)).toBeInTheDocument();
+
+    // 체크박스 미체크 시 '이 결과로 확정' 버튼 비활성화 확인
+    const confirmBtn = screen.getByRole('button', { name: /이 결과로 확정/i });
+    expect(confirmBtn).toBeDisabled();
+
+    // 체크박스 클릭
+    const checkbox = screen.getByTestId('integrity-confirm-checkbox');
+    fireEvent.click(checkbox);
+
+    // 버튼 활성화 및 클릭 시 handleConfirmAccount 호출 확인
+    expect(confirmBtn).not.toBeDisabled();
+    fireEvent.click(confirmBtn);
+    expect(confirmMock).toHaveBeenCalledWith(1);
+  });
+
+  it('Step4BankDetail: 비정상 수익 또는 정합성 경고 발생 시 빨간색 경고 카드 및 확인 체크박스 가드를 렌더링한다', () => {
+    const confirmMock = vi.fn();
+
+    render(
+      <Step4BankDetail
+        currentAccIdx={0}
+        selectedBankIds={[2]}
+        accounts={[mockBankAccount]}
+        accountsFormData={{
+          2: {
+            newTransactions: [],
+            totalValuation: '5,050,000',
+            calcResult: {
+              theoretical_krw: 5000000,
+              period_profit: 50000,
+              integrity_warnings: ['은행 계좌에서 기간 수익(50,000원)이 발생했습니다.'],
+            },
+            isConfirmed: false,
+          },
+        }}
+        inputDate="2026-08-17"
+        handleConfirmAccount={confirmMock}
+      />
+    );
+
+    // 경고 카드 표시 확인
+    expect(screen.getByTestId('integrity-warning-card')).toBeInTheDocument();
+    expect(screen.getByText(/은행 계좌에서 기간 수익/)).toBeInTheDocument();
+
+    // 체크박스 미체크 시 '이 결과로 확정' 버튼 비활성화 확인
+    const confirmBtn = screen.getByRole('button', { name: /이 결과로 확정/i });
+    expect(confirmBtn).toBeDisabled();
+
+    // 체크박스 클릭
+    const checkbox = screen.getByTestId('integrity-confirm-checkbox');
+    fireEvent.click(checkbox);
+
+    // 버튼 활성화 및 클릭 시 handleConfirmAccount 호출 확인
+    expect(confirmBtn).not.toBeDisabled();
+    fireEvent.click(confirmBtn);
+    expect(confirmMock).toHaveBeenCalledWith(2);
+  });
 });
+

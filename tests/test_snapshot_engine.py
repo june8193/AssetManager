@@ -206,3 +206,59 @@ def test_snapshot_engine_delete_and_latest(db_session, seed_snapshot_data):
     db_session.commit()
 
     assert engine.get_latest_snapshot_date() is None
+
+
+@pytest.mark.asyncio
+async def test_snapshot_engine_integrity_warnings(db_session, seed_snapshot_data):
+    """SnapshotEngine의 정합성 경고(차액 발생, 은행 계좌 비정상 수익) 생성 검증."""
+    engine = SnapshotEngine(db_session)
+
+    # 1. 증권 계좌 차액 발생 시 경고 검증
+    req_brokerage = BrokerageCalculateRequest(
+        account_id=201,
+        snapshot_date=date(2026, 8, 1),
+        new_transactions=[],
+        current_krw=1050000.0,
+        current_usd=10.0,
+        exchange_rate=1350.0
+    )
+    res_brokerage = await engine.calculate_brokerage(req_brokerage)
+    assert len(res_brokerage.integrity_warnings) >= 2
+    assert any("원화 차액" in w for w in res_brokerage.integrity_warnings)
+    assert any("달러 차액" in w for w in res_brokerage.integrity_warnings)
+
+    # 2. 은행 계좌 비정상 수익 발생 시 경고 검증 (초기 50만원 계좌인데 추가 거래 없이 잔고가 60만원으로 변동되어 기간수익 10만원 발생 시)
+    # 거래 없이 잔고가 변한 경우 (신규 트랜잭션 없이 이전 스냅샷 대비 잔고 차이)
+    snap_bank_prev = AccountSnapshot(
+        account_id=202,
+        snapshot_date=date(2026, 7, 1),
+        period_deposit=500000.0,
+        total_valuation=500000.0,
+        total_profit=0.0
+    )
+    db_session.add(snap_bank_prev)
+    db_session.commit()
+
+    # 신규 거래로 10만원 입금이 아니라 이체나 다른 유형으로 처리되어 period_profit이 발생하는 경우 테스트
+    # 혹은 calculate_bank에서 period_profit != 0 일 때 경고 발생
+    req_bank = BankCalculateRequest(
+        account_id=202,
+        snapshot_date=date(2026, 8, 1),
+        new_transactions=[
+            TransactionSchema(
+                account_id=202,
+                asset_id=301,
+                transaction_date=date(2026, 7, 20),
+                type="CASH_ADJUSTMENT",
+                quantity=50000.0,
+                price=1.0,
+                total_amount=50000.0,
+                currency="KRW"
+            )
+        ]
+    )
+    res_bank = await engine.calculate_bank(req_bank)
+    assert res_bank.period_profit == 50000.0
+    assert len(res_bank.integrity_warnings) >= 1
+    assert any("기간 수익" in w for w in res_bank.integrity_warnings)
+

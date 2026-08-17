@@ -103,11 +103,12 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
       }
       if (url.includes('/calculate')) {
         return Promise.resolve(mockResponse({
-          diff_krw: 1000,
+          diff_krw: 0,
           diff_usd: 0,
           existing_transactions: [],
           period_deposit: 500000,
-          period_profit: 1000,
+          period_profit: 0,
+          integrity_warnings: [],
         }));
       }
       return Promise.resolve(mockResponse({}));
@@ -136,7 +137,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
 
     // 계산결과 검증
     await waitFor(() => {
-      expect(screen.getByText('+1,000원')).toBeDefined();
+      expect(screen.getByText('0원')).toBeDefined();
     });
 
     // 확정 버튼 클릭
@@ -158,7 +159,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
       if (url.includes('/snapshots/latest')) return Promise.resolve(mockResponse({ latest_date: '2026-08-01' }));
       if (url.includes('/accounts') && !url.includes('/transactions/period')) return Promise.resolve(mockResponse(mockAccounts));
       if (url.includes('/transactions/period')) return Promise.resolve(mockResponse([]));
-      if (url.includes('/brokerage/calculate')) return Promise.resolve(mockResponse({ diff_krw: 500, diff_usd: 0, period_deposit: 0, period_profit: 0 }));
+      if (url.includes('/brokerage/calculate')) return Promise.resolve(mockResponse({ diff_krw: 0, diff_usd: 0, period_deposit: 0, period_profit: 0, integrity_warnings: [] }));
       if (url.includes('/bank/calculate')) return Promise.resolve(mockResponse({
         theoretical_krw: 2000000,
         total_deposit: 2000000,
@@ -168,7 +169,8 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
         total_fee: 0,
         total_adjustment: 0,
         period_deposit: 1900000,
-        period_profit: 4300,
+        period_profit: 0,
+        integrity_warnings: [],
       }));
       if (url.includes('/unified/save')) return Promise.resolve(mockResponse({ status: 'success' }));
       return Promise.resolve(mockResponse({}));
@@ -204,6 +206,9 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
       expect(screen.getByText('+5,000원')).toBeDefined();
       expect(screen.getByText('-700원')).toBeDefined();
     });
+
+    // 예상 잔액 적용
+    fireEvent.click(screen.getByText('이 금액 적용하기'));
 
     fireEvent.click(screen.getByText('이 결과로 확정'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
@@ -268,6 +273,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
           total_adjustment: 0,
           period_deposit: 800000,
           period_profit: 4300,
+          integrity_warnings: [],
         }));
       }
       return Promise.resolve(mockResponse({}));
@@ -322,6 +328,9 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
           total_tax: 0,
           total_fee: 0,
           total_adjustment: 0,
+          period_deposit: 500000,
+          period_profit: 0,
+          integrity_warnings: [],
         }));
       }
       return Promise.resolve(mockResponse({}));
@@ -346,6 +355,9 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     fireEvent.click(screen.getByText('예상 잔액 계산하기'));
     await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeInTheDocument());
 
+    // 예상 잔액 적용 (0원 -> 500,000원)
+    fireEvent.click(screen.getByText('이 금액 적용하기'));
+
     // 확정 클릭
     fireEvent.click(screen.getByText('이 결과로 확정'));
 
@@ -365,4 +377,53 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
       expect(screen.queryByText('정산 결과 확정 완료')).toBeNull();
     });
   });
+
+  it('정합성 경고 발생 시 확인 체크박스를 체크해야만 확정 버튼이 활성화된다', async () => {
+    global.fetch.mockImplementation((url) => {
+      if (url.includes('/exchange/rates')) return Promise.resolve(mockResponse([{ date: '2026-08-17', rate: 1350.0 }]));
+      if (url.includes('/snapshots/latest')) return Promise.resolve(mockResponse({ latest_date: '2026-08-01' }));
+      if (url.includes('/accounts') && !url.includes('/transactions/period')) return Promise.resolve(mockResponse(mockAccounts));
+      if (url.includes('/transactions/period')) return Promise.resolve(mockResponse([]));
+      if (url.includes('/brokerage/calculate')) {
+        return Promise.resolve(mockResponse({
+          diff_krw: 50000,
+          diff_usd: 0,
+          period_deposit: 0,
+          period_profit: 50000,
+          integrity_warnings: ['원화 차액(50,000원)이 감지되었습니다.'],
+        }));
+      }
+      return Promise.resolve(mockResponse({}));
+    });
+
+    renderWithRouter(<SnapshotWizardPage />);
+
+    // Step 1
+    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 2
+    await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
+    fireEvent.click(screen.getByText('정산 결과 계산하기'));
+
+    // 경고 카드 표시 확인
+    await waitFor(() => {
+      expect(screen.getByTestId('integrity-warning-card')).toBeInTheDocument();
+      expect(screen.getByText(/원화 차액\(50,000원\)이 감지되었습니다/)).toBeInTheDocument();
+    });
+
+    const confirmBtn = screen.getByRole('button', { name: /이 결과로 확정/i });
+    expect(confirmBtn).toBeDisabled();
+
+    // 체크박스 클릭
+    const checkbox = screen.getByTestId('integrity-confirm-checkbox');
+    fireEvent.click(checkbox);
+    expect(confirmBtn).not.toBeDisabled();
+
+    // 확정 클릭
+    fireEvent.click(confirmBtn);
+    await waitFor(() => expect(screen.getByText('정산 결과 확정 완료')).toBeInTheDocument());
+  });
 });
+
