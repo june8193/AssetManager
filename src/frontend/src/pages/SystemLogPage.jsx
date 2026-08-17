@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { FileText, RefreshCw, Search, Play, Pause, AlertCircle } from 'lucide-react';
+import { systemService } from '../services';
 
 /**
  * 시스템 로그 보기 컴포넌트
@@ -26,9 +27,7 @@ const SystemLogPage = () => {
     try {
       setPageLoadingStatus(true);
       setPageErrorMessage(null);
-      const response = await fetch('/api/v1/system/logs/files');
-      if (!response.ok) throw new Error('로그 파일 목록을 불러오지 못했습니다.');
-      const data = await response.json();
+      const data = await systemService.getLogFiles();
       setLogFileList(data);
 
       setSelectedFileName((prev) => prev || (data[0] ? data[0].name : ''));
@@ -50,16 +49,13 @@ const SystemLogPage = () => {
       setPageLoadingStatus(true);
       setPageErrorMessage(null);
 
-      const params = new URLSearchParams({
-        filename: selectedFileName,
-        lines: tailLineLimit.toString(),
-      });
-      if (logLevelFilter) params.append('level', logLevelFilter);
-      if (searchKeyword) params.append('keyword', searchKeyword);
+      const options = {
+        lines: tailLineLimit,
+      };
+      if (logLevelFilter) options.level = logLevelFilter;
+      if (searchKeyword) options.keyword = searchKeyword;
 
-      const response = await fetch(`/api/v1/system/logs/content?${params.toString()}`);
-      if (!response.ok) throw new Error('로그 내용을 읽어오지 못했습니다.');
-      const data = await response.json();
+      const data = await systemService.getLogContent(selectedFileName, options);
 
       setLogLinesResult(data.lines || []);
       setTotalMatchingLines(data.total_lines || 0);

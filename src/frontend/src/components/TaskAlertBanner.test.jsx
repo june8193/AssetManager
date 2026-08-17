@@ -2,6 +2,13 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import TaskAlertBanner from './TaskAlertBanner';
+import { systemService } from '../services';
+
+vi.mock('../services', () => ({
+  systemService: {
+    getTaskStatus: vi.fn(),
+  },
+}));
 
 describe('TaskAlertBanner 컴포넌트 테스트', () => {
   beforeEach(() => {
@@ -16,10 +23,7 @@ describe('TaskAlertBanner 컴포넌트 테스트', () => {
       exchange_rate_update: { status: 'success', last_error: null },
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockStatus,
-    });
+    vi.mocked(systemService.getTaskStatus).mockResolvedValue(mockStatus);
 
     render(<TaskAlertBanner />);
 
@@ -36,10 +40,7 @@ describe('TaskAlertBanner 컴포넌트 테스트', () => {
       exchange_rate_update: { status: 'failed', last_error: '키움 API 응답 오류' },
     };
 
-    global.fetch = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => mockStatus,
-    });
+    vi.mocked(systemService.getTaskStatus).mockResolvedValue(mockStatus);
 
     render(<TaskAlertBanner />);
 

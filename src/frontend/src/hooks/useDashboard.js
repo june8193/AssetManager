@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
+import { dashboardService } from '../services';
 
+/**
+ * 대시보드 데이터를 조회하고 새로고침하는 커스텀 훅
+ */
 export const useDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -10,36 +14,25 @@ export const useDashboard = () => {
     try {
       let refreshResult = null;
       if (force) {
-        const refreshRes = await fetch('/api/dashboard/refresh', {
-          method: 'POST',
-        });
-        if (!refreshRes.ok) {
+        try {
+          refreshResult = await dashboardService.refresh();
+        } catch {
           throw new Error('시세를 새로고침하는 중 오류가 발생했습니다.');
         }
-        refreshResult = await refreshRes.json();
       }
 
-      const [summaryRes, yearlyRes, dailyRes, snapshotsRes] = await Promise.all([
-        fetch('/api/dashboard/summary'),
-        fetch('/api/dashboard/yearly'),
-        fetch('/api/dashboard/daily?all=true'),
-        fetch('/api/dashboard/snapshots?all=true')
+      const [summary, yearly, daily, snapshots] = await Promise.all([
+        dashboardService.getSummary(),
+        dashboardService.getYearly(),
+        dashboardService.getDaily({ all: true }),
+        dashboardService.getSnapshots({ all: true }),
       ]);
-
-      if (!summaryRes.ok || !yearlyRes.ok || !dailyRes.ok || !snapshotsRes.ok) {
-        throw new Error('데이터를 가져오는데 실패했습니다.');
-      }
-
-      const summary = await summaryRes.json();
-      const yearly = await yearlyRes.json();
-      const daily = await dailyRes.json();
-      const snapshots = await snapshotsRes.json();
 
       setData({ ...summary, yearly, daily, snapshots });
       setError(null);
       return refreshResult;
     } catch (err) {
-      setError(err.message);
+      setError(err.message || '데이터를 가져오는데 실패했습니다.');
       throw err;
     } finally {
       setLoading(false);
@@ -47,9 +40,8 @@ export const useDashboard = () => {
   };
 
   useEffect(() => {
-    fetchDashboard();
+    fetchDashboard().catch(() => {});
   }, []);
 
   return { data, loading, error, refresh: fetchDashboard };
 };
-

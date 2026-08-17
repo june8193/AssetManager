@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Database, Table as TableIcon, Play, RefreshCw, AlertCircle, ChevronLeft, ChevronRight, Key } from 'lucide-react';
 import QueryResultTable from '../components/QueryResultTable';
+import { systemService } from '../services';
 
 /**
  * DB 탐색기 컴포넌트
@@ -34,9 +35,7 @@ const DbExplorerPage = () => {
     try {
       setPageLoadingStatus(true);
       setPageErrorMessage(null);
-      const response = await fetch('/api/v1/system/db/tables');
-      if (!response.ok) throw new Error('DB 테이블 목록을 불러오지 못했습니다.');
-      const data = await response.json();
+      const data = await systemService.getDbTables();
       setTableList(data);
 
       setSelectedTableName((prev) => prev || (data[0] ? data[0].name : ''));
@@ -59,10 +58,11 @@ const DbExplorerPage = () => {
       setPageErrorMessage(null);
 
       // 스키마 조회
-      const schemaResponse = await fetch(`/api/v1/system/db/schema/${selectedTableName}`);
-      if (schemaResponse.ok) {
-        const schemaData = await schemaResponse.json();
+      try {
+        const schemaData = await systemService.getDbSchema(selectedTableName);
         setTableSchemaInfo(schemaData);
+      } catch (schemaErr) {
+        console.warn(`테이블 ${selectedTableName} 스키마 조회 실패:`, schemaErr);
       }
 
       // 정렬 조건 적용하여 SELECT 실행
@@ -72,19 +72,11 @@ const DbExplorerPage = () => {
         orderClause = ` ORDER BY "${sortColumn}" ${sortDirection}`;
       }
 
-      const dataResponse = await fetch('/api/v1/system/db/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: `SELECT * FROM "${selectedTableName}"${orderClause} LIMIT ${pageSize} OFFSET ${offset}`,
-          limit: pageSize,
-        }),
-      });
-
-      if (dataResponse.ok) {
-        const data = await dataResponse.json();
-        setTableDataResult(data);
-      }
+      const data = await systemService.executeDbQuery(
+        `SELECT * FROM "${selectedTableName}"${orderClause} LIMIT ${pageSize} OFFSET ${offset}`,
+        pageSize
+      );
+      setTableDataResult(data);
     } catch (err) {
       setPageErrorMessage(err.message);
     } finally {
@@ -96,21 +88,21 @@ const DbExplorerPage = () => {
     fetchTableDetails();
   }, [fetchTableDetails]);
 
-  // 컬럼 헤더 클릭 시 정렬 토글 (useCallback 메모이제이션)
+  // 컬럼 헤더 클릭 시 정렬 토글
   const handleSortToggle = useCallback((columnName) => {
-    setSortColumn((prevCol) => {
-      if (prevCol === columnName) {
-        setSortDirection((prevDir) => (prevDir === 'ASC' ? 'DESC' : 'ASC'));
-        if (sortDirection === 'DESC') {
-          return '';
-        }
-        return columnName;
+    if (sortColumn === columnName) {
+      if (sortDirection === 'ASC') {
+        setSortDirection('DESC');
+      } else {
+        setSortColumn('');
+        setSortDirection('ASC');
       }
+    } else {
+      setSortColumn(columnName);
       setSortDirection('ASC');
-      return columnName;
-    });
+    }
     setCurrentPage(1);
-  }, [sortDirection]);
+  }, [sortColumn, sortDirection]);
 
   // SQL 직접 실행
   const handleExecuteSql = async () => {
@@ -120,20 +112,10 @@ const DbExplorerPage = () => {
       setSqlErrorMessage(null);
       setSqlExecutionResult(null);
 
-      const response = await fetch('/api/v1/system/db/query', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: sqlQueryText, limit: 500 }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || 'SQL 실행 중 오류가 발생했습니다.');
-      }
-
+      const data = await systemService.executeDbQuery(sqlQueryText, 500);
       setSqlExecutionResult(data);
     } catch (err) {
-      setSqlErrorMessage(err.message);
+      setSqlErrorMessage(err.detail || err.message || 'SQL 실행 중 오류가 발생했습니다.');
     } finally {
       setSqlLoadingStatus(false);
     }

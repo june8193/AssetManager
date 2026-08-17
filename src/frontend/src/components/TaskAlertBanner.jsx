@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import { API_BASE_URL } from '../config';
+import { systemService } from '../services';
 
 const TASK_NAMES = {
   exchange_rate_update: '환율 자동 수집',
@@ -19,9 +19,8 @@ const TaskAlertBanner = () => {
   useEffect(() => {
     const fetchTaskStatus = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/v1/system/tasks/status`);
-        if (res.ok) {
-          const data = await res.json();
+        const data = await systemService.getTaskStatus();
+        if (data && typeof data === 'object') {
           const failures = [];
           Object.keys(data).forEach((key) => {
             if (data[key] && data[key].status === 'failed') {

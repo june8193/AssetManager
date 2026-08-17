@@ -1,10 +1,19 @@
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import DbExplorerPage from './DbExplorerPage';
+import { systemService } from '../services';
+
+vi.mock('../services', () => ({
+  systemService: {
+    getDbTables: vi.fn(),
+    getDbSchema: vi.fn(),
+    executeDbQuery: vi.fn(),
+  },
+}));
 
 describe('DbExplorerPage', () => {
   beforeEach(() => {
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('테이블 목록 및 데이터 정렬이 포함된 화면을 정상적으로 렌더링한다', async () => {
@@ -23,18 +32,9 @@ describe('DbExplorerPage', () => {
       truncated: false,
     };
 
-    global.fetch = vi.fn().mockImplementation((url) => {
-      if (url.includes('/api/v1/system/db/tables')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockTables) });
-      }
-      if (url.includes('/api/v1/system/db/schema/accounts')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSchema) });
-      }
-      if (url.includes('/api/v1/system/db/query')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockQueryData) });
-      }
-      return Promise.reject(new Error('Unknown URL'));
-    });
+    vi.mocked(systemService.getDbTables).mockResolvedValue(mockTables);
+    vi.mocked(systemService.getDbSchema).mockResolvedValue(mockSchema);
+    vi.mocked(systemService.executeDbQuery).mockResolvedValue(mockQueryData);
 
     render(<DbExplorerPage />);
 
@@ -63,15 +63,9 @@ describe('DbExplorerPage', () => {
       ],
     };
 
-    global.fetch = vi.fn().mockImplementation((url) => {
-      if (url.includes('/api/v1/system/db/tables')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockTables) });
-      }
-      if (url.includes('/api/v1/system/db/schema')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockSchema) });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ columns: [], rows: [] }) });
-    });
+    vi.mocked(systemService.getDbTables).mockResolvedValue(mockTables);
+    vi.mocked(systemService.getDbSchema).mockResolvedValue(mockSchema);
+    vi.mocked(systemService.executeDbQuery).mockResolvedValue({ columns: [], rows: [], row_count: 0, truncated: false });
 
     render(<DbExplorerPage />);
 
@@ -93,18 +87,9 @@ describe('DbExplorerPage', () => {
       truncated: false,
     };
 
-    global.fetch = vi.fn().mockImplementation((url) => {
-      if (url.includes('/api/v1/system/db/tables')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockTables) });
-      }
-      if (url.includes('/api/v1/system/db/schema')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve({ columns: [], foreign_keys: [] }) });
-      }
-      if (url.includes('/api/v1/system/db/query')) {
-        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockQueryResult) });
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
-    });
+    vi.mocked(systemService.getDbTables).mockResolvedValue(mockTables);
+    vi.mocked(systemService.getDbSchema).mockResolvedValue({ columns: [], foreign_keys: [] });
+    vi.mocked(systemService.executeDbQuery).mockResolvedValue(mockQueryResult);
 
     render(<DbExplorerPage />);
 
