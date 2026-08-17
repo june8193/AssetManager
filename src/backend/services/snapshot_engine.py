@@ -297,6 +297,10 @@ class SnapshotEngine:
             elif t_type == 'CASH_ADJUSTMENT':
                 total_adjustment += amount
                 
+        period_deposit = total_deposit - total_withdraw
+        last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
+        period_profit = final_balance - last_valuation - period_deposit
+                
         return BankCalculateResponse(
             theoretical_krw=final_balance,
             existing_transactions=existing_transactions,
@@ -304,7 +308,9 @@ class SnapshotEngine:
             total_withdraw=total_withdraw,
             total_interest=total_interest,
             total_tax=total_tax,
-            total_adjustment=total_adjustment
+            total_adjustment=total_adjustment,
+            period_deposit=period_deposit,
+            period_profit=period_profit
         )
 
     def _save_exchange_rate(self, target_date: date, rate: float):
@@ -394,7 +400,7 @@ class SnapshotEngine:
         previews: List[SnapshotPreviewSchema],
         bank_accounts_req: List[BankSaveAccountRequest]
     ):
-        """사용자가 지정한 은행 계좌 총 평가액을 바탕으로 수익을 재계산합니다.
+        """사용자가 지정한 은행 계좌 총 평가액을 바탕으로 기간 수익을 재계산합니다.
         
         Args:
             previews (List[SnapshotPreviewSchema]): 스냅샷 미리보기 리스트.
@@ -404,25 +410,21 @@ class SnapshotEngine:
         if not bank_valuation_map:
             return
 
-        bank_account_ids = list(bank_valuation_map.keys())
-        snapshot_date = previews[0].snapshot_date if previews else None
-        
-        all_txs = self.db.query(Transaction).filter(
-            Transaction.account_id.in_(bank_account_ids),
-            Transaction.transaction_date <= snapshot_date
-        ).all()
-        
-        net_deposits = {acc_id: 0.0 for acc_id in bank_account_ids}
-        for tx in all_txs:
-            if tx.type in ['DEPOSIT', 'INITIAL_BALANCE']:
-                net_deposits[tx.account_id] += tx.total_amount
-            elif tx.type == 'WITHDRAW':
-                net_deposits[tx.account_id] -= tx.total_amount
-
         for p in previews:
             if p.account_id in bank_valuation_map:
                 p.total_valuation = bank_valuation_map[p.account_id]
-                p.total_profit = p.total_valuation - net_deposits[p.account_id]
+                
+                last_snapshot = self.db.query(AccountSnapshot).filter(
+                    AccountSnapshot.account_id == p.account_id,
+                    AccountSnapshot.snapshot_date < p.snapshot_date
+                ).order_by(AccountSnapshot.snapshot_date.desc()).first()
+                
+                last_valuation = last_snapshot.total_valuation if last_snapshot else 0.0
+                p.total_profit = p.total_valuation - last_valuation - p.period_deposit
+                p.period_profit = p.total_profit
+                
+                base_assets = last_valuation + p.period_deposit
+                p.calculated_return_rate = round((p.period_profit / base_assets * 100), 2) if base_assets != 0 else 0.0
 
     def save_snapshots(self, previews: List[SnapshotPreviewSchema], commit: bool = True) -> List[AccountSnapshot]:
         """미리보기 데이터를 바탕으로 기존 스냅샷을 교체 저장합니다.

@@ -606,9 +606,18 @@ class DashboardService:
                 profit_ratio = 0.0
 
         # 최신 주가 업데이트 날짜/시간 조회
-        latest_price_date_val = self.db.query(func.max(HistoricalPrice.updated_at)).scalar()
+        latest_price_date_val = None
+        try:
+            latest_price_date_val = self.db.query(func.max(HistoricalPrice.updated_at)).scalar()
+        except Exception:
+            self.db.rollback()
+
         if not latest_price_date_val:
-            latest_price_date_val = self.db.query(func.max(HistoricalPrice.price_date)).scalar()
+            try:
+                latest_price_date_val = self.db.query(func.max(HistoricalPrice.price_date)).scalar()
+            except Exception:
+                self.db.rollback()
+                latest_price_date_val = None
         
         if latest_price_date_val:
             if isinstance(latest_price_date_val, datetime.datetime):

@@ -94,6 +94,8 @@ class BankCalculateResponse(BaseModel):
     total_interest: float = 0.0
     total_tax: float = 0.0
     total_adjustment: float = 0.0
+    period_deposit: float = 0.0
+    period_profit: float = 0.0
 
 
 class BankSaveAccountRequest(BaseModel):

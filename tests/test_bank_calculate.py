@@ -63,7 +63,50 @@ def test_calculate_bank_snapshot(setup_bank_account, db_session):
     assert data["total_interest"] == 100.0
     assert data["total_tax"] == 15.0
     assert data["total_adjustment"] == 200.0
-    # total_fee 검증은 삭제됨 (FEE 삭제 대응)
+    
+    # 기간 순입금액 및 기간 손익 검증 (신규 추가 필드)
+    # period_deposit = 15000 - 2000 = 13000.0
+    assert data["period_deposit"] == 13000.0
+    # period_profit = 13285 (잔액) - 0 (직전평가) - 13000 (기간순입금) = 285.0 (이자 100 - 세금 15 + 보정 200)
+    assert data["period_profit"] == 285.0
+
+
+def test_calculate_bank_snapshot_with_previous_snapshot(setup_bank_account, db_session):
+    """직전 스냅샷이 존재하는 경우의 기간 입금액 및 기간 손익 산출 검증."""
+    acc, krw = setup_bank_account
+    from src.backend.models import AccountSnapshot
+    
+    # 1. 2024-01-10 기준 직전 스냅샷 생성 (평가액 10,000원)
+    prev_snap = AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=date(2024, 1, 10),
+        period_deposit=10000.0,
+        total_valuation=10000.0,
+        total_profit=0.0
+    )
+    db_session.add(prev_snap)
+    db_session.commit()
+    
+    # 2. 2024-01-11 이후 트랜잭션: 이자 500원, 세금 70원, 출금 1000원
+    new_transactions = [
+        {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-20", "type": "WITHDRAW", "total_amount": 1000, "currency": "KRW"},
+        {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-25", "type": "INTEREST", "total_amount": 500, "currency": "KRW"},
+        {"account_id": acc.id, "asset_id": krw.id, "transaction_date": "2024-01-25", "type": "TAX", "total_amount": 70, "currency": "KRW"},
+    ]
+    
+    response = client.post("/api/db/snapshots/bank/calculate", json={
+        "account_id": acc.id,
+        "snapshot_date": "2024-01-31",
+        "new_transactions": new_transactions
+    })
+    
+    assert response.status_code == 200
+    data = response.json()
+    # 최종 잔액: 10000 - 1000 + 500 - 70 = 9430.0
+    assert data["theoretical_krw"] == 9430.0
+    assert data["period_deposit"] == -1000.0
+    # 기간 손익 = 9430 - 10000(직전평가) - (-1000)(순입금) = 430.0 (이자 500 - 세금 70)
+    assert data["period_profit"] == 430.0
 
 
 def test_invalid_transaction_types_validation(setup_bank_account, db_session):

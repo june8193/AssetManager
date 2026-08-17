@@ -51,7 +51,7 @@ describe('Sidebar Component', () => {
       '시장분석',
       '비중 점검',
       'DB 관리',
-      'API 연결 관리'
+      '서버 점검'
     ];
     
     expectedMenus.forEach(menu => {

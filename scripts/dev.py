@@ -85,9 +85,9 @@ def main():
         print("   -> node_modules not found. Installing dependencies with pnpm...")
         subprocess.run(["pnpm", "install"], cwd=frontend_dir, shell=True, check=True)
 
-    # pnpm은 shell을 통해 실행해야 함
+    # pnpm 실행
     frontend_process = subprocess.Popen(
-        ["pnpm", "run", "dev"],
+        "pnpm run dev",
         cwd=frontend_dir,
         env=env,
         shell=True,

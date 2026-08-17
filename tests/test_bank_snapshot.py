@@ -72,3 +72,78 @@ async def test_save_bank_snapshots_with_memo(db_session, setup_bank_assets):
     # 입금/출금만 원금 변동으로 계산 (INTEREST는 제외되어야 함)
     # 초기 잔액 0에서 -50,000(WITHDRAW) = -50,000
     assert snap.period_deposit == -50000.0
+    # 기간 손익: 1,000,000 - 0(직전) - (-50,000)(순입금) = 1,050,000
+    assert snap.total_profit == 1050000.0
+
+
+@pytest.mark.asyncio
+async def test_consecutive_bank_snapshots_period_profit(db_session, setup_bank_assets):
+    """연속적인 은행 스냅샷 생성 시 기간 손익이 누적이 아닌 해당 기간의 손익으로 올바르게 기록되는지 검증합니다."""
+    krw = setup_bank_assets
+    account = Account(user_id=1, name="카카오뱅크", provider="카카오", account_type="BANK")
+    db_session.add(account)
+    db_session.commit()
+    
+    # 1. 1차 스냅샷 (2026-07-01): 초기 잔고 10,000,000원 + 이자 50,000원 -> 잔액 10,050,000원
+    snap1_date = datetime.date(2026, 7, 1)
+    req1 = BankSaveRequest(
+        snapshot_date=snap1_date,
+        accounts=[
+            BankSaveAccountRequest(
+                account_id=account.id,
+                new_transactions=[
+                    TransactionSchema(
+                        account_id=account.id, asset_id=0, transaction_date=snap1_date,
+                        type="DEPOSIT", total_amount=10000000, currency="KRW"
+                    ),
+                    TransactionSchema(
+                        account_id=account.id, asset_id=0, transaction_date=snap1_date,
+                        type="INTEREST", total_amount=50000, currency="KRW"
+                    )
+                ],
+                total_valuation=10050000.0
+            )
+        ]
+    )
+    await save_bank_snapshots(req1, db_session)
+    
+    snap1 = db_session.query(AccountSnapshot).filter(
+        AccountSnapshot.account_id == account.id,
+        AccountSnapshot.snapshot_date == snap1_date
+    ).first()
+    assert snap1.period_deposit == 10000000.0
+    assert snap1.total_valuation == 10050000.0
+    assert snap1.total_profit == 50000.0  # 1차 기간 손익: +50,000원
+    
+    # 2. 2차 스냅샷 (2026-08-01): 단순 입출금만 발생 (입금 2,000,000원, 출금 500,000원), 이자/세금 없음
+    # 잔액 = 10,050,000 + 1,500,000 = 11,550,000원
+    snap2_date = datetime.date(2026, 8, 1)
+    req2 = BankSaveRequest(
+        snapshot_date=snap2_date,
+        accounts=[
+            BankSaveAccountRequest(
+                account_id=account.id,
+                new_transactions=[
+                    TransactionSchema(
+                        account_id=account.id, asset_id=0, transaction_date=snap2_date,
+                        type="DEPOSIT", total_amount=2000000, currency="KRW"
+                    ),
+                    TransactionSchema(
+                        account_id=account.id, asset_id=0, transaction_date=snap2_date,
+                        type="WITHDRAW", total_amount=500000, currency="KRW"
+                    )
+                ],
+                total_valuation=11550000.0
+            )
+        ]
+    )
+    await save_bank_snapshots(req2, db_session)
+    
+    snap2 = db_session.query(AccountSnapshot).filter(
+        AccountSnapshot.account_id == account.id,
+        AccountSnapshot.snapshot_date == snap2_date
+    ).first()
+    assert snap2.period_deposit == 1500000.0
+    assert snap2.total_valuation == 11550000.0
+    # 2차 기간 손익: 11,550,000 - 10,050,000(직전평가) - 1,500,000(순입금) = 0원이어야 함! (과거 누적 50,000원이 고정되면 안 됨)
+    assert snap2.total_profit == 0.0

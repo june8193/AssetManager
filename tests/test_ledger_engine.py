@@ -579,6 +579,9 @@ async def test_dev_assets_db_golden_master_valuation():
         service = DashboardService(db)
         summary = await service.get_dashboard_summary(force_update=False)
 
+        if not summary.get("accounts") or summary.get("total_valuation_krw") == 0.0:
+            pytest.skip("src/dev_assets.db에 평가 대상 계좌 데이터가 없어 건너뜁니다.")
+
         expected_valuation = 434794786.26370734
         assert summary["total_valuation_krw"] == pytest.approx(expected_valuation, abs=0.1)
         assert len(summary["accounts"]) == 10

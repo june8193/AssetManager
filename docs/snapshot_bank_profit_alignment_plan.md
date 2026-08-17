@@ -77,9 +77,10 @@
    uv run pytest tests/test_snapshot_engine.py
    ```
 3. **서버 DB 백업 (권장)**:
+   * 마이그레이션 스크립트 실행 시 `settings.toml`의 `[backup].path`로 **자동 백업**이 수행되나, 필요 시 수동으로도 백업할 수 있습니다:
    ```bash
-   # SQLite DB 파일 백업
-   cp src/assets.db src/assets_backup_$(date +%Y%m%d_%H%M%S).db
+   # SQLite DB 파일 수동 백업 (settings.toml의 백업 경로 또는 원하는 위치)
+   cp src/assets.db "settings.toml에 설정된 백업 폴더/assets_backup_$(date +%Y%m%d_%H%M%S).db"
    ```
 4. **마이그레이션 스크립트 실행**:
    ```bash

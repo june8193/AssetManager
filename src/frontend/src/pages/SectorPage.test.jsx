@@ -32,6 +32,17 @@ const mockDashboardData = {
       ]
     }
   ],
+  individual_stocks: [
+    {
+      rank: 1,
+      ticker: "000660",
+      name: "SK하이닉스",
+      current_price: 180000.0,
+      return_rate: 15.0,
+      alpha: 9.5,
+      judgment: "시장 상회"
+    }
+  ],
   watchlist: [
     {
       rank: 1,
