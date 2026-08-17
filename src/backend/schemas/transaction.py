@@ -52,6 +52,8 @@ class TransactionSchema(BaseModel):
     target_asset_name: Optional[str] = None
     target_asset_ticker: Optional[str] = None
     account_display_name: Optional[str] = None
+    warning: Optional[str] = None
+
 
 
 class TransferTransactionRequest(BaseModel):

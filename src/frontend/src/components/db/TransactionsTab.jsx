@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Check, Search, AlertTriangle } from 'lucide-react';
 import { DB_API_BASE } from '../../config';
 import { useMasking } from '../../contexts/MaskingContext';
+import { PastTransactionWarningModal } from './PastTransactionWarningModal';
+
 
 /**
  * 숫자를 3자리마다 쉼표가 들어간 포맷으로 변환합니다.
@@ -100,6 +102,19 @@ const isSameId = (id1, id2) => {
 };
 
 /**
+ * 거래 일자가 최신 스냅샷 기준일 이전(또는 당일)인지 검사하는 헬퍼 함수입니다.
+ *
+ * @param {string} targetDate - 대상 일자 (YYYY-MM-DD)
+ * @param {string|null} snapshotDate - 최신 스냅샷 일자 (YYYY-MM-DD)
+ * @returns {boolean} 과거 여부
+ */
+const isPastDate = (targetDate, snapshotDate) => {
+  if (!targetDate || !snapshotDate) return false;
+  return targetDate <= snapshotDate;
+};
+
+
+/**
  * 거래 유형 및 선택된 자산 Ticker에 따라 폼 입력 필드 라벨을 반환합니다.
  *
  * @param {string} type - 거래 유형 (EXCHANGE, TRANSFER, BUY 등)
@@ -137,6 +152,8 @@ const TransactionsTab = () => {
   const [transactions, setTransactions] = useState([]); // 전체 거래 내역
   const [accounts, setAccounts] = useState([]);         // 계좌 목록 (필터 및 입력용)
   const [assets, setAssets] = useState([]);             // 자산 목록 (입력용)
+  const [latestSnapshotDate, setLatestSnapshotDate] = useState(null); // 최신 스냅샷 기준일
+  const [pendingPastAction, setPendingPastAction] = useState(null);   // 과거 거래 확인 모달 상태 ({ type, transactionDate, action })
   const [loading, setLoading] = useState(true);         // 로딩 상태
   const [error, setError] = useState(null);             // 데이터 로딩 에러 상태
   const [editingId, setEditingId] = useState(null);     // 수정 중인 거래 ID
@@ -160,16 +177,17 @@ const TransactionsTab = () => {
   });
 
   /**
-   * 서버에서 거래, 계좌, 자산 데이터를 병렬로 가져옵니다.
+   * 서버에서 거래, 계좌, 자산, 최신 스냅샷 데이터를 병렬로 가져옵니다.
    */
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const [txRes, accRes, assetRes] = await Promise.all([
+      const [txRes, accRes, assetRes, snapRes] = await Promise.all([
         fetch(`${DB_API_BASE}/transactions`),
         fetch(`${DB_API_BASE}/accounts`),
-        fetch(`${DB_API_BASE}/assets`)
+        fetch(`${DB_API_BASE}/assets`),
+        fetch(`${DB_API_BASE}/snapshots/latest`).catch(() => null)
       ]);
 
       if (!txRes.ok || !accRes.ok || !assetRes.ok) {
@@ -183,6 +201,12 @@ const TransactionsTab = () => {
       setTransactions(txData);
       setAccounts(accData);
       setAssets(assetData);
+
+      if (snapRes && snapRes.ok) {
+        const snapData = await snapRes.json();
+        setLatestSnapshotDate(snapData?.latest_snapshot_date || null);
+      }
+
 
       // 초기 폼 데이터 설정 및 자산별 기본 제약사항/통화 매핑 자동 적용
       let initialAccountId = formData.account_id;
@@ -348,21 +372,20 @@ const TransactionsTab = () => {
   };
 
   /**
-   * 폼 제출(저장/추가) 핸들러
+   * 실제 거래 내역 생성/수정 API 요청 실행
    */
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const isTransfer = formData.type === 'TRANSFER';
-    const isExchange = formData.type === 'EXCHANGE';
+  const executeSubmit = async (customFormData = formData, customEditingId = editingId) => {
+    const isTransfer = customFormData.type === 'TRANSFER';
+    const isExchange = customFormData.type === 'EXCHANGE';
 
-    if (isTransfer && !editingId) {
+    if (isTransfer && !customEditingId) {
       const transferPayload = {
-        source_account_id: parseInt(formData.account_id),
-        target_account_id: parseInt(formData.target_account_id),
-        asset_id: parseInt(formData.asset_id),
-        amount: parseFormattedNumber(formData.total_amount),
-        transaction_date: formData.transaction_date,
-        memo: formData.memo || null
+        source_account_id: parseInt(customFormData.account_id),
+        target_account_id: parseInt(customFormData.target_account_id),
+        asset_id: parseInt(customFormData.asset_id),
+        amount: parseFormattedNumber(customFormData.total_amount),
+        transaction_date: customFormData.transaction_date,
+        memo: customFormData.memo || null
       };
 
       try {
@@ -382,18 +405,18 @@ const TransactionsTab = () => {
       return;
     }
 
-    const url = editingId ? `${DB_API_BASE}/transactions/${editingId}` : `${DB_API_BASE}/transactions`;
-    const method = editingId ? 'PUT' : 'POST';
+    const url = customEditingId ? `${DB_API_BASE}/transactions/${customEditingId}` : `${DB_API_BASE}/transactions`;
+    const method = customEditingId ? 'PUT' : 'POST';
 
     const payload = {
-      ...formData,
-      quantity: parseFormattedNumber(formData.quantity),
-      price: parseFormattedNumber(formData.price),
-      total_amount: parseFormattedNumber(formData.total_amount),
-      target_asset_id: isExchange && formData.target_asset_id ? parseInt(formData.target_asset_id) : null,
+      ...customFormData,
+      quantity: parseFormattedNumber(customFormData.quantity),
+      price: parseFormattedNumber(customFormData.price),
+      total_amount: parseFormattedNumber(customFormData.total_amount),
+      target_asset_id: isExchange && customFormData.target_asset_id ? parseInt(customFormData.target_asset_id) : null,
       exchange_rate: isExchange 
-        ? (parseFormattedNumber(formData.price) || null) 
-        : (formData.exchange_rate ? parseFloat(formData.exchange_rate) : null)
+        ? (parseFormattedNumber(customFormData.price) || null) 
+        : (customFormData.exchange_rate ? parseFloat(customFormData.exchange_rate) : null)
     };
 
     try {
@@ -405,10 +428,10 @@ const TransactionsTab = () => {
 
       if (response.ok) {
         fetchData();
-        if (editingId) {
+        if (customEditingId) {
           resetForm();
         } else {
-          const currentAsset = assets.find(a => isSameId(a.id, formData.asset_id));
+          const currentAsset = assets.find(a => isSameId(a.id, customFormData.asset_id));
           const isCash = isCashAsset(currentAsset);
           setFormData(prev => ({
             ...prev,
@@ -421,6 +444,32 @@ const TransactionsTab = () => {
     } catch (error) {
       console.error('거래 내역 저장 오류:', error);
     }
+  };
+
+  /**
+   * 폼 제출(저장/추가) 핸들러 (과거 스냅샷 가드 적용)
+   */
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // 과거 스냅샷 기준일 이전 거래 조작 여부 확인
+    const isTargetPast = isPastDate(formData.transaction_date, latestSnapshotDate);
+    let isOriginalPast = false;
+    if (editingId) {
+      const originalTx = transactions.find((t) => t.id === editingId);
+      isOriginalPast = isPastDate(originalTx?.transaction_date, latestSnapshotDate);
+    }
+
+    if (isTargetPast || isOriginalPast) {
+      setPendingPastAction({
+        type: editingId ? '수정' : '추가',
+        transactionDate: formData.transaction_date,
+        action: () => executeSubmit(formData, editingId)
+      });
+      return;
+    }
+
+    await executeSubmit(formData, editingId);
   };
 
   /**
@@ -445,10 +494,9 @@ const TransactionsTab = () => {
   };
 
   /**
-   * 거래 내역 삭제 핸들러
+   * 실제 거래 삭제 API 호출 실행
    */
-  const handleDelete = async (id) => {
-    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+  const executeDelete = async (id) => {
     try {
       const response = await fetch(`${DB_API_BASE}/transactions/${id}`, { method: 'DELETE' });
       if (response.ok) fetchData();
@@ -456,6 +504,28 @@ const TransactionsTab = () => {
       console.error('거래 내역 삭제 오류:', error);
     }
   };
+
+  /**
+   * 거래 내역 삭제 핸들러 (과거 스냅샷 가드 적용)
+   */
+  const handleDelete = async (id) => {
+    const targetTx = transactions.find((t) => t.id === id);
+    const isTargetPast = isPastDate(targetTx?.transaction_date, latestSnapshotDate);
+
+    if (isTargetPast) {
+      setPendingPastAction({
+        type: '삭제',
+        transactionDate: targetTx.transaction_date,
+        action: () => executeDelete(id)
+      });
+      return;
+    }
+
+    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+    await executeDelete(id);
+  };
+
+
 
   /**
    * 입력 폼 초기화
@@ -893,9 +963,25 @@ const TransactionsTab = () => {
           <div className="py-12 text-center text-slate-400 text-sm">거래 내역이 없습니다.</div>
         )}
       </div>
+
+      {/* 과거 거래 스냅샷 정합성 경고 모달 */}
+      <PastTransactionWarningModal
+        isOpen={!!pendingPastAction}
+        title={`과거 거래 ${pendingPastAction?.type || ''} 확인`}
+        actionType={pendingPastAction?.type || '조작'}
+        transactionDate={pendingPastAction?.transactionDate || formData.transaction_date}
+        latestSnapshotDate={latestSnapshotDate || ''}
+        onConfirm={async () => {
+          const action = pendingPastAction?.action;
+          setPendingPastAction(null);
+          if (action) await action();
+        }}
+        onCancel={() => setPendingPastAction(null)}
+      />
     </div>
   );
 
 };
 
 export default TransactionsTab;
+

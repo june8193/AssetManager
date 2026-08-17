@@ -94,11 +94,15 @@ class SnapshotEngine:
         Returns:
             Transaction: DB에 삽입할 Transaction 인스턴스.
         """
-        data = tx_schema.model_dump(exclude={"id", "asset_name", "asset_ticker"})
+        data = tx_schema.model_dump(
+            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning"}
+        )
+
         data['asset_id'] = asset_id
         if data['quantity'] == 0 and data['total_amount'] != 0:
             data['quantity'] = data['total_amount']
         return Transaction(**data)
+
 
     async def preview(self, snapshot_date: date, exchange_rate: float) -> List[SnapshotPreviewSchema]:
         """실시간 시세 및 거래 원장을 기반으로 계좌별 스냅샷 미리보기를 산출합니다.

@@ -112,3 +112,50 @@ def test_delete_transaction_with_pair(db_session, tx_setup):
     # 해당 이체 쌍 삭제 후 생성한 이체 거래들이 남아있지 않아야 함
     remaining_pair = db_session.query(Transaction).filter_by(transfer_pair_id=txs[0].transfer_pair_id).all()
     assert len(remaining_pair) == 0
+
+
+def test_past_transaction_warning(db_session, tx_setup):
+    """최신 스냅샷 기준일 이전 거래 생성/수정 시 경고 메시지 반환을 검증합니다."""
+    from src.backend.models import AccountSnapshot
+    acc1, acc2, asset_krw, asset_usd, asset_stock = tx_setup
+    service = TransactionService(db_session)
+
+    # 2026-02-01 기준 스냅샷 추가
+    snapshot = AccountSnapshot(
+        account_id=acc1.id,
+        snapshot_date=date(2026, 2, 1),
+        total_valuation=1000000.0
+    )
+
+    db_session.add(snapshot)
+    db_session.commit()
+
+    # 1. 스냅샷 이전 날짜(2026-01-15) 거래 생성 -> warning 포함
+    past_tx_schema = TransactionSchema(
+        account_id=acc1.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 1, 15),
+        type="DEPOSIT",
+        quantity=100000.0,
+        price=1.0,
+        total_amount=100000.0,
+        currency="KRW"
+    )
+    created_past_tx = service.create_transaction(past_tx_schema)
+    assert created_past_tx.warning is not None
+    assert "스냅샷" in created_past_tx.warning
+
+    # 2. 스냅샷 이후 날짜(2026-02-15) 거래 생성 -> warning 없음
+    future_tx_schema = TransactionSchema(
+        account_id=acc1.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 2, 15),
+        type="DEPOSIT",
+        quantity=50000.0,
+        price=1.0,
+        total_amount=50000.0,
+        currency="KRW"
+    )
+    created_future_tx = service.create_transaction(future_tx_schema)
+    assert created_future_tx.warning is None
+

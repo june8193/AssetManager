@@ -4,7 +4,7 @@ import uuid
 from typing import List, Optional
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
-from ..models import Transaction, Asset, Account
+from ..models import Transaction, Asset, Account, AccountSnapshot
 
 
 class TransactionService:
@@ -12,6 +12,21 @@ class TransactionService:
 
     def __init__(self, db: Session):
         self.db = db
+
+    def check_past_snapshot_warning(self, account_id: int, transaction_date: date) -> Optional[str]:
+        """해당 거래 일자가 이미 확정된 스냅샷 기준일 이전 또는 당일인지 검사하여 경고 메시지를 반환합니다."""
+        last_snapshot = (
+            self.db.query(AccountSnapshot)
+            .filter(AccountSnapshot.account_id == account_id)
+            .order_by(AccountSnapshot.snapshot_date.desc())
+            .first()
+        )
+        if last_snapshot and transaction_date <= last_snapshot.snapshot_date:
+            return (
+                f"입력하신 거래 일자({transaction_date})는 이미 확정된 최신 스냅샷 기준일({last_snapshot.snapshot_date}) 이전입니다. "
+                f"과거 거래 수정/추가는 스냅샷 결산 데이터와 불일치를 유발할 수 있으므로, 처리 후 스냅샷 재계산이 권장됩니다."
+            )
+        return None
 
     def get_transactions(
         self,
@@ -63,7 +78,7 @@ class TransactionService:
                 raise ValueError("환전 도착 자산(target_asset_id)은 현금 카테고리 자산이어야 합니다.")
 
         return transaction.model_dump(
-            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name"}
+            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning"}
         )
 
     def create_transaction(self, transaction) -> Transaction:
@@ -73,7 +88,13 @@ class TransactionService:
         self.db.add(db_transaction)
         self.db.commit()
         self.db.refresh(db_transaction)
+
+        # 과거 스냅샷 기준일 이전 거래 여부 검사 후 transient 경고 속성 추가
+        warning = self.check_past_snapshot_warning(db_transaction.account_id, db_transaction.transaction_date)
+        setattr(db_transaction, "warning", warning)
+
         return db_transaction
+
 
     def create_transfer_pair(self, req) -> List[Transaction]:
         """계좌 간 이체 트랜잭션(WITHDRAW + DEPOSIT 쌍)을 원자적으로 생성합니다."""
@@ -103,9 +124,18 @@ class TransactionService:
         pair_txs = [tx_withdraw, tx_deposit]
         self.db.add_all(pair_txs)
         self.db.commit()
+
+        # 과거 스냅샷 경고 확인
+        warning_src = self.check_past_snapshot_warning(req.source_account_id, req.transaction_date)
+        warning_tgt = self.check_past_snapshot_warning(req.target_account_id, req.transaction_date)
+        warning = warning_src or warning_tgt
+
         for tx in pair_txs:
             self.db.refresh(tx)
+            setattr(tx, "warning", warning)
+
         return pair_txs
+
 
     def update_transaction(self, transaction_id: int, transaction) -> Transaction:
         """기존 거래 내역 정보를 수정하고 연동된 이체 트랜잭션도 연쇄 수정합니다."""
@@ -129,7 +159,13 @@ class TransactionService:
 
         self.db.commit()
         self.db.refresh(db_transaction)
+
+        warning = self.check_past_snapshot_warning(db_transaction.account_id, db_transaction.transaction_date)
+        setattr(db_transaction, "warning", warning)
+
         return db_transaction
+
+
 
     def delete_transaction(self, transaction_id: int) -> bool:
         """거래 내역을 삭제하며, 연동된 이체 트랜잭션이 있을 경우 원자적으로 함께 삭제합니다."""

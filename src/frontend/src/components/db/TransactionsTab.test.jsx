@@ -633,6 +633,108 @@ describe('TransactionsTab', () => {
       expect(screen.getByText('수동입력')).toBeInTheDocument();
     });
   });
+
+  it('최신 스냅샷 기준일 이전 과거 거래 등록 시도 시 경고 모달이 노출되고 확인 시에만 API가 호출된다', async () => {
+    let postCalled = false;
+    vi.stubGlobal('fetch', vi.fn((url, options) => {
+      if (url.endsWith('/snapshots/latest')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ latest_snapshot_date: '2026-08-01' }) });
+      }
+      if (url.endsWith('/transactions')) {
+        if (options && options.method === 'POST') {
+          postCalled = true;
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 99 }) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(mockTransactions) });
+      }
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const dateInput = container.querySelector('input[name="transaction_date"]');
+    fireEvent.change(dateInput, { target: { value: '2026-07-15' } }); // 최신 스냅샷(2026-08-01) 이전 날짜
+
+    const submitButton = screen.getByText('거래 기록 추가');
+    fireEvent.click(submitButton);
+
+    // 경고 모달 노출 확인
+    await waitFor(() => {
+      expect(screen.getByTestId('past-tx-warning-modal')).toBeInTheDocument();
+      expect(screen.getByText(/과거 거래 추가 확인/)).toBeInTheDocument();
+    });
+    expect(postCalled).toBe(false);
+
+    // 모달에서 확인 클릭 시 API 호출
+    const confirmBtn = screen.getByTestId('past-tx-confirm-btn');
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(postCalled).toBe(true);
+      expect(screen.queryByTestId('past-tx-warning-modal')).not.toBeInTheDocument();
+    });
+  });
+
+  it('과거 거래 삭제 시 경고 모달이 노출되고 취소 클릭 시 삭제가 수행되지 않는다', async () => {
+    let deleteCalled = false;
+    const pastTxList = [
+      { id: 77, account_id: 1, asset_id: 1, transaction_date: '2026-06-10', type: 'BUY', quantity: 10, price: 1000, total_amount: 10000, currency: 'KRW' }
+    ];
+
+    vi.stubGlobal('fetch', vi.fn((url, options) => {
+      if (url.endsWith('/snapshots/latest')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ latest_snapshot_date: '2026-08-01' }) });
+      }
+      if (url.endsWith('/transactions/77') && options?.method === 'DELETE') {
+        deleteCalled = true;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ message: '삭제' }) });
+      }
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(pastTxList) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('2026-06-10')).toBeInTheDocument();
+    });
+
+    const deleteBtn = screen.getByTitle('삭제');
+    fireEvent.click(deleteBtn);
+
+    // 과거 거래 삭제 경고 모달 노출 확인
+    await waitFor(() => {
+      expect(screen.getByTestId('past-tx-warning-modal')).toBeInTheDocument();
+      expect(screen.getByText(/과거 거래 삭제 확인/)).toBeInTheDocument();
+    });
+    expect(deleteCalled).toBe(false);
+
+    // 취소 버튼 클릭 시 모달이 닫히고 삭제되지 않음
+    const cancelBtn = screen.getByTestId('past-tx-cancel-btn');
+    fireEvent.click(cancelBtn);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('past-tx-warning-modal')).not.toBeInTheDocument();
+    });
+    expect(deleteCalled).toBe(false);
+  });
 });
+
 
 
