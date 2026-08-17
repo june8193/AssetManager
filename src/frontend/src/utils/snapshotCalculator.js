@@ -28,6 +28,16 @@ export const parseCommas = (val) => {
 };
 
 /**
+ * 계좌의 표시용 이름을 반환합니다. 별칭이 있는 경우 '계좌명 (별칭)' 형식으로 반환합니다.
+ * @param {{ name: string, alias?: string }} acc
+ * @returns {string}
+ */
+export const getAccountDisplayName = (acc) => {
+  if (!acc) return '';
+  return acc.alias ? `${acc.name} (${acc.alias})` : acc.name;
+};
+
+/**
  * 주식 개별 종목의 평가액을 계산합니다 (환율 반영).
  * @param {{ quantity: number, price: number, currency: string }} holding
  * @param {number} [exchangeRate=1.0]
