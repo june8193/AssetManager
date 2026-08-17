@@ -2,91 +2,37 @@
 
 이 파일은 프로젝트 개발 시 에이전트가 항상 준수해야 하는 공통 규칙들을 담고 있습니다.
 
-## 1. 커뮤니케이션 및 문서화 규칙 (언어 정책)
-- **기본 언어**: 에이전트의 모든 대답(Reply)과 아티팩트(Artifact) 문서는 항상 **한국어**로 작성합니다.
-- **Docstring 및 주석**: 모든 Docstring과 코드 주석은 **한글**로 작성하며, Docstring 스타일은 Google Style을 따릅니다.
-- **커밋 메시지**: Git 커밋 메시지는 항상 **한국어**로 작성합니다.
+## 1. 기본 원칙 (언어 및 실행 환경)
+- **언어 정책**: 대답(Reply), 아티팩트(Artifact) 문서, Docstring(Google Style) 및 주석, Git 커밋 메시지 모두 항상 **한국어**로 작성합니다.
+- **Python 실행**: 모든 파이썬 스크립트 실행은 반드시 `uv`를 사용합니다 (`uv run <script_path>`, 예: `uv run pytest`, `uv run scripts/dev.py`).
+- **PowerShell 환경**: Windows 환경이므로 `&&` 대신 `;` 사용, 리다이렉션은 `2>$null`, `grep` 대신 `Select-String`, `rm -rf` 대신 `Remove-Item -Recurse -Force`를 사용합니다.
+- **Scratch 스크립트 관리**: 임시 테스트/분석을 위해 `scratch/` 폴더에 작성한 스크립트도 Git 커밋으로 이력을 관리합니다.
 
-## 2. Python 패키지 구조 규칙 (`__init__.py` 허용)
-- **원칙**: 패키지 내부의 초기화 및 명시적 모듈 노출을 위해 필요한 경우 `__init__.py`를 자유롭게 생성하여 사용합니다.
-- **이유**: 모듈 간 명확한 인터페이스 설정과 계층적 구조 관리를 위해 패키지 구조를 적극 활용합니다.
+## 2. TDD (Test Driven Development) 규칙
+- **개발 절차 (Red-Green-Refactor)**: 
+  1. **Red**: 실패하는 테스트를 먼저 작성합니다.
+  2. **Green**: 테스트를 통과하는 최소한의 코드를 작성합니다.
+  3. **Refactor**: 테스트 통과 상태를 유지하며 코드를 개선(리팩토링)합니다.
+- **테스트 도구 및 위치**:
+  - **백엔드**: `pytest` (`tests/test_*.py`)
+  - **프론트엔드**: `Vitest` + `React Testing Library` (컴포넌트 디렉토리 내 `*.test.jsx`)
+- **데이터베이스 격리 (필수)**: 테스트는 반드시 격리된 환경(인메모리 또는 테스트용 DB)에서 수행하며, 실제 운영 DB에 영향을 주지 않도록 합니다.
 
-## 3. TDD (Test Driven Development) 규칙
-이 프로젝트는 TDD 방식으로 개발합니다. 새로운 기능을 구현하거나 기존 코드를 수정할 때 반드시 아래 절차를 준수합니다.
+## 3. E2E (End-to-End) 테스트 규칙
+- **원칙**: 기능 구현 및 수정 후에는 내장 브라우저 도구로 실제 동작을 검증합니다.
+- **개발 서버 구동**: 반드시 `uv run scripts/dev.py`를 백그라운드 태스크(Async)로 실행합니다 (개발용 DB `src/dev_assets.db` 자동 격리 사용). `scripts/run_prod.py` 또는 `--prod` 플래그는 절대 사용 금지.
+- **테스트 수행**: `http://localhost:5173`에 접속하여 시나리오별로 기능을 검증합니다.
+- **스크린샷 및 정리**: 주요 화면은 `screenshots/YYYYMMDD_HHMMSS_작업명/` 폴더에 스크린샷을 저장하고, 검증 완료 후 개발 서버 백그라운드 태스크를 반드시 종료(kill)합니다.
 
-### 개발 절차
-1. **Red**: 실패하는 테스트를 먼저 작성합니다.
-2. **Green**: 테스트를 통과하는 최소한의 코드를 작성합니다.
-3. **Refactor**: 테스트 통과 상태를 유지하며 코드를 개선(리팩토링)합니다.
+## 4. 데이터베이스 관리, 수정 및 검증 규칙
+- **원칙**: DB 테이블 구조/데이터 확인을 위해 일회성 스크립트를 작성하지 않으며, 데이터 조사는 **SELECT** 쿼리만 수행합니다.
+  - **로컬 DB 조회**: `uv run scripts/db_query.py` 사용 (`--list-tables` 또는 `"SELECT ..."`).
+  - **서버 DB 조회**: `assetmanager` MCP 도구(`get_db_tables`, `get_db_schema`, `execute_db_query` 등) 사용.
+- **수정 전 사전 백업**: 마이그레이션 스크립트 실행 등 DB 수정 전, 반드시 `settings.toml`의 `[backup].path`(기본 `./backups`)에 `assets_YYYYMMDD_HHMMSS.db` 백업 파일을 생성합니다.
+- **수정 후 지표 검증**: 작업 전/후 대시보드 핵심 지표(총 누적수익, 연도별 수익, 자산별 잔고 및 자산내역, 최근 스냅샷 정합성)를 API/스크립트 및 웹 화면(UI)으로 교차 비교 검증합니다.
+- **불일치 시 롤백**: 지표 불일치나 데이터 왜곡 발견 시 즉시 백업본으로 원복(롤백) 후 원인을 재분석합니다.
 
-### 공통 원칙
-- 프로덕션 코드를 작성하기 전에 반드시 해당 기능의 테스트를 먼저 작성합니다.
-- 모든 공개(Public) 함수 및 메서드는 최소 하나 이상의 테스트 케이스를 가져야 합니다.
-- 버그 수정 시에도 해당 버그를 재현하는 테스트를 먼저 작성한 후 수정을 진행합니다.
-- **데이터베이스 격리**: 테스트 수행 시 실제 운영(Production) 데이터베이스에 영향을 주지 않도록 반드시 격리된 환경(예: 인메모리 DB, 테스트용 DB 파일)에서 수행해야 합니다. 실제 DB가 삭제되거나 데이터가 오염되는 사고를 방지하기 위함입니다.
-
-### 기술 스택별 테스트 도구
-- **백엔드 (Python)**
-  - 프레임워크: `pytest`
-  - 테스트 위치: `tests/` 디렉토리
-  - 네이밍 규칙: `test_` 접두사 사용 (예: `test_api.py`)
-- **프론트엔드 (React)**
-  - 러너: `Vitest`
-  - 라이브러리: `React Testing Library`
-  - 테스트 위치: 해당 컴포넌트와 동일한 디렉토리
-  - 네이밍 규칙: `.test.jsx` 접미사 사용 (예: `Dashboard.test.jsx`)
-
-## 4. E2E (End-to-End) 테스트 규칙
-- **원칙**: 모든 기능 구현 및 수정 후에는 반드시 E2E 테스트를 수행하여 실제 동작을 검증합니다.
-- **수행 방식**: AI 에이전트가 **Playwright MCP** 브라우저 도구를 사용하여 직접 진행합니다.
-- **데이터베이스 격리 (중요)**: 
-    - E2E 테스트를 위해 서버를 구동할 때는 반드시 `uv run scripts/dev.py`를 사용합니다. 이 스크립트는 자동으로 개발용 DB(`src/dev_assets.db`)를 사용하도록 설정되어 있습니다.
-    - **절대로 `scripts/run_prod.py` 또는 `scripts/dev.py --prod`를 E2E 테스트 용도로 실행해서는 안 됩니다.** 이는 실제 운영 DB에 테스트 데이터가 쌓이는 사고를 초래합니다.
-- **절차**:
-  1. `uv run scripts/dev.py`를 실행하여 격리된 환경에서 백엔드와 프론트엔드 서버를 구동합니다.
-     - *AI 에이전트 지침*: 이 명령어는 서버가 계속 기동되는 상태를 유지하므로, 반드시 **백그라운드 태스크(Async)로 실행**하고 5초~8초 정도 충분한 대기 시간을 주어 서버가 완전히 기동되도록 합니다.
-  2. Playwright MCP를 통해 브라우저로 웹 페이지에 접속하여 시나리오별로 기능을 테스트합니다.
-     - *AI 에이전트 지침*: E2E 테스트 대상 URL은 **`http://localhost:5173`**입니다.
-     - *AI 에이전트 지침*: 테스트 검증 완료 혹은 주요 화면 전환 시 반드시 **스크린샷을 캡처**하여 `screenshots/` 디렉토리 아래에 하위 폴더를 생성하여 저장합니다. 여러 작업 결과를 쉽게 구분할 수 있도록 하위 폴더명은 `YYYYMMDD_HHMMSS_간단한작업이름` 형식(예: `20260528_114000_snapshot_wizard`)으로 지정해야 합니다.
-     - *AI 에이전트 지침*: 검증이 모두 끝난 후에는 에이전트가 실행한 **개발 서버 백그라운드 태스크를 반드시 종료(kill)**하여 리소스를 해제해야 합니다.
-## 5. 데이터베이스 조사 및 환경 규칙
-- **원칙**: 데이터베이스 테이블 구조나 데이터를 확인하기 위해 매번 일회성 파이썬 스크립트를 작성하지 않습니다.
-- **데이터베이스 위치**: `src/assets.db` (SQLite)
-- **로컬 DB 조회 도구**: 프로젝트 루트에 있는 `scripts/db_query.py`를 사용하여 로컬 DB 쿼리를 실행합니다.
-  - 테이블 목록 조회: `uv run scripts/db_query.py --list-tables`
-  - 특정 쿼리 실행: `uv run scripts/db_query.py "SELECT * FROM assets LIMIT 5"`
-- **서버/운영 DB 조회 (AssetManager MCP)**: 개발하는 PC와 서버를 실제로 구동하는 PC는 다를 수 있습니다. 따라서 실제 서버의 정확한 DB 정보를 확인하고 싶을 때는 `assetmanager` MCP 도구(예: `get_db_tables`, `get_db_schema`, `execute_db_query` 등)를 사용합니다.
-- **주의 사항**: AI 에이전트는 데이터 조사를 목적으로 **SELECT** 쿼리만 수행하는 것을 권장하며, 데이터 변경(INSERT, UPDATE, DELETE)이 필요한 경우 반드시 관련 서비스 코드나 마이그레이션 스크립트를 통해 진행해야 합니다.
-
-## 6. Python 실행 규칙
-- **원칙**: 모든 파이썬 스크립트 및 도구 실행 시 반드시 `uv`를 사용합니다.
-- **실행 방법**: `uv run <script_path>` 형식을 사용하여 일관된 가상환경 내에서 실행되도록 합니다. (예: `uv run pytest`, `uv run scripts/dev.py`)
-
-## 7. Shell 명령어 실행 규칙
-- **환경**: 현재 환경은 **Windows PowerShell**입니다.
-- **리다이렉션**: `2>/dev/null` 대신 `2>$null`을 사용해야 합니다.
-- **연산자**: `&&` 연산자 대신 `;`를 사용하거나 도구 호출을 분리하십시오.
-- **대체 명령어**:
-  - `grep` -> `Select-String`
-  - `ls -d` -> `Test-Path` 또는 `Get-Item`
-  - `rm -rf` -> `Remove-Item -Recurse -Force`
-- **원칙**: 복잡한 파이프라인보다는 `wait_for_previous: true` 옵션을 활용하여 단계별로 실행하는 것을 권장합니다.
-
-## 9. Scratch 스크립트 관리 규칙
-- **원칙**: 임시 테스트나 데이터 분석 등을 위해 `scratch` 폴더 내에 작성한 스크립트도 변경 이력 관리와 협업을 위해 Git에 커밋하여 관리합니다.
-
-## Agent skills
-
-### Issue tracker
-
-Local Markdown (`.scratch/<feature-slug>/`). See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default 5 canonical triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context layout (`CONTEXT.md` + `docs/adr/`). See `docs/agents/domain.md`.
-
-
+## 5. Agent skills
+- **Issue tracker**: `.scratch/<feature-slug>/` (참조: `docs/agents/issue-tracker.md`)
+- **Triage labels**: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix` (참조: `docs/agents/triage-labels.md`)
+- **Domain docs**: `CONTEXT.md` + `docs/adr/` (참조: `docs/agents/domain.md`)
