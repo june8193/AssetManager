@@ -66,4 +66,60 @@ export const snapshotService = {
   saveUnified(data) {
     return apiClient.post('/api/db/snapshots/unified/save', data);
   },
+
+  /**
+   * 스냅샷 위저드 초기화 데이터(계좌 목록, 최신 스냅샷 일자, 환율 목록)를 병렬 로드합니다.
+   * @param {string} [targetDate] - 환율 매칭 대상 기준 일자 (YYYY-MM-DD)
+   * @returns {Promise<{ accounts: any[], latestSnapshotDate: string|null, exchangeRates: any[], exchangeRate: string }>}
+   */
+  async fetchWizardInitData(targetDate) {
+    const [accounts, latestSnapshot, exchangeRates] = await Promise.all([
+      apiClient.get('/api/db/accounts'),
+      apiClient.get('/api/db/snapshots/latest'),
+      apiClient.get('/api/exchange/rates', { limit: 100 }),
+    ]);
+
+    const latestSnapshotDate = latestSnapshot?.latest_date || null;
+    const rates = Array.isArray(exchangeRates) ? exchangeRates : [];
+
+    let exchangeRate = '1300.00';
+    if (rates.length > 0) {
+      const matched = targetDate ? rates.find((r) => r.date === targetDate) : null;
+      if (matched) {
+        exchangeRate = matched.rate.toString();
+      } else {
+        exchangeRate = rates[0].rate.toString();
+      }
+    }
+
+    return {
+      accounts: Array.isArray(accounts) ? accounts : [],
+      latestSnapshotDate,
+      exchangeRates: rates,
+      exchangeRate,
+    };
+  },
+
+  /**
+   * 특정 계좌의 직전 스냅샷 이후 기간 내 거래 내역을 조회합니다.
+   * @param {number|string} accountId - 계좌 ID
+   * @param {string} startDate - 시작 일자 (직전 스냅샷 일자 등)
+   * @param {string} endDate - 종료 일자 (스냅샷 기준 일자)
+   * @returns {Promise<any[]>}
+   */
+  fetchAccountWizardData(accountId, startDate = '1970-01-01', endDate) {
+    return apiClient.get(`/api/db/accounts/${accountId}/transactions/period`, {
+      start_date: startDate || '1970-01-01',
+      end_date: endDate,
+    });
+  },
+
+  /**
+   * 완성된 스냅샷 위저드 DTO 페이로드를 통합 저장합니다.
+   * @param {object} payload - buildSnapshotPayload로 조립된 DTO
+   * @returns {Promise<any>}
+   */
+  saveWizardSnapshot(payload) {
+    return this.saveUnified(payload);
+  },
 };
