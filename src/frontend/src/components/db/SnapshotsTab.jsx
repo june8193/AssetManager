@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DB_API_BASE } from '../../config';
-import { Camera, Calendar, Clock, Trash2 } from 'lucide-react';
+import { Camera, Calendar, Clock, Trash2, RefreshCw } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
+import SnapshotRecalculateModal from './SnapshotRecalculateModal';
 
 /**
  * 자산 상태 스냅샷 조회 탭 컴포넌트입니다.
@@ -13,8 +14,10 @@ const SnapshotsTab = () => {
   const [accounts, setAccounts] = useState([]);   // 전체 계좌 목록
   const [latestInfo, setLatestInfo] = useState(null); // 최신 스냅샷 정보
   const [loading, setLoading] = useState(true);   // 로딩 상태
+  const [isRecalcModalOpen, setIsRecalcModalOpen] = useState(false); // 재계산 모달 오픈 상태
   const { maskValue } = useMasking();
   const navigate = useNavigate();
+
 
   /**
    * 서버에서 스냅샷 및 계좌 데이터를 가져옵니다.
@@ -79,14 +82,25 @@ const SnapshotsTab = () => {
           <h3 className="text-sm font-semibold text-slate-700">자산 상태 스냅샷 이력</h3>
           <p className="text-xs text-slate-500 mt-1">정기적으로 자산 상태를 기록하여 시계열 차트를 생성합니다.</p>
         </div>
-        <button
-          onClick={() => navigate('/db/snapshots/new')}
-          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
-        >
-          <Camera size={16} />
-          스냅샷 생성 마법사
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setIsRecalcModalOpen(true)}
+            className="flex items-center gap-2 bg-white text-slate-700 border border-slate-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors shadow-sm"
+          >
+            <RefreshCw size={15} />
+            스냅샷 재계산
+          </button>
+          <button
+            onClick={() => navigate('/db/snapshots/new')}
+            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-sm"
+          >
+            <Camera size={16} />
+            스냅샷 생성 마법사
+          </button>
+        </div>
       </div>
+
 
       {/* 최신 스냅샷 요약 정보 */}
       {latestInfo && latestInfo.latest_date && (
@@ -182,8 +196,17 @@ const SnapshotsTab = () => {
           <div className="py-12 text-center text-slate-400 text-sm">데이터가 없습니다.</div>
         )}
       </div>
+
+      {/* 스냅샷 일괄 재계산 모달 */}
+      <SnapshotRecalculateModal
+        isOpen={isRecalcModalOpen}
+        accounts={accounts}
+        onClose={() => setIsRecalcModalOpen(false)}
+        onSuccess={fetchData}
+      />
     </div>
   );
 };
 
 export default SnapshotsTab;
+

@@ -93,5 +93,24 @@ describe('SnapshotsTab Component', () => {
     expect(await screen.findByText('BANK')).toBeInTheDocument();
     expect(await screen.findByText('-')).toBeInTheDocument();
   });
+
+  it('스냅샷 재계산 버튼 클릭 시 재계산 모달이 열려야 한다', async () => {
+    fetch.mockImplementation((url) => {
+      if (url.includes('/snapshots/latest')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ latest_date: '2026-05-28' }) });
+      if (url.includes('/snapshots')) return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      if (url.includes('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      return Promise.reject(new Error('Unknown URL'));
+    });
+
+    renderComponent();
+
+    const recalcBtn = await screen.findByRole('button', { name: /스냅샷 재계산/i });
+    expect(recalcBtn).toBeInTheDocument();
+
+    fireEvent.click(recalcBtn);
+
+    expect(await screen.findByText('스냅샷 일괄 재계산')).toBeInTheDocument();
+  });
 });
+
 

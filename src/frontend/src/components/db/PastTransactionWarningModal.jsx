@@ -12,6 +12,7 @@ export const PastTransactionWarningModal = ({
   latestSnapshotDate = '',
   onConfirm,
   onCancel,
+  onOpenRecalculate,
 }) => {
   if (!isOpen) return null;
 
@@ -43,6 +44,18 @@ export const PastTransactionWarningModal = ({
             </p>
           </div>
 
+          {onOpenRecalculate && (
+            <div className="mt-3 text-center">
+              <button
+                type="button"
+                onClick={onOpenRecalculate}
+                className="text-xs text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2"
+              >
+                스냅샷 일괄 재계산 바로 열기
+              </button>
+            </div>
+          )}
+
           <div className="flex gap-3 mt-6">
             <button
               type="button"
@@ -66,3 +79,4 @@ export const PastTransactionWarningModal = ({
     </div>
   );
 };
+

@@ -3,6 +3,8 @@ import { Plus, Edit2, Trash2, Check, Search, AlertTriangle } from 'lucide-react'
 import { DB_API_BASE } from '../../config';
 import { useMasking } from '../../contexts/MaskingContext';
 import { PastTransactionWarningModal } from './PastTransactionWarningModal';
+import SnapshotRecalculateModal from './SnapshotRecalculateModal';
+
 
 
 /**
@@ -154,7 +156,9 @@ const TransactionsTab = () => {
   const [assets, setAssets] = useState([]);             // 자산 목록 (입력용)
   const [latestSnapshotDate, setLatestSnapshotDate] = useState(null); // 최신 스냅샷 기준일
   const [pendingPastAction, setPendingPastAction] = useState(null);   // 과거 거래 확인 모달 상태 ({ type, transactionDate, action })
+  const [isRecalcModalOpen, setIsRecalcModalOpen] = useState(false); // 재계산 모달 상태
   const [loading, setLoading] = useState(true);         // 로딩 상태
+
   const [error, setError] = useState(null);             // 데이터 로딩 에러 상태
   const [editingId, setEditingId] = useState(null);     // 수정 중인 거래 ID
   const [accountFilter, setAccountFilter] = useState('all'); // 계좌 필터 상태
@@ -971,6 +975,10 @@ const TransactionsTab = () => {
         actionType={pendingPastAction?.type || '조작'}
         transactionDate={pendingPastAction?.transactionDate || formData.transaction_date}
         latestSnapshotDate={latestSnapshotDate || ''}
+        onOpenRecalculate={() => {
+          setPendingPastAction(null);
+          setIsRecalcModalOpen(true);
+        }}
         onConfirm={async () => {
           const action = pendingPastAction?.action;
           setPendingPastAction(null);
@@ -978,7 +986,16 @@ const TransactionsTab = () => {
         }}
         onCancel={() => setPendingPastAction(null)}
       />
+
+      {/* 스냅샷 일괄 재계산 모달 */}
+      <SnapshotRecalculateModal
+        isOpen={isRecalcModalOpen}
+        accounts={accounts}
+        onClose={() => setIsRecalcModalOpen(false)}
+        onSuccess={fetchData}
+      />
     </div>
+
   );
 
 };
