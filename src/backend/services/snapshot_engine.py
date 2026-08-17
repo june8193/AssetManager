@@ -17,9 +17,14 @@ from ..schemas import (
     BankSaveAccountRequest,
     BankSaveRequest,
     UnifiedSaveRequest,
+    SnapshotRecalculateRequest,
+    SnapshotRecalculateResponse,
+    SnapshotRecalculateItemDiff,
 )
 from .dashboard_service import DashboardService
 from .ledger_engine import LedgerEngine
+from .transaction_service import TransactionService
+
 
 
 class SnapshotEngine:
@@ -622,3 +627,145 @@ class SnapshotEngine:
 
         self.db.query(AccountSnapshot).filter(AccountSnapshot.snapshot_date == snapshot_date).delete()
         return True
+
+    def _calculate_bank_period_metrics(self, period_txs: List[Transaction]) -> tuple[float, float]:
+        """은행 계좌 기간 거래 내역으로부터 (순입출금, 기간수익)을 산출합니다."""
+        total_dep = sum(tx.total_amount for tx in period_txs if tx.type == "DEPOSIT")
+        total_with = sum(tx.total_amount for tx in period_txs if tx.type == "WITHDRAW")
+        total_int = sum(tx.total_amount for tx in period_txs if tx.type == "INTEREST")
+        total_tx = sum(tx.total_amount for tx in period_txs if tx.type == "TAX")
+        total_adj = sum(tx.total_amount for tx in period_txs if tx.type == "CASH_ADJUSTMENT")
+
+        period_deposit = total_dep - total_with
+        period_profit = total_int - total_tx + total_adj
+        return period_deposit, period_profit
+
+    def _calculate_brokerage_period_deposit(self, period_txs: List[Transaction]) -> float:
+        """증권 계좌 기간 거래 내역으로부터 순입출금을 산출합니다."""
+        period_deposit = 0.0
+        for tx in period_txs:
+            mult = 1.0 if tx.type == "DEPOSIT" else (-1.0 if tx.type == "WITHDRAW" else 0.0)
+            if mult != 0.0:
+                period_deposit += tx.total_amount * mult
+        return period_deposit
+
+    async def recalculate(self, req: SnapshotRecalculateRequest) -> SnapshotRecalculateResponse:
+        """원장 거래 내역을 기반으로 과거 스냅샷의 입출금 및 기간 수익을 일괄 재산출합니다.
+        
+        Args:
+            req (SnapshotRecalculateRequest): 재계산 요청 정보 (from_date, account_id, dry_run).
+            
+        Returns:
+            SnapshotRecalculateResponse: 재계산 평가 결과 및 전/후 차액 diff 목록.
+        """
+        tx_service = TransactionService(self.db)
+        
+        # 1. 대상 계좌 목록 조회
+        acc_query = self.db.query(Account)
+        if req.account_id:
+            acc_query = acc_query.filter(Account.id == req.account_id)
+        accounts = acc_query.all()
+
+        diffs: List[SnapshotRecalculateItemDiff] = []
+        total_evaluated = 0
+        total_updated = 0
+
+        # 2. 계좌별로 과거부터 최신순으로 스냅샷 순회
+        for acc in accounts:
+            snapshots = (
+                self.db.query(AccountSnapshot)
+                .filter(AccountSnapshot.account_id == acc.id)
+                .order_by(AccountSnapshot.snapshot_date.asc())
+                .all()
+            )
+            if not snapshots:
+                continue
+
+            prev_snap: Optional[AccountSnapshot] = None
+
+            for snap in snapshots:
+                is_target = True
+                if req.from_date and snap.snapshot_date < req.from_date:
+                    is_target = False
+
+                if is_target:
+                    total_evaluated += 1
+
+                # 직전 스냅샷 일자
+                start_date = prev_snap.snapshot_date if prev_snap else None
+                end_date = snap.snapshot_date
+
+                # 기간 내 거래 내역 조회
+                period_txs = tx_service.get_period_transactions(acc.id, start_date, end_date)
+
+                new_period_deposit = 0.0
+                new_period_profit = 0.0
+                new_total_valuation = snap.total_valuation
+
+                if prev_snap is None:
+                    # 첫 스냅샷은 시작 기준점이므로 기존 스냅샷 값 유지
+                    new_period_deposit = snap.period_deposit or 0.0
+                    new_period_profit = snap.total_profit or 0.0
+                else:
+                    if acc.account_type == "BANK":
+                        new_period_deposit, new_period_profit = self._calculate_bank_period_metrics(period_txs)
+                    else:
+                        new_period_deposit = self._calculate_brokerage_period_deposit(period_txs)
+                        prev_val = prev_snap.total_valuation or 0.0
+                        new_period_profit = (snap.total_valuation or 0.0) - (prev_val + new_period_deposit)
+
+                if is_target:
+                    old_dep = snap.period_deposit or 0.0
+                    old_profit = snap.total_profit or 0.0
+                    diff_dep = new_period_deposit - old_dep
+                    diff_profit = new_period_profit - old_profit
+                    diff_val = 0.0
+
+                    is_changed = abs(diff_dep) > 0.01 or abs(diff_profit) > 0.01
+
+                    if is_changed:
+                        total_updated += 1
+                        if not req.dry_run:
+                            snap.period_deposit = new_period_deposit
+                            snap.total_profit = new_period_profit
+
+                    diffs.append(
+                        SnapshotRecalculateItemDiff(
+                            snapshot_id=snap.id,
+                            account_id=acc.id,
+                            account_name=acc.name,
+                            account_type=acc.account_type,
+                            snapshot_date=snap.snapshot_date,
+                            old_period_deposit=old_dep,
+                            new_period_deposit=new_period_deposit,
+                            diff_period_deposit=diff_dep,
+                            old_period_profit=old_profit,
+                            new_period_profit=new_period_profit,
+                            diff_period_profit=diff_profit,
+                            old_total_valuation=snap.total_valuation or 0.0,
+                            new_total_valuation=new_total_valuation,
+                            diff_total_valuation=diff_val,
+                            is_changed=is_changed
+                        )
+                    )
+
+                prev_snap = snap
+
+        if not req.dry_run and total_updated > 0:
+            self.db.commit()
+
+
+        summary_msg = (
+            f"[Dry Run] {total_evaluated}개 스냅샷 검토 완료, {total_updated}개 변경 대상 감지"
+            if req.dry_run
+            else f"{total_evaluated}개 스냅샷 검토 완료, {total_updated}개 스냅샷 갱신 완료"
+        )
+
+        return SnapshotRecalculateResponse(
+            total_snapshots_evaluated=total_evaluated,
+            total_snapshots_updated=total_updated,
+            dry_run=req.dry_run,
+            diffs=diffs,
+            summary_message=summary_msg
+        )
+

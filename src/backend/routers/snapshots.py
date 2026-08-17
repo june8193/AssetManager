@@ -18,8 +18,11 @@ from ..schemas import (
     BankCalculateResponse,
     BankSaveRequest,
     UnifiedSaveRequest,
+    SnapshotRecalculateRequest,
+    SnapshotRecalculateResponse,
 )
 from ..services.snapshot_engine import SnapshotEngine
+
 
 router = APIRouter(
     prefix="/api/db",
@@ -198,3 +201,24 @@ async def save_unified_snapshots(req: UnifiedSaveRequest, db: Session = Depends(
         return await SnapshotEngine(db).save_unified(req)
     except Exception as e:
         _handle_save_error(e, "통합 스냅샷 저장")
+
+
+@router.post("/snapshots/recalculate", response_model=SnapshotRecalculateResponse)
+async def recalculate_snapshots(req: SnapshotRecalculateRequest, db: Session = Depends(get_db)):
+    """원장 거래 내역을 기반으로 과거 스냅샷의 입출금 및 기간 수익을 일괄 재산출합니다.
+    
+    Args:
+        req (SnapshotRecalculateRequest): 재계산 요청 데이터.
+        db (Session): 데이터베이스 세션.
+        
+    Returns:
+        SnapshotRecalculateResponse: 재계산 결과 및 차액 diff 리스트.
+        
+    Raises:
+        HTTPException: 재계산 처리 중 오류 발생 시 500.
+    """
+    try:
+        return await SnapshotEngine(db).recalculate(req)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"스냅샷 재계산 오류 발생: {str(e)}")
+

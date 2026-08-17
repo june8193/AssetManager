@@ -127,3 +127,39 @@ class UnifiedSaveRequest(BaseModel):
 class LatestSnapshotDateResponse(BaseModel):
     """최신 스냅샷 날짜 정보를 담는 스키마입니다."""
     latest_date: Optional[date] = None
+
+
+class SnapshotRecalculateItemDiff(BaseModel):
+    """단일 스냅샷 계좌 재계산 전/후 차액 비교 스키마입니다."""
+    snapshot_id: int
+    account_id: int
+    account_name: Optional[str] = None
+    account_type: Optional[str] = None
+    snapshot_date: date
+    old_period_deposit: float
+    new_period_deposit: float
+    diff_period_deposit: float
+    old_period_profit: float
+    new_period_profit: float
+    diff_period_profit: float
+    old_total_valuation: float
+    new_total_valuation: float
+    diff_total_valuation: float
+    is_changed: bool
+
+
+class SnapshotRecalculateRequest(BaseModel):
+    """스냅샷 일괄 재계산 요청 스키마입니다."""
+    from_date: Optional[date] = None
+    account_id: Optional[int] = None
+    dry_run: bool = False
+
+
+class SnapshotRecalculateResponse(BaseModel):
+    """스냅샷 일괄 재계산 결과 응답 스키마입니다."""
+    total_snapshots_evaluated: int
+    total_snapshots_updated: int
+    dry_run: bool
+    diffs: List[SnapshotRecalculateItemDiff]
+    summary_message: str
+

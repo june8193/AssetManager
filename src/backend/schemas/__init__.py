@@ -17,6 +17,9 @@ from .snapshot import (
     BankSaveRequest,
     UnifiedSaveRequest,
     LatestSnapshotDateResponse,
+    SnapshotRecalculateItemDiff,
+    SnapshotRecalculateRequest,
+    SnapshotRecalculateResponse,
 )
 from .common import MessageResponse
 
@@ -39,5 +42,9 @@ __all__ = [
     "BankSaveRequest",
     "UnifiedSaveRequest",
     "LatestSnapshotDateResponse",
+    "SnapshotRecalculateItemDiff",
+    "SnapshotRecalculateRequest",
+    "SnapshotRecalculateResponse",
     "MessageResponse",
 ]
+
