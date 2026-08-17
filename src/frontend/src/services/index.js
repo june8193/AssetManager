@@ -4,3 +4,5 @@
 export { apiClient, ApiError } from './apiClient';
 export { dashboardService } from './dashboardService';
 export { systemService } from './systemService';
+export { ratioService } from './ratioService';
+export { marketService } from './marketService';

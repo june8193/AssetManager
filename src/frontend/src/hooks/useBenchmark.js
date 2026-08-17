@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { marketService } from '../services';
 
+/**
+ * 벤치마크 지수 비교 및 관심 종목 시계열 데이터를 관리하는 커스텀 훅
+ */
 export const useBenchmark = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -10,11 +14,7 @@ export const useBenchmark = () => {
   const fetchBenchmark = useCallback(async (currentPeriod = period, keepWatchlist = false) => {
     setLoading(true);
     try {
-      const response = await fetch(`/api/benchmark?period=${currentPeriod}`);
-      if (!response.ok) {
-        throw new Error('벤치마크 데이터를 가져오는데 실패했습니다.');
-      }
-      const result = await response.json();
+      const result = await marketService.getBenchmark({ period: currentPeriod });
       setData(result);
       setError(null);
 
@@ -23,14 +23,10 @@ export const useBenchmark = () => {
         const activeTickers = Object.keys(activeWatchlistDataset);
         if (activeTickers.length > 0) {
           const promises = activeTickers.map(ticker =>
-            fetch(`/api/benchmark/historical?ticker=${ticker}&period=${currentPeriod}`)
-              .then(res => {
-                if (!res.ok) throw new Error(`${ticker} 조회 실패`);
-                return res.json();
-              })
+            marketService.getHistoricalBenchmark(ticker, currentPeriod)
               .then(hist => ({ ticker, data: hist }))
               .catch(err => {
-                console.error(err);
+                console.error(`⚠️ [useBenchmark] 관심종목 시계열 로딩 실패 (${ticker}):`, err);
                 return null;
               })
           );
@@ -49,7 +45,7 @@ export const useBenchmark = () => {
       }
 
     } catch (err) {
-      setError(err.message);
+      setError(err.message || '벤치마크 데이터를 가져오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -65,18 +61,14 @@ export const useBenchmark = () => {
     } else {
       // 비활성화된 경우 백엔드에서 비동기로 시계열 로딩하여 캐싱 추가
       try {
-        const response = await fetch(`/api/benchmark/historical?ticker=${stockCode}&period=${period}`);
-        if (!response.ok) {
-          throw new Error('종목 과거 데이터를 가져오는데 실패했습니다.');
-        }
-        const histData = await response.json();
+        const histData = await marketService.getHistoricalBenchmark(stockCode, period);
         setActiveWatchlistDataset(prev => ({
           ...prev,
           [stockCode]: histData
         }));
       } catch (err) {
         console.error(`⚠️ [useBenchmark] 관심종목 시계열 로딩 실패:`, err);
-        alert(`관심 종목 데이터를 가져오지 못했습니다: ${err.message}`);
+        setError(`관심 종목 데이터를 가져오지 못했습니다: ${err.message}`);
       }
     }
   };

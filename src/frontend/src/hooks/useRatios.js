@@ -1,5 +1,9 @@
 import { useState, useEffect } from 'react';
+import { ratioService } from '../services';
 
+/**
+ * 자산 배분 비중 및 리밸런싱을 관리하는 커스텀 훅
+ */
 export const useRatios = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -10,12 +14,10 @@ export const useRatios = () => {
   const fetchTargets = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/ratios/targets');
-      if (!response.ok) throw new Error('목표 비중을 가져오는데 실패했습니다.');
-      const data = await response.json();
+      const data = await ratioService.getTargets();
       setTargets(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || '목표 비중을 가져오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -24,12 +26,10 @@ export const useRatios = () => {
   const fetchHierarchy = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/ratios/hierarchy');
-      if (!response.ok) throw new Error('계층 구조를 가져오는데 실패했습니다.');
-      const data = await response.json();
+      const data = await ratioService.getHierarchy();
       setHierarchy(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || '계층 구조를 가져오는데 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -38,16 +38,11 @@ export const useRatios = () => {
   const updateTargets = async (newTargets) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/ratios/targets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newTargets)
-      });
-      if (!response.ok) throw new Error('목표 비중을 저장하는데 실패했습니다.');
+      await ratioService.saveTargets(newTargets);
       await fetchTargets();
       await fetchHierarchy();
     } catch (err) {
-      setError(err.message);
+      setError(err.message || '목표 비중을 저장하는데 실패했습니다.');
       throw err;
     } finally {
       setLoading(false);
@@ -57,12 +52,10 @@ export const useRatios = () => {
   const calculateRebalancing = async (additionalCash = 0) => {
     try {
       setLoading(true);
-      const response = await fetch(`/api/ratios/rebalancing?additional_cash=${additionalCash}`);
-      if (!response.ok) throw new Error('리밸런싱 계산에 실패했습니다.');
-      const data = await response.json();
+      const data = await ratioService.getRebalancing(additionalCash);
       setRebalancing(data);
     } catch (err) {
-      setError(err.message);
+      setError(err.message || '리밸런싱 계산에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -82,6 +75,6 @@ export const useRatios = () => {
     updateTargets,
     calculateRebalancing,
     refreshTargets: fetchTargets,
-    refreshHierarchy: fetchHierarchy
+    refreshHierarchy: fetchHierarchy,
   };
 };
