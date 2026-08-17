@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { useBenchmark } from '../hooks/useBenchmark';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Wallet, Activity, RefreshCw, AlertCircle, Calendar, Plus, Check } from 'lucide-react';
+import { TrendingUp, Wallet, RefreshCw, AlertCircle } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
-import YearlyComparisonTable from '../components/YearlyComparisonTable';
-import DailyComparisonTable from '../components/DailyComparisonTable';
+import PerformanceTable from '../components/PerformanceTable';
 
 /**
  * 벤치마크 비교 대시보드 페이지 컴포넌트입니다.
@@ -353,10 +352,18 @@ const BenchmarkPage = () => {
       </div>
 
       {/* 연간 수익률 비교 표 */}
-      <YearlyComparisonTable data={data?.yearly_comparison} />
+      <PerformanceTable 
+        type="comparison"
+        period="yearly"
+        data={data?.yearly_comparison} 
+      />
 
       {/* 일간 수익률 비교 표 */}
-      <DailyComparisonTable data={data?.daily_comparison} />
+      <PerformanceTable 
+        type="comparison"
+        period="daily"
+        data={data?.daily_comparison} 
+      />
     </main>
   );
 };

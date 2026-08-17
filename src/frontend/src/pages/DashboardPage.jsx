@@ -2,8 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useDashboard } from '../hooks/useDashboard';
 import { Wallet, PieChart, TrendingUp, RefreshCw, AlertCircle, Calendar, Clock, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
-import YearlyStatusTable from '../components/YearlyStatusTable';
-import DailyStatusTable from '../components/DailyStatusTable';
+import PerformanceTable from '../components/PerformanceTable';
 import AssetChart from '../components/Dashboard/AssetChart';
 import TaskAlertBanner from '../components/TaskAlertBanner';
 
@@ -492,13 +491,17 @@ const DashboardPage = () => {
       <AssetChart data={data.snapshots} />
 
       {/* Yearly Performance Table */}
-      <YearlyStatusTable 
+      <PerformanceTable 
+        type="status"
+        period="yearly"
         data={yearly} 
         lastSnapshotDate={lastSnapshotDate}
       />
 
       {/* Daily Performance Table */}
-      <DailyStatusTable 
+      <PerformanceTable 
+        type="status"
+        period="daily"
         data={daily} 
       />
     </main>
