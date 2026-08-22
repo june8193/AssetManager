@@ -108,6 +108,8 @@ def test_get_dividend_summary(db_session):
     # 작년 삼성 6만원 포함 총 누적 = 275,000 + 60,000 = 335,000원
     assert summary["total_krw"] == 335000.0
     assert "monthly_data" in summary
+    assert "avg_yield" in summary
+    assert 0 < summary["avg_yield"] < 100.0
 
 def test_get_stock_dividend_analysis_ttm(db_session):
     """종목별 최근 12개월(TTM) 실수령 배당금 및 수량 기반 배당률 산출 검증"""

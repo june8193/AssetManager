@@ -65,10 +65,20 @@ class DividendService:
                 "cumulative": round(cum_val, 2)
             })
 
-        # 평균 연간 배당률 계산 (종목별 배당률의 평균 또는 포트폴리오 기준)
+        # 평균 연간 배당률 계산 (배당 목적 자산군: 중분류 '배당주' + 대분류 '채권'의 총 평가액 대비 TTM 배당금 가중평균)
         stock_analysis = self.get_stock_dividend_analysis()
-        active_yields = [s["yield_ttm_current"] for s in stock_analysis if s.get("yield_ttm_current", 0) > 0]
-        avg_yield = round(sum(active_yields) / len(active_yields), 2) if active_yields else 0.0
+        target_stocks = [
+            s for s in stock_analysis
+            if s.get("sub_category") == "배당주" or s.get("major_category") == "채권"
+        ]
+        total_target_val_krw = 0.0
+        total_target_div_krw = 0.0
+        for s in target_stocks:
+            rate = usd_rate if s.get("currency") == "USD" else 1.0
+            total_target_val_krw += (s.get("current_price", 0.0) * s.get("quantity", 0.0)) * rate
+            total_target_div_krw += s.get("ttm_amount", 0.0) * rate
+
+        avg_yield = round((total_target_div_krw / total_target_val_krw) * 100, 2) if total_target_val_krw > 0 else 0.0
 
         current_month = datetime.date.today().month
         monthly_avg = round(ytd_krw / current_month, 2) if current_month > 0 else 0.0

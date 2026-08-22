@@ -39,8 +39,12 @@ describe('DividendAnalysisPage - 카테고리 탭 필터링', () => {
     render(<DividendAnalysisPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('종목별 연간 배당률 & 가상 주가 시뮬레이터')).toBeDefined();
+      expect(screen.getByText('종목별 배당 수익률 & 가상 주가 시뮬레이터')).toBeDefined();
     });
+
+    // 상단 카드 배당주+채권 기준 표기 검증
+    expect(screen.getByText('배당주+채권 기준')).toBeDefined();
+    expect(screen.getByText('최근 1년 배당률')).toBeDefined();
 
     // 기본 활성 탭: 배당주
     const dividendTab = screen.getByRole('button', { name: /배당주/i });

@@ -141,8 +141,13 @@ const DividendAnalysisPage = () => {
             <TrendingUp size={24} />
           </div>
           <div>
-            <p className="text-xs text-slate-500 font-medium">평균 연간 배당률</p>
-            <p className="text-xl font-bold text-violet-600">{avg_yield.toFixed(2)}%</p>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <p className="text-xs text-slate-500 font-medium">최근 1년 배당률</p>
+              <span className="text-[10px] text-violet-700 bg-violet-50 font-semibold px-1.5 py-0.5 rounded border border-violet-100">
+                배당주+채권 기준
+              </span>
+            </div>
+            <p className="text-xl font-bold text-violet-600 mt-0.5">{avg_yield.toFixed(2)}%</p>
           </div>
         </div>
 
@@ -197,7 +202,7 @@ const DividendAnalysisPage = () => {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
           <div>
-            <h3 className="text-base font-bold text-slate-800">종목별 연간 배당률 & 가상 주가 시뮬레이터</h3>
+            <h3 className="text-base font-bold text-slate-800">종목별 배당 수익률 & 가상 주가 시뮬레이터</h3>
             <p className="text-xs text-slate-500">가상 주가를 수정하면 즉시 가상 배당률(%)이 실시간으로 재계산됩니다.</p>
           </div>
 
@@ -230,8 +235,8 @@ const DividendAnalysisPage = () => {
                 <th className="px-4 py-3 text-center">통화</th>
                 <th className="px-4 py-3 text-right">현재가 / 평단가</th>
                 <th className="px-4 py-3 text-right">올해 수령액</th>
-                <th className="px-4 py-3 text-right">추정 연배당금</th>
-                <th className="px-4 py-3 text-right">시가 배당률</th>
+                <th className="px-4 py-3 text-right">최근 1년(TTM) 배당금</th>
+                <th className="px-4 py-3 text-right">시가 배당률(TTM)</th>
                 <th className="px-4 py-3 text-center bg-blue-50 text-blue-700">가상 주가 입력</th>
                 <th className="px-4 py-3 text-right bg-blue-50 text-blue-700">가상 배당률</th>
                 <th className="px-4 py-3 text-right">총 누적 배당금</th>
@@ -242,9 +247,13 @@ const DividendAnalysisPage = () => {
                 filteredStocks.map((stock) => {
                   const symbol = stock.currency === 'USD' ? '$' : '₩';
                   const inputVal = customPrices[stock.id] ?? stock.current_price;
-                  const simYield = inputVal > 0 && stock.annual_estimate > 0 
-                    ? ((stock.annual_estimate / inputVal) * 100).toFixed(2) 
+                  const ttmAmt = stock.ttm_amount ?? stock.annual_estimate ?? 0;
+                  const qty = stock.quantity > 0 ? stock.quantity : 1;
+                  const simValuation = inputVal * qty;
+                  const simYield = simValuation > 0 && ttmAmt > 0 
+                    ? ((ttmAmt / simValuation) * 100).toFixed(2) 
                     : '-';
+                  const yieldVal = stock.yield_ttm_current ?? stock.yield_current ?? 0;
 
                   return (
                     <tr key={stock.id} className="hover:bg-slate-50/80 transition-colors">
@@ -267,10 +276,10 @@ const DividendAnalysisPage = () => {
                         {stock.ytd_amount > 0 ? `${symbol}${stock.ytd_amount.toLocaleString()}` : '-'}
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono font-medium text-slate-800">
-                        {stock.annual_estimate > 0 ? `${symbol}${stock.annual_estimate.toLocaleString()}` : '-'}
+                        {ttmAmt > 0 ? `${symbol}${ttmAmt.toLocaleString()}` : '-'}
                       </td>
                       <td className="px-4 py-3.5 text-right font-mono text-emerald-600 font-semibold">
-                        {stock.yield_current > 0 ? `${stock.yield_current.toFixed(2)}%` : '-'}
+                        {yieldVal > 0 ? `${yieldVal.toFixed(2)}%` : '-'}
                       </td>
                       <td className="px-4 py-3.5 text-center bg-blue-50/40">
                         <div className="inline-flex items-center gap-1 border border-blue-200 rounded px-2 py-1 bg-white focus-within:ring-2 focus-within:ring-blue-400">
