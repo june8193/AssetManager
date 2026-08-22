@@ -1,4 +1,4 @@
-Status: ready-for-agent
+Status: resolved
 
 # Spec: 프론트엔드 테스트 환경 및 실행 성능 최적화 (Frontend Test Environment & Performance Optimization)
 
