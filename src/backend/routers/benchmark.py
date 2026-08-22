@@ -2,13 +2,11 @@ import datetime
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List, Dict, Any
+from typing import Dict, Any
 
 from ..database import get_db
 from ..models import Watchlist, AccountSnapshot
 from ..services.benchmark_service import BenchmarkService
-from ..services.dashboard_service import DashboardService
-from ..services.price_service import price_service
 
 router = APIRouter(
     prefix="/api/benchmark",
@@ -42,13 +40,14 @@ def get_date_range(period: str) -> tuple[datetime.date, datetime.date]:
 @router.get("")
 async def get_benchmark_dashboard(
     period: str = Query("YTD", pattern="^(YTD|1M|3M|1Y)$"),
-    force_update: bool = Query(False),
+    force_update: bool = Query(False, description="캐시 무시 및 강제 갱신 여부"),
     db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """벤치마크 비교 대시보드 조회를 위한 통합 데이터를 반환합니다.
 
     Args:
         period (str): 조회 기간
+        force_update (bool): 캐시 무시 및 강제 갱신 여부
         db (Session): 데이터베이스 세션
 
     Returns:
@@ -61,16 +60,8 @@ async def get_benchmark_dashboard(
     tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
     chart_data = await benchmark_svc.calculate_cumulative_returns(start_date, end_date, tickers)
 
-    # 2. 내 포트폴리오 실시간 요약 (평가자산 및 누적 ROI)
-    dashboard_svc = DashboardService(db)
-    summary = await dashboard_svc.get_dashboard_summary(force_update=force_update)
-    
-    # 성과비교 수익률과 일치하도록 최신 스냅샷 자산액을 우선 적용합니다.
+    # 2. 내 포트폴리오 평가자산 추출 (차트 시계열 기준)
     total_valuation_krw = chart_data.get("portfolio_final_valuation")
-    if total_valuation_krw is None or total_valuation_krw <= 0.0:
-        total_valuation_krw = summary.get("total_valuation_krw", 0.0)
-        
-    portfolio_roi = summary.get("cumulative_roi", 0.0)
 
     # 3. 상단 지수 카드 정보 가공
     # yfinance 캐시를 기반으로 각 지수의 최종 누적 수익률(YTD 등) 및 현재 지수를 구합니다.
@@ -86,7 +77,6 @@ async def get_benchmark_dashboard(
         }
 
     # 지수 현재가 조회 (최근 저장된 캐시 정보 활용)
-    # asyncio.gather를 사용하여 각 지수의 가격 정보를 비동기 병렬로 가져옵니다.
     prices_list = await asyncio.gather(*(
         benchmark_svc.get_historical_prices(ticker, start_date, end_date)
         for ticker in tickers
@@ -98,51 +88,20 @@ async def get_benchmark_dashboard(
         if ticker in index_card_data:
             index_card_data[ticker]["value"] = current_val
 
-    # 4. 관심 종목 테이블 정보 가공 (Lazy Loading 대기 상태 목록)
-    # 관심 종목 목록을 조회하고 실시간 현재가 및 YTD 수익률을 연산합니다.
+    # 4. 관심 종목 테이블 기본 정보 (화면 미사용에 따른 외부 API 호출 제거)
     watchlist_items = db.query(Watchlist).all()
-    watchlist_data = []
-
-    if watchlist_items:
-        # 실시간 가격 조회를 위해 국가별 티커 분류
-        kr_codes = [item.stock_code for item in watchlist_items if item.country == "KR"]
-        us_codes = [item.stock_code for item in watchlist_items if item.country == "US"]
-
-        # 실시간 현재가 구하기
-        current_prices = {}
-        if kr_codes:
-            kr_res = await price_service.get_kr_prices(kr_codes, force_update=force_update)
-            for p in kr_res:
-                current_prices[p["stock_code"]] = p["current_price"]
-        if us_codes:
-            us_res = await price_service.get_us_prices(us_codes, force_update=force_update)
-            for p in us_res:
-                current_prices[p["stock_code"]] = p["current_price"]
-
-        # asyncio.gather를 사용하여 모든 관심 종목의 기간별 수익률 조회를 비동기 병렬로 처리합니다.
-        period_returns = await asyncio.gather(*(
-            benchmark_svc.get_period_return(item.stock_code, period)
-            for item in watchlist_items
-        ))
-
-        # 하위 호환성을 위해 YTD 수익률도 병렬 조회합니다.
-        ytd_returns = await asyncio.gather(*(
-            benchmark_svc.get_ytd_return(item.stock_code)
-            for item in watchlist_items
-        ))
-
-        for item, period_ret, ytd_ret in zip(watchlist_items, period_returns, ytd_returns):
-            curr_price = current_prices.get(item.stock_code, 0.0)
-
-            watchlist_data.append({
-                "id": item.id,
-                "stock_code": item.stock_code,
-                "stock_name": item.stock_name,
-                "country": item.country,
-                "current_price": curr_price,
-                "ytd_return": ytd_ret,
-                "period_return": period_ret
-            })
+    watchlist_data = [
+        {
+            "id": item.id,
+            "stock_code": item.stock_code,
+            "stock_name": item.stock_name,
+            "country": item.country,
+            "current_price": 0.0,
+            "ytd_return": 0.0,
+            "period_return": 0.0
+        }
+        for item in watchlist_items
+    ]
 
     # 5. 응답 데이터 구성
     # portfolio.ytd_return 에는 전체 역사적 누적 ROI 대신 선택한 기간의 최종일 정규화 누적 수익률을 전달합니다.
@@ -170,7 +129,7 @@ async def get_benchmark_dashboard(
             for snap in db.query(AccountSnapshot).filter_by(snapshot_date=actual_latest_date).all()
         )
 
-    # 5. 비교 테이블 데이터 연산 및 응답에 병합
+    # 6. 비교 테이블 데이터 연산 및 응답에 병합
     comparison_tables = await benchmark_svc.get_comparison_tables()
 
     return {

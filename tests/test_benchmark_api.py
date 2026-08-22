@@ -3,8 +3,7 @@
 
 import pytest
 import datetime
-from unittest.mock import patch, MagicMock
-import pandas as pd
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from src.backend.main import app
@@ -144,15 +143,13 @@ async def test_get_benchmark_dashboard_api(
     assert "^KS11" in indices
     assert indices["^KS11"]["value"] == 2200.0
 
-    # 관심 종목 검증
+    # 관심 종목 검증 (메인 대시보드에서는 외부 API 시세 전수 조회 생략)
     watchlist = res_data["watchlist"]
     assert len(watchlist) == 2
 
     samsung = next(w for w in watchlist if w["stock_code"] == "005930")
     assert samsung["stock_name"] == "삼성전자"
-    assert samsung["current_price"] == 72000.0
-    # YTD return: 70000 대비 72000 -> ((72000 - 70000) / 70000) * 100 = 2.86%
-    assert samsung["ytd_return"] == 2.86
+    assert samsung["country"] == "KR"
 
 
 @pytest.mark.asyncio
