@@ -55,10 +55,14 @@ async def get_benchmark_dashboard(
     """
     start_date, end_date = get_date_range(period)
     
-    # 1. 벤치마크 및 포트폴리오 누적 수익률 계산
+    # 1. 벤치마크 누적 수익률 및 비교 테이블 데이터를 비동기 병렬로 동시 연산
     benchmark_svc = BenchmarkService(db)
     tickers = BenchmarkService.BENCHMARK_TICKERS
-    chart_data = await benchmark_svc.calculate_cumulative_returns(start_date, end_date, tickers)
+
+    chart_data, comparison_tables = await asyncio.gather(
+        benchmark_svc.calculate_cumulative_returns(start_date, end_date, tickers),
+        benchmark_svc.get_comparison_tables()
+    )
 
     # 2. 내 포트폴리오 평가자산 추출 (차트 시계열 기준)
     total_valuation_krw = chart_data.get("portfolio_final_valuation")
@@ -116,9 +120,6 @@ async def get_benchmark_dashboard(
             snap.total_valuation 
             for snap in db.query(AccountSnapshot).filter_by(snapshot_date=actual_latest_date).all()
         )
-
-    # 6. 비교 테이블 데이터 연산 및 응답에 병합
-    comparison_tables = await benchmark_svc.get_comparison_tables()
 
     return {
         "portfolio": {

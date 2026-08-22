@@ -32,11 +32,6 @@ def fake_provider(db_session: Session):
         {"price_date": datetime.date(2026, 6, 16), "close_price": 71000.0},
         {"price_date": datetime.date(2026, 6, 17), "close_price": 72000.0},
     ])
-    kr_adapter.set_historical_prices("^KS11", [
-        {"price_date": datetime.date(2026, 6, 15), "close_price": 2700.0},
-        {"price_date": datetime.date(2026, 6, 16), "close_price": 2720.0},
-        {"price_date": datetime.date(2026, 6, 17), "close_price": 2750.0},
-    ])
     kr_adapter.set_stock_name("005930", "삼성전자")
     kr_adapter.set_stock_name("000660", "SK하이닉스")
     kr_adapter.set_exchange_rate(1350.0, sell_currency="USD", buy_currency="KRW")
@@ -45,6 +40,7 @@ def fake_provider(db_session: Session):
     us_adapter.set_current_prices({
         "AAPL": 180.0,
         "MSFT": 420.0,
+        "^KS11": 2700.0,
         "^GSPC": 5200.0,
         "^IXIC": 16500.0,
     })
@@ -52,6 +48,11 @@ def fake_provider(db_session: Session):
         {"price_date": datetime.date(2026, 6, 15), "close_price": 180.0},
         {"price_date": datetime.date(2026, 6, 16), "close_price": 182.0},
         {"price_date": datetime.date(2026, 6, 17), "close_price": 185.0},
+    ])
+    us_adapter.set_historical_prices("^KS11", [
+        {"price_date": datetime.date(2026, 6, 15), "close_price": 2700.0},
+        {"price_date": datetime.date(2026, 6, 16), "close_price": 2720.0},
+        {"price_date": datetime.date(2026, 6, 17), "close_price": 2750.0},
     ])
     us_adapter.set_historical_prices("^GSPC", [
         {"price_date": datetime.date(2026, 6, 15), "close_price": 5200.0},
