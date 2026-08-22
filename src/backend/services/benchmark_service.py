@@ -6,11 +6,20 @@
 
 import datetime
 import asyncio
-from typing import List, Dict, Any, Optional
+import bisect
+from typing import List, Dict, Any, Optional, TypedDict
 from sqlalchemy.orm import Session
 
 from src.backend.models import HistoricalPrice, AccountSnapshot
 from src.backend.market import MarketDataProvider
+
+
+class MappedSnapshot(TypedDict):
+    """영업일 매핑 스냅샷 정보를 정의하는 타입입니다."""
+    total_valuation: float
+    period_deposit: float
+    actual_latest_date: datetime.date
+    has_snapshot: bool
 
 
 class BenchmarkService:
@@ -83,6 +92,62 @@ class BenchmarkService:
 
         return db_prices
 
+    @staticmethod
+    def _map_snapshots_to_trading_dates(
+        sorted_dates: List[datetime.date],
+        snapshots: List[AccountSnapshot]
+    ) -> Dict[datetime.date, MappedSnapshot]:
+        """휴장일(주말/공휴일) 스냅샷을 직전 유효 영업일로 매핑 및 집계합니다.
+
+        규칙:
+        1. 각 스냅샷 날짜 d에 대해, sorted_dates 중 d 이하인 가장 최근 영업일(target_td)을 찾습니다.
+        2. 동일 target_td 슬롯에 복수 스냅샷이 매핑되는 경우:
+           - total_valuation: 가장 최신 스냅샷 날짜의 평가액으로 채택합니다 (최종 잔고).
+           - period_deposit: 해당 슬롯에 매핑된 모든 스냅샷의 입금액을 누적 합산합니다.
+           - actual_latest_date: 실제 스냅샷 날짜 중 가장 최신 날짜를 기록합니다.
+
+        Args:
+            sorted_dates (List[datetime.date]): 오름차순 정렬된 유효 영업일 목록
+            snapshots (List[AccountSnapshot]): DB에서 조회된 스냅샷 레코드 목록
+
+        Returns:
+            Dict[datetime.date, MappedSnapshot]: 영업일별 집계 데이터 매핑
+        """
+        if not sorted_dates or not snapshots:
+            return {}
+
+        # 1. 날짜별 계좌 합산 (원본 날짜 기준)
+        date_vals: Dict[datetime.date, float] = {}
+        date_deps: Dict[datetime.date, float] = {}
+        for s in snapshots:
+            d = s.snapshot_date
+            date_vals[d] = date_vals.get(d, 0.0) + (s.total_valuation or 0.0)
+            date_deps[d] = date_deps.get(d, 0.0) + (s.period_deposit or 0.0)
+
+        mapped: Dict[datetime.date, MappedSnapshot] = {}
+
+        # 2. 날짜 오름차순 정렬 후 직전 영업일 매핑 (bisect_right 활용)
+        for d in sorted(date_vals.keys()):
+            idx = bisect.bisect_right(sorted_dates, d)
+            if idx == 0:
+                continue
+            target_td = sorted_dates[idx - 1]
+
+            if target_td not in mapped:
+                mapped[target_td] = {
+                    "total_valuation": date_vals[d],
+                    "period_deposit": date_deps[d],
+                    "actual_latest_date": d,
+                    "has_snapshot": True
+                }
+            else:
+                mapped[target_td]["total_valuation"] = date_vals[d]
+                mapped[target_td]["period_deposit"] += date_deps[d]
+                mapped[target_td]["actual_latest_date"] = d
+                mapped[target_td]["has_snapshot"] = True
+
+        return mapped
+
     async def calculate_cumulative_returns(
         self,
         start_date: datetime.date,
@@ -122,7 +187,7 @@ class BenchmarkService:
         # 날짜 문자열 변환
         labels = [d.isoformat() for d in sorted_dates]
 
-        # 3. 포트폴리오 일자별 평가액 및 입출금액 계산
+        # 3. 포트폴리오 일자별 평가액 및 입출금액 계산 (휴장일 스냅샷 영업일 매핑 포함)
         snapshots = (
             self.db.query(AccountSnapshot)
             .filter(AccountSnapshot.snapshot_date >= start_date, AccountSnapshot.snapshot_date <= end_date)
@@ -130,20 +195,7 @@ class BenchmarkService:
             .all()
         )
 
-        # 분석 기간 내의 모든 일자(비영업일 포함) 생성
-        all_dates = []
-        curr = start_date
-        while curr <= end_date:
-            all_dates.append(curr)
-            curr += datetime.timedelta(days=1)
-
-        # 날짜별 포트폴리오 총 평가액 및 입금액 계산
-        snapshot_vals = {}
-        snapshot_deposits = {}
-        for s in snapshots:
-            d = s.snapshot_date
-            snapshot_vals[d] = snapshot_vals.get(d, 0.0) + s.total_valuation
-            snapshot_deposits[d] = snapshot_deposits.get(d, 0.0) + s.period_deposit
+        mapped_snapshots = self._map_snapshots_to_trading_dates(sorted_dates, snapshots)
 
         # 시작 영업일 직전의 초기 자산 찾기
         last_known_val = 0.0
@@ -158,44 +210,34 @@ class BenchmarkService:
             last_known_val = sum(
                 snap.total_valuation for snap in self.db.query(AccountSnapshot).filter_by(snapshot_date=prev_date).all()
             )
+            base_val = last_known_val
+        else:
+            first_snap = mapped_snapshots.get(sorted_dates[0])
+            if first_snap:
+                base_val = max(0.0, first_snap["total_valuation"] - first_snap["period_deposit"])
+                last_known_val = first_snap["total_valuation"]
+            else:
+                base_val = 0.0
 
-        daily_vals = {}
-        daily_deposits = {}
-        for d in all_dates:
-            if d in snapshot_vals:
-                last_known_val = snapshot_vals[d]
-            daily_vals[d] = last_known_val
-            daily_deposits[d] = snapshot_deposits.get(d, 0.0)
-
-        # 일자별 누적 입금액 사전 빌드
-        cumulative_deposits_map = {}
-        running_dep = 0.0
-        for d in all_dates:
-            running_dep += daily_deposits[d]
-            cumulative_deposits_map[d] = running_dep
-
-        # 시작 영업일 직전까지의 누적 입금액 기준값 구하기
-        cum_dep_start = 0.0
-        prev_day = sorted_dates[0] - datetime.timedelta(days=1)
-        if prev_day in cumulative_deposits_map:
-            cum_dep_start = cumulative_deposits_map[prev_day]
-        elif sorted_dates[0] in cumulative_deposits_map:
-            cum_dep_start = cumulative_deposits_map[sorted_dates[0]] - daily_deposits[sorted_dates[0]]
-
-        # 각 영업일별 누적 입금액(순입금액) 계산
         portfolio_history = []
         portfolio_net_deposits = []
         portfolio_has_snapshot = []
+        running_dep = 0.0
 
         for d in sorted_dates:
-            net_dep = cumulative_deposits_map.get(d, 0.0) - cum_dep_start
-            portfolio_history.append(daily_vals[d])
-            portfolio_net_deposits.append(net_dep)
-            portfolio_has_snapshot.append(d in snapshot_vals)
+            if d in mapped_snapshots:
+                last_known_val = mapped_snapshots[d]["total_valuation"]
+                running_dep += mapped_snapshots[d]["period_deposit"]
+                has_snap = True
+            else:
+                has_snap = False
+
+            portfolio_history.append(last_known_val)
+            portfolio_net_deposits.append(running_dep)
+            portfolio_has_snapshot.append(has_snap)
 
         # 4. 포트폴리오 누적 수익률 정규화 계산
         portfolio_returns = []
-        base_val = portfolio_history[0]
 
         for i, val in enumerate(portfolio_history):
             if i == 0:
@@ -317,11 +359,19 @@ class BenchmarkService:
             })
 
         portfolio_final_valuation = portfolio_history[-1] if portfolio_history else 0.0
+        portfolio_latest_snapshot_date = None
+        if mapped_snapshots:
+            latest_td = max(mapped_snapshots.keys())
+            actual_d = mapped_snapshots[latest_td].get("actual_latest_date")
+            if actual_d:
+                portfolio_latest_snapshot_date = actual_d.isoformat()
+
         return {
             "labels": labels,
             "datasets": datasets,
             "alpha_summaries": alpha_summaries,
             "portfolio_final_valuation": portfolio_final_valuation,
+            "portfolio_latest_snapshot_date": portfolio_latest_snapshot_date,
             "index_latest_values": {item["ticker"]: item["current_price"] for item in alpha_summaries}
         }
 

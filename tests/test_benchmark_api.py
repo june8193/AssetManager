@@ -136,7 +136,7 @@ async def test_get_benchmark_dashboard_api(
     assert res_data["portfolio"]["total_valuation"] == 1100000
     assert res_data["portfolio"]["actual_latest_valuation"] == 1100000
     assert res_data["portfolio"]["actual_latest_date"] == d3.strftime("%Y-%m-%d")
-    assert res_data["portfolio"]["ytd_return"] == -47.62
+    assert res_data["portfolio"]["ytd_return"] == 0.0
 
     # 지수 카드 정보 검증
     indices = res_data["indices"]
