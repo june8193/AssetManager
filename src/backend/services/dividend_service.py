@@ -6,6 +6,7 @@ from typing import Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from ..models import Asset, Transaction, ExchangeRate, HistoricalPrice
+from .ledger_engine import LedgerEngine
 
 class DividendService:
     """배당 데이터 분석 및 집계를 담당하는 서비스 클래스"""
@@ -66,7 +67,7 @@ class DividendService:
 
         # 평균 연간 배당률 계산 (종목별 배당률의 평균 또는 포트폴리오 기준)
         stock_analysis = self.get_stock_dividend_analysis()
-        active_yields = [s["yield_current"] for s in stock_analysis if s["yield_current"] > 0]
+        active_yields = [s["yield_ttm_current"] for s in stock_analysis if s.get("yield_ttm_current", 0) > 0]
         avg_yield = round(sum(active_yields) / len(active_yields), 2) if active_yields else 0.0
 
         current_month = datetime.date.today().month
@@ -81,10 +82,15 @@ class DividendService:
         }
 
     def get_stock_dividend_analysis(self) -> List[Dict[str, Any]]:
-        """각 종목별 YTD 배당 수령액, 추정 연배당금, 시가 배당률 및 누적 배당금을 계산합니다."""
+        """각 종목별 YTD 수령액, 최근 12개월(TTM) 실수령 배당금, 시가 배당률 및 매수가 대비 배당률을 계산합니다."""
         usd_rate = self.get_latest_usd_rate()
-        current_year = datetime.date.today().year
-        current_month = datetime.date.today().month
+        today = datetime.date.today()
+        current_year = today.year
+        ttm_start_date = today - datetime.timedelta(days=365)
+
+        # 원장 엔진을 통한 현재 보유 수량 조회
+        positions_state = LedgerEngine.get_positions(self.db, as_of=today)
+        holdings = positions_state.holdings
 
         # 투자 자산(현금 제외)만 조회
         assets = (
@@ -107,45 +113,50 @@ class DividendService:
             # 통화 결정
             currency = "USD" if asset.country == "US" else "KRW"
 
+            # 현재 보유 수량
+            quantity = float(holdings.get(asset.ticker, 0.0))
+
             # 해당 자산의 모든 INTEREST 및 TAX 거래내역
             txs = self.db.query(Transaction).filter(
                 Transaction.asset_id == asset.id,
                 Transaction.type.in_(["INTEREST", "TAX"])
             ).all()
 
-            # 가장 최근 BUY 거래내역에서 매수가(buy_price) 추정 (없으면 0.0)
-            buy_tx = self.db.query(Transaction).filter(
+            # 매수 가중평균 단가(buy_price) 산출 (BUY 및 INITIAL_BALANCE 기준)
+            buy_txs = self.db.query(Transaction).filter(
                 Transaction.asset_id == asset.id,
-                Transaction.type == "BUY"
-            ).order_by(Transaction.transaction_date.desc()).first()
-            buy_price = buy_tx.price if buy_tx else 0.0
+                Transaction.type.in_(["BUY", "INITIAL_BALANCE"])
+            ).all()
+            total_buy_qty = sum(float(tx.quantity or 0.0) for tx in buy_txs if (tx.quantity or 0) > 0)
+            total_buy_amt = sum(float(tx.total_amount or 0.0) for tx in buy_txs if (tx.total_amount or 0) > 0)
+            buy_price = (total_buy_amt / total_buy_qty) if total_buy_qty > 0 else 0.0
 
             ytd_amount = 0.0
             cumulative_amount = 0.0
+            ttm_amount = 0.0
 
             for tx in txs:
                 amt = tx.total_amount if tx.type == "INTEREST" else -tx.total_amount
                 cumulative_amount += amt
                 if tx.transaction_date.year == current_year:
                     ytd_amount += amt
+                if ttm_start_date <= tx.transaction_date <= today:
+                    ttm_amount += amt
 
-            # 연환산 추정 배당금: (YTD / current_month) * 12
-            if ytd_amount > 0 and current_month > 0:
-                annual_estimate = (ytd_amount / current_month) * 12
+            # 최근 12개월(TTM) 시가 배당률 산출
+            # 총 평가액(current_price * quantity) 대비 TTM 배당금 비율
+            valuation = current_price * quantity
+            if valuation > 0 and ttm_amount > 0:
+                yield_ttm_current = (ttm_amount / valuation) * 100
             else:
-                annual_estimate = 0.0
+                yield_ttm_current = 0.0
 
-            # 시가 배당률: (annual_estimate / current_price) * 100
-            if annual_estimate > 0 and current_price > 0:
-                yield_current = (annual_estimate / current_price) * 100
+            # 최근 12개월(TTM) 매수가 대비 배당률 (YoC) 산출
+            total_cost = buy_price * quantity
+            if total_cost > 0 and ttm_amount > 0:
+                yield_ttm_cost = (ttm_amount / total_cost) * 100
             else:
-                yield_current = 0.0
-
-            # 매수가 대비 배당률 (YoC)
-            if annual_estimate > 0 and buy_price > 0:
-                yield_cost = (annual_estimate / buy_price) * 100
-            else:
-                yield_cost = 0.0
+                yield_ttm_cost = 0.0
 
             result.append({
                 "id": asset.id,
@@ -154,13 +165,18 @@ class DividendService:
                 "major_category": asset.major_category,
                 "sub_category": asset.sub_category,
                 "currency": currency,
+                "quantity": quantity,
                 "current_price": current_price,
-                "buy_price": buy_price,
+                "buy_price": round(buy_price, 2),
                 "ytd_amount": round(ytd_amount, 2),
-                "annual_estimate": round(annual_estimate, 2),
-                "yield_current": round(yield_current, 2),
-                "yield_cost": round(yield_cost, 2),
-                "cumulative": round(cumulative_amount, 2)
+                "ttm_amount": round(ttm_amount, 2),
+                "yield_ttm_current": round(yield_ttm_current, 2),
+                "yield_ttm_cost": round(yield_ttm_cost, 2),
+                "cumulative": round(cumulative_amount, 2),
+                # 프론트엔드/기존 호환용 필드
+                "annual_estimate": round(ttm_amount, 2),
+                "yield_current": round(yield_ttm_current, 2),
+                "yield_cost": round(yield_ttm_cost, 2)
             })
 
         return result

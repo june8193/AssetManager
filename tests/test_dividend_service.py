@@ -76,7 +76,21 @@ def db_session():
         currency="USD", memo="SCHD dividend"
     )
 
-    session.add_all([tx_sam_1, tx_sam_2, tx_sam_old, tx_schd_1])
+    # BUY 거래 추가 (삼성전자우 100주 @ 50,000원, SCHD 50주 @ $25.0)
+    tx_sam_buy = Transaction(
+        account_id=acc_kr.id, asset_id=samsung.id,
+        transaction_date=datetime.date(current_year - 1, 1, 10),
+        type="BUY", quantity=100.0, price=50000.0, total_amount=5000000.0,
+        currency="KRW", memo="삼성전자우 매수"
+    )
+    tx_schd_buy = Transaction(
+        account_id=acc_us.id, asset_id=schd.id,
+        transaction_date=datetime.date(current_year - 1, 1, 10),
+        type="BUY", quantity=50.0, price=25.0, total_amount=1250.0,
+        currency="USD", memo="SCHD 매수"
+    )
+
+    session.add_all([tx_sam_1, tx_sam_2, tx_sam_old, tx_schd_1, tx_sam_buy, tx_schd_buy])
     session.commit()
 
     yield session
@@ -95,40 +109,47 @@ def test_get_dividend_summary(db_session):
     assert summary["total_krw"] == 335000.0
     assert "monthly_data" in summary
 
-def test_get_stock_dividend_analysis(db_session):
-    """종목별 연환산 추정 배당금 및 고유 통화 기준 배당률 산출 검증"""
+def test_get_stock_dividend_analysis_ttm(db_session):
+    """종목별 최근 12개월(TTM) 실수령 배당금 및 수량 기반 배당률 산출 검증"""
     service = DividendService(db_session)
     stocks = service.get_stock_dividend_analysis()
 
     sam = next(s for s in stocks if s["ticker"] == "005935")
-    current_month = datetime.date.today().month
-    
-    # 삼성전자우: 올해 수령액 140,000원 -> 추정 연배당금 = (140000 / current_month) * 12
-    expected_annual = (140000.0 / current_month) * 12
-    assert pytest.approx(sam["annual_estimate"], 0.1) == expected_annual
-    # 삼성전자우 현재가 58,000원 대비 시가 배당률 = (expected_annual / 58000) * 100
-    expected_yield = (expected_annual / 58000.0) * 100
-    assert pytest.approx(sam["yield_current"], 0.1) == expected_yield
+    # 삼성전자우: 최근 1년(TTM) 수령액 = 올해 140,000원 (+ 작년 12월 60,000원은 오늘 기준 1년 이내면 포함)
+    assert sam["quantity"] == 100.0
+    assert sam["buy_price"] == 50000.0
+    assert sam["current_price"] == 58000.0
+    assert sam["ytd_amount"] == 140000.0
+    assert "ttm_amount" in sam
+    assert sam["ttm_amount"] >= 140000.0
 
-    assert sam["major_category"] == "주식"
-    assert sam["sub_category"] == "배당주"
+    # 시가 배당률: (ttm_amount / (58,000 * 100)) * 100 -> 현실적인 2~5% 범위여야 함 (100% 미만)
+    assert sam["yield_ttm_current"] < 100.0
+    expected_yield = (sam["ttm_amount"] / (58000.0 * 100.0)) * 100
+    assert pytest.approx(sam["yield_ttm_current"], 0.01) == round(expected_yield, 2)
 
-    # SCHD: 올해 수령액 $100 -> 추정 연배당금 = ($100 / current_month) * 12 (달러 기준)
+    # 매수가 대비 배당률 (YoC): (ttm_amount / (50,000 * 100)) * 100
+    expected_yoc = (sam["ttm_amount"] / (50000.0 * 100.0)) * 100
+    assert pytest.approx(sam["yield_ttm_cost"], 0.01) == round(expected_yoc, 2)
+
+    # SCHD (달러 자산):
     schd_stock = next(s for s in stocks if s["ticker"] == "SCHD")
-    assert schd_stock["major_category"] == "주식"
-    assert schd_stock["sub_category"] == "배당주"
-    expected_schd_annual = (100.0 / current_month) * 12
-    assert pytest.approx(schd_stock["annual_estimate"], 0.1) == expected_schd_annual
-    # SCHD 현재가 $28.0 대비 시가 배당률 = (expected_schd_annual / 28.0) * 100
-    expected_schd_yield = (expected_schd_annual / 28.0) * 100
-    assert pytest.approx(schd_stock["yield_current"], 0.1) == expected_schd_yield
+    assert schd_stock["quantity"] == 50.0
+    assert schd_stock["buy_price"] == 25.0
+    assert schd_stock["current_price"] == 28.0
+    assert schd_stock["ytd_amount"] == 100.0
+    assert schd_stock["ttm_amount"] == 100.0
+    # 시가 배당률: (100 / (28.0 * 50)) * 100 = 7.14%
+    assert pytest.approx(schd_stock["yield_ttm_current"], 0.01) == 7.14
+    # 매수가 배당률: (100 / (25.0 * 50)) * 100 = 8.00%
+    assert pytest.approx(schd_stock["yield_ttm_cost"], 0.01) == 8.00
 
-    # 신규배당주: 수령 실적 0원 -> 추정 0원, 배당률 0.0
+    # 신규배당주 (미보유, 배당실적 0):
     new_st = next(s for s in stocks if s["ticker"] == "999999")
-    assert new_st["major_category"] == "주식"
-    assert new_st["sub_category"] == "배당주"
-    assert new_st["annual_estimate"] == 0.0
-    assert new_st["yield_current"] == 0.0
+    assert new_st["quantity"] == 0.0
+    assert new_st["ttm_amount"] == 0.0
+    assert new_st["yield_ttm_current"] == 0.0
+    assert new_st["yield_ttm_cost"] == 0.0
 
 
 def test_get_dividend_summary_with_tax(db_session):
