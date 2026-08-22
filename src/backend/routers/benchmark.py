@@ -57,15 +57,14 @@ async def get_benchmark_dashboard(
     
     # 1. 벤치마크 및 포트폴리오 누적 수익률 계산
     benchmark_svc = BenchmarkService(db)
-    tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
+    tickers = BenchmarkService.BENCHMARK_TICKERS
     chart_data = await benchmark_svc.calculate_cumulative_returns(start_date, end_date, tickers)
 
     # 2. 내 포트폴리오 평가자산 추출 (차트 시계열 기준)
     total_valuation_krw = chart_data.get("portfolio_final_valuation")
 
     # 3. 상단 지수 카드 정보 가공
-    # yfinance 캐시를 기반으로 각 지수의 최종 누적 수익률(YTD 등) 및 현재 지수를 구합니다.
-    # chart_data["alpha_summaries"]에서 지수별 최종 수익률을 추출합니다.
+    # 1단계 누적 수익률 계산 시 함께 추출된 지수별 최종 수익률 및 현재가를 재활용하여 중복 조회를 제거합니다.
     index_card_data = {}
     for item in chart_data.get("alpha_summaries", []):
         ticker = item["ticker"]
@@ -73,20 +72,9 @@ async def get_benchmark_dashboard(
             "name": item["benchmark"],
             "return": item["benchmark_return"],
             "alpha": item["alpha"],
-            "judgment": item["judgment"]
+            "judgment": item["judgment"],
+            "value": item.get("current_price", 0.0)
         }
-
-    # 지수 현재가 조회 (최근 저장된 캐시 정보 활용)
-    prices_list = await asyncio.gather(*(
-        benchmark_svc.get_historical_prices(ticker, start_date, end_date)
-        for ticker in tickers
-    ))
-    for ticker, prices in zip(tickers, prices_list):
-        # 0.0이 아닌 실질 유효 가격 중 가장 최근 가격을 현재가로 사용합니다.
-        valid_prices = [p for p in prices if p.close_price > 0.0]
-        current_val = valid_prices[-1].close_price if valid_prices else 0.0
-        if ticker in index_card_data:
-            index_card_data[ticker]["value"] = current_val
 
     # 4. 관심 종목 테이블 기본 정보 (화면 미사용에 따른 외부 API 호출 제거)
     watchlist_items = db.query(Watchlist).all()

@@ -312,7 +312,8 @@ class BenchmarkService:
                 "benchmark_return": i_final,
                 "portfolio_return": p_final,
                 "alpha": alpha,
-                "judgment": judgment
+                "judgment": judgment,
+                "current_price": ticker_prices[-1] if ticker_prices else 0.0
             })
 
         portfolio_final_valuation = portfolio_history[-1] if portfolio_history else 0.0
@@ -320,7 +321,8 @@ class BenchmarkService:
             "labels": labels,
             "datasets": datasets,
             "alpha_summaries": alpha_summaries,
-            "portfolio_final_valuation": portfolio_final_valuation
+            "portfolio_final_valuation": portfolio_final_valuation,
+            "index_latest_values": {item["ticker"]: item["current_price"] for item in alpha_summaries}
         }
 
     async def get_watchlist_returns(
