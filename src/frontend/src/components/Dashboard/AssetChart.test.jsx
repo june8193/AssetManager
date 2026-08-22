@@ -3,14 +3,6 @@ import { describe, it, expect, vi } from 'vitest';
 import AssetChart from './AssetChart';
 import { MaskingProvider } from '../../contexts/MaskingContext';
 
-// Recharts의 ResponsiveContainer가 테스트 환경(jsdom)에서 0x0 사이즈로 잡히는 문제를 해결하기 위해 모킹
-vi.mock('recharts', async () => {
-  const OriginalModule = await vi.importActual('recharts');
-  return {
-    ...OriginalModule,
-    ResponsiveContainer: ({ children }) => <div style={{ width: '800px', height: '400px' }}>{children}</div>,
-  };
-});
 
 describe('AssetChart 컴포넌트', () => {
   const mockData = {
