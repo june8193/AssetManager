@@ -4,8 +4,8 @@
 
 **Blocked by:** 01 — 경량 DOM 런타임(happy-dom) 전환 및 Vitest 러너 환경 최적화
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 순수 계산 유틸리티 테스트 파일들에 `@vitest-environment node` 지시어를 적용한다.
-- [ ] API 서비스 및 클라이언트 단위 테스트 파일들에 `@vitest-environment node` 지시어를 적용한다.
-- [ ] Node 환경에서 해당 유틸리티/서비스 테스트 스위트가 에러 없이 수 밀리초 내에 즉시 통과하는지 검증한다.
+- [x] 순수 계산 유틸리티 테스트 파일들에 `@vitest-environment node` 지시어를 적용한다.
+- [x] API 서비스 및 클라이언트 단위 테스트 파일들에 `@vitest-environment node` 지시어를 적용한다.
+- [x] Node 환경에서 해당 유틸리티/서비스 테스트 스위트가 에러 없이 수 밀리초 내에 즉시 통과하는지 검증한다.

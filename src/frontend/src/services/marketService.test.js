@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { marketService } from './marketService';
 import { apiClient } from './apiClient';

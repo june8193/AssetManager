@@ -22,6 +22,10 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
+    environmentMatchGlobs: [
+      ['src/services/**', 'node'],
+      ['src/utils/**', 'node'],
+    ],
     globals: true,
     setupFiles: './src/test/setup.js',
     css: false,
