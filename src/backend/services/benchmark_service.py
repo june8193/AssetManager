@@ -8,14 +8,21 @@ import datetime
 import asyncio
 from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
-from sqlalchemy.dialects.sqlite import insert
 
-from src.backend.models import HistoricalPrice, AccountSnapshot, Asset, Stock
+from src.backend.models import HistoricalPrice, AccountSnapshot
 from src.backend.market import MarketDataProvider
 
 
 class BenchmarkService:
     """포트폴리오 수익률과 시장 주요 지수 및 관심 종목의 성과를 비교 분석하는 서비스 클래스입니다."""
+
+    BENCHMARK_TICKERS = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
+    TICKER_NAMES = {
+        "^KS11": "kospi",
+        "^KQ11": "kosdaq",
+        "^GSPC": "sp500",
+        "^IXIC": "nasdaq"
+    }
 
     def __init__(self, db: Session, provider: Optional[MarketDataProvider] = None) -> None:
         """BenchmarkService를 초기화합니다.
@@ -445,51 +452,66 @@ class BenchmarkService:
         yearly_stats = dash_svc.get_yearly_stats()
         daily_stats = dash_svc.get_daily_stats(all_data=True)
 
-        tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
-        ticker_names = {
-            "^KS11": "kospi",
-            "^KQ11": "kosdaq",
-            "^GSPC": "sp500",
-            "^IXIC": "nasdaq"
-        }
+        tickers = self.BENCHMARK_TICKERS
+        ticker_names = self.TICKER_NAMES
 
-        # 2. 일간 수익률 비교 계산
+        # 2. 일간 및 연간 수익률 비교 계산을 위한 전체 날짜 범위 계산
         daily_comparison = []
+        yearly_comparison = []
+
+        all_dates = []
+        if daily_stats:
+            all_dates.extend([item["date"] for item in daily_stats])
+        if yearly_stats:
+            for item in yearly_stats:
+                all_dates.append(datetime.date(item["year"], 1, 1))
+                all_dates.append(datetime.date(item["year"], 12, 31))
+
+        if not all_dates:
+            return {"yearly": [], "daily": []}
+
+        min_date = min(all_dates)
+        max_date = max(all_dates)
+        today = datetime.date.today()
+        if max_date > today:
+            max_date = today
+
+        # 4대 지수 전체 구간 시세를 비동기 병렬(asyncio.gather)로 일괄 수집/캐싱 보장
+        await asyncio.gather(*(
+            self.get_historical_prices(ticker, min_date, max_date)
+            for ticker in tickers
+        ))
+
+        # DB 캐시에서 전체 지수 데이터 일괄 로드
+        prices_cache = {}
+        for ticker in tickers:
+            db_prices = (
+                self.db.query(HistoricalPrice)
+                .filter(
+                    HistoricalPrice.ticker == ticker,
+                    HistoricalPrice.price_date >= min_date - datetime.timedelta(days=10),
+                    HistoricalPrice.price_date <= max_date,
+                    HistoricalPrice.close_price > 0.0
+                )
+                .order_by(HistoricalPrice.price_date.asc())
+                .all()
+            )
+            prices_cache[ticker] = db_prices
+
+        def get_cached_price_at_date(ticker: str, target_date: datetime.date) -> float:
+            plist = prices_cache.get(ticker, [])
+            last_val = 0.0
+            for p in plist:
+                if p.price_date <= target_date:
+                    last_val = p.close_price
+                else:
+                    break
+            return last_val
+
+        # 3. 일간 수익률 비교 계산 (인메모리 캐시 활용)
         if daily_stats:
             sorted_daily = sorted(daily_stats, key=lambda x: x["date"])
             sorted_dates = [item["date"] for item in sorted_daily]
-
-            min_date = sorted_dates[0]
-            max_date = sorted_dates[-1]
-
-            # 4대 지수 전체 구간 시세 일괄 수집/캐싱 보장
-            for ticker in tickers:
-                await self.get_historical_prices(ticker, min_date, max_date)
-
-            prices_cache = {}
-            for ticker in tickers:
-                db_prices = (
-                    self.db.query(HistoricalPrice)
-                    .filter(
-                        HistoricalPrice.ticker == ticker,
-                        HistoricalPrice.price_date >= min_date - datetime.timedelta(days=10),
-                        HistoricalPrice.price_date <= max_date,
-                        HistoricalPrice.close_price > 0.0
-                    )
-                    .order_by(HistoricalPrice.price_date.asc())
-                    .all()
-                )
-                prices_cache[ticker] = db_prices
-
-            def get_cached_price_at_date(ticker: str, target_date: datetime.date) -> float:
-                plist = prices_cache.get(ticker, [])
-                last_val = 0.0
-                for p in plist:
-                    if p.price_date <= target_date:
-                        last_val = p.close_price
-                    else:
-                        break
-                return last_val
 
             for i, item in enumerate(sorted_daily):
                 curr_date = item["date"]
@@ -524,20 +546,14 @@ class BenchmarkService:
 
             daily_comparison.reverse()
 
-        # 3. 연간 수익률 비교 계산
-        yearly_comparison = []
+        # 4. 연간 수익률 비교 계산 (인메모리 캐시 활용으로 N+1 I/O 제거)
         if yearly_stats:
             sorted_yearly = sorted(yearly_stats, key=lambda x: x["year"])
 
             for item in sorted_yearly:
                 year = item["year"]
                 start_date = datetime.date(year, 1, 1)
-
-                today = datetime.date.today()
-                if year == today.year:
-                    end_date = today
-                else:
-                    end_date = datetime.date(year, 12, 31)
+                end_date = today if year == today.year else datetime.date(year, 12, 31)
 
                 row = {
                     "year": year,
@@ -550,8 +566,8 @@ class BenchmarkService:
                 }
 
                 for ticker in tickers:
-                    prices = await self.get_historical_prices(ticker, start_date, end_date)
-                    valid_prices = [p for p in prices if p.close_price > 0.0]
+                    plist = prices_cache.get(ticker, [])
+                    valid_prices = [p for p in plist if start_date <= p.price_date <= end_date and p.close_price > 0.0]
                     name = ticker_names[ticker]
 
                     if len(valid_prices) >= 2:
