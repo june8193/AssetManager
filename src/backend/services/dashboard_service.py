@@ -466,6 +466,48 @@ class DashboardService:
         return prices
 
 
+    def get_pending_deposits_krw(self, usd_rate: float) -> float:
+        """각 활성 계좌의 마지막 스냅샷 이후 발생한 미반영 입출금(DEPOSIT, WITHDRAW) 순변동액(KRW)을 계산합니다.
+
+        Args:
+            usd_rate (float): 외화 환산에 사용할 현재 USD 환율
+
+        Returns:
+            float: 원화 환산 순입출금 합계 (입금: +, 출금: -)
+        """
+        active_accounts = self.db.query(Account).filter(Account.is_active == True).all()
+        if not active_accounts:
+            return 0.0
+
+        pending_total_krw = 0.0
+        for acc in active_accounts:
+            last_snapshot = (
+                self.db.query(AccountSnapshot)
+                .filter(AccountSnapshot.account_id == acc.id)
+                .order_by(AccountSnapshot.snapshot_date.desc())
+                .first()
+            )
+
+            last_date = last_snapshot.snapshot_date if last_snapshot else datetime.date(1970, 1, 1)
+
+            txs = (
+                self.db.query(Transaction)
+                .filter(
+                    Transaction.account_id == acc.id,
+                    Transaction.transaction_date > last_date,
+                    Transaction.type.in_(["DEPOSIT", "WITHDRAW"])
+                )
+                .all()
+            )
+
+            pending_total_krw += LedgerEngine.calculate_net_deposits(
+                transactions=txs,
+                start_date=last_date,
+                usd_rate=usd_rate
+            )
+
+        return pending_total_krw
+
     async def get_dashboard_summary(self, force_update: bool = False) -> Dict[str, Any]:
         """대시보드 요약 데이터를 생성합니다.
 
@@ -568,6 +610,7 @@ class DashboardService:
 
         # 누적 성과 통계 계산
         yearly_stats = self.get_yearly_stats()
+        pending_deposits_krw = self.get_pending_deposits_krw(usd_rate=usd_rate)
         
         total_contribution = 0.0
         initial_base_asset = 0.0
@@ -576,14 +619,18 @@ class DashboardService:
         contribution_ratio = 100.0
         profit_ratio = 0.0
         
-        if yearly_stats:
-            # 1) 총 추가액 (스냅샷 상의 입금 합계)
-            total_contribution = sum(y['contribution'] for y in yearly_stats)
+        if yearly_stats or pending_deposits_krw != 0.0:
+            # 1) 총 추가액 (스냅샷 상의 입금 합계 + 미반영 입출금)
+            snapshot_contribution = sum(y['contribution'] for y in yearly_stats) if yearly_stats else 0.0
+            total_contribution = snapshot_contribution + pending_deposits_krw
             
             # 2) 최초 기초 자산 (가장 과거 연도의 prev_assets)
             # prev_assets = assets - contribution - profit
-            oldest_year_stat = yearly_stats[-1] # 내림차순 정렬이므로 마지막 요소가 가장 과거
-            initial_base_asset = oldest_year_stat['assets'] - oldest_year_stat['contribution'] - oldest_year_stat['profit']
+            if yearly_stats:
+                oldest_year_stat = yearly_stats[-1] # 내림차순 정렬이므로 마지막 요소가 가장 과거
+                initial_base_asset = oldest_year_stat['assets'] - oldest_year_stat['contribution'] - oldest_year_stat['profit']
+            else:
+                initial_base_asset = 0.0
             
             # 3) 실시간 누적 수익금 = 실시간 평가자산 - 누적 추가액 - 최초 기초 자산
             total_profit = total_valuation_krw - total_contribution - initial_base_asset

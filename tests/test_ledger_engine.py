@@ -970,4 +970,63 @@ def test_pure_replay_empty_transactions():
     assert state.accumulated_withdrawals_krw == 0.0
 
 
+def test_calculate_net_deposits():
+    """LedgerEngine.calculate_net_deposits의 기간 필터링, 통화 환산, 입출금 부호 처리를 검증합니다."""
+    txs = [
+        # 시작일 이전 거래 (제외 대상)
+        Transaction(
+            type="DEPOSIT",
+            total_amount=100000.0,
+            currency="KRW",
+            transaction_date=datetime.date(2026, 1, 1),
+        ),
+        # 시작일 초과 ~ 종료일 이하 거래 (포함 대상: KRW 입금 +500,000)
+        Transaction(
+            type="DEPOSIT",
+            total_amount=500000.0,
+            currency="KRW",
+            transaction_date=datetime.date(2026, 1, 5),
+        ),
+        # KRW 출금 (-200,000)
+        Transaction(
+            type="WITHDRAW",
+            total_amount=200000.0,
+            currency="KRW",
+            transaction_date=datetime.date(2026, 1, 10),
+        ),
+        # USD 입금 ($100 * 환율 1300 = +130,000)
+        Transaction(
+            type="DEPOSIT",
+            total_amount=100.0,
+            currency="USD",
+            transaction_date=datetime.date(2026, 1, 12),
+        ),
+        # 배당금 (입출금이 아니므로 제외)
+        Transaction(
+            type="DIVIDEND",
+            total_amount=50000.0,
+            currency="KRW",
+            transaction_date=datetime.date(2026, 1, 15),
+        ),
+        # 종료일 초과 거래 (제외 대상)
+        Transaction(
+            type="DEPOSIT",
+            total_amount=300000.0,
+            currency="KRW",
+            transaction_date=datetime.date(2026, 2, 1),
+        ),
+    ]
+
+    net = LedgerEngine.calculate_net_deposits(
+        transactions=txs,
+        start_date=datetime.date(2026, 1, 1),
+        end_date=datetime.date(2026, 1, 20),
+        usd_rate=1300.0,
+    )
+
+    # 500,000 - 200,000 + 130,000 = 430,000
+    assert net == pytest.approx(430000.0)
+
+
+
 

@@ -315,13 +315,13 @@ def test_get_dashboard_summary_cumulative_stats(db_session, monkeypatch):
     db_session.add(Transaction(
         account_id=acc.id,
         asset_id=asset.id,
-        transaction_date=datetime.date(2023, 1, 1),
+        transaction_date=datetime.date(2022, 12, 31),
         type="BUY",
         quantity=10.0,
         total_amount=2000.0,
         currency="KRW"
     ))
-    # 현금 잔고를 맞추기 위해 입금 2000.0 추가
+    # 현금 잔고를 맞추기 위해 입금 2000.0 추가 (스냅샷 시점 이전 입금)
     cash_asset = db_session.query(Asset).filter(Asset.ticker == "KRW").first()
     if not cash_asset:
         cash_asset = Asset(ticker="KRW", name="Won", country="KR", major_category="현금", sub_category="원화예수금")
@@ -331,7 +331,7 @@ def test_get_dashboard_summary_cumulative_stats(db_session, monkeypatch):
     db_session.add(Transaction(
         account_id=acc.id,
         asset_id=cash_asset.id,
-        transaction_date=datetime.date(2023, 1, 1),
+        transaction_date=datetime.date(2022, 12, 31),
         type="DEPOSIT",
         quantity=2000.0,
         total_amount=2000.0,
@@ -400,6 +400,117 @@ def test_get_dashboard_summary_latest_price_date(db_session, monkeypatch):
     summary = asyncio.run(service.get_dashboard_summary())
     assert "latest_price_date" in summary
     assert summary["latest_price_date"].startswith("2026-06-06")
+
+
+def test_get_dashboard_summary_with_pending_deposit_and_withdraw(db_session, monkeypatch):
+    """마지막 스냅샷 이후 발생한 입금(DEPOSIT) 및 출금(WITHDRAW)이 누적원금에 반영되어 누적수익이 왜곡되지 않는지 검증합니다."""
+    # 1. 사용자 및 계좌 설정
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+
+    acc = Account(user_id=user.id, name="Active Acc", provider="Broker", is_active=True)
+    db_session.add(acc)
+    db_session.commit()
+
+    krw_asset = Asset(ticker="KRW", name="원화", country="KR", major_category="현금", sub_category="원화예수금")
+    db_session.add(krw_asset)
+    db_session.commit()
+
+    # 2. 2023-12-31 기준 스냅샷 (원금 1,000,000, 평가액 1,200,000 => 수익 200,000)
+    snap = AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2023, 12, 31),
+        period_deposit=1000000.0,
+        total_valuation=1200000.0,
+        total_profit=200000.0
+    )
+    db_session.add(snap)
+    db_session.commit()
+
+    # 3. 2024-01-05에 500,000원 입금(DEPOSIT) 거래 발생
+    db_session.add(Transaction(
+        account_id=acc.id,
+        asset_id=krw_asset.id,
+        transaction_date=datetime.date(2024, 1, 5),
+        type="DEPOSIT",
+        quantity=500000.0,
+        price=1.0,
+        total_amount=500000.0,
+        currency="KRW"
+    ))
+    db_session.commit()
+
+    # 모킹: 현재가
+    async def mock_get_current_prices(self, tickers, *args, **kwargs):
+        return {"KRW": 1.0}
+    monkeypatch.setattr(DashboardService, "get_current_prices", mock_get_current_prices)
+
+    # 4. 검증: 입금 500,000원 발생 시
+    # 실시간 자산: 500,000원 (LedgerEngine 기준 cash_krw = 500,000)
+    # 스냅샷 원금: 1,000,000 + 미반영 입금 500,000 = 총 누적원금 1,500,000
+    # 기초자산: 0 (1,200,000 - 1,000,000 - 200,000 = 0)
+    # 만약 원금에 미반영 입금 500,000이 합산되지 않으면 total_profit이 왜곡됨.
+    service = DashboardService(db_session)
+    summary = asyncio.run(service.get_dashboard_summary())
+
+    assert summary["total_contribution"] == 1500000.0
+    assert summary["initial_base_asset"] == 0.0
+    # total_profit = total_valuation_krw(500,000) - total_contribution(1,500,000) = -1,000,000
+    # (과거 100만 원금에 해당하는 자산이 트랜잭션으로 입력되지 않은 상태이므로)
+    # 핵심은 total_contribution에 500,000원이 가산되어 total_contribution이 1,500,000원이 되는 것임.
+    assert summary["total_contribution"] == 1500000.0
+
+
+def test_get_dashboard_summary_with_foreign_pending_deposit(db_session, monkeypatch):
+    """외화(USD) 입금이 발생했을 때 실시간 환율을 적용하여 누적원금에 가산되는지 검증합니다."""
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+
+    acc = Account(user_id=user.id, name="US Acc", provider="Broker", is_active=True)
+    db_session.add(acc)
+    db_session.commit()
+
+    usd_asset = Asset(ticker="USD", name="달러", country="US", major_category="현금", sub_category="달러예수금")
+    db_session.add(usd_asset)
+    db_session.commit()
+
+    # 스냅샷 (원금 1,000,000원)
+    snap = AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2023, 12, 31),
+        period_deposit=1000000.0,
+        total_valuation=1000000.0,
+        total_profit=0.0
+    )
+    db_session.add(snap)
+    db_session.commit()
+
+    # 100 USD 입금 (환율 1300원 가정 시 130,000원)
+    db_session.add(Transaction(
+        account_id=acc.id,
+        asset_id=usd_asset.id,
+        transaction_date=datetime.date(2024, 1, 5),
+        type="DEPOSIT",
+        quantity=100.0,
+        price=1.0,
+        total_amount=100.0,
+        currency="USD"
+    ))
+    db_session.commit()
+
+    async def mock_get_current_prices(self, tickers, *args, **kwargs):
+        return {"USD": 1.0}
+    monkeypatch.setattr(DashboardService, "get_current_prices", mock_get_current_prices)
+    monkeypatch.setattr(DashboardService, "get_latest_exchange_rate", lambda self: {"rate": 1300.0, "date": datetime.date(2024, 1, 5)})
+
+    service = DashboardService(db_session)
+    summary = asyncio.run(service.get_dashboard_summary())
+
+    # 스냅샷 원금 1,000,000 + USD 100 * 1300 (130,000) = 1,130,000원
+    assert summary["total_contribution"] == 1130000.0
+
 
 
 

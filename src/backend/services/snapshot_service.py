@@ -5,6 +5,7 @@ from datetime import date
 from sqlalchemy.orm import Session, joinedload
 from ..models import Account, Asset, Transaction, AccountSnapshot, ExchangeRate
 from ..schemas import SnapshotPreviewSchema
+from .ledger_engine import LedgerEngine
 from .dashboard_service import DashboardService
 
 
@@ -90,12 +91,12 @@ class SnapshotService:
                 Transaction.transaction_date <= snapshot_date
             ).all()
 
-            period_deposit_krw = 0.0
-            for tx in txs:
-                if tx.type == 'DEPOSIT':
-                    period_deposit_krw += tx.total_amount
-                elif tx.type == 'WITHDRAW':
-                    period_deposit_krw -= tx.total_amount
+            period_deposit_krw = LedgerEngine.calculate_net_deposits(
+                transactions=txs,
+                start_date=last_date,
+                end_date=snapshot_date,
+                usd_rate=exchange_rate
+            )
 
             val_krw = account_valuations.get(acc.id, 0.0)
 

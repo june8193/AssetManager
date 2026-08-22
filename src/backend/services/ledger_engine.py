@@ -37,6 +37,47 @@ class LedgerEngine:
     """
 
     @staticmethod
+    def calculate_net_deposits(
+        transactions: Sequence[Transaction],
+        start_date: Optional[datetime.date] = None,
+        end_date: Optional[datetime.date] = None,
+        usd_rate: float = 1.0,
+    ) -> float:
+        """지정된 기간 내의 순입출금액(DEPOSIT +, WITHDRAW -)을 원화(KRW)로 환산하여 계산합니다.
+
+        Args:
+            transactions (Sequence[Transaction]): 대상 트랜잭션 목록
+            start_date (Optional[datetime.date]): 시작 일자 (초과 기준: transaction_date > start_date)
+            end_date (Optional[datetime.date]): 종료 일자 (이하 기준: transaction_date <= end_date)
+            usd_rate (float): 외화(USD) 환산 시 적용할 환율
+
+        Returns:
+            float: 기간 내 순입출금 합계 (KRW)
+        """
+        net_total = 0.0
+        for tx in transactions:
+            t_date = getattr(tx, "transaction_date", None)
+            if start_date is not None and t_date and t_date <= start_date:
+                continue
+            if end_date is not None and t_date and t_date > end_date:
+                continue
+
+            t_type = getattr(tx, "type", None)
+            if t_type not in ["DEPOSIT", "WITHDRAW"]:
+                continue
+
+            amount = float(getattr(tx, "total_amount", 0.0) or 0.0)
+            if t_type == "WITHDRAW":
+                amount = -amount
+
+            if getattr(tx, "currency", None) == "USD":
+                amount *= usd_rate
+
+            net_total += amount
+
+        return net_total
+
+    @staticmethod
     def replay(
         transactions: Sequence[Transaction],
         as_of: Optional[datetime.date] = None,
