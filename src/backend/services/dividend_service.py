@@ -23,8 +23,17 @@ class DividendService:
         usd_rate = self.get_latest_usd_rate()
         current_year = datetime.date.today().year
 
-        # 모든 INTEREST 및 TAX 거래내역 조회
-        transactions = self.db.query(Transaction).filter(Transaction.type.in_(["INTEREST", "TAX"])).all()
+        # 투자 자산(현금 제외)에 귀속된 배당/분배금(INTEREST) 및 배당소득세(TAX) 거래내역만 조회
+        transactions = (
+            self.db.query(Transaction)
+            .join(Asset, Transaction.asset_id == Asset.id)
+            .filter(
+                Transaction.type.in_(["INTEREST", "TAX"]),
+                Asset.major_category != "현금",
+                Asset.ticker.notin_(["KRW", "USD"])
+            )
+            .all()
+        )
 
         total_krw = 0.0
         ytd_krw = 0.0
@@ -77,8 +86,15 @@ class DividendService:
         current_year = datetime.date.today().year
         current_month = datetime.date.today().month
 
-        # 모든 자산 조회
-        assets = self.db.query(Asset).all()
+        # 투자 자산(현금 제외)만 조회
+        assets = (
+            self.db.query(Asset)
+            .filter(
+                Asset.major_category != "현금",
+                Asset.ticker.notin_(["KRW", "USD"])
+            )
+            .all()
+        )
         result = []
 
         for asset in assets:

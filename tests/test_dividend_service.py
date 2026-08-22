@@ -155,3 +155,44 @@ def test_get_dividend_summary_with_tax(db_session):
     # 세전 총 누적 = 335,000원, 세금 TAX = 13,500원 => 세후 총 누적 = 321,500원
     assert summary["total_krw"] == 321500.0
 
+def test_get_dividend_summary_ignores_cash_tax_and_interest(db_session):
+    """현금 예수금(KRW, USD)에 부과된 일반 양도소득세 출금(TAX) 및 단순 예수금 이자는 배당 분석에서 제외됨을 검증합니다."""
+    current_year = datetime.date.today().year
+    krw_cash = Asset(name="원화예수금", ticker="KRW", major_category="현금", sub_category="원화예수금", country="KR")
+    usd_cash = Asset(name="달러예수금", ticker="USD", major_category="현금", sub_category="달러예수금", country="US")
+    db_session.add_all([krw_cash, usd_cash])
+    db_session.commit()
+
+    acc_kr = db_session.query(Account).filter(Account.alias == "한국증권").first()
+
+    # 거액의 양도소득세 납부 내역 (예: 3,437,460원)
+    cash_tax_tx = Transaction(
+        account_id=acc_kr.id, asset_id=krw_cash.id,
+        transaction_date=datetime.date(current_year, 5, 10),
+        type="TAX", quantity=1.0, price=3437460.0, total_amount=3437460.0,
+        currency="KRW", memo="양도소득세 출금"
+    )
+    # 예수금 단순 이자 (예: 66원)
+    cash_interest_tx = Transaction(
+        account_id=acc_kr.id, asset_id=krw_cash.id,
+        transaction_date=datetime.date(current_year, 4, 25),
+        type="INTEREST", quantity=1.0, price=66.0, total_amount=66.0,
+        currency="KRW", memo="예탁금 이용료 이자"
+    )
+    db_session.add_all([cash_tax_tx, cash_interest_tx])
+    db_session.commit()
+
+    service = DividendService(db_session)
+    summary = service.get_dividend_summary()
+
+    # 현금 예수금 세금 343만원이 차감되어 음수가 되지 않고, 투자 자산 배당금(275,000원)만 집계되어야 함
+    assert summary["ytd_krw"] == 275000.0
+    assert summary["total_krw"] == 335000.0
+
+    # 종목별 배당 분석 목록에도 현금(KRW, USD)은 포함되지 않아야 함
+    stocks = service.get_stock_dividend_analysis()
+    tickers = [s["ticker"] for s in stocks]
+    assert "KRW" not in tickers
+    assert "USD" not in tickers
+
+
