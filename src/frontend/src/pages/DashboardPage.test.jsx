@@ -1,11 +1,14 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import DashboardPage from './DashboardPage';
 import { useDashboard } from '../hooks/useDashboard';
 import { MaskingProvider } from '../contexts/MaskingContext';
 
-// useDashboard 훅 모킹
+// useDashboard 훅 및 하위 컴포넌트 모킹
 vi.mock('../hooks/useDashboard');
+vi.mock('../components/TaskAlertBanner', () => ({
+  default: () => null,
+}));
 
 const mockData = {
   accounts: [
@@ -38,8 +41,8 @@ const mockData = {
 };
 
 describe('DashboardPage', () => {
-  it('새로고침 버튼이 정상적으로 렌더링되고 클릭 시 refresh 함수를 호출한다', () => {
-    const refreshMock = vi.fn();
+  it('새로고침 버튼이 정상적으로 렌더링되고 클릭 시 refresh 함수를 호출한다', async () => {
+    const refreshMock = vi.fn().mockResolvedValue({ status: 'success', message: '완료' });
     vi.mocked(useDashboard).mockReturnValue({
       data: mockData,
       loading: false,
@@ -59,7 +62,9 @@ describe('DashboardPage', () => {
     expect(refreshButton.textContent).toContain('새로고침');
 
     // 버튼 클릭 시 refresh 함수 호출 확인
-    fireEvent.click(refreshButton);
+    await act(async () => {
+      fireEvent.click(refreshButton);
+    });
     expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 

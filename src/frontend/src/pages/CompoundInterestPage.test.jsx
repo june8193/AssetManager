@@ -35,11 +35,13 @@ describe('CompoundInterestPage - Unit Test', () => {
     expect(screen.getByText('시뮬레이션 복리 계산기')).toBeDefined();
 
     // 기본 탭인 '현재 자산기반 계산' 레이아웃 확인
-    expect(screen.getByText('출생 연도')).toBeDefined();
-    expect(screen.getByText('목표 연도')).toBeDefined();
-    expect(screen.getByText('현재 나이 (2026년)')).toBeDefined();
-    expect(screen.getByText('목표 연도 나이 (2056년)')).toBeDefined();
-    expect(screen.getByText('총 시뮬레이션 기간')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByText('출생 연도')).toBeDefined();
+      expect(screen.getByText('목표 연도')).toBeDefined();
+      expect(screen.getByText('현재 나이 (2026년)')).toBeDefined();
+      expect(screen.getByText('목표 연도 나이 (2056년)')).toBeDefined();
+      expect(screen.getByText('총 시뮬레이션 기간')).toBeDefined();
+    });
   });
 
   it('자유 계산 탭으로 전환 시 투자 기간 입력 요소가 나타난다', async () => {
@@ -60,7 +62,9 @@ describe('CompoundInterestPage - Unit Test', () => {
     fireEvent.click(freeCalcTabButton);
 
     // 투자 기간 라벨이 드러나는지 확인
-    expect(screen.getByLabelText('투자 기간')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByLabelText('투자 기간')).toBeDefined();
+    });
   });
 
   it('나의 스냅샷 기록 연동 카드가 렌더링되고 적용 버튼 클릭 시 값이 대입된다', async () => {

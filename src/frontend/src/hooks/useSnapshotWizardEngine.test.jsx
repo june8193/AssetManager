@@ -99,10 +99,12 @@ describe('useSnapshotWizardEngine 훅 테스트', () => {
       result.current.goToNext();
     });
 
-    expect(result.current.step).toBe(2);
-    expect(result.current.currentAccIdx).toBe(0);
-    expect(result.current.accountsFormData[1]).toBeDefined();
-    expect(result.current.accountsFormData[1].currentKrw).toBe('0');
+    await waitFor(() => {
+      expect(result.current.step).toBe(2);
+      expect(result.current.currentAccIdx).toBe(0);
+      expect(result.current.accountsFormData[1]).toBeDefined();
+      expect(result.current.accountsFormData[1].currentKrw).toBe('0');
+    });
   });
 
   it('Step 2 증권사 상세 입력: 신규 거래 추가, 잔액 수정, 정산 계산 및 확정 처리', async () => {
@@ -187,6 +189,9 @@ describe('useSnapshotWizardEngine 훅 테스트', () => {
     act(() => {
       result.current.goToNext();
     });
+    await waitFor(() => {
+      expect(result.current.step).toBe(2);
+    });
 
     // 2단계 확정 -> 3단계
     act(() => {
@@ -195,7 +200,9 @@ describe('useSnapshotWizardEngine 훅 테스트', () => {
     act(() => {
       result.current.goToNext();
     });
-    expect(result.current.step).toBe(3);
+    await waitFor(() => {
+      expect(result.current.step).toBe(3);
+    });
 
     // 3단계: 은행 계좌 선택 -> 4단계
     act(() => {
@@ -204,7 +211,9 @@ describe('useSnapshotWizardEngine 훅 테스트', () => {
     act(() => {
       result.current.goToNext();
     });
-    expect(result.current.step).toBe(4);
+    await waitFor(() => {
+      expect(result.current.step).toBe(4);
+    });
 
     // 4단계: 은행 계산 및 확정
     await act(async () => {
@@ -218,7 +227,9 @@ describe('useSnapshotWizardEngine 훅 테스트', () => {
     act(() => {
       result.current.goToNext();
     });
-    expect(result.current.step).toBe(5);
+    await waitFor(() => {
+      expect(result.current.step).toBe(5);
+    });
 
     // 5단계: 최종 저장
     let saveResult;

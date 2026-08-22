@@ -51,6 +51,9 @@ describe('DbExplorerPage', () => {
     // 헤더 클릭 정렬 테스트
     const nameHeader = screen.getByText('name');
     fireEvent.click(nameHeader);
+    await waitFor(() => {
+      expect(screen.getByText('Main Account')).toBeDefined();
+    });
   });
 
   it('스키마 탭 전환 시 컬럼 및 외래 키(FK) 정보를 표시한다', async () => {
