@@ -2,11 +2,14 @@
 """배당 수령 내역 집계, 연환산 산식 및 종목별 배당률 계산 서비스 모듈입니다."""
 
 import datetime
+import logging
 from typing import Dict, List, Any
 from sqlalchemy.orm import Session
 from sqlalchemy import extract
 from ..models import Asset, Transaction, ExchangeRate, HistoricalPrice
 from .ledger_engine import LedgerEngine
+
+logger = logging.getLogger(__name__)
 
 class DividendService:
     """배당 데이터 분석 및 집계를 담당하는 서비스 클래스"""
@@ -18,6 +21,44 @@ class DividendService:
         """가장 최근 저장된 USD/KRW 환율을 조회합니다. 없으면 1350.0 기본값 반환."""
         rate_obj = self.db.query(ExchangeRate).filter(ExchangeRate.currency == "USD").order_by(ExchangeRate.date.desc()).first()
         return rate_obj.rate if rate_obj else 1350.0
+
+    @staticmethod
+    def _convert_currency(amount: float, from_curr: str, to_curr: str, usd_rate: float) -> float:
+        """통화 간 금액을 최신 USD 환율을 기준으로 환산합니다.
+
+        Args:
+            amount (float): 환산할 원본 금액
+            from_curr (str): 원본 통화 코드 (예: 'KRW', 'USD')
+            to_curr (str): 대상 통화 코드 (예: 'KRW', 'USD')
+            usd_rate (float): 적용할 USD/KRW 환율
+
+        Returns:
+            float: 대상 통화로 환산된 금액
+        """
+        if from_curr == to_curr or amount == 0.0:
+            return amount
+        if from_curr == "USD" and to_curr == "KRW":
+            return amount * usd_rate
+        if from_curr == "KRW" and to_curr == "USD":
+            return (amount / usd_rate) if usd_rate > 0 else 0.0
+        
+        logger.warning("지원되지 않는 통화 환산 요청: %s -> %s (금액: %s)", from_curr, to_curr, amount)
+        return amount
+
+    @staticmethod
+    def _convert_transaction_amount(tx: Transaction, target_currency: str, usd_rate: float) -> float:
+        """거래(Transaction)의 금액을 대상 통화로 환산하여 반환합니다.
+
+        Args:
+            tx (Transaction): 거래 객체
+            target_currency (str): 대상 통화 코드 ('KRW' 또는 'USD')
+            usd_rate (float): 최신 USD 환율
+
+        Returns:
+            float: 대상 통화로 환산된 거래 금액
+        """
+        raw_amt = float(tx.total_amount or 0.0)
+        return DividendService._convert_currency(raw_amt, tx.currency, target_currency, usd_rate)
 
     def get_dividend_summary(self) -> Dict[str, Any]:
         """총 누적 배당금, YTD 배당금, 평균 배당률 및 월별 수령/누적 시계열을 반환합니다."""
@@ -41,7 +82,7 @@ class DividendService:
         monthly_map: Dict[str, float] = {}
 
         for tx in transactions:
-            tx_amount_krw = tx.total_amount if tx.currency == "KRW" else tx.total_amount * usd_rate
+            tx_amount_krw = self._convert_transaction_amount(tx, "KRW", usd_rate)
             if tx.type == "TAX":
                 tx_amount_krw = -tx_amount_krw
 
@@ -146,7 +187,9 @@ class DividendService:
             ttm_amount = 0.0
 
             for tx in txs:
-                amt = tx.total_amount if tx.type == "INTEREST" else -tx.total_amount
+                # 자산 기준 통화(currency)로 거래 금액 환산
+                converted_amt = self._convert_transaction_amount(tx, currency, usd_rate)
+                amt = converted_amt if tx.type == "INTEREST" else -converted_amt
                 cumulative_amount += amt
                 if tx.transaction_date.year == current_year:
                     ytd_amount += amt

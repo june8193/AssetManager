@@ -177,6 +177,18 @@ def test_get_dividend_summary_with_tax(db_session):
     assert summary["ytd_krw"] == 261500.0
     # 세전 총 누적 = 335,000원, 세금 TAX = 13,500원 => 세후 총 누적 = 321,500원
     assert summary["total_krw"] == 321500.0
+    # 평균 배당률도 음수가 아닌 양수여야 함
+    assert summary["avg_yield"] > 0
+
+    # 종목별 배당 분석에서 SCHD의 TTM 배당금이 세금(13,500 KRW / 1350 = 10 USD)이 차감된 90 USD여야 함
+    stocks = service.get_stock_dividend_analysis()
+    schd_stock = next(s for s in stocks if s["ticker"] == "SCHD")
+    assert schd_stock["ttm_amount"] == 90.0
+    assert schd_stock["ytd_amount"] == 90.0
+    # 시가 배당률: (90 / (28.0 * 50)) * 100 = 6.43%
+    assert pytest.approx(schd_stock["yield_ttm_current"], 0.01) == 6.43
+    # 매수가 배당률: (90 / (25.0 * 50)) * 100 = 7.20%
+    assert pytest.approx(schd_stock["yield_ttm_cost"], 0.01) == 7.20
 
 def test_get_dividend_summary_ignores_cash_tax_and_interest(db_session):
     """현금 예수금(KRW, USD)에 부과된 일반 양도소득세 출금(TAX) 및 단순 예수금 이자는 배당 분석에서 제외됨을 검증합니다."""
@@ -217,5 +229,96 @@ def test_get_dividend_summary_ignores_cash_tax_and_interest(db_session):
     tickers = [s["ticker"] for s in stocks]
     assert "KRW" not in tickers
     assert "USD" not in tickers
+
+
+def test_convert_currency_helper():
+    """_convert_currency 정적 메서드의 통화 환산 동작을 검증합니다."""
+    # 동일 통화
+    assert DividendService._convert_currency(100.0, "USD", "USD", 1400.0) == 100.0
+    assert DividendService._convert_currency(10000.0, "KRW", "KRW", 1400.0) == 10000.0
+
+    # USD -> KRW
+    assert DividendService._convert_currency(10.0, "USD", "KRW", 1400.0) == 14000.0
+
+    # KRW -> USD
+    assert DividendService._convert_currency(14000.0, "KRW", "USD", 1400.0) == 10.0
+    # 환율이 0 이하일 때
+    assert DividendService._convert_currency(14000.0, "KRW", "USD", 0.0) == 0.0
+
+
+def test_mixed_currency_dividend_and_tax_detailed(db_session):
+    """미국 배당주에 원화 세금이 부과된 경우와 한국 배당주에 원화 세금이 부과된 경우의 정확한 실효 배당률을 검증합니다."""
+    current_year = datetime.date.today().year
+
+    # 1. 미국 배당주 O (Realty Income)
+    realty = Asset(name="Realty Income", ticker="O", major_category="주식", sub_category="배당주", country="US")
+    # 2. 한국 배당주 배당맥스
+    kr_div = Asset(name="맥쿼리인프라", ticker="088980", major_category="주식", sub_category="배당주", country="KR")
+    db_session.add_all([realty, kr_div])
+    db_session.commit()
+
+    acc_us = db_session.query(Account).filter(Account.alias == "미국증권").first()
+    acc_kr = db_session.query(Account).filter(Account.alias == "한국증권").first()
+
+    # O 매수: 100주, 단가 50 USD, 현재가 60 USD
+    tx_buy_o = Transaction(
+        account_id=acc_us.id, asset_id=realty.id,
+        transaction_date=datetime.date(current_year, 1, 10),
+        type="BUY", quantity=100.0, price=50.0, total_amount=5000.0, currency="USD"
+    )
+    # O 배당: 100 USD (INTEREST), 세금 13,500 KRW (TAX) -> 환율 1350 기준 10 USD 세금
+    tx_div_o = Transaction(
+        account_id=acc_us.id, asset_id=realty.id,
+        transaction_date=datetime.date(current_year, 6, 15),
+        type="INTEREST", quantity=0.0, price=0.0, total_amount=100.0, currency="USD"
+    )
+    tx_tax_o = Transaction(
+        account_id=acc_us.id, asset_id=realty.id,
+        transaction_date=datetime.date(current_year, 6, 15),
+        type="TAX", quantity=0.0, price=0.0, total_amount=13500.0, currency="KRW"
+    )
+    # 현재가 등록 (60 USD)
+    hp_o = HistoricalPrice(ticker="O", price_date=datetime.date.today(), close_price=60.0)
+
+    # 맥쿼리 매수: 100주, 단가 10,000 KRW, 현재가 12,000 KRW
+    tx_buy_kr = Transaction(
+        account_id=acc_kr.id, asset_id=kr_div.id,
+        transaction_date=datetime.date(current_year, 1, 10),
+        type="BUY", quantity=100.0, price=10000.0, total_amount=1000000.0, currency="KRW"
+    )
+    # 맥쿼리 배당: 50,000 KRW (INTEREST), 세금 7,700 KRW (TAX)
+    tx_div_kr = Transaction(
+        account_id=acc_kr.id, asset_id=kr_div.id,
+        transaction_date=datetime.date(current_year, 7, 1),
+        type="INTEREST", quantity=0.0, price=0.0, total_amount=50000.0, currency="KRW"
+    )
+    tx_tax_kr = Transaction(
+        account_id=acc_kr.id, asset_id=kr_div.id,
+        transaction_date=datetime.date(current_year, 7, 1),
+        type="TAX", quantity=0.0, price=0.0, total_amount=7700.0, currency="KRW"
+    )
+    hp_kr = HistoricalPrice(ticker="088980", price_date=datetime.date.today(), close_price=12000.0)
+
+    db_session.add_all([tx_buy_o, tx_div_o, tx_tax_o, hp_o, tx_buy_kr, tx_div_kr, tx_tax_kr, hp_kr])
+    db_session.commit()
+
+    service = DividendService(db_session)
+    stocks = service.get_stock_dividend_analysis()
+
+    o_stat = next(s for s in stocks if s["ticker"] == "O")
+    # O의 실효 TTM 배당금 = 100 USD - (13,500 KRW / 1350 = 10 USD) = 90 USD
+    assert o_stat["currency"] == "USD"
+    assert o_stat["ttm_amount"] == 90.0
+    # 시가배당률: (90 / (60 * 100)) * 100 = 1.5%
+    assert pytest.approx(o_stat["yield_ttm_current"], 0.01) == 1.50
+    # 매수가배당률: (90 / (50 * 100)) * 100 = 1.8%
+    assert pytest.approx(o_stat["yield_ttm_cost"], 0.01) == 1.80
+
+    kr_stat = next(s for s in stocks if s["ticker"] == "088980")
+    # 맥쿼리의 실효 TTM 배당금 = 50,000 KRW - 7,700 KRW = 42,300 KRW
+    assert kr_stat["currency"] == "KRW"
+    assert kr_stat["ttm_amount"] == 42300.0
+    # 시가배당률: (42300 / (12000 * 100)) * 100 = 3.525% => 3.53%
+    assert pytest.approx(kr_stat["yield_ttm_current"], 0.01) == 3.53
 
 
