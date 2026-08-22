@@ -85,9 +85,9 @@ class HistoricalPriceCache:
         if not trading_days:
             return []
 
-        # 2. DB에 이미 저장된 유효 시세 날짜 추출
+        # 2. DB에 이미 저장된 시세 날짜 추출 (휴장일/결측일 등으로 0.0 캐싱된 과거일 포함)
         cached_prices = self.get_cached_prices(ticker, start_date, end_date)
-        cached_dates = {p.price_date for p in cached_prices if p.close_price > 0}
+        cached_dates = {p.price_date for p in cached_prices}
 
         # 3. 오늘 날짜 및 장중 여부 판별
         today = datetime.date.today()
@@ -138,24 +138,18 @@ class HistoricalPriceCache:
 
         ranges: List[Tuple[datetime.date, datetime.date]] = []
         range_start = missing_days[0]
-        prev_idx = day_to_idx.get(range_start, 0)
+        prev_day = missing_days[0]
 
         for current_day in missing_days[1:]:
-            curr_idx = day_to_idx.get(current_day, prev_idx + 1)
-            # 연속된 영업일인 경우 (인덱스 차이가 1)
-            if curr_idx == prev_idx + 1:
-                prev_idx = curr_idx
+            # 영업일 인덱스 상 연속되는지 검사
+            if day_to_idx.get(current_day, -1) == day_to_idx.get(prev_day, -2) + 1:
+                prev_day = current_day
             else:
-                # 불연속 구간 발견 시 이전 구간 마감
-                range_end = all_trading_days[prev_idx]
-                ranges.append((range_start, range_end))
+                ranges.append((range_start, prev_day))
                 range_start = current_day
-                prev_idx = curr_idx
+                prev_day = current_day
 
-        # 마지막 구간 마감
-        last_end = all_trading_days[prev_idx]
-        ranges.append((range_start, last_end))
-
+        ranges.append((range_start, prev_day))
         return ranges
 
     def upsert_prices(
@@ -163,9 +157,10 @@ class HistoricalPriceCache:
         ticker: str,
         prices: Union[Sequence[Dict[str, Any]], Dict[datetime.date, float]]
     ) -> None:
-        """주어진 시세 데이터를 SQLite historical_prices 테이블에 일괄 적재(Upsert)합니다.
+        """주어진 티커의 시세 데이터를 historical_prices 테이블에 Upsert합니다.
 
-        동일한 (ticker, price_date)가 존재할 경우 종가(close_price)와 갱신시각(updated_at)을 업데이트합니다.
+        이미 동일 (ticker, price_date) 행이 존재하는 경우 최신 가격과 갱신 시각으로 업데이트합니다.
+        휴장일/결측일 표시를 위한 0.0 가격(Negative Caching)도 지원합니다.
 
         Args:
             ticker (str): 종목 코드 또는 티커
@@ -178,17 +173,27 @@ class HistoricalPriceCache:
             for k, v in prices.items():
                 p_date = self._parse_date(k)
                 close_p = self._parse_price(v)
-                if p_date and close_p and close_p > 0:
+                if p_date and close_p is not None and close_p >= 0.0:
                     normalized_items.append((p_date, close_p))
         elif isinstance(prices, (list, tuple)):
             for item in prices:
                 if not isinstance(item, dict):
                     continue
-                raw_date = item.get("price_date") or item.get("date")
-                raw_price = item.get("close_price") or item.get("close") or item.get("current_price") or item.get("price")
+                raw_date = None
+                for d_key in ("price_date", "date"):
+                    if d_key in item and item[d_key] is not None:
+                        raw_date = item[d_key]
+                        break
+
+                raw_price = None
+                for p_key in ("close_price", "close", "current_price", "price"):
+                    if p_key in item and item[p_key] is not None:
+                        raw_price = item[p_key]
+                        break
+
                 p_date = self._parse_date(raw_date)
                 close_p = self._parse_price(raw_price)
-                if p_date and close_p and close_p > 0:
+                if p_date and close_p is not None and close_p >= 0.0:
                     normalized_items.append((p_date, close_p))
 
         if not normalized_items:
@@ -232,7 +237,7 @@ class HistoricalPriceCache:
             .filter(
                 HistoricalPrice.ticker == ticker,
                 HistoricalPrice.price_date <= before_date,
-                HistoricalPrice.close_price > 0
+                HistoricalPrice.close_price > 0.0
             )
             .order_by(HistoricalPrice.price_date.desc())
             .first()
@@ -264,16 +269,26 @@ class HistoricalPriceCache:
             for k, v in prices.items():
                 p_date = self._parse_date(k)
                 close_p = self._parse_price(v)
-                if p_date and close_p is not None and close_p > 0:
+                if p_date and close_p is not None and close_p > 0.0:
                     price_map[p_date] = close_p
         elif isinstance(prices, (list, tuple)):
             for item in prices:
                 if isinstance(item, dict):
-                    raw_date = item.get("price_date") or item.get("date")
-                    raw_price = item.get("close_price") or item.get("close") or item.get("current_price") or item.get("price")
+                    raw_date = None
+                    for d_key in ("price_date", "date"):
+                        if d_key in item and item[d_key] is not None:
+                            raw_date = item[d_key]
+                            break
+
+                    raw_price = None
+                    for p_key in ("close_price", "close", "current_price", "price"):
+                        if p_key in item and item[p_key] is not None:
+                            raw_price = item[p_key]
+                            break
+
                     p_date = self._parse_date(raw_date)
                     close_p = self._parse_price(raw_price)
-                    if p_date and close_p is not None and close_p > 0:
+                    if p_date and close_p is not None and close_p > 0.0:
                         price_map[p_date] = close_p
 
         # 2. Forward Fill 적용

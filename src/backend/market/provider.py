@@ -302,10 +302,20 @@ class MarketDataProvider:
         missing_ranges = self.cache.find_missing_ranges(ticker, start_date, end_date, country=resolved_country)
         if missing_ranges:
             adapter = self.get_adapter_for_ticker(ticker, country)
+            today = datetime.date.today()
             for r_start, r_end in missing_ranges:
                 fetched = await adapter.get_historical_prices(ticker, r_start, r_end)
                 if fetched:
                     self.cache.upsert_prices(ticker, fetched)
+                else:
+                    # 과거 거래일(오늘 이전)에 대해 외부 API 조회가 빈 결과인 경우 0.0으로 Negative Caching
+                    past_days = [
+                        d for d in self.calendar.get_trading_days(r_start, r_end, country=resolved_country)
+                        if d < today
+                    ]
+                    if past_days:
+                        negative_entries = [{"price_date": d, "close_price": 0.0} for d in past_days]
+                        self.cache.upsert_prices(ticker, negative_entries)
 
         # 2. 캐시에서 전체 기간 시세 조회
         cached_models = self.cache.get_cached_prices(ticker, start_date, end_date)

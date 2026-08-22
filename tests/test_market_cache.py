@@ -130,23 +130,25 @@ class TestHistoricalPriceCache:
         assert cached[2].price_date == datetime.date(2026, 1, 6)
         assert cached[2].close_price == 71000.0
 
-    def test_upsert_prices_invalid_or_zero_ignored(self, db_session):
-        """0 이하의 비정상 가격이나 유효하지 않은 항목은 무시하는지 검증합니다."""
+    def test_upsert_prices_invalid_or_negative_ignored(self, db_session):
+        """음수의 비정상 가격이나 유효하지 않은 항목은 무시하는지 검증합니다 (0.0은 Negative Caching으로 허용)."""
         cache = HistoricalPriceCache(db=db_session)
         ticker = "005930"
 
         price_data = [
-            {"price_date": datetime.date(2026, 1, 2), "close_price": 0.0},
-            {"price_date": datetime.date(2026, 1, 3), "close_price": -100.0},
+            {"price_date": datetime.date(2026, 1, 2), "close_price": 0.0},  # Negative Caching으로 적재됨
+            {"price_date": datetime.date(2026, 1, 3), "close_price": -100.0},  # 음수 -> 무시
             {"price_date": datetime.date(2026, 1, 5), "close_price": 70000.0},
             {},
         ]
         cache.upsert_prices(ticker, price_data)
 
         cached = cache.get_cached_prices(ticker, datetime.date(2026, 1, 1), datetime.date(2026, 1, 10))
-        assert len(cached) == 1
-        assert cached[0].price_date == datetime.date(2026, 1, 5)
-        assert cached[0].close_price == 70000.0
+        assert len(cached) == 2
+        assert cached[0].price_date == datetime.date(2026, 1, 2)
+        assert cached[0].close_price == 0.0
+        assert cached[1].price_date == datetime.date(2026, 1, 5)
+        assert cached[1].close_price == 70000.0
 
     def test_upsert_empty_input(self, db_session):
         """빈 입력에 대해 에러 없이 정상 처리되는지 검증합니다."""
@@ -412,4 +414,24 @@ class TestHistoricalPriceCache:
         assert len(filled) == 2
         assert filled[0] == {"price_date": datetime.date(2026, 1, 5), "close_price": 70000.0}
         assert filled[1] == {"price_date": datetime.date(2026, 1, 6), "close_price": 70000.0}
+
+    def test_negative_caching_zero_price_upsert_and_find_missing(self, db_session):
+        """휴장일 등으로 인해 0.0 가격으로 Negative Caching된 경우 DB에 저장되고 누락일 목록에서 제외되는지 검증합니다."""
+        cache = HistoricalPriceCache(db=db_session)
+        ticker = "^KS11"
+        holiday_date = datetime.date(2026, 5, 5) # 어린이날 등 휴일
+
+        # 0.0 가격 적재 (Negative Caching)
+        cache.upsert_prices(ticker, [{"price_date": holiday_date, "close_price": 0.0}])
+
+        # DB에 0.0 가격이 저장되었는지 확인
+        cached = cache.get_cached_prices(ticker, holiday_date, holiday_date)
+        assert len(cached) == 1
+        assert cached[0].close_price == 0.0
+
+        # find_missing_trading_days에서 이미 0.0으로 캐싱된 과거 날짜는 누락일로 잡히지 않아야 함
+        with patch.object(cache.calendar, "get_trading_days", return_value=[holiday_date]):
+            missing = cache.find_missing_trading_days(ticker, holiday_date, holiday_date, country="KR")
+            assert holiday_date not in missing
+
 
