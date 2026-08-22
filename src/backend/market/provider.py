@@ -116,6 +116,25 @@ class MarketDataProvider:
         """
         self.adapters[(country or "KR").strip().upper()] = adapter
 
+    def get_adapter_for_ticker(self, ticker: str, country: Optional[str] = None) -> MarketAdapterBase:
+        """티커의 특성에 맞는 적절한 마켓 어댑터를 반환합니다.
+
+        지수 심볼('^'로 시작)은 국내 증권사 REST API에서 지원하지 않으므로
+        Yahoo Finance가 연동된 'US' 어댑터로 즉시 직결 라우팅합니다.
+
+        Args:
+            ticker (str): 종목 코드 또는 티커
+            country (Optional[str]): 국가 코드
+
+        Returns:
+            MarketAdapterBase: 해당 티커를 처리할 마켓 어댑터 인스턴스
+        """
+        t = (ticker or "").strip()
+        if t.startswith("^"):
+            return self.get_adapter("US")
+        resolved_country = self.resolve_country(ticker, country)
+        return self.get_adapter(resolved_country)
+
     async def get_current_price(
         self,
         ticker: str,
@@ -153,16 +172,8 @@ class MarketDataProvider:
                 }
 
         # 어댑터 호출 및 캐싱
-        adapter = self.get_adapter(resolved_country)
+        adapter = self.get_adapter_for_ticker(ticker, country)
         res_list = await adapter.get_current_prices([ticker])
-
-        # KR 지수 심볼(^)의 경우 주 어댑터 실패 시 US 어댑터(YahooFinance)로 fallback
-        if (not res_list or res_list[0].get("current_price", 0.0) == 0.0) and resolved_country == "KR" and ticker.startswith("^"):
-            us_adapter = self.get_adapter("US")
-            if us_adapter != adapter:
-                fallback_res = await us_adapter.get_current_prices([ticker])
-                if fallback_res and fallback_res[0].get("current_price", 0.0) > 0.0:
-                    res_list = fallback_res
 
         if res_list:
             item = res_list[0]
@@ -212,6 +223,7 @@ class MarketDataProvider:
                 else self.calendar.is_us_market_open()
             )
 
+            hit_cache = False
             if not force_update and not is_open:
                 last_price = self.cache.get_last_known_price(ticker, datetime.date.today())
                 if last_price is not None and last_price > 0:
@@ -220,16 +232,17 @@ class MarketDataProvider:
                         "current_price": float(last_price),
                         "change_rate": 0.0,
                     }
-                else:
-                    to_fetch.setdefault(c, []).append(ticker)
-            else:
-                to_fetch.setdefault(c, []).append(ticker)
+                    hit_cache = True
 
-        # 국가별 어댑터 일괄 요청
-        for c, t_list in to_fetch.items():
+            if not hit_cache:
+                adapter_key = "US" if (ticker or "").strip().startswith("^") else c
+                to_fetch.setdefault(adapter_key, []).append(ticker)
+
+        # 국가/어댑터별 일괄 요청
+        for adapter_key, t_list in to_fetch.items():
             if not t_list:
                 continue
-            adapter = self.get_adapter(c)
+            adapter = self.get_adapter(adapter_key)
             res_list = await adapter.get_current_prices(t_list)
             for item in res_list:
                 code = item.get("stock_code") or item.get("ticker")
@@ -288,13 +301,9 @@ class MarketDataProvider:
         # 1. 누락 구간 식별 및 어댑터 보충 요청
         missing_ranges = self.cache.find_missing_ranges(ticker, start_date, end_date, country=resolved_country)
         if missing_ranges:
-            adapter = self.get_adapter(resolved_country)
+            adapter = self.get_adapter_for_ticker(ticker, country)
             for r_start, r_end in missing_ranges:
                 fetched = await adapter.get_historical_prices(ticker, r_start, r_end)
-                if not fetched and resolved_country == "KR" and ticker.startswith("^"):
-                    us_adapter = self.get_adapter("US")
-                    if us_adapter != adapter:
-                        fetched = await us_adapter.get_historical_prices(ticker, r_start, r_end)
                 if fetched:
                     self.cache.upsert_prices(ticker, fetched)
 

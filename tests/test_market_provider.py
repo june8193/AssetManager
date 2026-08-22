@@ -387,3 +387,40 @@ class TestMarketDataProvider:
             assert res["current_price"] == 0.0
             assert res["change_rate"] == 0.0
 
+    @pytest.mark.asyncio
+    async def test_index_symbol_direct_routing_to_us_adapter(self, db_session):
+        """^KS11, ^KQ11 등 지수 심볼 조회 시 KR 어댑터를 거치지 않고 US 어댑터로 즉시 라우팅되는지 검증합니다."""
+        kr_adapter = FakeMarketAdapter()
+        us_adapter = FakeMarketAdapter()
+        
+        # US 어댑터에만 지수 시세 설정
+        us_adapter.set_current_price("^KS11", 2600.0, 1.5)
+        us_adapter.set_historical_prices("^KQ11", {
+            datetime.date(2026, 1, 2): 850.0,
+            datetime.date(2026, 1, 5): 855.0,
+        })
+        
+        provider = MarketDataProvider(
+            db=db_session,
+            kr_adapter=kr_adapter,
+            us_adapter=us_adapter
+        )
+
+        with patch.object(kr_adapter, "get_current_prices", wraps=kr_adapter.get_current_prices) as mock_kr_current, \
+             patch.object(kr_adapter, "get_historical_prices", wraps=kr_adapter.get_historical_prices) as mock_kr_hist:
+            
+            # 현재가 조회
+            with patch.object(provider.calendar, "is_kr_market_open", return_value=True):
+                cur_res = await provider.get_current_price("^KS11", force_update=True)
+                assert cur_res["current_price"] == 2600.0
+                # KR 어댑터는 절대 호출되지 않아야 함
+                mock_kr_current.assert_not_called()
+
+            # 과거 시세 조회
+            start = datetime.date(2026, 1, 2)
+            end = datetime.date(2026, 1, 5)
+            hist_res = await provider.get_historical_prices("^KQ11", start, end, fill_missing=False)
+            assert len(hist_res) == 2
+            assert hist_res[0]["close_price"] == 850.0
+            mock_kr_hist.assert_not_called()
+

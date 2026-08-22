@@ -98,8 +98,8 @@ async def test_sync_historical_prices_lazy(benchmark_service, fake_market_provid
     start_date = datetime.date(2026, 6, 15)
     end_date = datetime.date(2026, 6, 15)
 
-    kr_adapter = fake_market_provider.get_adapter("KR")
-    kr_adapter.set_historical_prices(ticker, [
+    us_adapter = fake_market_provider.get_adapter("US")
+    us_adapter.set_historical_prices(ticker, [
         {"price_date": start_date, "close_price": 2500.0}
     ])
 
@@ -114,7 +114,7 @@ async def test_sync_historical_prices_lazy(benchmark_service, fake_market_provid
     assert len(cached) >= 1
 
     # 2. 두 번째 호출 시에는 DB 캐시를 활용하여 조회되는지 검증
-    with patch.object(kr_adapter, "get_historical_prices", new_callable=AsyncMock) as mock_fetch:
+    with patch.object(us_adapter, "get_historical_prices", new_callable=AsyncMock) as mock_fetch:
         prices_cached = await benchmark_service.get_historical_prices(ticker, start_date, end_date)
         mock_fetch.assert_not_called()
         assert len(prices_cached) == 1
@@ -366,13 +366,13 @@ async def test_sync_historical_prices_needs_fetch_threshold(fake_market_provider
     db_session.add(p)
     db_session.commit()
 
-    kr_adapter = fake_market_provider.get_adapter("KR")
-    kr_adapter.set_historical_prices("^KS11", [
+    us_adapter = fake_market_provider.get_adapter("US")
+    us_adapter.set_historical_prices("^KS11", [
         {"price_date": datetime.date(2026, 6, 16), "close_price": 2520.0},
         {"price_date": d_end, "close_price": 2550.0}
     ])
 
-    with patch.object(kr_adapter, "get_historical_prices", wraps=kr_adapter.get_historical_prices) as mock_fetch:
+    with patch.object(us_adapter, "get_historical_prices", wraps=us_adapter.get_historical_prices) as mock_fetch:
         prices = await benchmark_service.get_historical_prices("^KS11", d_start, d_end)
         # 누락 구간이 존재하므로 어댑터가 호출되었는지 검증
         assert mock_fetch.call_count >= 1
