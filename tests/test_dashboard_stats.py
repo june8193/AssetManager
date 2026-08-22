@@ -96,7 +96,7 @@ def test_get_yearly_stats_contribution_logic(db_session):
     
     # 3. 왜곡을 유도하는 트랜잭션 추가 (2024년에 몰려있는 초기잔고 트랜잭션 가정)
     # 현재 로직은 이 트랜잭션을 무시해야 함
-    asset = Asset(ticker="TEST", name="Test Asset", major_category="일반주식", sub_category="국내주식")
+    asset = Asset(ticker="TEST", name="Test Asset", major_category="주식", sub_category="알파(성장)")
     db_session.add(asset)
     db_session.commit()
     
@@ -307,7 +307,7 @@ def test_get_dashboard_summary_cumulative_stats(db_session, monkeypatch):
 
     # 3. 실시간 주가 조회를 가상화 (2000 KRW 평가액을 만들도록 설정)
     # 자산 및 트랜잭션 추가하여 실시간 평가 자산을 2000.0으로 만듦
-    asset = Asset(ticker="TEST", name="Test Asset", country="KR", major_category="일반주식", sub_category="국내주식")
+    asset = Asset(ticker="TEST", name="Test Asset", country="KR", major_category="주식", sub_category="알파(성장)")
     db_session.add(asset)
     db_session.commit()
 

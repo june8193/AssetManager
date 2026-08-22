@@ -12,7 +12,7 @@ def setup_assets(db_session):
     """증권 스냅샷 테스트용 기본 현금 및 주식 자산을 생성합니다."""
     krw = Asset(ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금", country="KR")
     usd = Asset(ticker="USD", name="달러", major_category="현금", sub_category="달러예수금", country="US")
-    stock = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    stock = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
     db_session.add_all([krw, usd, stock])
     db_session.commit()
     return krw, usd, stock

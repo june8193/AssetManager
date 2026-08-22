@@ -59,6 +59,9 @@ const DividendAnalysisPage = () => {
 
   const filteredStocks = stocks.filter((stock) => {
     if (activeTab === '전체 자산') return true;
+    if (activeTab === '배당주') {
+      return stock.sub_category === '배당주' || stock.major_category === '배당주';
+    }
     return stock.major_category === activeTab;
   });
 

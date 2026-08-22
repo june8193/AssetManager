@@ -19,8 +19,8 @@ async def test_get_dashboard_summary_includes_category_info(db_session):
     asset = Asset(
         ticker="AAPL", 
         name="애플", 
-        major_category="일반주식", 
-        sub_category="해외주식", 
+        major_category="주식", 
+        sub_category="코어(지수)", 
         country="US"
     )
     db_session.add(asset)
@@ -69,6 +69,6 @@ async def test_get_dashboard_summary_includes_category_info(db_session):
         
         asset_info = acc_summary["assets"][0]
         assert asset_info["ticker"] == "AAPL"
-        assert asset_info["category"] == "일반주식"
-        assert asset_info["sub_category"] == "해외주식"
+        assert asset_info["category"] == "주식"
+        assert asset_info["sub_category"] == "코어(지수)"
         assert asset_info["valuation_krw"] == 10.0 * 170.0 * 1300.0

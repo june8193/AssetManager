@@ -24,8 +24,8 @@ def setup_test_data(db_session):
     asset = Asset(
         ticker="005930",
         name="삼성전자",
-        major_category="일반주식",
-        sub_category="국내주식",
+        major_category="주식",
+        sub_category="알파(성장)",
         country="KR"
     )
     db_session.add(asset)

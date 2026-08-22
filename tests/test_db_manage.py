@@ -93,8 +93,8 @@ def test_create_and_get_asset():
     payload = {
         "ticker": "TEST_TICKER",
         "name": "Test Asset",
-        "major_category": "일반주식",
-        "sub_category": "국내주식",
+        "major_category": "주식",
+        "sub_category": "알파(성장)",
         "country": "KR"
     }
     response = client.post("/api/db/assets", json=payload)
@@ -509,7 +509,7 @@ def test_delete_snapshots_by_date(db_session, test_user):
 def test_get_transactions_with_date_filters(db_session, test_user):
     """GET /api/db/transactions API의 start_date 및 end_date 필터 기능을 검증합니다."""
     # 1. 자산 생성 (유효한 카테고리 조합 사용)
-    asset = Asset(ticker="BTC", name="비트코인", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset = Asset(ticker="BTC", name="비트코인", major_category="주식", sub_category="알파(성장)", country="KR")
     db_session.add(asset)
     db_session.flush()
 
@@ -573,7 +573,7 @@ def test_get_transactions_with_date_filters(db_session, test_user):
 
 def test_create_transfer_transaction(db_session, test_user):
     """POST /api/db/transactions/transfer 호출 시 이체 쌍 트랜잭션(WITHDRAW, DEPOSIT)이 자동 생성되는지 검증합니다."""
-    asset = Asset(ticker="KRW", name="원화예수금", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset = Asset(ticker="KRW", name="원화예수금", major_category="주식", sub_category="알파(성장)", country="KR")
     acc_src = Account(user_id=test_user.id, name="출발계좌", provider="은행A", account_type="BANK", is_active=True)
     acc_dst = Account(user_id=test_user.id, name="도착계좌", provider="은행B", account_type="BANK", is_active=True)
     db_session.add_all([asset, acc_src, acc_dst])
@@ -609,7 +609,7 @@ def test_create_transfer_transaction(db_session, test_user):
 
 def test_delete_transfer_transaction_cascade(db_session, test_user):
     """이체 트랜잭션 삭제 시 동일 transfer_pair_id를 가진 상대방 트랜잭션도 함께 삭제되는지 검증합니다."""
-    asset = Asset(ticker="KRW2", name="원화예수금2", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset = Asset(ticker="KRW2", name="원화예수금2", major_category="주식", sub_category="알파(성장)", country="KR")
     acc_src = Account(user_id=test_user.id, name="출발계좌2", provider="은행A", account_type="BANK", is_active=True)
     acc_dst = Account(user_id=test_user.id, name="도착계좌2", provider="은행B", account_type="BANK", is_active=True)
     db_session.add_all([asset, acc_src, acc_dst])
@@ -639,7 +639,7 @@ def test_delete_transfer_transaction_cascade(db_session, test_user):
 
 def test_update_transfer_transaction_cascade(db_session, test_user):
     """이체 트랜잭션 수정 시 동일 transfer_pair_id를 가진 상대방 트랜잭션도 금액/일자/메모가 자동 수정되는지 검증합니다."""
-    asset = Asset(ticker="KRW3", name="원화예수금3", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset = Asset(ticker="KRW3", name="원화예수금3", major_category="주식", sub_category="알파(성장)", country="KR")
     acc_src = Account(user_id=test_user.id, name="출발계좌3", provider="은행A", account_type="BANK", is_active=True)
     acc_dst = Account(user_id=test_user.id, name="도착계좌3", provider="은행B", account_type="BANK", is_active=True)
     db_session.add_all([asset, acc_src, acc_dst])
@@ -677,7 +677,7 @@ def test_update_transfer_transaction_cascade(db_session, test_user):
 
 def _create_test_asset_and_account(db_session, user_id: int, suffix: str):
     """테스트용 자산 및 계좌를 생성하는 헬퍼 함수입니다."""
-    asset = Asset(ticker=f"SRC_TEST_{suffix}", name=f"출처테스트자산_{suffix}", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset = Asset(ticker=f"SRC_TEST_{suffix}", name=f"출처테스트자산_{suffix}", major_category="주식", sub_category="알파(성장)", country="KR")
     account = Account(user_id=user_id, name=f"출처테스트계좌_{suffix}", provider="키움증권", account_type="BROKERAGE", is_active=True)
     db_session.add_all([asset, account])
     db_session.commit()

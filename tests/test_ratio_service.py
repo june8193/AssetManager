@@ -13,8 +13,8 @@ async def test_calculate_rebalancing_logic(db_session: Session):
     # 중분류: 국내주식(주식의 50%), 해외주식(주식의 50%)
     db_session.add(TargetRatio(category_name="주식", category_type="major", target_percentage=40.0))
     db_session.add(TargetRatio(category_name="현금", category_type="major", target_percentage=60.0))
-    db_session.add(TargetRatio(category_name="국내주식", category_type="sub", target_percentage=50.0, parent_category="주식"))
-    db_session.add(TargetRatio(category_name="해외주식", category_type="sub", target_percentage=50.0, parent_category="주식"))
+    db_session.add(TargetRatio(category_name="알파(성장)", category_type="sub", target_percentage=50.0, parent_category="주식"))
+    db_session.add(TargetRatio(category_name="코어(지수)", category_type="sub", target_percentage=50.0, parent_category="주식"))
     db_session.commit()
 
     # 2. DashboardService.get_dashboard_summary 모킹
@@ -27,8 +27,8 @@ async def test_calculate_rebalancing_logic(db_session: Session):
                 "category": "주식",
                 "value_krw": 300.0,
                 "sub_categories": [
-                    {"category": "국내주식", "value_krw": 100.0},
-                    {"category": "해외주식", "value_krw": 200.0}
+                    {"category": "알파(성장)", "value_krw": 100.0},
+                    {"category": "코어(지수)", "value_krw": 200.0}
                 ]
             },
             {
@@ -68,11 +68,11 @@ async def test_calculate_rebalancing_logic(db_session: Session):
         assert major_cash["diff_amt"] == 20.0
         
         # 중분류 검증
-        sub_kr = next(r for r in result["sub_results"] if r["category"] == "국내주식")
+        sub_kr = next(r for r in result["sub_results"] if r["category"] == "알파(성장)")
         assert sub_kr["target_amt"] == 240.0 # 480 * 0.5
         assert sub_kr["diff_amt"] == 140.0   # 240 - 100
         
-        sub_us = next(r for r in result["sub_results"] if r["category"] == "해외주식")
+        sub_us = next(r for r in result["sub_results"] if r["category"] == "코어(지수)")
         assert sub_us["target_amt"] == 240.0 # 480 * 0.5
         assert sub_us["diff_amt"] == 40.0    # 240 - 200
 
@@ -105,7 +105,7 @@ async def test_get_hierarchy_includes_stocks(db_session: Session):
     """get_hierarchy 결과의 각 중분류 하위에 종목 리스트가 포함되는지 검증합니다."""
     # 1. 목표 비중 설정
     db_session.add(TargetRatio(category_name="주식", category_type="major", target_percentage=100.0))
-    db_session.add(TargetRatio(category_name="해외주식", category_type="sub", target_percentage=100.0, parent_category="주식"))
+    db_session.add(TargetRatio(category_name="코어(지수)", category_type="sub", target_percentage=100.0, parent_category="주식"))
     db_session.commit()
 
     # 2. DashboardService.get_dashboard_summary 모킹
@@ -119,7 +119,7 @@ async def test_get_hierarchy_includes_stocks(db_session: Session):
                         "ticker": "AAPL",
                         "name": "Apple Inc.",
                         "category": "주식",
-                        "sub_category": "해외주식",
+                        "sub_category": "코어(지수)",
                         "quantity": 10,
                         "price": 100.0,
                         "valuation_krw": 1000.0
@@ -143,7 +143,7 @@ async def test_get_hierarchy_includes_stocks(db_session: Session):
         major_node = next(n for n in hierarchy if n["category_name"] == "주식")
         assert len(major_node["children"]) > 0
         
-        sub_node = next(n for n in major_node["children"] if n["category_name"] == "해외주식")
+        sub_node = next(n for n in major_node["children"] if n["category_name"] == "코어(지수)")
         assert "children" in sub_node
         assert len(sub_node["children"]) == 1
         
@@ -161,7 +161,7 @@ async def test_get_hierarchy_includes_accounts_in_stocks(db_session: Session):
     """get_hierarchy 결과의 각 종목 하위에 해당 종목을 보유한 계좌 정보가 포함되는지 검증합니다."""
     # 1. 목표 비중 설정
     db_session.add(TargetRatio(category_name="주식", category_type="major", target_percentage=100.0))
-    db_session.add(TargetRatio(category_name="해외주식", category_type="sub", target_percentage=100.0, parent_category="주식"))
+    db_session.add(TargetRatio(category_name="코어(지수)", category_type="sub", target_percentage=100.0, parent_category="주식"))
     db_session.commit()
 
     # 2. DashboardService.get_dashboard_summary 모킹 (2개 계좌에 AAPL 보유)
@@ -178,7 +178,7 @@ async def test_get_hierarchy_includes_accounts_in_stocks(db_session: Session):
                         "ticker": "AAPL",
                         "name": "Apple Inc.",
                         "category": "주식",
-                        "sub_category": "해외주식",
+                        "sub_category": "코어(지수)",
                         "quantity": 10,
                         "price": 100.0,
                         "valuation_krw": 1000.0,
@@ -196,7 +196,7 @@ async def test_get_hierarchy_includes_accounts_in_stocks(db_session: Session):
                         "ticker": "AAPL",
                         "name": "Apple Inc.",
                         "category": "주식",
-                        "sub_category": "해외주식",
+                        "sub_category": "코어(지수)",
                         "quantity": 20,
                         "price": 100.0,
                         "valuation_krw": 2000.0,
@@ -218,7 +218,7 @@ async def test_get_hierarchy_includes_accounts_in_stocks(db_session: Session):
         
         # 4. 검증
         major_node = next(n for n in hierarchy if n["category_name"] == "주식")
-        sub_node = next(n for n in major_node["children"] if n["category_name"] == "해외주식")
+        sub_node = next(n for n in major_node["children"] if n["category_name"] == "코어(지수)")
         
         assert len(sub_node["children"]) == 1
         stock = sub_node["children"][0]

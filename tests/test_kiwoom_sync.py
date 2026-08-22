@@ -22,7 +22,7 @@ def setup_test_data(db_session: Session):
         user_id=user.id,
         name="5526-9093",
         provider="키움증권",
-        alias="일반주식",
+        alias="주식",
         account_type="BROKERAGE"
     )
     account2 = Account(
@@ -52,22 +52,22 @@ def setup_test_data(db_session: Session):
     samsung = Asset(
         ticker="005930",
         name="삼성전자",
-        major_category="일반주식",
-        sub_category="국내주식",
+        major_category="주식",
+        sub_category="알파(성장)",
         country="KR"
     )
     apple = Asset(
         ticker="AAPL",
         name="Apple",
-        major_category="일반주식",
-        sub_category="해외주식",
+        major_category="주식",
+        sub_category="코어(지수)",
         country="US"
     )
     macquarie = Asset(
         ticker="001230",
         name="맥쿼리인프라",
-        major_category="배당주",
-        sub_category="국내배당주",
+        major_category="주식",
+        sub_category="배당주",
         country="KR"
     )
     db_session.add_all([krw_cash, usd_cash, samsung, apple, macquarie])

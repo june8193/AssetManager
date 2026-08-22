@@ -10,7 +10,7 @@ def test_db_model_asset_category_validation_invalid_major(db_session):
             ticker="TEST1",
             name="테스트 자산 1",
             major_category="잘못된대분류",
-            sub_category="국내주식",
+            sub_category="코어(지수)",
             country="KR"
         )
         db_session.add(asset)
@@ -24,8 +24,8 @@ def test_db_model_asset_category_validation_invalid_sub(db_session):
         asset = Asset(
             ticker="TEST2",
             name="테스트 자산 2",
-            major_category="일반주식",
-            sub_category="원화예수금",  # 일반주식의 중분류로는 유효하지 않음
+            major_category="주식",
+            sub_category="원화예수금",  # 주식의 중분류로는 유효하지 않음
             country="KR"
         )
         db_session.add(asset)
@@ -56,7 +56,7 @@ def test_schema_asset_category_validation_invalid():
         AssetSchema(
             ticker="TEST4",
             name="테스트 자산 4",
-            major_category="일반주식",
+            major_category="주식",
             sub_category="달러예수금",  # 달러예수금은 현금의 중분류임
             country="US"
         )
@@ -67,9 +67,9 @@ def test_schema_asset_category_validation_valid():
     schema = AssetSchema(
         ticker="TEST5",
         name="테스트 자산 5",
-        major_category="배당주",
-        sub_category="해외배당주",
+        major_category="주식",
+        sub_category="배당주",
         country="US"
     )
-    assert schema.major_category == "배당주"
-    assert schema.sub_category == "해외배당주"
+    assert schema.major_category == "주식"
+    assert schema.sub_category == "배당주"

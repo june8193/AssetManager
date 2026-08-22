@@ -22,8 +22,8 @@ def setup_portfolio_data(db_session):
     # 2. 자산 마스터 데이터 생성
     krw_cash = Asset(ticker="KRW", name="원화예수금", major_category="현금", sub_category="원화예수금", country="KR")
     usd_cash = Asset(ticker="USD", name="달러예수금", major_category="현금", sub_category="달러예수금", country="US")
-    aapl = Asset(ticker="AAPL", name="애플", major_category="일반주식", sub_category="해외주식", country="US")
-    samsung = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    aapl = Asset(ticker="AAPL", name="애플", major_category="주식", sub_category="코어(지수)", country="US")
+    samsung = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
     db_session.add_all([krw_cash, usd_cash, aapl, samsung])
     db_session.commit()
 

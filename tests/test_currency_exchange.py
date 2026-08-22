@@ -204,7 +204,7 @@ def test_dashboard_service_handles_currency_exchange(db_session):
 
 def test_api_create_exchange_transaction_non_cash_asset_validation(client, db_session):
     """EXCHANGE 트랜잭션의 출발/도착 자산이 현금이 아닐 때 422 오류를 반환하는지 테스트합니다."""
-    stock_asset = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    stock_asset = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
     usd = db_session.query(Asset).filter_by(ticker="USD").first()
     account = db_session.query(Account).first()
     db_session.add(stock_asset)

@@ -66,7 +66,7 @@ def test_assets_router_crud(client, db_session):
     res = client.get("/api/db/assets/categories")
     assert res.status_code == 200
     categories = res.json()
-    assert "일반주식" in categories
+    assert "주식" in categories
     assert "현금" in categories
 
     # 2. 자산 실시간 검증 엔드포인트 (현금 및 주식)
@@ -78,8 +78,8 @@ def test_assets_router_crud(client, db_session):
     asset_payload = {
         "ticker": "SPLIT_TEST_01",
         "name": "스플릿테스트종목",
-        "major_category": "일반주식",
-        "sub_category": "국내주식",
+        "major_category": "주식",
+        "sub_category": "알파(성장)",
         "country": "KR"
     }
     res = client.post("/api/db/assets", json=asset_payload)

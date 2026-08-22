@@ -26,7 +26,7 @@ def seed_snapshot_data(db_session: Session):
     
     asset_krw = Asset(id=301, ticker="KRW", name="원화예수금", major_category="현금", sub_category="원화예수금", country="KR")
     asset_usd = Asset(id=302, ticker="USD", name="달러예수금", major_category="현금", sub_category="달러예수금", country="US")
-    asset_stock = Asset(id=303, ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset_stock = Asset(id=303, ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
 
     db_session.add_all([user, acc_brokerage, acc_bank, asset_krw, asset_usd, asset_stock])
     db_session.commit()

@@ -31,9 +31,9 @@ def db_session():
     session.add(rate)
 
     # 3. 자산 마스터 (삼성전자우, SCHD, 신규배당주)
-    samsung = Asset(name="삼성전자우", ticker="005935", major_category="배당주", sub_category="국내배당주", country="KR")
-    schd = Asset(name="SCHD", ticker="SCHD", major_category="배당주", sub_category="해외배당주", country="US")
-    new_stock = Asset(name="신규배당주", ticker="999999", major_category="배당주", sub_category="국내배당주", country="KR")
+    samsung = Asset(name="삼성전자우", ticker="005935", major_category="주식", sub_category="배당주", country="KR")
+    schd = Asset(name="SCHD", ticker="SCHD", major_category="주식", sub_category="배당주", country="US")
+    new_stock = Asset(name="신규배당주", ticker="999999", major_category="주식", sub_category="배당주", country="KR")
     session.add_all([samsung, schd, new_stock])
     session.commit()
 
@@ -110,13 +110,13 @@ def test_get_stock_dividend_analysis(db_session):
     expected_yield = (expected_annual / 58000.0) * 100
     assert pytest.approx(sam["yield_current"], 0.1) == expected_yield
 
-    assert sam["major_category"] == "배당주"
-    assert sam["sub_category"] == "국내배당주"
+    assert sam["major_category"] == "주식"
+    assert sam["sub_category"] == "배당주"
 
     # SCHD: 올해 수령액 $100 -> 추정 연배당금 = ($100 / current_month) * 12 (달러 기준)
     schd_stock = next(s for s in stocks if s["ticker"] == "SCHD")
-    assert schd_stock["major_category"] == "배당주"
-    assert schd_stock["sub_category"] == "해외배당주"
+    assert schd_stock["major_category"] == "주식"
+    assert schd_stock["sub_category"] == "배당주"
     expected_schd_annual = (100.0 / current_month) * 12
     assert pytest.approx(schd_stock["annual_estimate"], 0.1) == expected_schd_annual
     # SCHD 현재가 $28.0 대비 시가 배당률 = (expected_schd_annual / 28.0) * 100
@@ -125,8 +125,8 @@ def test_get_stock_dividend_analysis(db_session):
 
     # 신규배당주: 수령 실적 0원 -> 추정 0원, 배당률 0.0
     new_st = next(s for s in stocks if s["ticker"] == "999999")
-    assert new_st["major_category"] == "배당주"
-    assert new_st["sub_category"] == "국내배당주"
+    assert new_st["major_category"] == "주식"
+    assert new_st["sub_category"] == "배당주"
     assert new_st["annual_estimate"] == 0.0
     assert new_st["yield_current"] == 0.0
 

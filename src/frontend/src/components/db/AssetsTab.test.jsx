@@ -5,11 +5,11 @@ import AssetsTab from './AssetsTab';
 
 describe('AssetsTab', () => {
   const mockAssets = [
-    { id: 1, ticker: 'AAPL', name: '애플', major_category: '일반주식', sub_category: '해외주식', country: 'US' }
+    { id: 1, ticker: 'AAPL', name: '애플', major_category: '주식', sub_category: '알파(성장)', country: 'US' }
   ];
 
   const mockCategories = {
-    "일반주식": ["국내주식", "해외주식"],
+    "주식": ["코어(지수)", "알파(성장)", "배당주"],
     "채권": ["미국장기채"],
     "현금": ["원화예수금", "달러예수금"]
   };
@@ -66,10 +66,10 @@ describe('AssetsTab', () => {
     
     // 2. 대분류 및 중분류 선택
     const majorSelect = screen.getByRole('combobox', { name: /대분류/i });
-    fireEvent.change(majorSelect, { target: { value: '일반주식' } });
+    fireEvent.change(majorSelect, { target: { value: '주식' } });
     
     const subSelect = screen.getByRole('combobox', { name: /중분류/i });
-    fireEvent.change(subSelect, { target: { value: '해외주식' } });
+    fireEvent.change(subSelect, { target: { value: '알파(성장)' } });
 
     // 3. 국가 선택
     const countrySelect = screen.getByRole('combobox', { name: /국가/i });
@@ -100,8 +100,8 @@ describe('AssetsTab', () => {
       const payload = JSON.parse(postCall[1].body);
       expect(payload.ticker).toBe('TSLA');
       expect(payload.name).toBe('테슬라');
-      expect(payload.major_category).toBe('일반주식');
-      expect(payload.sub_category).toBe('해외주식');
+      expect(payload.major_category).toBe('주식');
+      expect(payload.sub_category).toBe('알파(성장)');
       expect(payload.country).toBe('US');
     });
   });

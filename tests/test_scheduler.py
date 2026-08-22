@@ -36,8 +36,8 @@ async def test_is_market_holiday():
 @pytest.mark.asyncio
 async def test_update_all_market_prices_normal_day(db_session: Session):
     """영업일일 때 지수, 보유자산, 관심종목의 가격 정보가 DB에 정상 적재되는지 검증합니다."""
-    asset_kr = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
-    asset_us = Asset(ticker="AAPL", name="애플", major_category="일반주식", sub_category="해외주식", country="US")
+    asset_kr = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
+    asset_us = Asset(ticker="AAPL", name="애플", major_category="주식", sub_category="코어(지수)", country="US")
     asset_cash = Asset(ticker="KRW", name="원화예수금", major_category="현금", sub_category="원화예수금", country="KR")
     
     watchlist_kr = Watchlist(stock_code="000660", stock_name="SK하이닉스", country="KR")
@@ -88,8 +88,8 @@ async def test_update_all_market_prices_normal_day(db_session: Session):
 @pytest.mark.asyncio
 async def test_update_all_market_prices_kr_holiday(db_session: Session):
     """한국 휴장일인 경우 한국 지수/자산 업데이트는 생략하고 미국 지수/자산만 업데이트되는지 검증합니다."""
-    asset_kr = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
-    asset_us = Asset(ticker="AAPL", name="애플", major_category="일반주식", sub_category="해외주식", country="US")
+    asset_kr = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
+    asset_us = Asset(ticker="AAPL", name="애플", major_category="주식", sub_category="코어(지수)", country="US")
     db_session.add_all([asset_kr, asset_us])
     db_session.commit()
 

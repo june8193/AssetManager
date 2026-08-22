@@ -96,7 +96,7 @@ async def test_get_portfolio_status_mcp(mock_api_client):
                         "ticker": "005930",
                         "name": "삼성전자",
                         "major_category": "주식",
-                        "sub_category": "국내주식",
+                        "sub_category": "알파(성장)",
                         "country": "KR",
                         "quantity": 10.0,
                         "current_price": 70000.0,

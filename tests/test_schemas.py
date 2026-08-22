@@ -59,13 +59,13 @@ def test_asset_schema_validation_success():
     asset = AssetSchema(
         ticker="005930",
         name="삼성전자",
-        major_category="일반주식",
-        sub_category="국내주식",
+        major_category="주식",
+        sub_category="알파(성장)",
         country="KR"
     )
     assert asset.ticker == "005930"
-    assert asset.major_category == "일반주식"
-    assert asset.sub_category == "국내주식"
+    assert asset.major_category == "주식"
+    assert asset.sub_category == "알파(성장)"
 
 
 def test_asset_schema_validation_invalid_major():
@@ -75,7 +75,7 @@ def test_asset_schema_validation_invalid_major():
             ticker="TEST",
             name="테스트",
             major_category="잘못된대분류",
-            sub_category="국내주식",
+            sub_category="알파(성장)",
         )
     assert "유효하지 않은 대분류입니다" in str(exc_info.value)
 
@@ -86,7 +86,7 @@ def test_asset_schema_validation_invalid_sub():
         AssetSchema(
             ticker="TEST",
             name="테스트",
-            major_category="일반주식",
+            major_category="주식",
             sub_category="잘못된중분류",
         )
     assert "유효하지 않은 카테고리 조합입니다" in str(exc_info.value)

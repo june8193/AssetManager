@@ -102,8 +102,8 @@ def test_pure_replay_cash_operations():
 
 def test_pure_replay_stock_buy_sell():
     """주식 매수(BUY) 및 매도(SELL) 시 예수금과 수량 변동을 검증합니다."""
-    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식")
-    apple = Asset(id=20, ticker="AAPL", name="Apple Inc.", major_category="일반주식", sub_category="해외주식")
+    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)")
+    apple = Asset(id=20, ticker="AAPL", name="Apple Inc.", major_category="주식", sub_category="코어(지수)")
 
     transactions = [
         # KRW 입금 1,000,000
@@ -210,7 +210,7 @@ def test_pure_replay_currency_exchange():
 def test_pure_replay_initial_balance_baseline_cutoff():
     """INITIAL_BALANCE 기준선 이전 거래 스킵 규칙을 검증합니다."""
     krw_asset = Asset(id=1, ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금")
-    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식")
+    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)")
 
     transactions = [
         # 1월 1일 이전 입금 (기준선 이전에 발생했으므로 현금 계산에서 무시되어야 함)
@@ -314,7 +314,7 @@ def test_db_integration_and_golden_master(db_session):
     account = Account(id=1, user_id=1, name="메인계좌", provider="KB증권", account_type="BROKERAGE", is_active=True)
     krw_asset = Asset(id=1, ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금")
     usd_asset = Asset(id=2, ticker="USD", name="달러", major_category="현금", sub_category="달러예수금")
-    stock_asset = Asset(id=3, ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식")
+    stock_asset = Asset(id=3, ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)")
 
     db_session.add_all([user, account, krw_asset, usd_asset, stock_asset])
     db_session.commit()
@@ -369,8 +369,8 @@ def test_db_integration_and_golden_master(db_session):
 
 def test_pure_replay_initial_balance_non_cash_asset():
     """비현금 자산(주식/채권)의 INITIAL_BALANCE는 예수금을 증가시키지 않고 수량만 반영함을 검증합니다 (R1)."""
-    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식")
-    googl = Asset(id=20, ticker="GOOGL", name="Alphabet Inc.", major_category="일반주식", sub_category="해외주식")
+    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)")
+    googl = Asset(id=20, ticker="GOOGL", name="Alphabet Inc.", major_category="주식", sub_category="코어(지수)")
     tlt = Asset(id=30, ticker="TLT", name="iShares 20+ Year Treasury Bond ETF", major_category="채권", sub_category="미국장기채")
 
     transactions = [
@@ -429,8 +429,8 @@ def test_pure_replay_initial_balance_mixed_cash_and_stock():
     """현금과 주식이 혼합된 INITIAL_BALANCE 순회 시 현금과 수량이 각각 올바르게 분리 계산되는지 검증합니다 (R1)."""
     krw_asset = Asset(id=1, ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금")
     usd_asset = Asset(id=2, ticker="USD", name="달러", major_category="현금", sub_category="달러예수금")
-    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식")
-    apple = Asset(id=20, ticker="AAPL", name="Apple Inc.", major_category="일반주식", sub_category="해외주식")
+    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)")
+    apple = Asset(id=20, ticker="AAPL", name="Apple Inc.", major_category="주식", sub_category="코어(지수)")
 
     transactions = [
         # KRW 현금 초기 잔고: 50,000,000원
@@ -505,7 +505,7 @@ def test_get_positions_filters_inactive_accounts(db_session):
     active_acc = Account(id=1, user_id=1, name="활성계좌", provider="증권A", is_active=True)
     inactive_acc = Account(id=2, user_id=1, name="비활성계좌", provider="증권B", is_active=False)
     krw_asset = Asset(id=1, ticker="KRW", name="원화", major_category="현금", sub_category="원화예수금")
-    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식")
+    samsung = Asset(id=10, ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)")
 
     db_session.add_all([user, active_acc, inactive_acc, krw_asset, samsung])
     db_session.commit()
@@ -927,7 +927,7 @@ def test_pure_replay_cross_account_transfer_pair():
 
 def test_pure_replay_negative_cash_balance():
     """예수금 초과 매수 또는 수수료로 인한 음수(마이너스) 예수금 계산 정합성을 검증합니다."""
-    apple = Asset(id=20, ticker="AAPL", name="Apple Inc.", major_category="일반주식", sub_category="해외주식")
+    apple = Asset(id=20, ticker="AAPL", name="Apple Inc.", major_category="주식", sub_category="코어(지수)")
 
     txs = [
         # USD $100 입금

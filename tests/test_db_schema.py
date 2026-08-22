@@ -56,7 +56,7 @@ def test_create_account(db_session):
 
 def test_create_asset(db_session):
     """자산 마스터 생성을 테스트합니다."""
-    asset = Asset(ticker="AAPL", name="애플", major_category="일반주식", sub_category="해외주식")
+    asset = Asset(ticker="AAPL", name="애플", major_category="주식", sub_category="코어(지수)")
     db_session.add(asset)
     db_session.commit()
     

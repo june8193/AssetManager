@@ -21,7 +21,7 @@ def snapshot_recalc_setup(db_session):
 
     krw_asset = Asset(ticker="KRW", name="원화현금", major_category="현금", sub_category="원화예수금", country="KR")
     usd_asset = Asset(ticker="USD", name="달러현금", major_category="현금", sub_category="달러예수금", country="US")
-    stock_asset = Asset(ticker="005930", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    stock_asset = Asset(ticker="005930", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
     db_session.add_all([krw_asset, usd_asset, stock_asset])
     db_session.commit()
 

@@ -9,10 +9,10 @@ async def test_get_hierarchy_stock_target_exists(db_session: Session):
     """DB에 종목별 목표 비중이 있는 경우 올바르게 반환되는지 확인합니다."""
     # 1. 목표 비중 설정
     db_session.add(TargetRatio(category_name="주식", category_type="major", target_percentage=100.0))
-    db_session.add(TargetRatio(category_name="해외주식", category_type="sub", target_percentage=100.0, parent_category="주식"))
+    db_session.add(TargetRatio(category_name="코어(지수)", category_type="sub", target_percentage=100.0, parent_category="주식"))
     # 종목별 목표 비중 설정 (AAPL: 60%, TSLA: 40%)
-    db_session.add(TargetRatio(category_name="AAPL", category_type="stock", target_percentage=60.0, parent_category="해외주식"))
-    db_session.add(TargetRatio(category_name="TSLA", category_type="stock", target_percentage=40.0, parent_category="해외주식"))
+    db_session.add(TargetRatio(category_name="AAPL", category_type="stock", target_percentage=60.0, parent_category="코어(지수)"))
+    db_session.add(TargetRatio(category_name="TSLA", category_type="stock", target_percentage=40.0, parent_category="코어(지수)"))
     db_session.commit()
 
     # 2. DashboardService.get_dashboard_summary 모킹
@@ -26,7 +26,7 @@ async def test_get_hierarchy_stock_target_exists(db_session: Session):
                         "ticker": "AAPL",
                         "name": "Apple Inc.",
                         "category": "주식",
-                        "sub_category": "해외주식",
+                        "sub_category": "코어(지수)",
                         "quantity": 10,
                         "price": 100.0,
                         "valuation_krw": 1000.0
@@ -35,7 +35,7 @@ async def test_get_hierarchy_stock_target_exists(db_session: Session):
                         "ticker": "TSLA",
                         "name": "Tesla Inc.",
                         "category": "주식",
-                        "sub_category": "해외주식",
+                        "sub_category": "코어(지수)",
                         "quantity": 10,
                         "price": 100.0,
                         "valuation_krw": 1000.0
@@ -56,7 +56,7 @@ async def test_get_hierarchy_stock_target_exists(db_session: Session):
         
         # 4. 검증
         major_node = next(n for n in hierarchy if n["category_name"] == "주식")
-        sub_node = next(n for n in major_node["children"] if n["category_name"] == "해외주식")
+        sub_node = next(n for n in major_node["children"] if n["category_name"] == "코어(지수)")
         
         aapl = next(s for s in sub_node["children"] if s["ticker"] == "AAPL")
         tsla = next(s for s in sub_node["children"] if s["ticker"] == "TSLA")
@@ -70,7 +70,7 @@ async def test_get_hierarchy_stock_target_defaults_to_current(db_session: Sessio
     """DB에 종목별 목표 비중이 없을 경우 현재 비중이 기본값으로 설정되는지 확인합니다."""
     # 1. 목표 비중 설정 (종목 비중은 설정하지 않음)
     db_session.add(TargetRatio(category_name="주식", category_type="major", target_percentage=100.0))
-    db_session.add(TargetRatio(category_name="해외주식", category_type="sub", target_percentage=100.0, parent_category="주식"))
+    db_session.add(TargetRatio(category_name="코어(지수)", category_type="sub", target_percentage=100.0, parent_category="주식"))
     db_session.commit()
 
     # 2. DashboardService.get_dashboard_summary 모킹
@@ -85,7 +85,7 @@ async def test_get_hierarchy_stock_target_defaults_to_current(db_session: Sessio
                         "ticker": "AAPL",
                         "name": "Apple Inc.",
                         "category": "주식",
-                        "sub_category": "해외주식",
+                        "sub_category": "코어(지수)",
                         "quantity": 15,
                         "price": 100.0,
                         "valuation_krw": 1500.0
@@ -94,7 +94,7 @@ async def test_get_hierarchy_stock_target_defaults_to_current(db_session: Sessio
                         "ticker": "TSLA",
                         "name": "Tesla Inc.",
                         "category": "주식",
-                        "sub_category": "해외주식",
+                        "sub_category": "코어(지수)",
                         "quantity": 5,
                         "price": 100.0,
                         "valuation_krw": 500.0
@@ -115,7 +115,7 @@ async def test_get_hierarchy_stock_target_defaults_to_current(db_session: Sessio
         
         # 4. 검증
         major_node = next(n for n in hierarchy if n["category_name"] == "주식")
-        sub_node = next(n for n in major_node["children"] if n["category_name"] == "해외주식")
+        sub_node = next(n for n in major_node["children"] if n["category_name"] == "코어(지수)")
         
         aapl = next(s for s in sub_node["children"] if s["ticker"] == "AAPL")
         tsla = next(s for s in sub_node["children"] if s["ticker"] == "TSLA")

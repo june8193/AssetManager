@@ -12,9 +12,9 @@ const mockSummary = {
 };
 
 const mockStocks = [
-  { id: 1, name: '삼성전자우', ticker: '005935', major_category: '배당주', currency: 'KRW', current_price: 58000, buy_price: 55000, ytd_amount: 140000, annual_estimate: 140000, yield_current: 2.41, yield_cost: 2.54, cumulative: 200000 },
-  { id: 2, name: '미국채10년', ticker: 'TLT', major_category: '채권', currency: 'USD', current_price: 90, buy_price: 95, ytd_amount: 4, annual_estimate: 4, yield_current: 4.44, yield_cost: 4.21, cumulative: 8 },
-  { id: 3, name: '테슬라', ticker: 'TSLA', major_category: '일반주식', currency: 'USD', current_price: 200, buy_price: 180, ytd_amount: 0, annual_estimate: 0, yield_current: 0, yield_cost: 0, cumulative: 0 }
+  { id: 1, name: '삼성전자우', ticker: '005935', major_category: '주식', sub_category: '배당주', currency: 'KRW', current_price: 58000, buy_price: 55000, ytd_amount: 140000, annual_estimate: 140000, yield_current: 2.41, yield_cost: 2.54, cumulative: 200000 },
+  { id: 2, name: '미국채10년', ticker: 'TLT', major_category: '채권', sub_category: '미국장기채', currency: 'USD', current_price: 90, buy_price: 95, ytd_amount: 4, annual_estimate: 4, yield_current: 4.44, yield_cost: 4.21, cumulative: 8 },
+  { id: 3, name: '테슬라', ticker: 'TSLA', major_category: '주식', sub_category: '알파(성장)', currency: 'USD', current_price: 200, buy_price: 180, ytd_amount: 0, annual_estimate: 0, yield_current: 0, yield_cost: 0, cumulative: 0 }
 ];
 
 describe('DividendAnalysisPage - 카테고리 탭 필터링', () => {

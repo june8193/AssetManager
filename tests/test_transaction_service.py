@@ -18,7 +18,7 @@ def tx_setup(db_session):
 
     asset_krw = Asset(ticker="KRW_TX", name="원화현금", major_category="현금", sub_category="원화예수금", country="KR")
     asset_usd = Asset(ticker="USD_TX", name="달러현금", major_category="현금", sub_category="달러예수금", country="US")
-    asset_stock = Asset(ticker="AAPL_TX", name="애플", major_category="일반주식", sub_category="해외주식", country="US")
+    asset_stock = Asset(ticker="AAPL_TX", name="애플", major_category="주식", sub_category="코어(지수)", country="US")
     db_session.add_all([asset_krw, asset_usd, asset_stock])
 
     db_session.commit()

@@ -17,7 +17,7 @@ def snapshot_setup(db_session):
     db_session.add_all([acc1, acc2])
 
     asset_krw = Asset(ticker="KRW_TEST", name="원화현금", major_category="현금", sub_category="원화예수금", country="KR")
-    asset_stock = Asset(ticker="005930_TEST", name="삼성전자", major_category="일반주식", sub_category="국내주식", country="KR")
+    asset_stock = Asset(ticker="005930_TEST", name="삼성전자", major_category="주식", sub_category="알파(성장)", country="KR")
     db_session.add_all([asset_krw, asset_stock])
 
     db_session.commit()
