@@ -37,10 +37,37 @@ const getTypeBadgeProps = (tx) => {
   if (['BUY', 'DEPOSIT', 'INITIAL_BALANCE'].includes(tx.type)) {
     return { label: tx.type, style: 'bg-blue-50 text-blue-600' };
   }
-  if (['SELL', 'WITHDRAW'].includes(tx.type)) {
+  if (['SELL', 'WITHDRAW', 'TAX'].includes(tx.type)) {
     return { label: tx.type, style: 'bg-red-50 text-red-600' };
   }
   return { label: tx.type, style: 'bg-emerald-50 text-emerald-600' };
+};
+
+/**
+ * 현금 자산에서 선택 가능한 거래 유형 목록입니다.
+ */
+const CASH_TRANSACTION_TYPES = ['DEPOSIT', 'WITHDRAW', 'TRANSFER', 'EXCHANGE', 'INTEREST', 'TAX', 'CASH_ADJUSTMENT'];
+
+/**
+ * 현금 자산 선택 시 거래 유형 및 단가/총금액을 보정하는 헬퍼 함수입니다.
+ *
+ * @param {Object} currentFormData - 현재 폼 데이터 상태
+ * @param {Object|null} asset - 선택된 자산 객체
+ * @returns {Object} 보정된 폼 데이터 객체
+ */
+const adjustCashTransactionFields = (currentFormData, asset) => {
+  if (!isCashAsset(asset)) return currentFormData;
+
+  const adjusted = { ...currentFormData };
+  if (!CASH_TRANSACTION_TYPES.includes(adjusted.type)) {
+    adjusted.type = 'DEPOSIT';
+  }
+  if (adjusted.type !== 'EXCHANGE' && adjusted.type !== 'TRANSFER') {
+    adjusted.price = '1';
+    const q = parseFormattedNumber(adjusted.quantity);
+    adjusted.total_amount = q.toString();
+  }
+  return adjusted;
 };
 
 /**
@@ -249,17 +276,7 @@ const TransactionsTab = () => {
             newCurrency = 'USD';
           }
           updated.currency = newCurrency;
-
-          if (isCashAsset(firstAsset)) {
-            if (updated.type !== 'DEPOSIT' && updated.type !== 'WITHDRAW' && updated.type !== 'EXCHANGE' && updated.type !== 'TRANSFER') {
-              updated.type = 'DEPOSIT';
-            }
-            if (updated.type !== 'EXCHANGE' && updated.type !== 'TRANSFER') {
-              updated.price = '1';
-              const q = parseFormattedNumber(updated.quantity);
-              updated.total_amount = q.toString();
-            }
-          }
+          return adjustCashTransactionFields(updated, firstAsset);
         }
         return updated;
       });
@@ -312,6 +329,9 @@ const TransactionsTab = () => {
           newFormData.asset_id = krwAsset.id;
           newFormData.currency = krwAsset.country === 'US' ? 'USD' : 'KRW';
         }
+      } else {
+        const currentAsset = assets.find(a => isSameId(a.id, newFormData.asset_id));
+        newFormData = adjustCashTransactionFields(newFormData, currentAsset);
       }
     } else if (name === 'account_id' && newFormData.type === 'TRANSFER') {
       if (isSameId(newFormData.target_account_id, value)) {
@@ -358,17 +378,7 @@ const TransactionsTab = () => {
           newCurrency = 'USD';
         }
         newFormData.currency = newCurrency;
-
-        if (isCashAsset(selectedAsset)) {
-          if (newFormData.type !== 'DEPOSIT' && newFormData.type !== 'WITHDRAW' && newFormData.type !== 'EXCHANGE' && newFormData.type !== 'TRANSFER') {
-            newFormData.type = 'DEPOSIT';
-          }
-          if (newFormData.type !== 'EXCHANGE' && newFormData.type !== 'TRANSFER') {
-            newFormData.price = '1';
-            const q = parseFormattedNumber(newFormData.quantity);
-            newFormData.total_amount = q.toString();
-          }
-        }
+        newFormData = adjustCashTransactionFields(newFormData, selectedAsset);
       }
     }
 
@@ -714,7 +724,10 @@ const TransactionsTab = () => {
                   <option value="WITHDRAW">출금 (WITHDRAW)</option>
                   <option value="TRANSFER">이체 (TRANSFER)</option>
                   <option value="EXCHANGE">환전 (EXCHANGE)</option>
-                  {editingId && !['DEPOSIT', 'WITHDRAW', 'TRANSFER', 'EXCHANGE'].includes(formData.type) && (
+                  <option value="INTEREST">이자 (INTEREST)</option>
+                  <option value="TAX">세금 (TAX)</option>
+                  <option value="CASH_ADJUSTMENT">현금 보정 (CASH_ADJUSTMENT)</option>
+                  {editingId && !CASH_TRANSACTION_TYPES.includes(formData.type) && (
                     <option value={formData.type}>{formData.type}</option>
                   )}
                 </>

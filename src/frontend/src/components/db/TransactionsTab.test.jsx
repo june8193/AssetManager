@@ -734,6 +734,108 @@ describe('TransactionsTab', () => {
     });
     expect(deleteCalled).toBe(false);
   });
+
+  it('현금 자산(KRW, USD) 선택 시 이자(INTEREST), 세금(TAX), 현금 보정(CASH_ADJUSTMENT) 유형을 선택할 수 있어야 하고 단가는 1로 고정되어야 한다', async () => {
+    let postPayload = null;
+    const cashAssets = [
+      { id: 10, ticker: 'KRW', name: '원화 현금', category: 'CASH' },
+      { id: 20, ticker: 'USD', name: '달러 현금', category: 'CASH' }
+    ];
+
+    vi.stubGlobal('fetch', vi.fn((url, options) => {
+      if (url.endsWith('/transactions')) {
+        if (options?.method === 'POST') {
+          postPayload = JSON.parse(options.body);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 99 }) });
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve([]) });
+      }
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(cashAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    const { container } = render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('거래 기록 추가')).toBeInTheDocument();
+    });
+
+    const typeSelect = container.querySelector('select[name="type"]');
+    const options = Array.from(typeSelect.options).map(o => o.value);
+
+    // 현금 자산 선택 시 허용되는 옵션 검증
+    expect(options).toContain('DEPOSIT');
+    expect(options).toContain('WITHDRAW');
+    expect(options).toContain('TRANSFER');
+    expect(options).toContain('EXCHANGE');
+    expect(options).toContain('INTEREST');
+    expect(options).toContain('TAX');
+    expect(options).toContain('CASH_ADJUSTMENT');
+
+    // 이자(INTEREST) 선택
+    fireEvent.change(typeSelect, { target: { value: 'INTEREST' } });
+
+    // 단가 필드는 1로 고정되고 readOnly 상태인지 확인
+    const priceInput = container.querySelector('input[name="price"]');
+    expect(priceInput).toHaveValue('1');
+    expect(priceInput).toHaveAttribute('readOnly');
+
+    // 수량에 50,000 입력 시 총금액도 50,000 자동 계산되는지 확인
+    const quantityInput = container.querySelector('input[name="quantity"]');
+    fireEvent.change(quantityInput, { target: { value: '50000' } });
+
+    const totalAmountInput = container.querySelector('input[name="total_amount"]');
+    expect(totalAmountInput).toHaveValue('50,000');
+
+    // 등록 버튼 클릭
+    const submitBtn = screen.getByText('거래 기록 추가');
+    fireEvent.click(submitBtn);
+
+    await waitFor(() => {
+      expect(postPayload).not.toBeNull();
+      expect(postPayload.type).toBe('INTEREST');
+      expect(postPayload.quantity).toBe(50000);
+      expect(postPayload.price).toBe(1);
+      expect(postPayload.total_amount).toBe(50000);
+    });
+  });
+
+  it('이자(INTEREST) 거래는 초록색 뱃지, 세금(TAX) 거래는 빨간색 뱃지로 렌더링되어야 한다', async () => {
+    const txList = [
+      { id: 101, account_id: 1, asset_id: 10, transaction_date: '2026-08-20', type: 'INTEREST', quantity: 5000, price: 1, total_amount: 5000, currency: 'KRW' },
+      { id: 102, account_id: 1, asset_id: 10, transaction_date: '2026-08-21', type: 'TAX', quantity: 700, price: 1, total_amount: 700, currency: 'KRW' }
+    ];
+    const cashAssets = [{ id: 10, ticker: 'KRW', name: '원화 현금', category: 'CASH' }];
+
+    vi.stubGlobal('fetch', vi.fn((url) => {
+      if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(txList) });
+      if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccounts) });
+      if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(cashAssets) });
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+    }));
+
+    render(
+      <MaskingProvider>
+        <TransactionsTab />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('INTEREST')).toBeInTheDocument();
+      expect(screen.getByText('TAX')).toBeInTheDocument();
+    });
+
+    const interestBadge = screen.getByText('INTEREST');
+    const taxBadge = screen.getByText('TAX');
+
+    expect(interestBadge.className).toContain('bg-emerald-50 text-emerald-600');
+    expect(taxBadge.className).toContain('bg-red-50 text-red-600');
+  });
 });
 
 
