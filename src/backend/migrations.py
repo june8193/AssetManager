@@ -62,29 +62,32 @@ def run_migrations(engine: Engine) -> None:
             _add_column_if_missing(conn, "transactions", "transfer_pair_id", "VARCHAR")
             conn.commit()
 
-            # 레거시 자산 카테고리 표준화 마이그레이션
-            conn.execute(text(
-                "UPDATE assets SET major_category = '주식', sub_category = '코어(지수)' "
-                "WHERE major_category IN ('일반주식', '주식') AND sub_category IN ('일반주식', '해외주식', '국내주식', '주식')"
-            ))
-            conn.execute(text(
-                "UPDATE assets SET major_category = '주식', sub_category = '배당주' "
-                "WHERE major_category = '배당주' OR sub_category IN ('배당주', '해외배당', '해외배당주', '국내배당주')"
-            ))
-            conn.execute(text(
-                "UPDATE assets SET major_category = '현금', sub_category = '원화예수금' "
-                "WHERE major_category = '현금' AND sub_category IN ('원화', '원화예수금', '현금')"
-            ))
-            conn.execute(text(
-                "UPDATE assets SET major_category = '현금', sub_category = '달러예수금' "
-                "WHERE major_category = '현금' AND sub_category IN ('달러', '달러예수금', '외화')"
-            ))
-            conn.execute(text(
-                "UPDATE assets SET major_category = '채권', sub_category = '미국장기채' "
-                "WHERE major_category = '채권' AND sub_category IN ('미국채', '미국장기채', '채권')"
-            ))
-            conn.commit()
+            # 레거시 자산 카테고리 표준화 마이그레이션 (assets 테이블이 존재하는 경우에만 실행)
+            assets_info = conn.execute(text("PRAGMA table_info(assets)")).fetchall()
+            if assets_info:
+                conn.execute(text(
+                    "UPDATE assets SET major_category = '주식', sub_category = '코어(지수)' "
+                    "WHERE major_category IN ('일반주식', '주식') AND sub_category IN ('일반주식', '해외주식', '국내주식', '주식')"
+                ))
+                conn.execute(text(
+                    "UPDATE assets SET major_category = '주식', sub_category = '배당주' "
+                    "WHERE major_category = '배당주' OR sub_category IN ('배당주', '해외배당', '해외배당주', '국내배당주')"
+                ))
+                conn.execute(text(
+                    "UPDATE assets SET major_category = '현금', sub_category = '원화예수금' "
+                    "WHERE major_category = '현금' AND sub_category IN ('원화', '원화예수금', '현금')"
+                ))
+                conn.execute(text(
+                    "UPDATE assets SET major_category = '현금', sub_category = '달러예수금' "
+                    "WHERE major_category = '현금' AND sub_category IN ('달러', '달러예수금', '외화')"
+                ))
+                conn.execute(text(
+                    "UPDATE assets SET major_category = '채권', sub_category = '미국장기채' "
+                    "WHERE major_category = '채권' AND sub_category IN ('미국채', '미국장기채', '채권')"
+                ))
+                conn.commit()
 
     except Exception as e:
         logger.error(f"⚠️ 데이터베이스 마이그레이션 수행 중 오류 발생: {e}", exc_info=True)
         raise RuntimeError(f"데이터베이스 마이그레이션 실패: {e}") from e
+

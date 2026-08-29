@@ -11,6 +11,9 @@ from src.kiwoom.auth import KiwoomAuthManager
 
 logger = logging.getLogger("KiwoomTransactionService")
 
+# 미국 주식은 한국 시간 기준 야간(22:30~익일 06:00)에 장이 열리므로 실시간 당일 동기화 시 전일(T-1) 및 당일(T) 2일치 오프셋을 순회
+OVERSEAS_REALTIME_DAY_OFFSETS = [1, 0]
+
 def _safe_float(val, default: float = 0.0) -> float:
     if val is None or val == "":
         return default
@@ -153,30 +156,35 @@ class KiwoomTransactionService:
                                 "memo": f"키움 자동저장 (체결)"
                             })
 
-                        overseas_executions = await self._fetch_overseas_executions(token, target_date=today_str, client=http_client)
-                        for exe in overseas_executions:
-                            qty = _safe_float(exe.get("cntr_qty"))
-                            if qty <= 0:
-                                continue
-                            slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
-                            slby_tp = str(exe.get("slby_tp", ""))
-                            is_buy = "매수" in slby_nm or slby_tp == "2"
-                            price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
-                            ext_id = exe.get("ord_no") or exe.get("cntr_no")
-                            tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
+                        # 미국 주식은 시차(한국 밤~익일 새벽)를 고려하여 어제(T-1)와 오늘(T) 2일치를 조회
+                        for d_offset in OVERSEAS_REALTIME_DAY_OFFSETS:
+                            dt_obj = datetime.date.today() - datetime.timedelta(days=d_offset)
+                            dt_str = dt_obj.strftime("%Y%m%d")
+                            overseas_executions = await self._fetch_overseas_executions(token, target_date=dt_str, client=http_client)
+                            for exe in overseas_executions:
+                                qty = _safe_float(exe.get("cntr_qty"))
+                                if qty <= 0:
+                                    continue
+                                slby_nm = exe.get("slby_tp_nm") or exe.get("io_tp_nm") or ""
+                                slby_tp = str(exe.get("slby_tp", ""))
+                                is_buy = "매수" in slby_nm or slby_tp == "2"
+                                price_val = _safe_float(exe.get("cntr_uv") or exe.get("cntr_pric"))
+                                ext_id = exe.get("ord_no") or exe.get("cntr_no")
+                                tm_str = exe.get("cntr_tm") or exe.get("trde_tm") or exe.get("ord_tm")
 
-                            raw_transactions.append({
-                                "date": datetime.date.today(),
-                                "traded_at": _parse_traded_at(datetime.date.today(), tm_str),
-                                "ticker": exe.get("stk_cd"),
-                                "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
-                                "type": "BUY" if is_buy else "SELL",
-                                "quantity": qty,
-                                "price": price_val,
-                                "currency": "USD",
-                                "external_id": str(ext_id) if ext_id else None,
-                                "memo": f"키움 자동저장 (해외체결)"
-                            })
+                                raw_transactions.append({
+                                    "date": dt_obj,
+                                    "traded_at": _parse_traded_at(dt_obj, tm_str),
+                                    "ticker": exe.get("stk_cd"),
+                                    "name": exe.get("frgn_stk_nm") or exe.get("stk_nm"),
+                                    "type": "BUY" if is_buy else "SELL",
+                                    "quantity": qty,
+                                    "price": price_val,
+                                    "total_amount": qty * price_val,
+                                    "currency": "USD",
+                                    "external_id": str(ext_id) if ext_id else None,
+                                    "memo": f"키움 자동저장 (해외체결)"
+                                })
 
                         daily_ledger = await self._fetch_comprehensive_ledger(token, today_str, today_str, client=http_client)
                         raw_transactions.extend(self._parse_ledger_entries(daily_ledger, is_retroactive=False))
@@ -215,6 +223,7 @@ class KiwoomTransactionService:
 
                     # DB 적재 및 검증 처리
                     success_count = 0
+                    seen_ext_ids = set()
                     for tx_data in raw_transactions:
                         if tx_data["type"] == "EXCHANGE":
                             if self._sync_exchange_transaction(db, account, tx_data, unregistered_list, synced_list):
@@ -224,6 +233,13 @@ class KiwoomTransactionService:
                         ticker = normalize_ticker(tx_data.get("ticker"))
                         if not ticker:
                             continue
+
+                        ext_id = tx_data.get("external_id")
+                        if ext_id:
+                            if ext_id in seen_ext_ids:
+                                logger.info(f"배치 내 중복 체결번호 스킵: {ext_id}")
+                                continue
+                            seen_ext_ids.add(ext_id)
 
                         asset = db.query(Asset).filter(Asset.ticker == ticker).first()
                         if not asset:
@@ -246,7 +262,6 @@ class KiwoomTransactionService:
                         total_amt = tx_data.get("total_amount")
                         if total_amt is None:
                             total_amt = tx_data["quantity"] * tx_data["price"] if tx_data["type"] in ["BUY", "SELL"] else tx_data["price"]
-                        ext_id = tx_data.get("external_id")
 
                         # 1) 동일 체결번호(external_id)가 이미 DB에 존재하는 경우 -> 100% 중복 스킵
                         if ext_id:

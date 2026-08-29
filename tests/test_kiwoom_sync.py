@@ -160,6 +160,7 @@ async def test_sync_transactions_multi_accounts(
                     "return_code": 0,
                     "result_list": [
                         {
+                            "ord_no": "ORD_AAPL_001",
                             "stk_cd": "AAPL",
                             "frgn_stk_nm": "Apple",
                             "slby_tp": "1",
@@ -169,6 +170,7 @@ async def test_sync_transactions_multi_accounts(
                             "ord_stat": "체결완료"
                         },
                         {
+                            "ord_no": "ORD_NVDA_001",
                             "stk_cd": "NVDA", # 미등록 자산
                             "frgn_stk_nm": "NVIDIA",
                             "slby_tp": "2",
@@ -515,20 +517,26 @@ async def test_sync_transactions_traded_at_field(
                 ]
             }
         elif api_id == "ust21510": # 미국 체결 (미등록 종목, 시간 22:15:00 포함)
-            mock_response.json = lambda: {
-                "return_code": 0,
-                "result_list": [
-                    {
-                        "stk_cd": "NVDA",
-                        "frgn_stk_nm": "NVIDIA",
-                        "slby_tp": "2",
-                        "slby_tp_nm": "매수",
-                        "cntr_uv": "120.0",
-                        "cntr_qty": "3",
-                        "cntr_tm": "221500"
-                    }
-                ]
-            }
+            json_data = kwargs.get("json", {})
+            today_str_num = datetime.date.today().strftime("%Y%m%d")
+            if json_data.get("ord_dt") == today_str_num:
+                mock_response.json = lambda: {
+                    "return_code": 0,
+                    "result_list": [
+                        {
+                            "ord_no": "ORD_NVDA_TRADED_AT",
+                            "stk_cd": "NVDA",
+                            "frgn_stk_nm": "NVIDIA",
+                            "slby_tp": "2",
+                            "slby_tp_nm": "매수",
+                            "cntr_uv": "120.0",
+                            "cntr_qty": "3",
+                            "cntr_tm": "221500"
+                        }
+                    ]
+                }
+            else:
+                mock_response.json = lambda: {"return_code": 0, "result_list": []}
         elif api_id == "kt00015": # 배당금 (시간 없음)
             mock_response.json = lambda: {
                 "return_code": 0,
@@ -919,6 +927,91 @@ async def test_sync_exchange_transaction_sell_usd(
     assert exchange_tx.currency == "USD"
     assert exchange_tx.source == "AUTO_KIWOOM"
     assert exchange_tx.external_id == "000000010"
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_overseas_executions_days_1_includes_yesterday(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """days=1(실시간 당일 동기화)일 때 해외 주식 체결 조회(ust21510)가 시차를 고려하여 어제(T-1)와 오늘(T) 2일치를 조회하고 적재하는지 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    today_str = today.strftime("%Y%m%d")
+    yesterday_str = yesterday.strftime("%Y%m%d")
+
+    called_ord_dts = []
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        json_data = kwargs.get("json", {})
+        mock_response = MagicMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "ust21510":
+            ord_dt = json_data.get("ord_dt")
+            called_ord_dts.append(ord_dt)
+            if ord_dt == yesterday_str:
+                # 어제 밤 22:37에 체결된 Apple 10주 매수 건 반환
+                mock_response.json = lambda: {
+                    "return_code": 0,
+                    "result_list": [
+                        {
+                            "ord_no": "ORD_YESTERDAY_001",
+                            "stk_cd": "AAPL",
+                            "frgn_stk_nm": "Apple",
+                            "slby_tp": "2",
+                            "slby_tp_nm": "매수",
+                            "cntr_uv": "200.0",
+                            "cntr_qty": "10",
+                            "cntr_tm": "223716",
+                            "ord_stat": "체결완료"
+                        }
+                    ]
+                }
+            elif ord_dt == today_str:
+                # 오늘 체결 없음
+                mock_response.json = lambda: {"return_code": 0, "result_list": []}
+            else:
+                mock_response.json = lambda: {"return_code": 0, "result_list": []}
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": [], "trst_ovrl_trde_prps_array": []}
+
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=1)
+
+    assert result["status"] == "success"
+    # days=1임에도 어제(yesterday_str)와 오늘(today_str) 모두 ust21510으로 조회되어야 함
+    assert yesterday_str in called_ord_dts, f"어제 일자({yesterday_str})가 ust21510 조회에 포함되지 않았습니다. 호출된 목록: {called_ord_dts}"
+    assert today_str in called_ord_dts, f"오늘 일자({today_str})가 ust21510 조회에 포함되지 않았습니다. 호출된 목록: {called_ord_dts}"
+
+    # DB에 어제 체결된 Apple 매수건이 정상 적재되었는지 검증
+    account = setup_test_data["accounts"]["5526-9093"]
+    apple_asset = setup_test_data["assets"]["AAPL"]
+
+    apple_tx = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.asset_id == apple_asset.id,
+        Transaction.external_id == "ORD_YESTERDAY_001"
+    ).first()
+
+    assert apple_tx is not None
+    assert apple_tx.transaction_date == yesterday
+    assert apple_tx.quantity == 10.0
+    assert apple_tx.price == 200.0
+    assert apple_tx.total_amount == 2000.0
+    assert apple_tx.currency == "USD"
+
 
 
 
