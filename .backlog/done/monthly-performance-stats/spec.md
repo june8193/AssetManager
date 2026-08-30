@@ -1,6 +1,6 @@
 # Feature Spec: 월간 수익률 조회 및 성과 비교 탭 UI 통합
 
-Status: ready-for-agent
+Status: done
 
 ## Problem Statement
 
