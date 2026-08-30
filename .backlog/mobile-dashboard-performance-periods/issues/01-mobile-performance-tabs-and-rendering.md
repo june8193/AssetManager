@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** completed
+**Status:** resolved
 
 - [x] 성과 요약 카드 헤더 영역에 [연도별 | 월별 | 일별] 세그먼트 탭 버튼 그룹이 렌더링되고, 기본값으로 '연도별'이 활성화되어 있어야 한다.
 - [x] '연도별', '월별', '일별' 탭을 탭(클릭)하면 각각 `yearly`, `monthly`, `daily` 데이터가 즉시 전환되어 표시되어야 한다.

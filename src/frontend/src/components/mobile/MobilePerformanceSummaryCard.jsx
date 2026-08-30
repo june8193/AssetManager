@@ -1,6 +1,8 @@
 import { useState } from 'react';
-import { Award, TrendingDown, ArrowUpRight } from 'lucide-react';
+import { Award, TrendingDown, ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
+
+const ITEMS_PER_PAGE = 5;
 
 const TABS = [
   { key: 'yearly', label: '연도별' },
@@ -60,6 +62,7 @@ function formatDateBadge(period, item) {
 export default function MobilePerformanceSummaryCard({ data }) {
   const { maskValue } = useMasking();
   const [activeTab, setActiveTab] = useState('yearly');
+  const [currentPage, setCurrentPage] = useState(1);
 
   if (!data) return null;
 
@@ -68,6 +71,17 @@ export default function MobilePerformanceSummaryCard({ data }) {
 
   const currentItems =
     activeTab === 'monthly' ? monthly : activeTab === 'daily' ? daily : yearly;
+
+  const handleTabChange = (key) => {
+    setActiveTab(key);
+    setCurrentPage(1);
+  };
+
+  const totalPages = Math.ceil((currentItems?.length || 0) / ITEMS_PER_PAGE);
+  const paginatedItems = currentItems.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg">
@@ -104,7 +118,7 @@ export default function MobilePerformanceSummaryCard({ data }) {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => handleTabChange(tab.key)}
               className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-center ${
                 isActive
                   ? 'bg-slate-700 text-white shadow-sm'
@@ -118,9 +132,9 @@ export default function MobilePerformanceSummaryCard({ data }) {
       </div>
 
       {/* 성과 리스트 */}
-      {currentItems && currentItems.length > 0 ? (
+      {paginatedItems && paginatedItems.length > 0 ? (
         <div className="space-y-2.5">
-          {currentItems.map((item, index) => {
+          {paginatedItems.map((item, index) => {
             const isProfit = (item.profit ?? item.roi) >= 0;
             const dateBadge = formatDateBadge(activeTab, item);
             const key = item.year || item.month || item.date || index;
@@ -172,6 +186,43 @@ export default function MobilePerformanceSummaryCard({ data }) {
       ) : (
         <div className="py-6 text-center text-xs text-slate-500 font-medium">
           해당 기간 성과 데이터가 없습니다.
+        </div>
+      )}
+
+      {/* 페이지네이션 컨트롤 (5개 초과 시 노출) */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/80">
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={currentPage === 1}
+            className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+              currentPage === 1
+                ? 'text-slate-600 cursor-not-allowed'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <ChevronLeft className="w-3.5 h-3.5" />
+            <span>이전</span>
+          </button>
+
+          <span className="text-xs font-semibold text-slate-400">
+            {currentPage} / {totalPages}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={currentPage === totalPages}
+            className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
+              currentPage === totalPages
+                ? 'text-slate-600 cursor-not-allowed'
+                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <span>다음</span>
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
     </div>

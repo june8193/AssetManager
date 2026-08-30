@@ -162,4 +162,142 @@ describe('MobilePerformanceSummaryCard', () => {
     fireEvent.click(monthlyTab);
     expect(screen.getByText('해당 기간 성과 데이터가 없습니다.')).toBeInTheDocument();
   });
+
+  describe('페이지네이션 (Pagination)', () => {
+    // 12개 월별 테스트 데이터 생성 (2026-12 ~ 2026-01)
+    const mock12Months = Array.from({ length: 12 }, (_, i) => {
+      const m = String(12 - i).padStart(2, '0');
+      return {
+        month: `2026-${m}`,
+        contribution: 1000000,
+        profit: (12 - i) * 100000,
+        roi: 12 - i,
+        assets: 100000000 + i * 1000000,
+        increase: 1000000,
+      };
+    });
+
+    const paginationSummary = {
+      total_profit: 50000000,
+      cumulative_roi: 30.0,
+      yearly: mockYearlyData, // 2개
+      monthly: mock12Months,  // 12개 (3페이지)
+      daily: mockDailyData,   // 2개
+    };
+
+    it('5개 이하 항목인 경우 페이지네이션 컨트롤이 노출되지 않아야 한다', () => {
+      render(
+        <MaskingProvider>
+          <MobilePerformanceSummaryCard data={paginationSummary} />
+        </MaskingProvider>
+      );
+
+      // 기본 연도별 탭은 2개이므로 이전/다음 버튼이 없어야 함
+      expect(screen.queryByRole('button', { name: /이전/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /다음/ })).not.toBeInTheDocument();
+    });
+
+    it('5개를 초과하는 경우 1페이지에 5개만 표시되고 이전 버튼은 disabled, 다음 버튼은 enabled 되어야 한다', () => {
+      render(
+        <MaskingProvider>
+          <MobilePerformanceSummaryCard data={paginationSummary} />
+        </MaskingProvider>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '월별' }));
+
+      // 1페이지 항목 5개 (26.12 ~ 26.08) 노출
+      expect(screen.getByText('26.12')).toBeInTheDocument();
+      expect(screen.getByText('26.11')).toBeInTheDocument();
+      expect(screen.getByText('26.10')).toBeInTheDocument();
+      expect(screen.getByText('26.09')).toBeInTheDocument();
+      expect(screen.getByText('26.08')).toBeInTheDocument();
+
+      // 6번째 이후 항목은 1페이지에 없어야 함
+      expect(screen.queryByText('26.07')).not.toBeInTheDocument();
+
+      // 페이지 번호 표시 (1 / 3 또는 1/3)
+      expect(screen.getByText(/1\s*\/\s*3/)).toBeInTheDocument();
+
+      // 버튼 상태
+      const prevBtn = screen.getByRole('button', { name: /이전/ });
+      const nextBtn = screen.getByRole('button', { name: /다음/ });
+      expect(prevBtn).toBeDisabled();
+      expect(nextBtn).toBeEnabled();
+    });
+
+    it('다음 버튼 클릭 시 2페이지(6~10번째 항목)로 이동하고 이전/다음 버튼 모두 활성화되어야 한다', () => {
+      render(
+        <MaskingProvider>
+          <MobilePerformanceSummaryCard data={paginationSummary} />
+        </MaskingProvider>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '월별' }));
+      const nextBtn = screen.getByRole('button', { name: /다음/ });
+      fireEvent.click(nextBtn);
+
+      // 2페이지 항목 (26.07 ~ 26.03) 노출
+      expect(screen.getByText('26.07')).toBeInTheDocument();
+      expect(screen.getByText('26.03')).toBeInTheDocument();
+      expect(screen.queryByText('26.12')).not.toBeInTheDocument();
+      expect(screen.queryByText('26.02')).not.toBeInTheDocument();
+
+      // 페이지 번호 표시
+      expect(screen.getByText(/2\s*\/\s*3/)).toBeInTheDocument();
+
+      const prevBtn = screen.getByRole('button', { name: /이전/ });
+      expect(prevBtn).toBeEnabled();
+      expect(nextBtn).toBeEnabled();
+    });
+
+    it('마지막 페이지로 이동 시 다음 버튼이 disabled 되어야 하고, 이전 버튼 클릭 시 이전 페이지로 복귀해야 한다', () => {
+      render(
+        <MaskingProvider>
+          <MobilePerformanceSummaryCard data={paginationSummary} />
+        </MaskingProvider>
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: '월별' }));
+      const nextBtn = screen.getByRole('button', { name: /다음/ });
+      fireEvent.click(nextBtn); // 2페이지
+      fireEvent.click(nextBtn); // 3페이지
+
+      // 3페이지 항목 (26.02, 26.01) 노출
+      expect(screen.getByText('26.02')).toBeInTheDocument();
+      expect(screen.getByText('26.01')).toBeInTheDocument();
+      expect(screen.getByText(/3\s*\/\s*3/)).toBeInTheDocument();
+
+      const prevBtn = screen.getByRole('button', { name: /이전/ });
+      expect(prevBtn).toBeEnabled();
+      expect(nextBtn).toBeDisabled();
+
+      // 이전 버튼 클릭하여 2페이지로 복귀
+      fireEvent.click(prevBtn);
+      expect(screen.getByText('26.07')).toBeInTheDocument();
+      expect(screen.getByText(/2\s*\/\s*3/)).toBeInTheDocument();
+    });
+
+    it('탭(연도별/월별/일별)을 전환할 때 현재 페이지가 항상 1페이지로 자동 초기화되어야 한다', () => {
+      render(
+        <MaskingProvider>
+          <MobilePerformanceSummaryCard data={paginationSummary} />
+        </MaskingProvider>
+      );
+
+      // 월별 탭 이동 후 2페이지로 이동
+      fireEvent.click(screen.getByRole('button', { name: '월별' }));
+      const nextBtn = screen.getByRole('button', { name: /다음/ });
+      fireEvent.click(nextBtn);
+      expect(screen.getByText(/2\s*\/\s*3/)).toBeInTheDocument();
+
+      // 일별 탭으로 전환했다가 다시 월별 탭으로 전환
+      fireEvent.click(screen.getByRole('button', { name: '일별' }));
+      fireEvent.click(screen.getByRole('button', { name: '월별' }));
+
+      // 1페이지로 리셋되어 첫 5개 항목이 보여야 함
+      expect(screen.getByText('26.12')).toBeInTheDocument();
+      expect(screen.getByText(/1\s*\/\s*3/)).toBeInTheDocument();
+    });
+  });
 });
