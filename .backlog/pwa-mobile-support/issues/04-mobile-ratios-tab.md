@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — PWA 인프라 및 적응형 모바일 레이아웃 쉘
 
-**Status:** completed
+**Status:** resolved
 
 - [x] `MobileRatiosPage` 컴포넌트가 구현되고 모바일 비중 점검 탭(`/m/ratios`)에 연결되어야 함
 - [x] `useRatios` 훅의 데이터를 기반으로 자산군별 현재 비중, 목표 비중, 편차, 리밸런싱 금액이 모바일 카드 형태로 명확히 렌더링되어야 함

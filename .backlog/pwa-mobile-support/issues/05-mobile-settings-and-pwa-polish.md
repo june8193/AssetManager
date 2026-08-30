@@ -5,7 +5,7 @@
 
 **Blocked by:** 02 — 모바일 대시보드 탭 (자산/비중/성과 카드), 03 — 모바일 자산 조회 및 거래내역 탭 (Read-Only), 04 — 모바일 비중 점검 탭 (목표비중 및 리밸런싱)
 
-**Status:** closed
+**Status:** resolved
 
 - [x] `MobileSettingsPage` 컴포넌트가 구현되고 모바일 설정 탭(`/m/settings`)에 연결되어야 함
 - [x] 설정 탭에서 마스킹 On/Off 토글, 서버 연결 상태 확인 카드, PWA 설치 안내가 정상 렌더링되어야 함

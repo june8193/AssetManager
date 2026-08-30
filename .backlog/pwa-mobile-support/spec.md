@@ -1,6 +1,6 @@
 # Feature Spec: 모바일(iOS/Android) PWA 지원 및 읽기 전용 모바일 웹 개편
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 

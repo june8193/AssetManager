@@ -13,7 +13,11 @@ AssetManager 웹에 iOS 및 Android PWA(Progressive Web App)를 구축하고, �
 
 ## Decisions so far
 
-<!-- the index — one line per closed ticket: enough to judge relevance, then zoom the link for the detail the ticket holds -->
+- [01-pwa-foundation-and-adaptive-layout](issues/01-pwa-foundation-and-adaptive-layout.md): PWA 인프라(`vite-plugin-pwa`, Safe Area 메타) 및 `useIsMobile` 반응형 레이아웃 쉘, 모바일 가드 구축
+- [02-mobile-dashboard-tab](issues/02-mobile-dashboard-tab.md): 모바일 대시보드 탭 및 3대 요약 카드(총자산, 카테고리비중, 성과요약) 구현
+- [03-mobile-assets-and-transactions-tab](issues/03-mobile-assets-and-transactions-tab.md): 모바일 자산 조회(계좌별 아코디언) 및 거래내역(검색/필터) Read-Only 탭 구현
+- [04-mobile-ratios-tab](issues/04-mobile-ratios-tab.md): 모바일 비중 점검 탭 및 원터치 추가금 리밸런싱 시뮬레이터 카드 구현
+- [05-mobile-settings-and-pwa-polish](issues/05-mobile-settings-and-pwa-polish.md): 모바일 설정 탭(마스킹 스위치, 백엔드 Ping 헬스체크, PWA 설치 가이드) 및 캐싱 최적화 완료
 
 ## Not yet specified
 

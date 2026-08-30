@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — PWA 인프라 및 적응형 모바일 레이아웃 쉘
 
-**Status:** done
+**Status:** resolved
 
 - [x] `MobileAssetsPage` 컴포넌트가 구현되고 모바일 자산 조회 탭(`/m/assets`)에 연결되어야 함
 - [x] 계좌별 잔고, 총 평가금액 및 보유 종목 리스트를 펼치고 접을 수 있는 아코디언 카드 UI가 렌더링되어야 함
