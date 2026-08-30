@@ -121,7 +121,7 @@ const Sidebar = () => {
       </div>
 
       {/* 메뉴 항목 */}
-      <div className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-2">
+      <nav aria-label="메인 메뉴" className="flex-1 overflow-y-auto py-4 px-3 flex flex-col gap-2">
         {MENU_ITEMS.map((item) => {
           const Icon = item.icon;
           const hasSubItems = item.subItems && item.subItems.length > 0;
@@ -178,7 +178,7 @@ const Sidebar = () => {
             </React.Fragment>
           );
         })}
-      </div>
+      </nav>
 
       {/* 하단 설정 영역 */}
       <div className="p-4 border-t border-slate-200 flex flex-col gap-2">

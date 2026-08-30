@@ -5,11 +5,11 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `vite-plugin-pwa` 및 Web App Manifest(`name`, `theme_color: #1e293b`, `display: standalone`, 아이콘)가 올바르게 구성되어야 함
-- [ ] `index.html`에 iOS 전용 메타 태그(`apple-mobile-web-app-capable`, `viewport-fit=cover` 등)가 적용되어야 함
-- [ ] 화면 너비 및 PWA standalone 모드를 감지하는 `useIsMobile` 훅이 구현되고 리사이즈/모드 변화에 반응해야 함
-- [ ] 모바일 환경에서 상단 헤더, 본문 스크롤 영역, 하단 4개 탭 바(대시보드, 자산 조회, 비중 점검, 설정)를 렌더링하는 `MobileLayout`이 제공되어야 함
-- [ ] 모바일 모드에서 `/db` 등 비모바일 경로 접근 시 사용자 안내와 함께 `/`로 리다이렉트하는 `MobileRouteGuard`가 동작해야 함
-- [ ] 모바일 레이아웃 및 훅에 대한 Vitest 단위 테스트가 작성되고 통과해야 함
+- [x] `vite-plugin-pwa` 및 Web App Manifest(`name`, `theme_color: #1e293b`, `display: standalone`, 아이콘)가 올바르게 구성되어야 함
+- [x] `index.html`에 iOS 전용 메타 태그(`apple-mobile-web-app-capable`, `viewport-fit=cover` 등)가 적용되어야 함
+- [x] 화면 너비 및 PWA standalone 모드를 감지하는 `useIsMobile` 훅이 구현되고 리사이즈/모드 변화에 반응해야 함
+- [x] 모바일 환경에서 상단 헤더, 본문 스크롤 영역, 하단 4개 탭 바(대시보드, 자산 조회, 비중 점검, 설정)를 렌더링하는 `MobileLayout`이 제공되어야 함
+- [x] 모바일 모드에서 `/db` 등 비모바일 경로 접근 시 사용자 안내와 함께 `/`로 리다이렉트하는 `MobileRouteGuard`가 동작해야 함
+- [x] 모바일 레이아웃 및 훅에 대한 Vitest 단위 테스트가 작성되고 통과해야 함
