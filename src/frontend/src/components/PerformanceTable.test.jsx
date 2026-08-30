@@ -51,6 +51,33 @@ describe('PerformanceTable', () => {
     },
   ];
 
+  const monthlyStatusData = [
+    {
+      month: '2024-03',
+      contribution: 500,
+      profit: 300,
+      roi: 6.0,
+      assets: 5800,
+      increase: 800,
+    },
+    {
+      month: '2024-02',
+      contribution: 1000,
+      profit: -200,
+      roi: -4.0,
+      assets: 5000,
+      increase: 800,
+    },
+    {
+      month: '2024-01',
+      contribution: 4200,
+      profit: 0,
+      roi: 0,
+      assets: 4200,
+      increase: 4200,
+    },
+  ];
+
   const yearlyComparisonData = [
     {
       year: 2026,
@@ -90,6 +117,26 @@ describe('PerformanceTable', () => {
     });
   };
 
+  const generateMonthlyData = (count) => {
+    return Array.from({ length: count }, (_, idx) => {
+      const monthNum = count - idx;
+      const year = 2020 + Math.floor((monthNum - 1) / 12);
+      const month = String(((monthNum - 1) % 12) + 1).padStart(2, '0');
+      return {
+        month: `${year}-${month}`,
+        contribution: 500,
+        profit: 50,
+        roi: 2.0,
+        assets: 5000 + (count - idx) * 100,
+        increase: 100,
+        kospi: 1.0,
+        kosdaq: -0.5,
+        sp500: 1.2,
+        nasdaq: 1.5,
+      };
+    });
+  };
+
   beforeEach(() => {
     localStorage.clear();
   });
@@ -115,7 +162,45 @@ describe('PerformanceTable', () => {
     });
   });
 
-  describe('2. type="status" & period="daily" (일자별 현황)', () => {
+  describe('2. type="status" & period="monthly" (월별 현황)', () => {
+    it('월별 현황 테이블과 컬럼, 데이터가 올바르게 렌더링되어야 한다', () => {
+      render(
+        <MaskingProvider>
+          <PerformanceTable type="status" period="monthly" data={monthlyStatusData} />
+        </MaskingProvider>
+      );
+
+      expect(screen.getByText('월별 현황')).toBeInTheDocument();
+      expect(screen.getByText('Monthly Performance')).toBeInTheDocument();
+      expect(screen.getByText('연월')).toBeInTheDocument();
+
+      const rows = screen.getAllByRole('row');
+      expect(rows[1]).toHaveTextContent('2024-03');
+      expect(rows[1]).toHaveTextContent('+300');
+      expect(rows[1]).toHaveTextContent('6%');
+      expect(rows[2]).toHaveTextContent('2024-02');
+      expect(rows[2]).toHaveTextContent('-200');
+      expect(rows[3]).toHaveTextContent('2024-01');
+      expect(rows[3]).toHaveTextContent('-'); // 최초 월 증가액은 '-'
+    });
+
+    it('10개 초과 시 월별 모드에서도 페이지네이션 컨트롤이 작동해야 한다', () => {
+      const largeData = generateMonthlyData(15);
+      render(
+        <MaskingProvider>
+          <PerformanceTable type="status" period="monthly" data={largeData} />
+        </MaskingProvider>
+      );
+
+      expect(screen.getAllByRole('row')).toHaveLength(11); // 1 header + 10 items
+      const nextBtn = screen.getByLabelText('다음 페이지');
+      fireEvent.click(nextBtn);
+
+      expect(screen.getAllByRole('row')).toHaveLength(6); // 1 header + 5 items
+    });
+  });
+
+  describe('3. type="status" & period="daily" (일자별 현황)', () => {
     it('일자별 현황 데이터가 렌더링되고 최초 날짜 증가액은 "-"로 표시되어야 한다', () => {
       render(
         <MaskingProvider>
@@ -168,7 +253,7 @@ describe('PerformanceTable', () => {
     });
   });
 
-  describe('3. type="comparison" & period="yearly" (연간 지수 비교)', () => {
+  describe('4. type="comparison" & period="yearly" (연간 지수 비교)', () => {
     it('연간 지수 비교 테이블과 4대 지수 컬럼이 렌더링되어야 한다', () => {
       render(
         <MaskingProvider>
@@ -185,7 +270,23 @@ describe('PerformanceTable', () => {
     });
   });
 
-  describe('4. type="comparison" & period="daily" (일간 지수 비교)', () => {
+  describe('5. type="comparison" & period="monthly" (월간 지수 비교)', () => {
+    it('월간 지수 비교 테이블 및 페이지네이션이 렌더링되어야 한다', () => {
+      const largeData = generateMonthlyData(12);
+      render(
+        <MaskingProvider>
+          <PerformanceTable type="comparison" period="monthly" data={largeData} />
+        </MaskingProvider>
+      );
+
+      expect(screen.getByText('월간 수익률 비교')).toBeInTheDocument();
+      expect(screen.getByText('Monthly Index Comparison')).toBeInTheDocument();
+      expect(screen.getByText('2020-12')).toBeInTheDocument();
+      expect(screen.getByLabelText('다음 페이지')).toBeInTheDocument();
+    });
+  });
+
+  describe('6. type="comparison" & period="daily" (일간 지수 비교)', () => {
     it('일간 지수 비교 테이블 및 페이지네이션이 렌더링되어야 한다', () => {
       const largeData = generateDailyData(12);
       render(
@@ -201,7 +302,7 @@ describe('PerformanceTable', () => {
     });
   });
 
-  describe('5. 마스킹 모드 연동', () => {
+  describe('7. 마스킹 모드 연동', () => {
     it('마스킹 활성화 시 자산 금액이 ***로 표시되어야 한다', () => {
       localStorage.setItem('isMasked', 'true');
       render(
@@ -215,7 +316,7 @@ describe('PerformanceTable', () => {
     });
   });
 
-  describe('6. 예외 및 빈 데이터 처리', () => {
+  describe('8. 예외 및 빈 데이터 처리', () => {
     it('data가 비어있거나 null일 경우 아무것도 렌더링하지 않아야 한다', () => {
       const { container: c1 } = render(
         <MaskingProvider>

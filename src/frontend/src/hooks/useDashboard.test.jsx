@@ -7,6 +7,7 @@ vi.mock('../services', () => ({
   dashboardService: {
     getSummary: vi.fn(),
     getYearly: vi.fn(),
+    getMonthly: vi.fn(),
     getDaily: vi.fn(),
     getSnapshots: vi.fn(),
     refresh: vi.fn(),
@@ -16,6 +17,7 @@ vi.mock('../services', () => ({
 describe('useDashboard 훅 테스트', () => {
   const mockSummary = { total_valuation_krw: 10000000, accounts: [] };
   const mockYearly = [{ year: 2026, total_assets: 10000000 }];
+  const mockMonthly = [{ month: '2026-08', total_assets: 10000000 }];
   const mockDaily = [{ date: '2026-08-17', total_assets: 10000000 }];
   const mockSnapshots = { dates: ['2026-08-17'], series: [] };
 
@@ -23,6 +25,7 @@ describe('useDashboard 훅 테스트', () => {
     vi.clearAllMocks();
     vi.mocked(dashboardService.getSummary).mockResolvedValue(mockSummary);
     vi.mocked(dashboardService.getYearly).mockResolvedValue(mockYearly);
+    vi.mocked(dashboardService.getMonthly).mockResolvedValue(mockMonthly);
     vi.mocked(dashboardService.getDaily).mockResolvedValue(mockDaily);
     vi.mocked(dashboardService.getSnapshots).mockResolvedValue(mockSnapshots);
     vi.mocked(dashboardService.refresh).mockResolvedValue({ status: 'success', message: '성공' });
@@ -39,12 +42,14 @@ describe('useDashboard 훅 테스트', () => {
 
     expect(dashboardService.getSummary).toHaveBeenCalledTimes(1);
     expect(dashboardService.getYearly).toHaveBeenCalledTimes(1);
+    expect(dashboardService.getMonthly).toHaveBeenCalledTimes(1);
     expect(dashboardService.getDaily).toHaveBeenCalledWith({ all: true });
     expect(dashboardService.getSnapshots).toHaveBeenCalledWith({ all: true });
 
     expect(result.current.data).toEqual({
       ...mockSummary,
       yearly: mockYearly,
+      monthly: mockMonthly,
       daily: mockDaily,
       snapshots: mockSnapshots,
     });

@@ -21,14 +21,15 @@ export const useDashboard = () => {
         }
       }
 
-      const [summary, yearly, daily, snapshots] = await Promise.all([
+      const [summary, yearly, monthly, daily, snapshots] = await Promise.all([
         dashboardService.getSummary(),
         dashboardService.getYearly(),
+        dashboardService.getMonthly(),
         dashboardService.getDaily({ all: true }),
         dashboardService.getSnapshots({ all: true }),
       ]);
 
-      setData({ ...summary, yearly, daily, snapshots });
+      setData({ ...summary, yearly, monthly, daily, snapshots });
       setError(null);
       return refreshResult;
     } catch (err) {

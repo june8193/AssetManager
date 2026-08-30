@@ -23,6 +23,14 @@ export const dashboardService = {
   },
 
   /**
+   * 월별 자산 통계를 조회합니다.
+   * @returns {Promise<any[]>}
+   */
+  getMonthly() {
+    return apiClient.get('/api/dashboard/monthly');
+  },
+
+  /**
    * 일별 자산 통계를 조회합니다.
    * @param {{ start_date?: string, end_date?: string, all?: boolean }} [params] - 조회 필터
    * @returns {Promise<any[]>}

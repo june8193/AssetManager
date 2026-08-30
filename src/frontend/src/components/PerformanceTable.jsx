@@ -5,15 +5,16 @@ import useFormatters from '../hooks/useFormatters';
 /**
  * 성과 분석 및 지수 비교를 위한 통합 테이블 컴포넌트입니다.
  * 
- * type('status' | 'comparison')과 period('yearly' | 'daily')의 조합으로
- * 4가지 테이블 렌더링 모드를 단일 컴포넌트에서 지원하며,
- * 일별 모드에서의 페이지네이션 및 마스킹 포맷팅을 캡슐화합니다.
+ * type('status' | 'comparison')과 period('yearly' | 'monthly' | 'daily')의 조합으로
+ * 테이블 렌더링 모드를 단일 컴포넌트에서 지원하며,
+ * 월별 및 일별 모드에서의 페이지네이션 및 마스킹 포맷팅을 캡슐화합니다.
  *
  * @param {Object} props
- * @param {'status' | 'comparison'} props.type - 테이블 종류 ('status': 자산 현황, 'comparison': 지수 비교)
- * @param {'yearly' | 'daily'} props.period - 기간 단위 ('yearly': 연도별, 'daily': 일자별)
- * @param {Array<Object>} props.data - 테이블에 표시할 데이터 배열
+ * @param {'status' | 'comparison'} [props.type='status'] - 테이블 종류 ('status': 자산 현황, 'comparison': 지수 비교)
+ * @param {'yearly' | 'monthly' | 'daily'} [props.period='yearly'] - 기간 단위 ('yearly': 연도별, 'monthly': 월별, 'daily': 일자별)
+ * @param {Array<Object>} [props.data=[]] - 테이블에 표시할 데이터 배열
  * @param {string} [props.lastSnapshotDate] - 최신 스냅샷 기준일자 (연도별 현황 모드에서 표시)
+ * @param {string} [props.className='mt-12'] - 추가 래퍼 클래스네임
  * @returns {JSX.Element|null}
  */
 const PerformanceTable = ({
@@ -21,6 +22,7 @@ const PerformanceTable = ({
   period = 'yearly',
   data = [],
   lastSnapshotDate,
+  className = 'mt-12',
 }) => {
   const { formatCurrency, formatPercent } = useFormatters();
   const [currentPage, setCurrentPage] = useState(1);
@@ -29,14 +31,16 @@ const PerformanceTable = ({
   if (!data || data.length === 0) return null;
 
   const isDaily = period === 'daily';
+  const isMonthly = period === 'monthly';
+  const isPaginated = isDaily || isMonthly;
   const isComparison = type === 'comparison';
 
-  // 페이지네이션 연산 (일별 모드일 때만 적용)
+  // 페이지네이션 연산 (월별/일별 모드일 때 적용)
   const totalItems = data.length;
   const totalPages = Math.ceil(totalItems / pageSize);
   const indexOfLastItem = currentPage * pageSize;
   const indexOfFirstItem = indexOfLastItem - pageSize;
-  const currentItems = isDaily ? data.slice(indexOfFirstItem, indexOfLastItem) : data;
+  const currentItems = isPaginated ? data.slice(indexOfFirstItem, indexOfLastItem) : data;
 
   const handlePrevPage = () => {
     if (currentPage > 1) {
@@ -75,7 +79,31 @@ const PerformanceTable = ({
 
   // 헤더 타이틀 및 배지 설정
   const getHeaderConfig = () => {
-    if (!isComparison && !isDaily) {
+    if (!isComparison) {
+      if (isDaily) {
+        return {
+          title: '일자별 현황',
+          badge: 'Snapshot Performance',
+          icon: <Calendar className="text-blue-600" size={28} />,
+          subtitle: (
+            <p className="text-[11px] font-bold text-slate-400 mt-1 ml-10 flex items-center gap-1">
+              스냅샷 기록이 발생한 모든 날짜별 자산 성과 지표입니다.
+            </p>
+          ),
+        };
+      }
+      if (isMonthly) {
+        return {
+          title: '월별 현황',
+          badge: 'Monthly Performance',
+          icon: <BarChart3 className="text-blue-600" size={28} />,
+          subtitle: (
+            <p className="text-[11px] font-bold text-slate-400 mt-1 ml-10 flex items-center gap-1">
+              월별 포트폴리오의 자산 평가액, 순입금액 및 투자 수익률 지표입니다.
+            </p>
+          ),
+        };
+      }
       return {
         title: '연도별 현황',
         badge: 'Yearly Performance',
@@ -88,47 +116,51 @@ const PerformanceTable = ({
         ) : null,
       };
     }
-    if (!isComparison && isDaily) {
+
+    // Comparison 모드
+    if (isDaily) {
       return {
-        title: '일자별 현황',
-        badge: 'Snapshot Performance',
+        title: '일간 수익률 비교',
+        badge: 'Daily Index Comparison',
         icon: <Calendar className="text-blue-600" size={28} />,
         subtitle: (
           <p className="text-[11px] font-bold text-slate-400 mt-1 ml-10 flex items-center gap-1">
-            스냅샷 기록이 발생한 모든 날짜별 자산 성과 지표입니다.
+            스냅샷 기록이 발생한 일자별 자산 평가액 및 지수 대비 일간 성과 지표입니다.
           </p>
         ),
       };
     }
-    if (isComparison && !isDaily) {
+    if (isMonthly) {
       return {
-        title: '연간 수익률 비교',
-        badge: 'Yearly Index Comparison',
+        title: '월간 수익률 비교',
+        badge: 'Monthly Index Comparison',
         icon: <BarChart3 className="text-blue-600" size={28} />,
         subtitle: (
           <p className="text-[11px] font-bold text-slate-400 mt-1 ml-10 flex items-center gap-1">
-            연도별 포트폴리오의 평가 자산과 ROI, 그리고 시장 지수의 연간 성과 비교입니다.
+            월별 포트폴리오의 평가 자산과 ROI, 그리고 시장 지수의 월간 성과 비교입니다.
           </p>
         ),
       };
     }
     return {
-      title: '일간 수익률 비교',
-      badge: 'Daily Index Comparison',
-      icon: <Calendar className="text-blue-600" size={28} />,
+      title: '연간 수익률 비교',
+      badge: 'Yearly Index Comparison',
+      icon: <BarChart3 className="text-blue-600" size={28} />,
       subtitle: (
         <p className="text-[11px] font-bold text-slate-400 mt-1 ml-10 flex items-center gap-1">
-          스냅샷 기록이 발생한 일자별 자산 평가액 및 지수 대비 일간 성과 지표입니다.
+          연도별 포트폴리오의 평가 자산과 ROI, 그리고 시장 지수의 연간 성과 비교입니다.
         </p>
       ),
     };
   };
 
   const headerConfig = getHeaderConfig();
-  const firstItemKey = isDaily ? data[data.length - 1]?.date : null;
+  const firstItemKey = isDaily 
+    ? data[data.length - 1]?.date 
+    : (isMonthly ? data[data.length - 1]?.month : null);
 
   return (
-    <div className="mt-12 space-y-6">
+    <div className={`${className} space-y-6`}>
       {/* 헤더 섹션 */}
       <div className="flex items-center justify-between px-2">
         <div className="flex flex-col">
@@ -139,7 +171,7 @@ const PerformanceTable = ({
           {headerConfig.subtitle}
         </div>
         <div className="flex items-center gap-3">
-          {isDaily && (
+          {isPaginated && (
             <div className="flex items-center gap-1 text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded-xl">
               <label htmlFor="performance-table-pagesize" className="sr-only">페이지당 표시 개수</label>
               <select
@@ -168,7 +200,7 @@ const PerformanceTable = ({
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100">
                 <th className="px-6 py-5 text-xs font-black text-slate-500 uppercase tracking-widest text-center">
-                  {isDaily ? '날짜' : '연도'}
+                  {isDaily ? '날짜' : (isMonthly ? '연월' : '연도')}
                 </th>
                 {!isComparison ? (
                   <>
@@ -196,17 +228,17 @@ const PerformanceTable = ({
               {currentItems.map((item, index) => {
                 const isPositiveProfit = (item.profit ?? item.roi) >= 0;
                 const isPositiveIncrease = item.increase >= 0;
-                const key = item.date || item.year;
-                const isLastItem = isDaily
-                  ? item.date === firstItemKey
+                const key = item.month || item.date || item.year;
+                const isLastItem = isPaginated
+                  ? key === firstItemKey
                   : index === data.length - 1;
 
                 return (
                   <tr key={key} className="group hover:bg-blue-50/30 transition-colors">
-                    {/* 기간(연도/날짜) 컬럼 */}
+                    {/* 기간(연도/연월/날짜) 컬럼 */}
                     <td className="px-6 py-4 text-center">
                       <span className={`inline-flex items-center justify-center font-bold group-hover:bg-blue-600 group-hover:text-white transition-all shadow-sm ${
-                        isDaily 
+                        isDaily || isMonthly
                           ? 'px-3 py-1.5 rounded-xl bg-slate-100 text-slate-900 text-xs' 
                           : 'w-12 h-12 rounded-2xl bg-slate-100 text-slate-900 font-black text-sm'
                       }`}>
@@ -278,8 +310,8 @@ const PerformanceTable = ({
           </table>
         </div>
 
-        {/* 페이지네이션 컨트롤 (일별 모드 && 총 페이지 > 1) */}
-        {isDaily && totalPages > 1 && (
+        {/* 페이지네이션 컨트롤 (월별/일별 모드 && 총 페이지 > 1) */}
+        {isPaginated && totalPages > 1 && (
           <div className="py-4 border-t border-slate-100 flex items-center justify-center gap-4 bg-slate-50/50">
             <button
               onClick={handlePrevPage}
@@ -335,21 +367,28 @@ const PerformanceTable = ({
               </div>
               <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
                 <span className="text-slate-900 font-bold">
-                  {!isComparison ? (isDaily ? '일자별 수익률' : '수익률') : (!isDaily ? '내 수익률(ROI)' : '내 수익률')}
+                  {!isComparison 
+                    ? (isDaily ? '일자별 수익률' : (isMonthly ? '월별 수익률' : '수익률')) 
+                    : (isDaily ? '내 수익률' : (isMonthly ? '내 월간 수익률(ROI)' : '내 수익률(ROI)'))}
                 </span>
-                은 <span className="text-slate-900 font-bold">수익 / (기초 자산 + 해당 {isDaily ? '일자' : '연도'} 추가액)</span> 공식을 기준으로 산출되었습니다.{' '}
+                은 <span className="text-slate-900 font-bold">수익 / (기초 자산 + 해당 {isDaily ? '일자' : (isMonthly ? '연월' : '연도')} 추가액)</span> 공식을 기준으로 산출되었습니다.{' '}
                 {isDaily 
                   ? '기초 데이터는 계좌별 당일 스냅샷에 기록된 평가액과 추가액 합산치를 기준으로 연산합니다.'
-                  : '기초 데이터는 거래 내역과 연도별 평가 스냅샷을 기반으로 합니다.'
+                  : (isMonthly 
+                    ? '기초 데이터는 전월 말 평가 스냅샷과 당월 입출금 내역을 기반으로 합니다.'
+                    : '기초 데이터는 거래 내역과 연도별 평가 스냅샷을 기반으로 합니다.')
                 }
               </p>
             </div>
             {isComparison && (
               <div className="flex items-start gap-3 pl-8">
                 <p className="text-[11px] text-slate-500 leading-relaxed font-medium">
-                  <span className="text-slate-900 font-bold">지수 수익률</span>은 {!isDaily 
-                    ? '포트폴리오 기록 기간과 관계없이 순수 달력 기준인 **해당 연도 1월 1일(혹은 첫 거래일) 대비 12월 31일(혹은 마지막 거래일)**의 종가 변동률로 산출되었습니다. 단, 진행 중인 올해는 연초 대비 현재 시점까지의 누적(YTD) 수익률을 적용합니다.'
-                    : '포트폴리오의 일간 성과와 동일한 기준으로 비교하기 위해 **직전 스냅샷 날짜 대비 현재 스냅샷 날짜의 종가 변동률**로 산출되었습니다.'
+                  <span className="text-slate-900 font-bold">지수 수익률</span>은 {
+                    isDaily 
+                      ? '포트폴리오의 일간 성과와 동일한 기준으로 비교하기 위해 **직전 스냅샷 날짜 대비 현재 스냅샷 날짜의 종가 변동률**로 산출되었습니다.'
+                      : (isMonthly
+                        ? '포트폴리오의 월간 성과와 동일한 기준으로 비교하기 위해 **해당 월의 첫 거래일 대비 마지막 거래일의 종가 변동률**로 산출되었습니다.'
+                        : '포트폴리오 기록 기간과 관계없이 순수 달력 기준인 **해당 연도 1월 1일(혹은 첫 거래일) 대비 12월 31일(혹은 마지막 거래일)**의 종가 변동률로 산출되었습니다. 단, 진행 중인 올해는 연초 대비 현재 시점까지의 누적(YTD) 수익률을 적용합니다.')
                   }
                 </p>
               </div>

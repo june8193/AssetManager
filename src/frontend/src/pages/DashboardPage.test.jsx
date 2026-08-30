@@ -30,7 +30,16 @@ const mockData = {
     date: '2024-03-20',
     created_at: '2024-03-20T10:00:00Z'
   },
-  yearly: [],
+  yearly: [
+    { year: 2024, assets: 1000000, contribution: 800000, increase: 200000, profit: 100000, roi: 11.11 },
+  ],
+  monthly: [
+    { month: '2024-03', assets: 1000000, contribution: 100000, increase: 50000, profit: 30000, roi: 3.0 },
+    { month: '2024-02', assets: 950000, contribution: 200000, increase: 50000, profit: 20000, roi: 2.0 },
+  ],
+  daily: [
+    { date: '2024-03-20', assets: 1000000, contribution: 0, increase: 10000, profit: 10000, roi: 1.0 },
+  ],
   snapshots: [],
   total_contribution: 800000,
   initial_base_asset: 100000,
@@ -199,14 +208,59 @@ describe('DashboardPage', () => {
 
     // 누적 투자 수익 확인 (+100,000)
     expect(screen.getByText('누적 투자 수익')).toBeDefined();
-    expect(screen.getByText('+100,000')).toBeDefined();
+    expect(screen.getAllByText('+100,000').length).toBeGreaterThanOrEqual(1);
 
     // 누적 수익률 확인 (+11.11%)
     expect(screen.getByText('누적 수익률')).toBeDefined();
-    expect(screen.getByText('+11.11%')).toBeDefined();
+    expect(screen.getAllByText('+11.11%').length).toBeGreaterThanOrEqual(1);
 
     // 비율 텍스트 확인
     expect(screen.getByText('투자 원금 90.0%')).toBeDefined();
     expect(screen.getByText('투자 수익 10.0%')).toBeDefined();
+  });
+
+  it('연도별/월별/일별 탭이 렌더링되고 탭 전환 시 해당 기간의 테이블만 표시된다', () => {
+    vi.mocked(useDashboard).mockReturnValue({
+      data: mockData,
+      loading: false,
+      error: null,
+      refresh: vi.fn()
+    });
+
+    render(
+      <MaskingProvider>
+        <DashboardPage />
+      </MaskingProvider>
+    );
+
+    // 1. 기본 선택: 연도별 탭
+    const yearlyTab = screen.getByRole('button', { name: '연도별' });
+    const monthlyTab = screen.getByRole('button', { name: '월별' });
+    const dailyTab = screen.getByRole('button', { name: '일별' });
+
+    expect(yearlyTab).toBeDefined();
+    expect(monthlyTab).toBeDefined();
+    expect(dailyTab).toBeDefined();
+
+    // 초기 상태에서는 연도별 현황이 표시되고 월별/일자별 현황은 없어야 함
+    expect(screen.getByText('연도별 현황')).toBeInTheDocument();
+    expect(screen.queryByText('월별 현황')).not.toBeInTheDocument();
+    expect(screen.queryByText('일자별 현황')).not.toBeInTheDocument();
+    expect(screen.getByText('2024')).toBeInTheDocument();
+
+    // 2. 월별 탭 클릭
+    fireEvent.click(monthlyTab);
+    expect(screen.getByText('월별 현황')).toBeInTheDocument();
+    expect(screen.queryByText('연도별 현황')).not.toBeInTheDocument();
+    expect(screen.queryByText('일자별 현황')).not.toBeInTheDocument();
+    expect(screen.getByText('2024-03')).toBeInTheDocument();
+    expect(screen.getByText('2024-02')).toBeInTheDocument();
+
+    // 3. 일별 탭 클릭
+    fireEvent.click(dailyTab);
+    expect(screen.getByText('일자별 현황')).toBeInTheDocument();
+    expect(screen.queryByText('연도별 현황')).not.toBeInTheDocument();
+    expect(screen.queryByText('월별 현황')).not.toBeInTheDocument();
+    expect(screen.getAllByText('2024-03-20').length).toBeGreaterThanOrEqual(1);
   });
 });

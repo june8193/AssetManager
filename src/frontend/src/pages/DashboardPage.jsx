@@ -22,6 +22,7 @@ const DashboardPage = () => {
   const [expandedAccounts, setExpandedAccounts] = useState(new Set());
   const [expandedCategories, setExpandedCategories] = useState(new Set());
   const [assetSortOptions, setAssetSortOptions] = useState({});
+  const [selectedPeriod, setSelectedPeriod] = useState('yearly');
   const { maskValue } = useMasking();
 
   const handleRefresh = async () => {
@@ -124,6 +125,7 @@ const DashboardPage = () => {
     total_valuation_krw, 
     exchange_rate, 
     yearly, 
+    monthly,
     daily, 
     snapshots,
     total_contribution = 0,
@@ -490,20 +492,60 @@ const DashboardPage = () => {
       {/* Asset Trend Chart */}
       <AssetChart data={data.snapshots} />
 
-      {/* Yearly Performance Table */}
-      <PerformanceTable 
-        type="status"
-        period="yearly"
-        data={yearly} 
-        lastSnapshotDate={lastSnapshotDate}
-      />
+      {/* 기간별 성과 탭 컨트롤 */}
+      <div className="mt-12 flex items-center justify-between">
+        <div className="inline-flex p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/60 shadow-inner">
+          {[
+            { key: 'yearly', label: '연도별' },
+            { key: 'monthly', label: '월별' },
+            { key: 'daily', label: '일별' },
+          ].map((tab) => {
+            const isActive = selectedPeriod === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setSelectedPeriod(tab.key)}
+                className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${
+                  isActive
+                    ? 'bg-white text-blue-600 shadow-sm shadow-slate-200'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-      {/* Daily Performance Table */}
-      <PerformanceTable 
-        type="status"
-        period="daily"
-        data={daily} 
-      />
+      {/* 선택된 기간 단위에 따른 성과 현황 테이블 */}
+      {selectedPeriod === 'yearly' && (
+        <PerformanceTable 
+          type="status"
+          period="yearly"
+          data={yearly} 
+          lastSnapshotDate={lastSnapshotDate}
+          className="mt-6"
+        />
+      )}
+
+      {selectedPeriod === 'monthly' && (
+        <PerformanceTable 
+          type="status"
+          period="monthly"
+          data={monthly} 
+          className="mt-6"
+        />
+      )}
+
+      {selectedPeriod === 'daily' && (
+        <PerformanceTable 
+          type="status"
+          period="daily"
+          data={daily} 
+          className="mt-6"
+        />
+      )}
     </main>
   );
 };

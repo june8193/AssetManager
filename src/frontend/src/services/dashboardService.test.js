@@ -28,6 +28,16 @@ describe('dashboardService', () => {
     expect(result).toEqual(mockYearly);
   });
 
+  it('getMonthly: 월별 통계 데이터를 정상적으로 조회한다', async () => {
+    const mockMonthly = [{ month: '2026-08', total_assets: 50000000 }];
+    const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValueOnce(mockMonthly);
+
+    const result = await dashboardService.getMonthly();
+
+    expect(getSpy).toHaveBeenCalledWith('/api/dashboard/monthly');
+    expect(result).toEqual(mockMonthly);
+  });
+
   it('getDaily: 일별 통계 데이터를 정상적으로 조회한다', async () => {
     const mockDaily = [{ date: '2026-08-17', total_assets: 50000000 }];
     const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValueOnce(mockDaily);
