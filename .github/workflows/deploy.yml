@@ -17,13 +17,16 @@ jobs:
 
     steps:
       - name: Pull Latest Code and Deploy
+        env:
+          CI: "true"
         run: |
+          export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
           cd /Users/seongeunhong/Desktop/local_repo/AssetManager
           git fetch origin main
           git reset --hard origin/main
           mkdir -p backups/logs
           uv sync
           cd src/frontend
-          pnpm install
+          pnpm install --config.confirmModulesPurge=false
           cd /Users/seongeunhong/Desktop/local_repo/AssetManager
           pm2 startOrReload ecosystem.config.js --only asset-manager-prod
