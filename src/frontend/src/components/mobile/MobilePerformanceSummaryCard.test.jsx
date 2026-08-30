@@ -109,7 +109,7 @@ describe('MobilePerformanceSummaryCard', () => {
     expect(screen.getByText('-0.98%')).toBeInTheDocument();
   });
 
-  it('일별 탭을 클릭하면 일별 데이터가 MM.DD 포맷 배지와 함께 표시되어야 한다', () => {
+  it('일별 탭을 클릭하면 일별 데이터가 YY.MM.DD 포맷 배지와 함께 표시되어야 한다', () => {
     render(
       <MaskingProvider>
         <MobilePerformanceSummaryCard data={mockSummary} />
@@ -119,10 +119,10 @@ describe('MobilePerformanceSummaryCard', () => {
     const dailyTab = screen.getByRole('button', { name: '일별' });
     fireEvent.click(dailyTab);
 
-    // 일별 배지 포맷 (MM.DD: 05.15, 05.14)
-    expect(screen.getByText('05.15')).toBeInTheDocument();
+    // 일별 배지 포맷 (YY.MM.DD: 26.05.15, 26.05.14)
+    expect(screen.getByText('26.05.15')).toBeInTheDocument();
     expect(screen.getByText('+0.40%')).toBeInTheDocument();
-    expect(screen.getByText('05.14')).toBeInTheDocument();
+    expect(screen.getByText('26.05.14')).toBeInTheDocument();
     expect(screen.getByText('-0.24%')).toBeInTheDocument();
   });
 

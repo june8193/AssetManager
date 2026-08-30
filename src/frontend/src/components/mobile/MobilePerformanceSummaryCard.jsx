@@ -14,7 +14,7 @@ const TABS = [
  * 기간별 날짜 배지 문자열 포맷팅
  * - yearly: YYYY (예: 2026)
  * - monthly: YY.MM (예: 26.05)
- * - daily: MM.DD (예: 05.15)
+ * - daily: YY.MM.DD (예: 26.05.15)
  *
  * @param {'yearly' | 'monthly' | 'daily'} period
  * @param {Object} item
@@ -36,9 +36,12 @@ function formatDateBadge(period, item) {
   }
   if (period === 'daily') {
     const raw = String(item.date || item.day || '');
-    const match = raw.match(/\d{4}[-./](\d{1,2})[-./](\d{1,2})/);
+    const match = raw.match(/(?:(\d{4})|(\d{2}))[-./](\d{1,2})[-./](\d{1,2})/);
     if (match) {
-      return `${match[1].padStart(2, '0')}.${match[2].padStart(2, '0')}`;
+      const yy = match[1] ? match[1].slice(2) : match[2];
+      const mm = match[3].padStart(2, '0');
+      const dd = match[4].padStart(2, '0');
+      return `${yy}.${mm}.${dd}`;
     }
     const shortMatch = raw.match(/^(\d{1,2})[-./](\d{1,2})$/);
     if (shortMatch) {
@@ -146,7 +149,7 @@ export default function MobilePerformanceSummaryCard({ data }) {
               >
                 {/* 날짜 배지 & 평가액/추가액 */}
                 <div className="flex items-center gap-2.5">
-                  <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white text-xs">
+                  <div className="min-w-[54px] h-10 px-1 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white text-[11px] font-mono shrink-0">
                     {dateBadge}
                   </div>
                   <div>
