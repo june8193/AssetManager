@@ -33,6 +33,5 @@
 - **불일치 시 롤백**: 지표 불일치나 데이터 왜곡 발견 시 즉시 백업본으로 원복(롤백) 후 원인을 재분석합니다.
 
 ## 5. Agent skills
-- **Issue tracker**: `.scratch/<feature-slug>/` (참조: `docs/agents/issue-tracker.md`)
+- **Issue tracker**: `.backlog/<feature-slug>/` (완료 시 `.backlog/done/<feature-slug>/` 이동, 참조: `docs/agents/issue-tracker.md`)
 - **Triage labels**: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix` (참조: `docs/agents/triage-labels.md`)
-- **Domain docs**: `CONTEXT.md` + `docs/adr/` (참조: `docs/agents/domain.md`)
