@@ -1,10 +1,10 @@
 """스냅샷 산출, 증권/은행 정산 차액 계산 및 원자적 영속화를 전담하는 딥 도메인 엔진 모듈입니다."""
 
 from typing import List, Optional, Dict, Any, Union
-from datetime import date
+from datetime import date, timedelta
 from sqlalchemy.orm import Session, joinedload
 
-from ..models import Account, Asset, Transaction, AccountSnapshot, ExchangeRate
+from ..models import Account, Asset, Transaction, AccountSnapshot, ExchangeRate, HistoricalPrice
 from ..schemas import (
     TransactionSchema,
     SnapshotPreviewSchema,
@@ -21,6 +21,7 @@ from ..schemas import (
     SnapshotRecalculateResponse,
     SnapshotRecalculateItemDiff,
 )
+from ..market.cache import HistoricalPriceCache
 from .dashboard_service import DashboardService
 from .ledger_engine import LedgerEngine
 from .transaction_service import TransactionService
@@ -464,17 +465,144 @@ class SnapshotEngine:
                 base_assets = last_valuation + p.period_deposit
                 p.calculated_return_rate = round((p.period_profit / base_assets * 100), 2) if base_assets != 0 else 0.0
 
-    def save_snapshots(self, previews: List[SnapshotPreviewSchema], commit: bool = True) -> List[AccountSnapshot]:
-        """미리보기 데이터를 바탕으로 기존 스냅샷을 교체 저장합니다.
+    def _generate_intermediate_snapshots(
+        self,
+        snapshot_date: date,
+        exchange_rate: Optional[float] = None
+    ) -> List[AccountSnapshot]:
+        """저장 대상 기준일(snapshot_date) 이전의 최신 스냅샷(T_last)부터 snapshot_date - 1일까지 누락된 모든 날짜의 스냅샷을 연속 자동 생성합니다.
         
         Args:
-            previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 미리보기 리스트.
-            commit (bool): DB 커밋 여부.
+            snapshot_date (date): 저장 대상 기준 일자 (T_today).
+            exchange_rate (Optional[float]): 기본 적용 환율.
             
         Returns:
-            List[AccountSnapshot]: 저장된 스냅샷 모델 인스턴스 리스트.
+            List[AccountSnapshot]: 생성된 중간 날짜 스냅샷 리스트.
         """
-        saved_snapshots = []
+        last_snap = (
+            self.db.query(AccountSnapshot)
+            .filter(AccountSnapshot.snapshot_date < snapshot_date)
+            .order_by(AccountSnapshot.snapshot_date.desc())
+            .first()
+        )
+        if not last_snap:
+            return []
+
+        t_last = last_snap.snapshot_date
+        days_diff = (snapshot_date - t_last).days
+        if days_diff <= 1:
+            return []
+
+        target_dates = [t_last + timedelta(days=i) for i in range(1, days_diff)]
+        active_accounts = self.db.query(Account).filter(Account.is_active.is_(True)).all()
+        if not active_accounts:
+            return []
+
+        all_assets = self.db.query(Asset).all()
+        asset_by_ticker = {a.ticker: a for a in all_assets}
+        price_cache = HistoricalPriceCache(self.db)
+        intermediate_snapshots: List[AccountSnapshot] = []
+
+        for target_date in target_dates:
+            # 멱등성을 위해 target_date의 기존 스냅샷 정리
+            self.db.query(AccountSnapshot).filter(
+                AccountSnapshot.snapshot_date == target_date
+            ).delete(synchronize_session=False)
+
+            # target_date 기준 USD 환율 조회 (Forward-fill)
+            usd_rate_row = (
+                self.db.query(ExchangeRate)
+                .filter(ExchangeRate.date <= target_date, ExchangeRate.currency == "USD")
+                .order_by(ExchangeRate.date.desc())
+                .first()
+            )
+            current_usd_rate = usd_rate_row.rate if usd_rate_row else (exchange_rate or 1350.0)
+
+            for acc in active_accounts:
+                # 1. target_date 기준 원장 포지션 산출
+                ledger_state = LedgerEngine.get_positions(
+                    self.db,
+                    account_id=acc.id,
+                    as_of=target_date
+                )
+
+                # 2. 비현금 자산 평가액 산출 (Forward-fill)
+                non_cash_val_krw = 0.0
+                for ticker, qty in ledger_state.holdings.items():
+                    if qty <= 0.000001:
+                        continue
+                    asset = asset_by_ticker.get(ticker)
+                    price = price_cache.get_last_known_price(ticker, before_date=target_date) or 0.0
+                    val = qty * price
+                    if asset and (asset.country == "US" or asset.ticker == "USD"):
+                        val_krw = val * current_usd_rate
+                    else:
+                        val_krw = val
+                    non_cash_val_krw += val_krw
+
+                # 3. 총 평가액
+                cash_val_krw = ledger_state.cash_krw + (ledger_state.cash_usd * current_usd_rate)
+                total_valuation = cash_val_krw + non_cash_val_krw
+
+                # 4. 직전 스냅샷 조회
+                prev_snapshot = (
+                    self.db.query(AccountSnapshot)
+                    .filter(
+                        AccountSnapshot.account_id == acc.id,
+                        AccountSnapshot.snapshot_date < target_date
+                    )
+                    .order_by(AccountSnapshot.snapshot_date.desc())
+                    .first()
+                )
+                prev_date = prev_snapshot.snapshot_date if prev_snapshot else date(1970, 1, 1)
+                last_valuation = prev_snapshot.total_valuation if prev_snapshot else 0.0
+
+                # 5. 기간 입출금 집계
+                period_txs = (
+                    self.db.query(Transaction)
+                    .filter(
+                        Transaction.account_id == acc.id,
+                        Transaction.transaction_date > prev_date,
+                        Transaction.transaction_date <= target_date
+                    )
+                    .all()
+                )
+                period_deposit_krw = 0.0
+                for tx in period_txs:
+                    amount_krw = self._convert_tx_to_krw(tx, current_usd_rate)
+                    if tx.type == "DEPOSIT":
+                        period_deposit_krw += amount_krw
+                    elif tx.type == "WITHDRAW":
+                        period_deposit_krw -= amount_krw
+
+                # 6. 기간 수익 산출
+                total_profit = total_valuation - last_valuation - period_deposit_krw
+
+                snap = AccountSnapshot(
+                    account_id=acc.id,
+                    snapshot_date=target_date,
+                    period_deposit=period_deposit_krw,
+                    total_valuation=total_valuation,
+                    total_profit=total_profit
+                )
+                self.db.add(snap)
+                intermediate_snapshots.append(snap)
+
+            # 다음 일자 계산 시 방금 생성한 스냅샷을 참조할 수 있도록 flush
+            self.db.flush()
+
+        return intermediate_snapshots
+
+    def _persist_snapshots(self, previews: List[SnapshotPreviewSchema]) -> List[AccountSnapshot]:
+        """미리보기 데이터를 바탕으로 특정 일자의 스냅샷을 DB에 삽입합니다 (커밋 없이 add만 수행).
+        
+        Args:
+            previews (List[SnapshotPreviewSchema]): 스냅샷 미리보기 리스트.
+            
+        Returns:
+            List[AccountSnapshot]: 생성된 스냅샷 인스턴스 리스트.
+        """
+        saved = []
         for p in previews:
             self.db.query(AccountSnapshot).filter(
                 AccountSnapshot.account_id == p.account_id,
@@ -489,16 +617,40 @@ class SnapshotEngine:
                 total_profit=p.total_profit
             )
             self.db.add(new_snap)
-            saved_snapshots.append(new_snap)
+            saved.append(new_snap)
+        return saved
 
-        if commit:
-            self.db.commit()
-            for snap in saved_snapshots:
-                self.db.refresh(snap)
-        return saved_snapshots
+    def save_snapshots(self, previews: List[SnapshotPreviewSchema], commit: bool = True) -> List[AccountSnapshot]:
+        """미리보기 데이터를 바탕으로 직전 일자와의 갭에 대해 연속 스냅샷을 산출하고 교체 저장합니다.
+        
+        Args:
+            previews (List[SnapshotPreviewSchema]): 저장할 스냅샷 미리보기 리스트.
+            commit (bool): DB 커밋 여부.
+            
+        Returns:
+            List[AccountSnapshot]: 저장된 스냅샷 모델 인스턴스 리스트 (중간 생성분 포함).
+        """
+        if not previews:
+            return []
+
+        try:
+            snapshot_date = previews[0].snapshot_date
+            intermediate_snaps = self._generate_intermediate_snapshots(snapshot_date)
+            today_snaps = self._persist_snapshots(previews)
+            all_snaps = intermediate_snaps + today_snaps
+
+            if commit:
+                self.db.commit()
+                for snap in all_snaps:
+                    self.db.refresh(snap)
+            return all_snaps
+        except Exception:
+            if commit:
+                self.db.rollback()
+            raise
 
     async def save_unified(self, req: UnifiedSaveRequest) -> List[AccountSnapshot]:
-        """환율 기록, 정산 보정 거래 및 스냅샷 캐시를 단일 트랜잭션으로 원자적 커밋합니다.
+        """환율 기록, 정산 보정 거래, 중간 날짜 연속 스냅샷 및 오늘 스냅샷을 단일 트랜잭션으로 원자적 커밋합니다.
         
         Args:
             req (UnifiedSaveRequest): 통합 저장 요청 정보.
@@ -519,19 +671,30 @@ class SnapshotEngine:
             self._save_exchange_rate(req.snapshot_date, req.exchange_rate)
             self._process_brokerage_accounts(req.snapshot_date, req.brokerage_accounts, krw_asset.id, usd_asset.id)
             self._process_bank_accounts(req.bank_accounts, krw_asset.id)
-            
             self.db.flush()
 
+            # 1. 직전 스냅샷부터 어제까지 중간 날짜 연속 스냅샷 자동 산출 및 DB 반영
+            intermediate_snaps = self._generate_intermediate_snapshots(req.snapshot_date, req.exchange_rate)
+
+            # 2. 오늘 날짜 스냅샷 미리보기 산출 (중간 스냅샷이 flush되어 직전 스냅샷으로 적용됨)
             previews = await self.preview(req.snapshot_date, req.exchange_rate)
             self._update_bank_previews(previews, req.bank_accounts)
 
-            return self.save_snapshots(previews, commit=True)
+            # 3. 오늘 날짜 스냅샷 삽입
+            today_snaps = self._persist_snapshots(previews)
+            all_snaps = intermediate_snaps + today_snaps
+
+            # 4. 단일 DB 트랜잭션 원자적 일괄 커밋
+            self.db.commit()
+            for snap in all_snaps:
+                self.db.refresh(snap)
+            return all_snaps
         except Exception:
             self.db.rollback()
             raise
 
     async def save_brokerage(self, req: BrokerageSaveRequest) -> List[AccountSnapshot]:
-        """증권 계좌 전용 스냅샷을 원자적으로 저장합니다.
+        """증권 계좌 전용 스냅샷 및 중간 날짜 연속 스냅샷을 원자적으로 저장합니다.
         
         Args:
             req (BrokerageSaveRequest): 증권 스냅샷 저장 요청 정보.
@@ -551,16 +714,24 @@ class SnapshotEngine:
         try:
             self._save_exchange_rate(req.snapshot_date, req.exchange_rate)
             self._process_brokerage_accounts(req.snapshot_date, req.accounts, krw_asset.id, usd_asset.id)
-            
             self.db.flush()
+
+            intermediate_snaps = self._generate_intermediate_snapshots(req.snapshot_date, req.exchange_rate)
+
             previews = await self.preview(req.snapshot_date, req.exchange_rate)
-            return self.save_snapshots(previews, commit=True)
+            today_snaps = self._persist_snapshots(previews)
+            all_snaps = intermediate_snaps + today_snaps
+
+            self.db.commit()
+            for snap in all_snaps:
+                self.db.refresh(snap)
+            return all_snaps
         except Exception:
             self.db.rollback()
             raise
 
     async def save_bank(self, req: BankSaveRequest) -> List[AccountSnapshot]:
-        """은행 계좌 전용 스냅샷을 원자적으로 저장합니다.
+        """은행 계좌 전용 스냅샷 및 중간 날짜 연속 스냅샷을 원자적으로 저장합니다.
         
         Args:
             req (BankSaveRequest): 은행 스냅샷 저장 요청 정보.
@@ -582,10 +753,18 @@ class SnapshotEngine:
             self._process_bank_accounts(req.accounts, krw_asset.id)
             self.db.flush()
 
+            intermediate_snaps = self._generate_intermediate_snapshots(req.snapshot_date, latest_rate)
+
             previews = await self.preview(req.snapshot_date, latest_rate)
             self._update_bank_previews(previews, req.accounts)
 
-            return self.save_snapshots(previews, commit=True)
+            today_snaps = self._persist_snapshots(previews)
+            all_snaps = intermediate_snaps + today_snaps
+
+            self.db.commit()
+            for snap in all_snaps:
+                self.db.refresh(snap)
+            return all_snaps
         except Exception:
             self.db.rollback()
             raise
