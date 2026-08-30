@@ -490,37 +490,47 @@ class BenchmarkService:
         return 0.0
 
     async def get_comparison_tables(self) -> Dict[str, Any]:
-        """포트폴리오와 4대 시장 지수의 연간 및 일간 수익률 비교 데이터를 계산합니다.
+        """포트폴리오와 4대 시장 지수의 연간, 월간 및 일간 수익률 비교 데이터를 계산합니다.
 
         Returns:
-            Dict[str, Any]: 연간 및 일간 비교 테이블 데이터
+            Dict[str, Any]: 연간, 월간 및 일간 비교 테이블 데이터
                 - yearly (List[Dict]): 연간 비교 리스트 (최신 연도 순)
+                - monthly (List[Dict]): 월간 비교 리스트 (최신 연월 순)
                 - daily (List[Dict]): 일간 비교 리스트 (최신 일자 순)
         """
+        import calendar
         from .dashboard_service import DashboardService
         dash_svc = DashboardService(self.db)
 
-        # 1. 포트폴리오의 연도별, 일자별 데이터 로딩
+        # 1. 포트폴리오의 연도별, 월별, 일자별 데이터 로딩
         yearly_stats = dash_svc.get_yearly_stats()
+        monthly_stats = dash_svc.get_monthly_stats()
         daily_stats = dash_svc.get_daily_stats(all_data=True)
 
         tickers = self.BENCHMARK_TICKERS
         ticker_names = self.TICKER_NAMES
 
-        # 2. 일간 및 연간 수익률 비교 계산을 위한 전체 날짜 범위 계산
+        # 2. 일간, 월간 및 연간 수익률 비교 계산을 위한 전체 날짜 범위 계산
         daily_comparison = []
+        monthly_comparison = []
         yearly_comparison = []
 
         all_dates = []
         if daily_stats:
             all_dates.extend([item["date"] for item in daily_stats])
+        if monthly_stats:
+            for item in monthly_stats:
+                year, month = map(int, item["month"].split("-"))
+                all_dates.append(datetime.date(year, month, 1))
+                last_day = calendar.monthrange(year, month)[1]
+                all_dates.append(datetime.date(year, month, last_day))
         if yearly_stats:
             for item in yearly_stats:
                 all_dates.append(datetime.date(item["year"], 1, 1))
                 all_dates.append(datetime.date(item["year"], 12, 31))
 
         if not all_dates:
-            return {"yearly": [], "daily": []}
+            return {"yearly": [], "monthly": [], "daily": []}
 
         min_date = min(all_dates)
         max_date = max(all_dates)
@@ -598,7 +608,46 @@ class BenchmarkService:
 
             daily_comparison.reverse()
 
-        # 4. 연간 수익률 비교 계산 (인메모리 캐시 활용으로 N+1 I/O 제거)
+        # 4. 월간 수익률 비교 계산 (인메모리 캐시 활용)
+        if monthly_stats:
+            sorted_monthly = sorted(monthly_stats, key=lambda x: x["month"])
+
+            for item in sorted_monthly:
+                month_str = item["month"]
+                year, month = map(int, month_str.split("-"))
+                start_date = datetime.date(year, month, 1)
+                last_day = calendar.monthrange(year, month)[1]
+                end_date = today if (year == today.year and month == today.month) else datetime.date(year, month, last_day)
+
+                row = {
+                    "month": month_str,
+                    "assets": item["assets"],
+                    "roi": item["roi"],
+                    "kospi": 0.0,
+                    "kosdaq": 0.0,
+                    "sp500": 0.0,
+                    "nasdaq": 0.0
+                }
+
+                for ticker in tickers:
+                    plist = prices_cache.get(ticker, [])
+                    valid_prices = [p for p in plist if start_date <= p.price_date <= end_date and p.close_price > 0.0]
+                    name = ticker_names[ticker]
+
+                    if len(valid_prices) >= 2:
+                        base_price = valid_prices[0].close_price
+                        last_price = valid_prices[-1].close_price
+                        if base_price > 0.0:
+                            ret = ((last_price - base_price) / base_price) * 100
+                            row[name] = round(ret, 2)
+                    else:
+                        row[name] = 0.0
+
+                monthly_comparison.append(row)
+
+            monthly_comparison.reverse()
+
+        # 5. 연간 수익률 비교 계산 (인메모리 캐시 활용으로 N+1 I/O 제거)
         if yearly_stats:
             sorted_yearly = sorted(yearly_stats, key=lambda x: x["year"])
 
@@ -637,5 +686,6 @@ class BenchmarkService:
 
         return {
             "yearly": yearly_comparison,
+            "monthly": monthly_comparison,
             "daily": daily_comparison
         }

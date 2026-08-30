@@ -130,7 +130,9 @@ async def test_get_benchmark_dashboard_api(
     assert "watchlist" in res_data
     assert "alpha_analysis" in res_data
     assert "yearly_comparison" in res_data
+    assert "monthly_comparison" in res_data
     assert "daily_comparison" in res_data
+    assert len(res_data["monthly_comparison"]) >= 1
 
     # 포트폴리오
     assert res_data["portfolio"]["total_valuation"] == 1100000

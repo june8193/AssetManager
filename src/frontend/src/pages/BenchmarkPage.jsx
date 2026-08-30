@@ -26,6 +26,9 @@ const BenchmarkPage = () => {
 
   const { maskValue } = useMasking();
 
+  // 테이블 기간 탭 선택 상태 ('yearly' | 'monthly' | 'daily')
+  const [selectedPeriod, setSelectedPeriod] = useState('yearly');
+
   // 차트 렌더링 여부를 관리하는 통합 상태 (기본값 모두 True)
   const [activeSeries, setActiveSeries] = useState({
     "내 포트폴리오": true,
@@ -351,19 +354,59 @@ const BenchmarkPage = () => {
         </div>
       </div>
 
-      {/* 연간 수익률 비교 표 */}
-      <PerformanceTable 
-        type="comparison"
-        period="yearly"
-        data={data?.yearly_comparison} 
-      />
+      {/* 기간별 성과 탭 컨트롤 */}
+      <div className="mt-12 flex items-center justify-between">
+        <div className="inline-flex p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/60 shadow-inner">
+          {[
+            { key: 'yearly', label: '연도별' },
+            { key: 'monthly', label: '월별' },
+            { key: 'daily', label: '일별' },
+          ].map((tab) => {
+            const isActive = selectedPeriod === tab.key;
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setSelectedPeriod(tab.key)}
+                className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${
+                  isActive
+                    ? 'bg-white text-blue-600 shadow-sm shadow-slate-200'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-      {/* 일간 수익률 비교 표 */}
-      <PerformanceTable 
-        type="comparison"
-        period="daily"
-        data={data?.daily_comparison} 
-      />
+      {/* 선택된 기간 단위에 따른 성과 비교 테이블 */}
+      {selectedPeriod === 'yearly' && (
+        <PerformanceTable 
+          type="comparison"
+          period="yearly"
+          data={data?.yearly_comparison} 
+          className="mt-6"
+        />
+      )}
+
+      {selectedPeriod === 'monthly' && (
+        <PerformanceTable 
+          type="comparison"
+          period="monthly"
+          data={data?.monthly_comparison} 
+          className="mt-6"
+        />
+      )}
+
+      {selectedPeriod === 'daily' && (
+        <PerformanceTable 
+          type="comparison"
+          period="daily"
+          data={data?.daily_comparison} 
+          className="mt-6"
+        />
+      )}
     </main>
   );
 };

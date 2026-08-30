@@ -82,6 +82,17 @@ const mockBenchmarkData = {
       nasdaq: 18.5
     }
   ],
+  monthly_comparison: [
+    {
+      month: "2026-05",
+      assets: 150000000,
+      roi: 5.2,
+      kospi: 3.1,
+      kosdaq: 2.5,
+      sp500: 4.0,
+      nasdaq: 6.2
+    }
+  ],
   daily_comparison: [
     {
       date: "2026-05-05",
@@ -175,9 +186,44 @@ describe('BenchmarkPage', () => {
     // 벤치마크 초과수익률 테이블 확인
     expect(screen.getByText('vs KOSPI')).toBeDefined();
     expect(screen.getByText('+9.8%p')).toBeDefined();
+  });
 
-    // 연간 및 일간 비교 테이블 렌더링 확인
+  it('[연도별 | 월별 | 일별] 탭 전환에 따라 해당 비교 테이블이 올바르게 전환 렌더링된다', () => {
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: mockBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    // 기본값: 연도별 탭이 활성화되어 '연간 수익률 비교' 렌더링
     expect(screen.getByText('연간 수익률 비교')).toBeDefined();
+    expect(screen.queryByText('월간 수익률 비교')).toBeNull();
+    expect(screen.queryByText('일간 수익률 비교')).toBeNull();
+
+    // '월별' 탭 클릭 시 '월간 수익률 비교' 표로 전환
+    const monthlyTab = screen.getByRole('button', { name: '월별' });
+    fireEvent.click(monthlyTab);
+    expect(screen.getByText('월간 수익률 비교')).toBeDefined();
+    expect(screen.getByText('2026-05')).toBeDefined();
+    expect(screen.queryByText('연간 수익률 비교')).toBeNull();
+    expect(screen.queryByText('일간 수익률 비교')).toBeNull();
+
+    // '일별' 탭 클릭 시 '일간 수익률 비교' 표로 전환
+    const dailyTab = screen.getByRole('button', { name: '일별' });
+    fireEvent.click(dailyTab);
     expect(screen.getByText('일간 수익률 비교')).toBeDefined();
+    expect(screen.getByText('2026-05-05')).toBeDefined();
+    expect(screen.queryByText('연간 수익률 비교')).toBeNull();
+    expect(screen.queryByText('월간 수익률 비교')).toBeNull();
   });
 });

@@ -136,6 +136,7 @@ async def get_benchmark_dashboard(
         "alpha_analysis": chart_data.get("alpha_summaries", []),
         "watchlist": watchlist_data,
         "yearly_comparison": comparison_tables["yearly"],
+        "monthly_comparison": comparison_tables["monthly"],
         "daily_comparison": comparison_tables["daily"]
     }
 

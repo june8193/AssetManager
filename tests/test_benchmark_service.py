@@ -335,6 +335,17 @@ async def test_get_comparison_tables(benchmark_service, db_session):
     assert yearly[1]["kospi"] == 10.0
     assert yearly[0]["kospi"] == 10.0
 
+    assert "monthly" in result
+    monthly = result["monthly"]
+    assert len(monthly) == 3
+
+    assert monthly[0]["month"] == "2026-05"
+    assert monthly[1]["month"] == "2025-12"
+    assert monthly[2]["month"] == "2025-05"
+
+    assert monthly[0]["assets"] == 1500000.0
+    assert monthly[0]["kospi"] == 5.22
+
     assert "daily" in result
     daily = result["daily"]
     assert len(daily) == 4
