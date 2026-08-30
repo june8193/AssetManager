@@ -1,6 +1,6 @@
 # 모바일 웹 '자산 조회' 계좌별 보유종목 내림차순 정렬 명세서
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
