@@ -20,7 +20,7 @@ jobs:
         env:
           CI: "true"
         run: |
-          export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+          export PATH="/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
           cd /Users/seongeunhong/Desktop/local_repo/AssetManager
           git fetch origin main
           git reset --hard origin/main
