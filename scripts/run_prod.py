@@ -63,7 +63,7 @@ def main():
     # 2. 프론트엔드 빌드
     print(f"\n[2/3] Building Frontend...")
     build_result = subprocess.run(
-        "pnpm run build",
+        "pnpm exec vite build",
         cwd=str(frontend_dir),
         env=env,
         shell=True
