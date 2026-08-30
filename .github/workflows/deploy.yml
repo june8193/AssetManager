@@ -27,6 +27,6 @@ jobs:
           mkdir -p backups/logs
           uv sync
           cd src/frontend
-          pnpm install --config.confirmModulesPurge=false
+          pnpm install --config.confirmModulesPurge=false --config.minimum-release-age=0
           cd /Users/seongeunhong/Desktop/local_repo/AssetManager
           pm2 startOrReload ecosystem.config.js --only asset-manager-prod
