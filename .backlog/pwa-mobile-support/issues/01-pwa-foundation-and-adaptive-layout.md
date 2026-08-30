@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] `vite-plugin-pwa` 및 Web App Manifest(`name`, `theme_color: #1e293b`, `display: standalone`, 아이콘)가 올바르게 구성되어야 함
 - [x] `index.html`에 iOS 전용 메타 태그(`apple-mobile-web-app-capable`, `viewport-fit=cover` 등)가 적용되어야 함

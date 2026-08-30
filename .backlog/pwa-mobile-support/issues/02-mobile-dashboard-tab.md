@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — PWA 인프라 및 적응형 모바일 레이아웃 쉘
 
-**Status:** completed
+**Status:** resolved
 
 - [x] `MobileDashboardPage` 컴포넌트가 구현되고 모바일 대시보드 탭(`/` 또는 `/m/dashboard`)에 연결되어야 함
 - [x] 총 자산, 투자 원금, 평가 손익 및 총 수익률이 포함된 총 자산 카드가 모바일 스타일에 맞게 렌더링되어야 함
