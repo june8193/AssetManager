@@ -620,13 +620,31 @@ class SnapshotEngine:
         if not exists:
             return False
 
-        self.db.query(Transaction).filter(
-            Transaction.transaction_date == snapshot_date,
-            Transaction.type == "CASH_ADJUSTMENT"
-        ).delete()
-
-        self.db.query(AccountSnapshot).filter(AccountSnapshot.snapshot_date == snapshot_date).delete()
+        self.delete_snapshots_batch([snapshot_date])
         return True
+
+    def delete_snapshots_batch(self, snapshot_dates: List[date]) -> int:
+        """지정된 날짜 목록의 모든 계좌 스냅샷 데이터 및 관련 보정 거래(CASH_ADJUSTMENT)를 일괄 삭제합니다.
+        
+        Args:
+            snapshot_dates (List[date]): 삭제할 스냅샷 기준 일자 목록.
+            
+        Returns:
+            int: 삭제된 스냅샷 레코드 수.
+        """
+        if not snapshot_dates:
+            return 0
+
+        self.db.query(Transaction).filter(
+            Transaction.transaction_date.in_(snapshot_dates),
+            Transaction.type == "CASH_ADJUSTMENT"
+        ).delete(synchronize_session=False)
+
+        deleted_count = self.db.query(AccountSnapshot).filter(
+            AccountSnapshot.snapshot_date.in_(snapshot_dates)
+        ).delete(synchronize_session=False)
+
+        return deleted_count
 
     def _calculate_bank_period_metrics(self, period_txs: List[Transaction]) -> tuple[float, float]:
         """은행 계좌 기간 거래 내역으로부터 (순입출금, 기간수익)을 산출합니다."""

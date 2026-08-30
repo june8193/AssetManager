@@ -20,6 +20,8 @@ from .snapshot import (
     SnapshotRecalculateItemDiff,
     SnapshotRecalculateRequest,
     SnapshotRecalculateResponse,
+    SnapshotBatchDeleteRequest,
+    SnapshotBatchDeleteResponse,
 )
 from .common import MessageResponse
 
@@ -45,6 +47,8 @@ __all__ = [
     "SnapshotRecalculateItemDiff",
     "SnapshotRecalculateRequest",
     "SnapshotRecalculateResponse",
+    "SnapshotBatchDeleteRequest",
+    "SnapshotBatchDeleteResponse",
     "MessageResponse",
 ]
 

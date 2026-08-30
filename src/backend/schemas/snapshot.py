@@ -163,3 +163,16 @@ class SnapshotRecalculateResponse(BaseModel):
     diffs: List[SnapshotRecalculateItemDiff]
     summary_message: str
 
+
+class SnapshotBatchDeleteRequest(BaseModel):
+    """스냅샷 다중 일괄 삭제 요청 스키마입니다."""
+    dates: List[date]
+
+
+class SnapshotBatchDeleteResponse(BaseModel):
+    """스냅샷 다중 일괄 삭제 결과 응답 스키마입니다."""
+    deleted_count: int
+    deleted_dates: List[date]
+    message: str
+
+

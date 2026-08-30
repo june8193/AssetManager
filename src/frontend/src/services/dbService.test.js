@@ -208,5 +208,18 @@ describe('dbService', () => {
       expect(delSpy).toHaveBeenCalledWith('/api/db/snapshots/2026-08-17');
       expect(result).toEqual({ message: '삭제' });
     });
+
+    it('deleteSnapshotsBatch: 여러 날짜의 스냅샷을 일괄 삭제한다', async () => {
+      const mockRes = { deleted_count: 4, deleted_dates: ['2026-08-17', '2026-08-18'], message: '삭제 완료' };
+      const delSpy = vi.spyOn(apiClient, 'delete').mockResolvedValueOnce(mockRes);
+
+      const result = await dbService.deleteSnapshotsBatch(['2026-08-17', '2026-08-18']);
+
+      expect(delSpy).toHaveBeenCalledWith('/api/db/snapshots/batch', {
+        body: { dates: ['2026-08-17', '2026-08-18'] },
+      });
+      expect(result).toEqual(mockRes);
+    });
   });
 });
+

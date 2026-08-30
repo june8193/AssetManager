@@ -20,6 +20,8 @@ from ..schemas import (
     UnifiedSaveRequest,
     SnapshotRecalculateRequest,
     SnapshotRecalculateResponse,
+    SnapshotBatchDeleteRequest,
+    SnapshotBatchDeleteResponse,
 )
 from ..services.snapshot_engine import SnapshotEngine
 
@@ -55,6 +57,26 @@ def get_latest_snapshot_date(db: Session = Depends(get_db)):
     """
     latest_date = SnapshotEngine(db).get_latest_snapshot_date()
     return LatestSnapshotDateResponse(latest_date=latest_date)
+
+
+@router.delete("/snapshots/batch", response_model=SnapshotBatchDeleteResponse)
+def delete_snapshots_batch(req: SnapshotBatchDeleteRequest, db: Session = Depends(get_db)):
+    """다중 날짜의 모든 계좌 스냅샷 데이터 및 관련 보정 거래(CASH_ADJUSTMENT)를 일괄 삭제합니다.
+    
+    Args:
+        req (SnapshotBatchDeleteRequest): 삭제할 날짜 리스트 요청.
+        db (Session): 데이터베이스 세션.
+        
+    Returns:
+        SnapshotBatchDeleteResponse: 삭제 결과 요약.
+    """
+    deleted_count = SnapshotEngine(db).delete_snapshots_batch(req.dates)
+    db.commit()
+    return SnapshotBatchDeleteResponse(
+        deleted_count=deleted_count,
+        deleted_dates=req.dates,
+        message=f"{len(req.dates)}개 일자의 스냅샷({deleted_count}건) 및 보정 거래를 삭제했습니다."
+    )
 
 
 @router.delete("/snapshots/{snapshot_date}")

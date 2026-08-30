@@ -186,4 +186,16 @@ export const dbService = {
   deleteSnapshotByDate(date) {
     return apiClient.delete(`/api/db/snapshots/${date}`);
   },
+
+  /**
+   * 지정된 여러 날짜의 스냅샷 및 보정 거래를 일괄 삭제합니다.
+   * @param {string[]} dates - 삭제할 기준일자 배열 (['YYYY-MM-DD', ...])
+   * @returns {Promise<{ deleted_count: number, deleted_dates: string[], message: string }>}
+   */
+  deleteSnapshotsBatch(dates) {
+    return apiClient.delete('/api/db/snapshots/batch', {
+      body: { dates },
+    });
+  },
 };
+
