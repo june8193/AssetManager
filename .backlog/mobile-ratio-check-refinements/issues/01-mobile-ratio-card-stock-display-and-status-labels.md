@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 주식 레벨 아이템 표시 시 종목 이름(`name`)이 메인 볼드로 노출되고, 티커(`ticker`)가 종목명과 다를 경우 옆에 `(티커)` 형태로 보조 병기된다.
 - [x] 목표 비중이 설정된 자산에 대해 상태 배지가 '매수 필요'(Sky), '매도 필요'(Amber), '적정'(Emerald)으로 명확히 구분되어 표시된다.

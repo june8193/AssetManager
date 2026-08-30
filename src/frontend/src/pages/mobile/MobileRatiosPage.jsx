@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { RefreshCw, AlertCircle, PieChart, Sparkles, RotateCcw, Plus, Coins } from 'lucide-react';
+import { RefreshCw, AlertCircle, PieChart } from 'lucide-react';
 import { useRatios } from '../../hooks/useRatios';
 import { useMasking } from '../../contexts/MaskingContext';
 import { calculateRealtimeRebalancing } from '../RatioCheckPage';
@@ -7,30 +7,27 @@ import MobileRatioCard from '../../components/mobile/MobileRatioCard';
 
 /**
  * 모바일 자산 비중 점검 및 리밸런싱 페이지 컴포넌트 (Read-Only)
- * - 목표 비중 대비 현재 비중 및 리밸런싱 필요 금액 확인
- * - 추가 투자금에 따른 실시간 리밸런싱 시뮬레이션
+ * - 목표 비중 대비 현재 비중 및 리밸런싱 규모 확인
  * - 자산군/종목 계층 아코디언 카드 리스트
  * - 실시간 시세 새로고침 및 마스킹 연동
  */
 export default function MobileRatiosPage() {
   const { hierarchy, loading, error, refreshHierarchy } = useRatios();
   const { maskValue } = useMasking();
-  const [additionalCash, setAdditionalCash] = useState(0);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
 
   // 실시간 리밸런싱 계산 결과 도출
   const rebalancingResult = useMemo(() => {
-    return calculateRealtimeRebalancing(hierarchy || [], additionalCash);
-  }, [hierarchy, additionalCash]);
+    return calculateRealtimeRebalancing(hierarchy || [], 0);
+  }, [hierarchy]);
 
-  // 총 현재 평가액 및 목표 총 자산 산출
-  const { totalCurrentValue, totalTargetValue, totalNeedBuy, totalOverSold } = useMemo(() => {
+  // 총 현재 평가액 및 단일 리밸런싱 규모 산출
+  const { totalCurrentValue, rebalanceAmount } = useMemo(() => {
     if (!rebalancingResult || rebalancingResult.length === 0) {
-      return { totalCurrentValue: 0, totalTargetValue: 0, totalNeedBuy: 0, totalOverSold: 0 };
+      return { totalCurrentValue: 0, rebalanceAmount: 0 };
     }
     const currentVal = rebalancingResult.reduce((sum, item) => sum + (item.current_value || 0), 0);
-    const targetVal = currentVal + additionalCash;
 
     let needBuy = 0;
     let overSold = 0;
@@ -41,11 +38,9 @@ export default function MobileRatiosPage() {
 
     return {
       totalCurrentValue: currentVal,
-      totalTargetValue: targetVal,
-      totalNeedBuy: needBuy,
-      totalOverSold: overSold,
+      rebalanceAmount: Math.max(needBuy, overSold),
     };
-  }, [rebalancingResult, additionalCash]);
+  }, [rebalancingResult]);
 
   const handleRefresh = async () => {
     if (isRefreshing) return;
@@ -67,14 +62,6 @@ export default function MobileRatiosPage() {
         setToastMessage(null);
       }, 3000);
     }
-  };
-
-  const handleAddCash = (amount) => {
-    setAdditionalCash((prev) => Math.max(0, prev + amount));
-  };
-
-  const handleResetCash = () => {
-    setAdditionalCash(0);
   };
 
   const formatMoney = (val) => {
@@ -166,106 +153,30 @@ export default function MobileRatiosPage() {
             <PieChart className="w-3.5 h-3.5" />
             포트폴리오 비중 요약
           </span>
-          {additionalCash > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30 flex items-center gap-1">
-              <Sparkles className="w-2.5 h-2.5" />
-              시뮬레이션 적용 중
-            </span>
-          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-3 pt-1">
-          <div>
-            <span className="text-[10px] text-slate-400 font-medium block">현재 총 자산</span>
-            <div className="text-base font-extrabold text-white font-mono mt-0.5">
-              {formatMoney(totalCurrentValue)}
-              <span className="text-xs font-normal text-slate-400 ml-0.5">원</span>
-            </div>
-          </div>
-
-          <div>
-            <span className="text-[10px] text-slate-400 font-medium block">목표 총 자산</span>
-            <div className="text-base font-extrabold text-sky-400 font-mono mt-0.5">
-              {formatMoney(totalTargetValue)}
-              <span className="text-xs font-normal text-slate-400 ml-0.5">원</span>
-            </div>
+        {/* 현재 총 자산 단일 메인 금액 */}
+        <div className="pt-1">
+          <span className="text-[10px] text-slate-400 font-medium block">현재 총 자산</span>
+          <div className="text-xl font-extrabold text-white font-mono mt-0.5 tracking-tight">
+            {formatMoney(totalCurrentValue)}
+            <span className="text-xs font-normal text-slate-400 ml-0.5">원</span>
           </div>
         </div>
 
-        {/* 리밸런싱 필요 총액 안내 */}
-        {(totalNeedBuy > 0 || totalOverSold > 0) && (
+        {/* 단일화된 리밸런싱 규모 안내 */}
+        {rebalanceAmount > 0 && (
           <div className="pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
-            <span className="text-slate-400">리밸런싱 조정 요약</span>
-            <div className="flex items-center gap-2 font-mono font-bold">
-              {totalNeedBuy > 0 && (
-                <span className="text-sky-400 text-[11px]">
-                  매수 +{formatMoney(totalNeedBuy)}원
-                </span>
-              )}
-              {totalOverSold > 0 && (
-                <span className="text-amber-400 text-[11px]">
-                  매도 -{formatMoney(totalOverSold)}원
-                </span>
-              )}
+            <span className="text-slate-400">리밸런싱 규모</span>
+            <div className="text-sky-400 font-mono font-bold text-[11px]">
+              {formatMoney(rebalanceAmount)}
+              <span className="text-[10px] font-normal text-slate-400 ml-0.5">원</span>
             </div>
           </div>
         )}
       </div>
 
-      {/* 2. 추가 투자금 시뮬레이터 (간편 칩 버튼) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-2.5">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-200">
-            <Coins className="w-3.5 h-3.5 text-amber-400" />
-            <span>추가 투자금 시뮬레이션</span>
-          </div>
-          {additionalCash > 0 && (
-            <span className="text-xs font-mono font-bold text-emerald-400">
-              +{formatMoney(additionalCash)}원
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
-          <button
-            type="button"
-            onClick={() => handleAddCash(1000000)}
-            className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl text-[11px] font-bold border border-slate-700/60 transition-all flex items-center justify-center gap-0.5 whitespace-nowrap"
-          >
-            <Plus className="w-3 h-3 text-sky-400" />
-            100만
-          </button>
-          <button
-            type="button"
-            onClick={() => handleAddCash(5000000)}
-            className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl text-[11px] font-bold border border-slate-700/60 transition-all flex items-center justify-center gap-0.5 whitespace-nowrap"
-          >
-            <Plus className="w-3 h-3 text-sky-400" />
-            500만
-          </button>
-          <button
-            type="button"
-            onClick={() => handleAddCash(10000000)}
-            className="flex-1 py-1.5 px-2 bg-slate-800 hover:bg-slate-700 active:scale-95 text-slate-200 rounded-xl text-[11px] font-bold border border-slate-700/60 transition-all flex items-center justify-center gap-0.5 whitespace-nowrap"
-          >
-            <Plus className="w-3 h-3 text-sky-400" />
-            1,000만
-          </button>
-          {additionalCash > 0 && (
-            <button
-              type="button"
-              onClick={handleResetCash}
-              aria-label="투자금 초기화"
-              className="py-1.5 px-2.5 bg-rose-500/10 hover:bg-rose-500/20 active:scale-95 text-rose-400 rounded-xl text-[11px] font-bold border border-rose-500/20 transition-all flex items-center justify-center gap-1"
-            >
-              <RotateCcw className="w-3 h-3" />
-              초기화
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* 3. 자산군별 비중 카드 목록 */}
+      {/* 2. 자산군별 비중 카드 목록 */}
       <div className="space-y-3">
         {rebalancingResult.length === 0 ? (
           <div className="py-12 text-center bg-slate-900 border border-slate-800 rounded-3xl p-6 shadow-sm">
