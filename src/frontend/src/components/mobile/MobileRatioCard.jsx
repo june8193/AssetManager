@@ -51,8 +51,7 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
 
   if (!item) return null;
 
-  const displayName = item.category_name || item.name || item.ticker || '기타';
-  const ticker = item.ticker && item.ticker !== displayName ? item.ticker : null;
+  const displayName = item.name || item.category_name || item.ticker || '기타';
   const currentValue = item.current_value !== undefined ? item.current_value : (item.valuation_krw || 0);
   const targetPercentage = item.target_percentage || 0;
 
@@ -113,9 +112,6 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
                 <span className={`w-2 h-2 rounded-full ${theme.barColor}`} />
               )}
               {displayName}
-              {ticker && (
-                <span className="text-[10px] font-mono text-slate-400 font-normal">({ticker})</span>
-              )}
             </span>
 
             {/* 상태 배지 (목표 비중이 설정된 경우에만 표시) */}

@@ -132,9 +132,9 @@ describe('MobileRatioCard Component', () => {
       </MaskingProvider>
     );
 
-    // 종목명 노출 확인
+    // 종목명 노출 확인 및 괄호 티커 미노출 확인
     expect(screen.getByText('삼성전자')).toBeInTheDocument();
-    expect(screen.getByText('(005930)')).toBeInTheDocument();
+    expect(screen.queryByText('(005930)')).not.toBeInTheDocument();
 
     // 상태 배지('매도 필요', '매수 필요', '적정', '초과')가 없어야 함
     expect(screen.queryByText('매도 필요')).not.toBeInTheDocument();
@@ -153,31 +153,32 @@ describe('MobileRatioCard Component', () => {
     expect(screen.getByText('-')).toBeInTheDocument();
   });
 
-  it('주식 레벨 종목명과 티커 표기 규칙이 올바르게 적용되어야 한다', () => {
-    // 1. 종목명과 티커가 다른 경우: 애플 (AAPL)
+  it('주식 레벨 종목명 단독 표기 규칙이 올바르게 적용되어야 한다', () => {
+    // 1. 종목명과 티커가 모두 있는 경우 (백엔드 구조: category_name='AAPL', name='애플', ticker='AAPL'): 종목명('애플')만 단독 표시
     const { unmount } = render(
       <MaskingProvider>
         <MobileRatioCard
-          item={{ name: '애플', ticker: 'AAPL', current_value: 10000000, target_percentage: 10 }}
+          item={{ name: '애플', category_name: 'AAPL', ticker: 'AAPL', current_value: 10000000, target_percentage: 10 }}
           totalValuation={100000000}
         />
       </MaskingProvider>
     );
     expect(screen.getByText('애플')).toBeInTheDocument();
-    expect(screen.getByText('(AAPL)')).toBeInTheDocument();
+    expect(screen.queryByText('(AAPL)')).not.toBeInTheDocument();
+    expect(screen.queryByText('AAPL')).not.toBeInTheDocument();
     unmount();
 
-    // 2. 종목명과 티커가 동일한 경우: AAPL 단일 표시
+    // 2. 종목명이 없고 티커만 있는 경우: 티커('TSLA') 단독 표시
     render(
       <MaskingProvider>
         <MobileRatioCard
-          item={{ name: 'AAPL', ticker: 'AAPL', current_value: 10000000, target_percentage: 10 }}
+          item={{ name: '', category_name: 'TSLA', ticker: 'TSLA', current_value: 10000000, target_percentage: 10 }}
           totalValuation={100000000}
         />
       </MaskingProvider>
     );
-    expect(screen.getByText('AAPL')).toBeInTheDocument();
-    expect(screen.queryByText('(AAPL)')).not.toBeInTheDocument();
+    expect(screen.getByText('TSLA')).toBeInTheDocument();
+    expect(screen.queryByText('(TSLA)')).not.toBeInTheDocument();
   });
 
   it('하위 카테고리가 있는 경우 클릭 시 아코디언이 펼쳐져 하위 항목이 렌더링되어야 한다', () => {
