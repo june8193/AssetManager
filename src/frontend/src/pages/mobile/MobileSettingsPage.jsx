@@ -357,7 +357,9 @@ export default function MobileSettingsPage() {
           </div>
           <div className="flex items-center justify-between py-1.5 border-b border-slate-800/80">
             <span className="text-slate-400">앱 버전</span>
-            <span className="font-mono text-slate-200">v1.0.0</span>
+            <span className="font-mono text-slate-200">
+              v{import.meta.env.VITE_APP_VERSION || '1.0.0'}
+            </span>
           </div>
           <div className="flex items-center justify-between py-1.5 border-b border-slate-800/80">
             <span className="text-slate-400">실행 모드</span>
