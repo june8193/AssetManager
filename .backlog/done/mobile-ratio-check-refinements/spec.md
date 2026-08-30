@@ -1,6 +1,6 @@
 # 모바일 웹 비중 점검 탭 사용성 및 리밸런싱 표시 개선 명세서
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
