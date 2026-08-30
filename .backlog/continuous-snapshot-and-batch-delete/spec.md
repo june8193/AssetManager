@@ -1,6 +1,6 @@
 # Feature Spec: 연속 스냅샷 자동 생성 및 스냅샷 다중 일괄 삭제
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 

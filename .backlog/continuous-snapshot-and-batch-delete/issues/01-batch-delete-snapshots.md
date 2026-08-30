@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] DB 관리 스냅샷 테이블의 헤더에 전체 선택/해제 체크박스가 표시된다.
 - [x] 각 스냅샷 행에 개별 선택 체크박스가 표시된다.
