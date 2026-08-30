@@ -77,7 +77,7 @@ def main():
     # 3. 프론트엔드 Preview 실행 (배포 모드)
     print(f"\n[3/3] Starting Frontend Server (Vite Preview) on port {frontend_port}...")
     frontend_process = subprocess.Popen(
-        f"pnpm run preview --port {frontend_port} --host 0.0.0.0",
+        f"pnpm exec vite preview --port {frontend_port} --host 0.0.0.0",
         cwd=str(frontend_dir),
         env=env,
         shell=True,
