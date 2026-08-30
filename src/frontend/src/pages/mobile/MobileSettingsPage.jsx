@@ -5,12 +5,7 @@ import {
   EyeOff,
   Server,
   RefreshCw,
-  Smartphone,
   Info,
-  Share,
-  PlusSquare,
-  MoreVertical,
-  Download,
 } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 import { systemService } from '../../services/systemService';
@@ -20,8 +15,7 @@ import { systemService } from '../../services/systemService';
  * 
  * 1. 개인정보 보호: 자산 금액 마스킹 스위치 On/Off
  * 2. 백엔드 서버 헬스체크: Ping 상태, 응답 시간(Latency), 실시간 재확인
- * 3. 홈 화면 추가(PWA 설치) 인터랙티브 가이드 (iOS / Android)
- * 4. 앱 정보 및 읽기 전용 모드 안내
+ * 3. 앱 정보 및 읽기 전용 모드 안내
  */
 export default function MobileSettingsPage() {
   const { isMasked, toggleMasking } = useMasking();
@@ -31,23 +25,6 @@ export default function MobileSettingsPage() {
   const [latency, setLatency] = useState(null);
   const [lastChecked, setLastChecked] = useState(null);
   const [isChecking, setIsChecking] = useState(false);
-
-  // PWA 가이드 탭: 'ios' | 'android'
-  const [activePwaTab, setActivePwaTab] = useState('ios');
-
-  // Standalone PWA 모드 감지
-  const [isStandalone, setIsStandalone] = useState(false);
-
-  useEffect(() => {
-    const checkStandalone = () => {
-      const isStandaloneMode =
-        window.matchMedia('(display-mode: standalone)').matches ||
-        window.navigator.standalone === true;
-      setIsStandalone(isStandaloneMode);
-    };
-
-    checkStandalone();
-  }, []);
 
   // 서버 헬스체크 수행 함수
   const checkServerHealth = useCallback(async () => {
@@ -214,134 +191,7 @@ export default function MobileSettingsPage() {
         </button>
       </div>
 
-      {/* 3. 홈 화면 추가 가이드 (PWA 설치) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-indigo-500/10 text-indigo-400">
-              <Smartphone className="w-4 h-4" />
-            </div>
-            <h2 className="text-sm font-semibold text-slate-200">홈 화면 추가 가이드</h2>
-          </div>
-
-          {isStandalone && (
-            <span className="px-2 py-0.5 rounded-md bg-sky-500/20 text-sky-300 text-[11px] font-medium border border-sky-500/30">
-              PWA 앱 모드 실행 중
-            </span>
-          )}
-        </div>
-
-        {/* OS 선택 탭 */}
-        <div className="flex rounded-xl bg-slate-800/80 p-1 mb-3 border border-slate-700/60">
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activePwaTab === 'ios'}
-            onClick={() => setActivePwaTab('ios')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              activePwaTab === 'ios'
-                ? 'bg-sky-500 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            iOS (Safari)
-          </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activePwaTab === 'android'}
-            onClick={() => setActivePwaTab('android')}
-            className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              activePwaTab === 'android'
-                ? 'bg-sky-500 text-white shadow-sm'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            Android (Chrome)
-          </button>
-        </div>
-
-        {/* 단계별 가이드 내용 */}
-        {activePwaTab === 'ios' ? (
-          <div className="space-y-2.5 text-xs">
-            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40">
-              <div className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0 font-bold text-[11px] mt-0.5">
-                1
-              </div>
-              <div className="text-slate-300 leading-relaxed">
-                Safari 브라우저 하단 메뉴 바에서{' '}
-                <span className="text-sky-300 font-semibold inline-flex items-center gap-1">
-                  <Share className="w-3.5 h-3.5 inline" /> 하단 공유 버튼
-                </span>
-                을 탭합니다.
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40">
-              <div className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0 font-bold text-[11px] mt-0.5">
-                2
-              </div>
-              <div className="text-slate-300 leading-relaxed">
-                공유 메뉴 목록을 위로 스크롤하여{' '}
-                <span className="text-sky-300 font-semibold inline-flex items-center gap-1">
-                  <PlusSquare className="w-3.5 h-3.5 inline" /> '홈 화면에 추가'
-                </span>
-                를 선택합니다.
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40">
-              <div className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0 font-bold text-[11px] mt-0.5">
-                3
-              </div>
-              <div className="text-slate-300 leading-relaxed">
-                우측 상단의 <span className="text-sky-300 font-semibold">'추가'</span> 버튼을 누르면
-                홈 화면에서 주소창 없이 네이티브 앱처럼 풀스크린으로 실행됩니다.
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="space-y-2.5 text-xs">
-            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40">
-              <div className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0 font-bold text-[11px] mt-0.5">
-                1
-              </div>
-              <div className="text-slate-300 leading-relaxed">
-                Chrome 브라우저 우측 상단{' '}
-                <span className="text-sky-300 font-semibold inline-flex items-center gap-1">
-                  <MoreVertical className="w-3.5 h-3.5 inline" /> 브라우저 우측 상단 더보기(⋮)
-                </span>{' '}
-                메뉴를 탭합니다.
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40">
-              <div className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0 font-bold text-[11px] mt-0.5">
-                2
-              </div>
-              <div className="text-slate-300 leading-relaxed">
-                메뉴에서{' '}
-                <span className="text-sky-300 font-semibold inline-flex items-center gap-1">
-                  <Download className="w-3.5 h-3.5 inline" /> '앱 설치'
-                </span>{' '}
-                또는 <span className="text-sky-300 font-semibold">'홈 화면에 추가'</span>를 선택합니다.
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-slate-800/50 border border-slate-700/40">
-              <div className="w-5 h-5 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center flex-shrink-0 font-bold text-[11px] mt-0.5">
-                3
-              </div>
-              <div className="text-slate-300 leading-relaxed">
-                안내 팝업에서 <span className="text-sky-300 font-semibold">'설치'</span>를 누르면 홈 화면에
-                독립 앱으로 즉시 등록됩니다.
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* 4. 앱 정보 및 안전 안내 */}
+      {/* 3. 앱 정보 및 안전 안내 */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
           <div className="p-1.5 rounded-lg bg-violet-500/10 text-violet-400">

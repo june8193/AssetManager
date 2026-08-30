@@ -36,7 +36,7 @@ describe('MobileSettingsPage', () => {
     });
   });
 
-  it('설정 페이지의 주요 섹션(개인정보 보호, 서버 상태, PWA 설치 가이드, 앱 정보)이 렌더링되어야 한다', async () => {
+  it('설정 페이지의 주요 섹션(개인정보 보호, 서버 상태, 앱 정보)이 렌더링되어야 한다', async () => {
     renderWithProviders(<MobileSettingsPage />);
 
     await waitFor(() => {
@@ -46,7 +46,6 @@ describe('MobileSettingsPage', () => {
     expect(screen.getByText('환경 설정')).toBeInTheDocument();
     expect(screen.getByText('개인정보 보호')).toBeInTheDocument();
     expect(screen.getByText('서버 연결 상태')).toBeInTheDocument();
-    expect(screen.getByText('홈 화면 추가 가이드')).toBeInTheDocument();
     expect(screen.getByText('앱 정보')).toBeInTheDocument();
   });
 
@@ -99,31 +98,6 @@ describe('MobileSettingsPage', () => {
     await waitFor(() => {
       expect(screen.getByText(/연결 실패|오프라인/i)).toBeInTheDocument();
     });
-  });
-
-  it('PWA 가이드에서 iOS 탭과 Android 탭을 전환할 수 있어야 한다', async () => {
-    renderWithProviders(<MobileSettingsPage />);
-
-    await waitFor(() => {
-      expect(systemServiceModule.systemService.getTaskStatus).toHaveBeenCalled();
-    });
-
-    const iosTab = screen.getByRole('tab', { name: /iOS \(Safari\)/i });
-    const androidTab = screen.getByRole('tab', { name: /Android \(Chrome\)/i });
-
-    expect(iosTab).toBeInTheDocument();
-    expect(androidTab).toBeInTheDocument();
-
-    // 기본 iOS 가이드 표시 확인
-    expect(screen.getByText(/하단 공유 버튼/i)).toBeInTheDocument();
-
-    // Android 탭 클릭
-    fireEvent.click(androidTab);
-    expect(screen.getByText(/브라우저 우측 상단 더보기/i)).toBeInTheDocument();
-
-    // 다시 iOS 탭 클릭
-    fireEvent.click(iosTab);
-    expect(screen.getByText(/하단 공유 버튼/i)).toBeInTheDocument();
   });
 
   it('앱 정보 섹션에 버전 및 읽기 전용 모드 안내가 올바르게 표시되어야 한다', async () => {
