@@ -8,7 +8,7 @@ from fastmcp import FastMCP
 
 # 기능별 도구 함수 가져오기
 from src.mcp.tools.assets import get_asset_summary, get_asset_ratios, get_portfolio_status
-from src.mcp.tools.stats import get_yearly_stats, get_daily_stats, get_snapshots
+from src.mcp.tools.stats import get_yearly_stats, get_monthly_stats, get_daily_stats, get_snapshots
 from src.mcp.tools.market import (
     get_watchlist_prices,
     get_market_history,
@@ -33,6 +33,7 @@ mcp.tool()(get_asset_summary)
 mcp.tool()(get_asset_ratios)
 mcp.tool()(get_portfolio_status)
 mcp.tool()(get_yearly_stats)
+mcp.tool()(get_monthly_stats)
 mcp.tool()(get_daily_stats)
 mcp.tool()(get_snapshots)
 mcp.tool()(get_watchlist_prices)

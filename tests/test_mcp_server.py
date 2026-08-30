@@ -11,6 +11,7 @@ from src.mcp.tools.assets import (
 )
 from src.mcp.tools.stats import (
     get_yearly_stats,
+    get_monthly_stats,
     get_daily_stats,
     get_snapshots,
 )
@@ -134,6 +135,20 @@ async def test_get_yearly_stats_mcp(mock_api_client):
     assert "stats" in result
     assert result["stats"][0]["year"] == 2026
     mock_get.assert_called_once_with("/api/dashboard/yearly")
+
+@pytest.mark.asyncio
+async def test_get_monthly_stats_mcp(mock_api_client):
+    """월별 통계 조회 MCP 도구 결과를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = [
+        {"month": "2026-07", "contribution": 100000.0, "profit": 50000.0, "roi": 5.0, "assets": 1500000.0, "increase": 150000.0}
+    ]
+    
+    result = await get_monthly_stats()
+    assert "error" not in result
+    assert "stats" in result
+    assert result["stats"][0]["month"] == "2026-07"
+    mock_get.assert_called_once_with("/api/dashboard/monthly")
 
 @pytest.mark.asyncio
 async def test_get_daily_stats_mcp(mock_api_client):

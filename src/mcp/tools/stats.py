@@ -20,6 +20,20 @@ async def get_yearly_stats() -> dict:
     except Exception as e:
         return {"error": f"연도별 통계 조회 중 오류 발생: {str(e)}"}
 
+async def get_monthly_stats() -> dict:
+    """연월별(YYYY-MM) 순 투자 원금 추가액, 투자 수익, 월말 자산 평가액 및 월간 수익률(ROI) 통계를 조회합니다.
+
+    Returns:
+        dict: 연월별 투자 수익률 통계 목록
+    """
+    try:
+        stats = await api_client.get("/api/dashboard/monthly")
+        if isinstance(stats, dict) and "error" in stats:
+            return stats
+        return {"stats": stats}
+    except Exception as e:
+        return {"error": f"월별 통계 조회 중 오류 발생: {str(e)}"}
+
 async def get_daily_stats(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,

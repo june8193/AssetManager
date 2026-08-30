@@ -22,6 +22,7 @@ async def get_dashboard_summary(force_update: bool = False, db: Session = Depend
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/yearly", response_model=List[Dict[str, Any]])
+@router.get("/stats/yearly", response_model=List[Dict[str, Any]])
 async def get_yearly_stats(db: Session = Depends(get_db)):
     """연도별 자산 현황 통계를 조회합니다."""
     try:
@@ -32,7 +33,20 @@ async def get_yearly_stats(db: Session = Depends(get_db)):
         print(f"연도별 통계 조회 중 오류: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/monthly", response_model=List[Dict[str, Any]])
+@router.get("/stats/monthly", response_model=List[Dict[str, Any]])
+async def get_monthly_stats(db: Session = Depends(get_db)):
+    """월별 자산 현황 통계를 조회합니다."""
+    try:
+        service = DashboardService(db)
+        stats = service.get_monthly_stats()
+        return stats
+    except Exception as e:
+        print(f"월별 통계 조회 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @router.get("/daily", response_model=List[Dict[str, Any]])
+@router.get("/stats/daily", response_model=List[Dict[str, Any]])
 async def get_daily_stats(
     start_date: Optional[datetime.date] = Query(None, description="조회 시작일 (YYYY-MM-DD)"),
     end_date: Optional[datetime.date] = Query(None, description="조회 종료일 (YYYY-MM-DD)"),

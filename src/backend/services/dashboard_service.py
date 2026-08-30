@@ -137,6 +137,94 @@ class DashboardService:
         results.reverse()
         return results
 
+    def get_monthly_stats(self) -> List[Dict[str, Any]]:
+        """월별 자산 현황 통계를 계산하여 최신순으로 반환합니다.
+        
+        역사적 통계 데이터이므로 현재 계좌의 활성 여부와 관계없이 모든 데이터를 포함합니다.
+        결과는 최신 연월이 가장 앞에 오도록(내림차순) 정렬되어 반환됩니다.
+        순 추가액(Contribution)은 해당 월의 모든 스냅샷에 기록된 period_deposit의 합계로 계산합니다.
+        기초자산은 직전 월의 기말 자산(마지막 스냅샷 평가액)이며, 최초 기록 월은 첫 스냅샷의 (평가액 - 입금액)을 사용합니다.
+        
+        Returns:
+            List[Dict[str, Any]]: 연월별 통계 목록 (month, assets, contribution, increase, profit, roi)
+        """
+        snapshots = (
+            self.db.query(AccountSnapshot)
+            .order_by(AccountSnapshot.snapshot_date.asc())
+            .all()
+        )
+        
+        if not snapshots:
+            return []
+
+        # 연월별 날짜별 평가액 및 추가액 합산
+        monthly_date_valuations = {}  # month ("YYYY-MM") -> snapshot_date -> total_valuation
+        monthly_date_deposits = {}  # month ("YYYY-MM") -> snapshot_date -> total_period_deposit
+        
+        for snapshot in snapshots:
+            month_str = snapshot.snapshot_date.strftime("%Y-%m")
+            snap_date = snapshot.snapshot_date
+            
+            if month_str not in monthly_date_valuations:
+                monthly_date_valuations[month_str] = {}
+                monthly_date_deposits[month_str] = {}
+            if snap_date not in monthly_date_valuations[month_str]:
+                monthly_date_valuations[month_str][snap_date] = 0.0
+                monthly_date_deposits[month_str][snap_date] = 0.0
+            
+            monthly_date_valuations[month_str][snap_date] += snapshot.total_valuation
+            monthly_date_deposits[month_str][snap_date] += snapshot.period_deposit
+
+        # 연월별 기말 자산 및 당월 총 추가액 결정
+        monthly_assets = {}  # month -> total_valuation
+        monthly_contributions = {}  # month -> total_period_deposit
+        for month_str, date_vals in monthly_date_valuations.items():
+            if date_vals:
+                latest_date = max(date_vals.keys())
+                monthly_assets[month_str] = date_vals[latest_date]
+                monthly_contributions[month_str] = sum(monthly_date_deposits[month_str].values())
+
+        # 종합 통계 계산
+        months = sorted(list(monthly_assets.keys()))
+        results = []
+        
+        prev_month_end_assets = 0.0
+        
+        for idx, month_str in enumerate(months):
+            assets = monthly_assets[month_str]
+            contribution = monthly_contributions.get(month_str, 0.0)
+            
+            # 기초 자산(prev_assets) 결정
+            if idx == 0:
+                # 최초 기록 월인 경우
+                sorted_dates = sorted(monthly_date_valuations[month_str].keys())
+                first_date = sorted_dates[0]
+                prev_assets = monthly_date_valuations[month_str][first_date] - monthly_date_deposits[month_str][first_date]
+            else:
+                # 직전 월 기말 자산
+                prev_assets = prev_month_end_assets
+            
+            increase = assets - prev_assets
+            profit = increase - contribution
+            
+            # ROI = 수익 / (기초 자산 + 추가액)
+            base = prev_assets + contribution
+            roi = (profit / base * 100) if base != 0 else 0.0
+            
+            results.append({
+                "month": month_str,
+                "contribution": contribution,
+                "profit": profit,
+                "roi": round(roi, 2),
+                "assets": assets,
+                "increase": increase
+            })
+            
+            prev_month_end_assets = assets
+            
+        results.reverse()
+        return results
+
     def get_daily_stats(self, start_date: datetime.date | None = None, end_date: datetime.date | None = None, all_data: bool = False) -> List[Dict[str, Any]]:
         """일자별 자산 현황 통계를 계산하여 최신순으로 반환합니다.
         

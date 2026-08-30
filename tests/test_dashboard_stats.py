@@ -512,5 +512,210 @@ def test_get_dashboard_summary_with_foreign_pending_deposit(db_session, monkeypa
     assert summary["total_contribution"] == 1130000.0
 
 
+def test_get_monthly_stats_empty(db_session):
+    """스냅샷 데이터가 없을 때 월간 통계는 빈 리스트를 반환해야 합니다."""
+    service = DashboardService(db_session)
+    stats = service.get_monthly_stats()
+    assert stats == []
+
+
+def test_get_monthly_stats_single_month(db_session):
+    """단일 월 내 여러 일자 스냅샷이 있는 경우 월간 통계 계산을 검증합니다."""
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+
+    acc = Account(user_id=user.id, name="Test Account", provider="Bank")
+    db_session.add(acc)
+    db_session.commit()
+
+    # 2024-01-05: 최초 스냅샷 (평가액 100만, 입금 100만)
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 1, 5),
+        period_deposit=1000000.0,
+        total_valuation=1000000.0
+    ))
+    # 2024-01-20: 추가 입금 10만, 평가액 120만
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 1, 20),
+        period_deposit=100000.0,
+        total_valuation=1200000.0
+    ))
+    # 2024-01-31: 월말 스냅샷 (평가액 125만, 입금 0)
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 1, 31),
+        period_deposit=0.0,
+        total_valuation=1250000.0
+    ))
+    db_session.commit()
+
+    service = DashboardService(db_session)
+    stats = service.get_monthly_stats()
+
+    assert len(stats) == 1
+    s = stats[0]
+    assert s["month"] == "2024-01"
+    assert s["assets"] == 1250000.0
+    assert s["contribution"] == 1100000.0
+    assert s["increase"] == 1250000.0
+    assert s["profit"] == 150000.0
+    # ROI = 150,000 / (0 + 1,100,000) * 100 = 13.636... -> 13.64
+    assert s["roi"] == 13.64
+
+
+def test_get_monthly_stats_multiple_months(db_session):
+    """다중 월 스냅샷의 연속 계산 및 내림차순 정렬을 검증합니다."""
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+
+    acc = Account(user_id=user.id, name="Test Account", provider="Bank")
+    db_session.add(acc)
+    db_session.commit()
+
+    # 2024-01-31: 1월말 평가액 100만, 입금 100만
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 1, 31),
+        period_deposit=1000000.0,
+        total_valuation=1000000.0
+    ))
+    # 2024-02-15: 2월 중 입금 20만, 2024-02-28: 평가액 130만
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 2, 15),
+        period_deposit=200000.0,
+        total_valuation=1200000.0
+    ))
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 2, 28),
+        period_deposit=0.0,
+        total_valuation=1300000.0
+    ))
+    # 2024-03-31: 3월말 평가액 120만 (손실 10만), 입금 0
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 3, 31),
+        period_deposit=0.0,
+        total_valuation=1200000.0
+    ))
+    db_session.commit()
+
+    service = DashboardService(db_session)
+    stats = service.get_monthly_stats()
+
+    assert len(stats) == 3
+    # 최신 연월이 가장 먼저 오는지 확인
+    assert stats[0]["month"] == "2024-03"
+    assert stats[1]["month"] == "2024-02"
+    assert stats[2]["month"] == "2024-01"
+
+    # 2024-03 검증: A_base=1,300,000, C=0, A_end=1,200,000, P=-100,000, ROI = -100000/1300000*100 = -7.69
+    assert stats[0]["assets"] == 1200000.0
+    assert stats[0]["contribution"] == 0.0
+    assert stats[0]["increase"] == -100000.0
+    assert stats[0]["profit"] == -100000.0
+    assert stats[0]["roi"] == -7.69
+
+    # 2024-02 검증: A_base=1,000,000, C=200,000, A_end=1,300,000, P=100,000, ROI = 100000/1200000*100 = 8.33
+    assert stats[1]["assets"] == 1300000.0
+    assert stats[1]["contribution"] == 200000.0
+    assert stats[1]["increase"] == 300000.0
+    assert stats[1]["profit"] == 100000.0
+    assert stats[1]["roi"] == 8.33
+
+    # 2024-01 검증: A_base=0, C=1,000,000, A_end=1,000,000, P=0, ROI = 0.0
+    assert stats[2]["assets"] == 1000000.0
+    assert stats[2]["contribution"] == 1000000.0
+    assert stats[2]["increase"] == 1000000.0
+    assert stats[2]["profit"] == 0.0
+    assert stats[2]["roi"] == 0.0
+
+
+def test_get_monthly_stats_initial_base_asset(db_session):
+    """최초 기록 월에 이미 보유 자산(평가액 > 입금액)이 있던 경우 기초자산이 올바르게 차감되는지 검증합니다."""
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+
+    acc = Account(user_id=user.id, name="Test Account", provider="Bank")
+    db_session.add(acc)
+    db_session.commit()
+
+    # 2024-01-10: 평가액 150만, 입금액 100만 (이전 잔존 기초자산 50만)
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 1, 10),
+        period_deposit=1000000.0,
+        total_valuation=1500000.0
+    ))
+    # 2024-01-31: 평가액 180만, 추가 입금 0
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 1, 31),
+        period_deposit=0.0,
+        total_valuation=1800000.0
+    ))
+    db_session.commit()
+
+    service = DashboardService(db_session)
+    stats = service.get_monthly_stats()
+
+    assert len(stats) == 1
+    s = stats[0]
+    # A_base = 150만 - 100만 = 50만
+    # C = 100만
+    # A_end = 180만
+    # increase = 180만 - 50만 = 130만
+    # profit = 130만 - 100만 = 30만
+    # ROI = 30만 / (50만 + 100만) * 100 = 20.0%
+    assert s["month"] == "2024-01"
+    assert s["assets"] == 1800000.0
+    assert s["contribution"] == 1000000.0
+    assert s["increase"] == 1300000.0
+    assert s["profit"] == 300000.0
+    assert s["roi"] == 20.0
+
+
+def test_get_monthly_stats_api_endpoint(client, db_session):
+    """월간 통계 REST API 엔드포인트(/api/dashboard/stats/monthly 및 /api/dashboard/monthly)를 검증합니다."""
+    user = User(name="Test User")
+    db_session.add(user)
+    db_session.commit()
+
+    acc = Account(user_id=user.id, name="Test Account", provider="Bank")
+    db_session.add(acc)
+    db_session.commit()
+
+    db_session.add(AccountSnapshot(
+        account_id=acc.id,
+        snapshot_date=datetime.date(2024, 1, 31),
+        period_deposit=1000000.0,
+        total_valuation=1100000.0
+    ))
+    db_session.commit()
+
+    # /api/dashboard/stats/monthly 호출 검증
+    res1 = client.get("/api/dashboard/stats/monthly")
+    assert res1.status_code == 200
+    data1 = res1.json()
+    assert len(data1) == 1
+    assert data1[0]["month"] == "2024-01"
+    assert data1[0]["assets"] == 1100000.0
+
+    # /api/dashboard/monthly 호출 검증
+    res2 = client.get("/api/dashboard/monthly")
+    assert res2.status_code == 200
+    data2 = res2.json()
+    assert len(data2) == 1
+    assert data2[0]["month"] == "2024-01"
+    assert data2[0]["assets"] == 1100000.0
+
+
+
 
 
