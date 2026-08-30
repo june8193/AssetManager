@@ -47,4 +47,13 @@ describe('App 적응형 레이아웃 분기', () => {
     // 데스크톱 사이드바는 렌더링되지 않아야 함
     expect(screen.queryByRole('navigation', { name: /메인 메뉴/i })).not.toBeInTheDocument();
   });
+
+  it('모바일 모드 기본 진입 시 MobileDashboardPage(로딩 스켈레톤/대시보드 뷰)가 렌더링되어야 한다', () => {
+    window.innerWidth = 500;
+    render(<App />);
+
+    // MobileDashboardPage의 초기 로딩 스켈레톤 확인
+    expect(screen.getByText(/자산 데이터를 불러오는 중/i)).toBeInTheDocument();
+  });
 });
+

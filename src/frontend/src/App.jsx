@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar';
 import MobileLayout from './components/mobile/MobileLayout';
 import MobileRouteGuard from './components/mobile/MobileRouteGuard';
 import DashboardPage from './pages/DashboardPage';
+import MobileDashboardPage from './pages/mobile/MobileDashboardPage';
 import BenchmarkPage from './pages/BenchmarkPage';
 import MarketAnalysisPage from './pages/MarketAnalysisPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
@@ -30,12 +31,12 @@ function MobileAppRoutes() {
     <MobileRouteGuard>
       <MobileLayout>
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/m/dashboard" element={<DashboardPage />} />
-          <Route path="/m/assets" element={<DashboardPage />} />
+          <Route path="/" element={<MobileDashboardPage />} />
+          <Route path="/dashboard" element={<MobileDashboardPage />} />
+          <Route path="/m/dashboard" element={<MobileDashboardPage />} />
+          <Route path="/m/assets" element={<MobileDashboardPage />} />
           <Route path="/m/ratios" element={<RatioCheckPage />} />
-          <Route path="/m/settings" element={<DashboardPage />} />
+          <Route path="/m/settings" element={<MobileDashboardPage />} />
           {/* 비허용 데스크톱 경로는 MobileRouteGuard에서 자동으로 / 로 리다이렉트됨 */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
