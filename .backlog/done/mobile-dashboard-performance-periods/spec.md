@@ -1,6 +1,6 @@
-﻿# Spec: 모바일 대시보드 성과 요약 카드 기간별(연간/월간/일간) 성과 지원
+# Spec: 모바일 대시보드 성과 요약 카드 기간별(연간/월간/일간) 성과 지원
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
