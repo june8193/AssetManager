@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Wallet, ChevronDown, ChevronUp, Coins } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 
 /**
  * 모바일 계좌별 자산 잔고 아코디언 카드 컴포넌트 (Read-Only)
  * - 계좌명, 금융기관, 별칭, 총 평가금액, 예수금 요약 표시
- * - 터치하여 아코디언 펼침/접힘으로 보유 종목 리스트 조회
+ * - 터치하여 아코디언 펼침/접힘으로 보유 종목 리스트 조회 (평가금액 내림차순 정렬)
  * - 수정/삭제/추가(CUD) 버튼이 없는 순수 읽기 전용 UI
  *
  * @param {Object} props
@@ -15,20 +15,34 @@ export default function MobileAccountCard({ account }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const { maskValue } = useMasking();
 
-  if (!account) return null;
-
   const {
     name = '',
     provider = '',
     alias = '',
     total_valuation_krw = 0,
     assets = [],
-  } = account;
+  } = account || {};
+
+  // 보유 종목 정렬 (1차: valuation_krw 내림차순, 2차: name 오름차순)
+  const sortedAssets = useMemo(() => {
+    return [...assets].sort((a, b) => {
+      const valA = Number(a?.valuation_krw) || 0;
+      const valB = Number(b?.valuation_krw) || 0;
+      if (valB !== valA) {
+        return valB - valA;
+      }
+      return (a?.name || '').localeCompare(b?.name || '');
+    });
+  }, [assets]);
 
   // 예수금(현금 자산) 잔고 합산 계산
-  const cashBalance = assets
-    .filter((a) => a.category === 'CASH' || a.ticker === 'KRW' || a.ticker === 'USD')
-    .reduce((sum, a) => sum + (a.valuation_krw || 0), 0);
+  const cashBalance = useMemo(() => {
+    return assets
+      .filter((a) => a.category === 'CASH' || a.ticker === 'KRW' || a.ticker === 'USD')
+      .reduce((sum, a) => sum + (a.valuation_krw || 0), 0);
+  }, [assets]);
+
+  if (!account) return null;
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md transition-all">
@@ -80,16 +94,16 @@ export default function MobileAccountCard({ account }) {
         <div className="px-4 pb-4 pt-2 border-t border-slate-800/80 bg-slate-950/40">
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-[11px] font-bold text-slate-400 px-1">
-              <span>보유 종목 ({assets.length}개)</span>
+              <span>보유 종목 ({sortedAssets.length}개)</span>
               <span>평가금액 (KRW)</span>
             </div>
 
-            {assets.length === 0 ? (
+            {sortedAssets.length === 0 ? (
               <div className="py-6 text-center text-xs text-slate-500 font-medium bg-slate-900/50 rounded-xl border border-slate-800/60">
                 보유 종목이 없습니다.
               </div>
             ) : (
-              assets.map((asset, idx) => {
+              sortedAssets.map((asset, idx) => {
                 const isUsd = asset.country === 'US' || asset.ticker === 'USD';
                 return (
                   <div
@@ -101,7 +115,7 @@ export default function MobileAccountCard({ account }) {
                         <span className="text-xs font-bold text-slate-100 truncate">{asset.name}</span>
                         {asset.country && (
                           <span
-                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded ${
+                            className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
                               asset.country === 'KR'
                                 ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                                 : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'

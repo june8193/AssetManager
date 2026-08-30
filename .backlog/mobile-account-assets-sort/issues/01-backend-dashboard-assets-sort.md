@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** completed
+**Status:** resolved
 
 - [x] 대시보드 요약 서비스 로직에서 각 계좌의 `assets` 리스트가 1차 `valuation_krw` 내림차순, 2차 `name` 오름차순으로 정렬된다.
 - [x] 예수금(원화/외화) 및 일반 주식 종목 모두 동일한 정렬 규칙에 따라 평가금액 크기순으로 배치된다.
