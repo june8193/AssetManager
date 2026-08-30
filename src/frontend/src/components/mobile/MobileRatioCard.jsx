@@ -69,15 +69,18 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
   // 리밸런싱 필요 금액
   const diffAmt = item.diff_amt !== undefined ? item.diff_amt : 0;
 
+  // 목표 비중 설정 여부 판별 (0% 초과인 경우만 목표 설정된 것으로 간주)
+  const hasTarget = targetPercentage !== undefined && targetPercentage !== null && Number(targetPercentage) > 0;
+
   const hasChildren = Array.isArray(item.children) && item.children.length > 0;
   const theme = MAJOR_THEMES[displayName] || DEFAULT_THEME;
 
   // 상태 배지 판별
-  // diffAmt > 0 : 목표치보다 부족 -> 추가 매수 필요
-  // diffAmt < 0 : 목표치보다 초과 -> 매도/비중 축소 필요
-  const isOver = diffRatio > 0.5 || diffAmt < -1000;
-  const isUnder = diffRatio < -0.5 || diffAmt > 1000;
-  const isBalanced = !isOver && !isUnder;
+  // diffAmt > 0 : 목표치보다 부족 -> 매수 필요
+  // diffAmt < 0 : 목표치보다 초과 -> 매도 필요
+  const isOver = hasTarget && (diffRatio > 0.5 || diffAmt < -1000);
+  const isUnder = hasTarget && (diffRatio < -0.5 || diffAmt > 1000);
+  const isBalanced = hasTarget && !isOver && !isUnder;
 
   const formatMoney = (val) => {
     const formatted = Math.round(Math.abs(val)).toLocaleString();
@@ -115,23 +118,23 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
               )}
             </span>
 
-            {/* 상태 배지 */}
-            {isBalanced && (
-              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+            {/* 상태 배지 (목표 비중이 설정된 경우에만 표시) */}
+            {hasTarget && isBalanced && (
+              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                 <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
                 적정
               </span>
             )}
-            {isUnder && (
+            {hasTarget && isUnder && (
               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">
                 <TrendingUp className="w-2.5 h-2.5" />
-                추가 매수
+                매수 필요
               </span>
             )}
-            {isOver && (
+            {hasTarget && isOver && (
               <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
                 <TrendingDown className="w-2.5 h-2.5" />
-                초과
+                매도 필요
               </span>
             )}
           </div>
@@ -165,38 +168,51 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
               </span>
               <span className="text-slate-600">/</span>
               <span className="text-[11px] text-slate-400 font-medium">
-                목표 <strong className="text-sky-400 font-bold">{targetPercentage.toFixed(1)}%</strong>
+                목표{' '}
+                {hasTarget ? (
+                  <strong className="text-sky-400 font-bold">{targetPercentage.toFixed(1)}%</strong>
+                ) : (
+                  <strong className="text-slate-500 font-bold">-</strong>
+                )}
               </span>
             </div>
 
-            {/* 편차 %p */}
-            <div className="text-[11px] font-mono font-bold">
-              {diffRatio > 0 ? (
-                <span className="text-amber-400">+{diffRatio.toFixed(1)}%p</span>
-              ) : diffRatio < 0 ? (
-                <span className="text-sky-400">{diffRatio.toFixed(1)}%p</span>
-              ) : (
-                <span className="text-slate-400">0.0%p</span>
-              )}
-            </div>
+            {/* 편차 %p (목표 비중이 설정된 경우에만 표시) */}
+            {hasTarget && (
+              <div className="text-[11px] font-mono font-bold">
+                {diffRatio > 0 ? (
+                  <span className="text-amber-400">+{diffRatio.toFixed(1)}%p</span>
+                ) : diffRatio < 0 ? (
+                  <span className="text-sky-400">{diffRatio.toFixed(1)}%p</span>
+                ) : (
+                  <span className="text-slate-400">0.0%p</span>
+                )}
+              </div>
+            )}
           </div>
 
           {/* 게이지 바 */}
           <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden flex">
             <div
               className={`h-full rounded-full transition-all duration-300 ${
-                isOver ? 'bg-amber-400' : isUnder ? 'bg-sky-400' : 'bg-emerald-400'
+                hasTarget
+                  ? isOver
+                    ? 'bg-amber-400'
+                    : isUnder
+                    ? 'bg-sky-400'
+                    : 'bg-emerald-400'
+                  : 'bg-slate-600'
               }`}
               style={{ width: `${Math.min(Math.max(currentRatio, 0), 100)}%` }}
             />
           </div>
         </div>
 
-        {/* 리밸런싱 조정 필요 금액 */}
-        {Math.abs(diffAmt) >= 1 && (
+        {/* 리밸런싱 조정 필요 금액 (목표 비중이 설정된 경우에만 표시) */}
+        {hasTarget && Math.abs(diffAmt) >= 1 && (
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
             <span className="text-slate-400 font-medium">
-              {diffAmt > 0 ? '추가 매수 필요' : '초과 비중 (매도)'}
+              {diffAmt > 0 ? '매수 필요' : '매도 필요'}
             </span>
             <span
               className={`font-mono font-bold ${
