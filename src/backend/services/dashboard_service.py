@@ -678,6 +678,10 @@ class DashboardService:
             total_valuation_krw += valuation_krw
             
         # 결과 포맷팅 및 정렬
+        # 계좌별 보유 종목 사전 정렬 (1차: 평가금액 내림차순, 2차: 종목명 오름차순)
+        for acc_summary in account_summaries.values():
+            acc_summary["assets"].sort(key=lambda asset: (-asset["valuation_krw"], asset["name"]))
+
         formatted_categories = []
         for cat_name, data in category_summaries.items():
             sub_list = [
