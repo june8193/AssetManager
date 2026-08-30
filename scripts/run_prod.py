@@ -63,7 +63,7 @@ def main():
     # 2. 프론트엔드 빌드
     print(f"\n[2/3] Building Frontend...")
     build_result = subprocess.run(
-        "pnpm exec vite build",
+        "npx vite build",
         cwd=str(frontend_dir),
         env=env,
         shell=True
@@ -77,7 +77,7 @@ def main():
     # 3. 프론트엔드 Preview 실행 (배포 모드)
     print(f"\n[3/3] Starting Frontend Server (Vite Preview) on port {frontend_port}...")
     frontend_process = subprocess.Popen(
-        f"pnpm exec vite preview --port {frontend_port} --host 0.0.0.0",
+        f"npx vite preview --port {frontend_port} --host 0.0.0.0",
         cwd=str(frontend_dir),
         env=env,
         shell=True,
