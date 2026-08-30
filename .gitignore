@@ -45,6 +45,7 @@ screenshots/
 
 # Node 모듈
 node_modules/
+.pnpm-store/
 
 # GitHub Self-hosted Runner
 actions-runner/
