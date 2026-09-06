@@ -306,6 +306,93 @@ describe('MarketAnalysisPage', () => {
       expect(status80.label).toBe('위기');
     });
   });
+
+  describe('VIX Info 안내 팝오버 인터랙션 검증', () => {
+    it('VIX 차트 타이틀 옆에 Info 안내 아이콘 버튼이 렌더링된다', async () => {
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      const infoButton = screen.getByTestId('vix-info-button');
+      expect(infoButton).toBeDefined();
+      expect(infoButton.getAttribute('aria-label')).toBe('VIX 지표 안내');
+    });
+
+    it('Info 아이콘 마우스 호버 시 VIX 개념 및 4단계 기준선 안내 팝오버가 표시되고 마우스 아웃 시 닫힌다', async () => {
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      const infoContainer = screen.getByTestId('vix-info-container');
+      
+      // 초기에는 팝오버가 보이지 않음
+      expect(screen.queryByTestId('vix-info-popover')).toBeNull();
+
+      // 마우스 진입 시 팝오버 표시
+      fireEvent.mouseEnter(infoContainer);
+      const popover = screen.getByTestId('vix-info-popover');
+      expect(popover).toBeDefined();
+      
+      // VIX 개념 및 기준선 텍스트 검증
+      expect(screen.getByText(/CBOE S&P 500 변동성 지수/)).toBeDefined();
+      expect(screen.getByText(/안정 \(20 미만\)/)).toBeDefined();
+      expect(screen.getByText(/주의 \(20 ~ 30\)/)).toBeDefined();
+      expect(screen.getByText(/경고 \(30 ~ 40\)/)).toBeDefined();
+      expect(screen.getByText(/위기 \(40 이상\)/)).toBeDefined();
+
+      // 마우스 벗어날 시 팝오버 닫힘
+      fireEvent.mouseLeave(infoContainer);
+      await waitFor(() => {
+        expect(screen.queryByTestId('vix-info-popover')).toBeNull();
+      });
+    });
+
+    it('Info 아이콘 클릭 시 팝오버가 토글되고 외부 클릭 시 자연스럽게 닫힌다', async () => {
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      const infoButton = screen.getByTestId('vix-info-button');
+
+      // 클릭 시 팝오버 열림
+      fireEvent.click(infoButton);
+      expect(screen.getByTestId('vix-info-popover')).toBeDefined();
+
+      // 다시 클릭 시 팝오버 닫힘 (토글)
+      fireEvent.click(infoButton);
+      await waitFor(() => {
+        expect(screen.queryByTestId('vix-info-popover')).toBeNull();
+      });
+
+      // 다시 열기
+      fireEvent.click(infoButton);
+      expect(screen.getByTestId('vix-info-popover')).toBeDefined();
+
+      // 외부(문서 바깥 영역) 클릭 시 닫힘
+      fireEvent.mouseDown(document.body);
+      await waitFor(() => {
+        expect(screen.queryByTestId('vix-info-popover')).toBeNull();
+      });
+    });
+  });
 });
 
 

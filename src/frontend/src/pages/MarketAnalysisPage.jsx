@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
   AreaChart, Area, ReferenceLine 
@@ -91,6 +91,24 @@ export default function MarketAnalysisPage() {
   
   // 하단 테이블 서브 탭 ('monthly' | 'yearly')
   const [tableSubTab, setTableSubTab] = useState('monthly');
+
+  // VIX 안내 팝오버 상태 및 외부 클릭 Ref
+  const [isVixInfoOpen, setIsVixInfoOpen] = useState(false);
+  const vixInfoRef = useRef(null);
+  const lastMouseEnterRef = useRef(0);
+
+  // 팝오버 외부 클릭 시 닫기
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (vixInfoRef.current && !vixInfoRef.current.contains(event.target)) {
+        setIsVixInfoOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // 선택된 지수 정보
   const activeIndexInfo = useMemo(() => {
@@ -459,12 +477,113 @@ export default function MarketAnalysisPage() {
                 {/* 3) VIX 변동성 지수 차트 카드 */}
                 <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
                   <div className="flex items-center justify-between mb-6 px-2">
-                    <div>
-                      <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-                        VIX 변동성 지수 (S&P 500)
-                      </h2>
+                    <div 
+                      className="relative" 
+                      ref={vixInfoRef} 
+                      data-testid="vix-info-container"
+                      onMouseEnter={() => {
+                        lastMouseEnterRef.current = Date.now();
+                        setIsVixInfoOpen(true);
+                      }}
+                      onMouseLeave={() => setIsVixInfoOpen(false)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                          VIX 변동성 지수 (S&P 500)
+                        </h2>
+                        <button
+                          type="button"
+                          data-testid="vix-info-button"
+                          aria-label="VIX 지표 안내"
+                          aria-expanded={isVixInfoOpen}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (Date.now() - lastMouseEnterRef.current < 400) {
+                              setIsVixInfoOpen(true);
+                            } else {
+                              setIsVixInfoOpen((prev) => !prev);
+                            }
+                          }}
+                          className="p-1 rounded-full text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors focus:outline-none"
+                        >
+                          <Info size={16} />
+                        </button>
+                      </div>
                       <p className="text-[10px] text-slate-400 font-bold mt-1">S&P 500 내재 변동성(CBOE VIX) 추이를 나타냅니다.</p>
+
+                      {/* VIX 설명 팝오버 */}
+                      <AnimatePresence>
+                        {isVixInfoOpen && (
+                          <motion.div
+                            data-testid="vix-info-popover"
+                            role="tooltip"
+                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                            transition={{ duration: 0.15 }}
+                            className="absolute z-50 left-0 top-full mt-2 w-80 sm:w-96 p-5 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 text-left"
+                          >
+                            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                              <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
+                                  <Info size={14} />
+                                </div>
+                                <h3 className="text-sm font-black text-slate-800">VIX 지수 &amp; 시장 심리 가이드</h3>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 space-y-3">
+                              <div>
+                                <h4 className="text-xs font-bold text-purple-700 flex items-center gap-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                                  CBOE S&P 500 변동성 지수 (VIX)
+                                </h4>
+                                <p className="text-[11px] text-slate-600 font-medium leading-relaxed mt-1">
+                                  향후 30일간 S&P 500 옵션 가격에 반영된 시장의 기대 변동성(내재 변동성)을 나타내며, 투자자들의 공포 수준을 측정하는 대표적인 공포 지수입니다.
+                                </p>
+                              </div>
+
+                              <div className="pt-2 border-t border-slate-100">
+                                <h4 className="text-[11px] font-black text-slate-700 mb-2">4단계 리스크 기준선 및 통계적 의미</h4>
+                                <div className="space-y-2">
+                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500 text-white shrink-0 mt-0.5">안정 (20 미만)</span>
+                                    <div className="text-[11px] text-slate-600">
+                                      <span className="font-bold text-emerald-800">정상 및 안정 국면</span>
+                                      <p className="text-[10px] text-slate-500">역사적 약 65~80% 분포. 시장 심리가 안정적이고 변동성이 낮은 일반적 환경.</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-amber-50/70 border border-amber-100">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white shrink-0 mt-0.5">주의 (20 ~ 30)</span>
+                                    <div className="text-[11px] text-slate-600">
+                                      <span className="font-bold text-amber-800">시장 불확실성 증가</span>
+                                      <p className="text-[10px] text-slate-500">역사적 상위 약 20% 수준. 시장 조정 국면 및 단기 변동성 확대 주의 필요.</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-red-50/70 border border-red-100">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-red-500 text-white shrink-0 mt-0.5">경고 (30 ~ 40)</span>
+                                    <div className="text-[11px] text-slate-600">
+                                      <span className="font-bold text-red-800">본격 패닉 및 투매</span>
+                                      <p className="text-[10px] text-slate-500">역사적 상위 약 5% 수준. 과도한 공포 확대로 역발상 분할 매수 기회 고려 구간.</p>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-rose-50/70 border border-rose-100">
+                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-700 text-white shrink-0 mt-0.5">위기 (40 이상)</span>
+                                    <div className="text-[11px] text-slate-600">
+                                      <span className="font-bold text-rose-900">극단적 시스템 위기</span>
+                                      <p className="text-[10px] text-slate-500">역사적 상위 1% 미만 (리먼·코로나급). 극단적 공포 국면이자 역사적 최적의 매수 기회.</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
                     {latestVix !== null && (
                       <div className="flex items-center gap-3">
