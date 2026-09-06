@@ -1,6 +1,6 @@
 # Feature Spec: 모바일 웹 지수분석 메뉴 추가
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
