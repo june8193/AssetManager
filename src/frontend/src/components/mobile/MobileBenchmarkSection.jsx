@@ -10,6 +10,7 @@ import {
 } from 'recharts';
 import { TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
 import MobileMddSummaryCard from './MobileMddSummaryCard';
+import MobileAlphaCardList from './MobileAlphaCardList';
 
 /**
  * 벤치마크 조회 기간 옵션 정의
@@ -405,6 +406,15 @@ export default function MobileBenchmarkSection({ isMasked, refreshTrigger = 0 })
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* 4. 알파 초과수익률 컴팩트 카드 리스트 및 상세 표 토글 */}
+          <MobileAlphaCardList
+            alphaAnalysis={benchmarkData?.alpha_analysis}
+            indices={benchmarkData?.indices}
+            indicesMdd={indicesMdd}
+            portfolioReturn={portfolioReturn}
+            isMasked={isMasked}
+          />
         </>
       )}
     </div>

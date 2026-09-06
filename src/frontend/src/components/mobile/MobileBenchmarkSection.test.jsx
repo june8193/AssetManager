@@ -185,4 +185,40 @@ describe('MobileBenchmarkSection', () => {
       expect(global.fetch.mock.calls.length).toBeGreaterThan(initialCallCount);
     });
   });
+
+  it('하단에 알파 초과수익 컴팩트 카드 리스트와 상세 표 토글이 연동되어 렌더링된다', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mobile-alpha-card-list')).toBeInTheDocument();
+      expect(screen.getByTestId('alpha-card-sp500')).toBeInTheDocument();
+      expect(screen.getByTestId('alpha-card-nasdaq')).toBeInTheDocument();
+      expect(screen.getByTestId('alpha-card-kospi')).toBeInTheDocument();
+      expect(screen.getByTestId('alpha-card-kosdaq')).toBeInTheDocument();
+    });
+
+    // 상세 표 토글 동작 확인
+    const toggleBtn = screen.getByTestId('alpha-table-toggle-btn');
+    expect(toggleBtn).toBeInTheDocument();
+    expect(screen.queryByTestId('alpha-detail-table')).not.toBeInTheDocument();
+
+    fireEvent.click(toggleBtn);
+    expect(screen.getByTestId('alpha-detail-table')).toBeInTheDocument();
+    expect(screen.getByTestId('alpha-table-row-sp500')).toBeInTheDocument();
+  });
+
+  it('isMasked prop 적용 시 알파 카드 내부의 포트폴리오 수익률과 알파 수치도 마스킹된다', async () => {
+    renderComponent({ isMasked: true });
+
+    await waitFor(() => {
+      const spCard = screen.getByTestId('alpha-card-sp500');
+      expect(spCard).toBeInTheDocument();
+      // 지수 수익률은 노출
+      expect(spCard).toHaveTextContent('+8.50%');
+      // 포트폴리오 수익률과 알파는 마스킹
+      expect(spCard).toHaveTextContent('***');
+      expect(spCard).not.toHaveTextContent('+12.45%');
+      expect(spCard).not.toHaveTextContent('+3.95%p');
+    });
+  });
 });
