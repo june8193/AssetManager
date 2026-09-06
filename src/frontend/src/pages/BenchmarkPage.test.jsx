@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import BenchmarkPage from './BenchmarkPage';
 import { useBenchmark } from '../hooks/useBenchmark';
@@ -154,7 +154,7 @@ describe('BenchmarkPage', () => {
     expect(refreshMock).toHaveBeenCalledTimes(1);
   });
 
-  it('정상 데이터 로드 시 요약 카드, 차트, 초과수익률 및 관심종목 테이블을 렌더링한다', () => {
+  it('정상 데이터 로드 시 요약 카드가 제거되고 초과수익률 분석 표와 차트가 순서대로 렌더링된다', () => {
     vi.mocked(useBenchmark).mockReturnValue({
       data: mockBenchmarkData,
       loading: false,
@@ -171,21 +171,63 @@ describe('BenchmarkPage', () => {
       </MaskingProvider>
     );
 
-    // 내 총자산 카드 렌더링 확인
-    expect(screen.getByText('내 총자산')).toBeDefined();
-    expect(screen.getByText('₩ 160,000,000')).toBeDefined();
-    expect(screen.getByText('YTD +15.2%')).toBeDefined();
-    expect(screen.getByText(/최신 스냅샷 2026-06-06 기준/i)).toBeDefined();
-    expect(screen.getByText(/수익률 비교 기준일: 2026-05-05/i)).toBeDefined();
+    // 요약 카드 영역 제거 확인 ('내 총자산' 및 지수 요약 카드 미노출)
+    expect(screen.queryByText('내 총자산')).not.toBeInTheDocument();
+    expect(screen.queryByText('₩ 160,000,000')).not.toBeInTheDocument();
+    expect(screen.queryByText('2,650.42')).not.toBeInTheDocument();
 
-    // 코스피 지수 카드 렌더링 확인
-    expect(screen.getAllByText(/KOSPI/i)[0]).toBeDefined();
-    expect(screen.getByText('2,650.42')).toBeDefined();
-    expect(screen.getByText('YTD +5.4%')).toBeDefined();
+    // 벤치마크 초과수익률 테이블 정상 렌더링 확인
+    const alphaHeading = screen.getByRole('heading', { level: 3, name: '벤치마크 초과수익률 (Alpha) 분석' });
+    expect(alphaHeading).toBeInTheDocument();
+    expect(screen.getByText('vs KOSPI')).toBeInTheDocument();
+    expect(screen.getByText('+9.8%p')).toBeInTheDocument();
+    expect(screen.getByText('+15.2%')).toBeInTheDocument();
 
-    // 벤치마크 초과수익률 테이블 확인
-    expect(screen.getByText('vs KOSPI')).toBeDefined();
-    expect(screen.getByText('+9.8%p')).toBeDefined();
+    // 누적 수익률 비교 추이 차트 정상 렌더링 확인
+    const chartHeading = screen.getByRole('heading', { level: 2, name: '누적 수익률 비교 추이 (%)' });
+    expect(chartHeading).toBeInTheDocument();
+
+    // 초과수익률 분석 표가 차트보다 상단(DOM 앞 순서)에 렌더링되는지 확인
+    expect(alphaHeading.compareDocumentPosition(chartHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    // 하단 연간 수익률 비교 테이블 정상 유지 확인
+    expect(screen.getByText('연간 수익률 비교')).toBeInTheDocument();
+  });
+
+  it('초과수익률 분석 표에서 포트폴리오 수익률이 음수일 때 마이너스 부호가 올바르게 렌더링된다', () => {
+    const negativeBenchmarkData = {
+      ...mockBenchmarkData,
+      alpha_analysis: [
+        {
+          benchmark: "KOSPI",
+          ticker: "^KS11",
+          benchmark_return: -1.2,
+          portfolio_return: -4.5,
+          alpha: -3.3,
+          judgment: "시장 하회"
+        }
+      ]
+    };
+
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: negativeBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    // 음수일 때 '+-4.5%'가 아니라 '-4.5%'로 렌더링되는지 확인
+    expect(screen.getByText('-4.5%')).toBeInTheDocument();
+    expect(screen.queryByText('+-4.5%')).not.toBeInTheDocument();
   });
 
   it('[연도별 | 월별 | 일별] 탭 전환에 따라 해당 비교 테이블이 올바르게 전환 렌더링된다', () => {

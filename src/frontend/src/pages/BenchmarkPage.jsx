@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useBenchmark } from '../hooks/useBenchmark';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, Wallet, RefreshCw, AlertCircle } from 'lucide-react';
-import { useMasking } from '../contexts/MaskingContext';
+import { TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
 import PerformanceTable from '../components/PerformanceTable';
 
 // 벤치마크 조회 기간 탭 옵션 정의
@@ -32,8 +31,6 @@ const BenchmarkPage = () => {
     refresh
   } = useBenchmark();
 
-  const { maskValue } = useMasking();
-
   // 테이블 기간 탭 선택 상태 ('yearly' | 'monthly' | 'daily')
   const [selectedPeriod, setSelectedPeriod] = useState('yearly');
 
@@ -46,7 +43,7 @@ const BenchmarkPage = () => {
     "NASDAQ": true,
   });
 
-  const { portfolio, indices, alpha_analysis } = data || {};
+  const { alpha_analysis } = data || {};
 
   // Recharts 형식에 맞게 데이터셋 가공
   const chartData = useMemo(() => {
@@ -65,13 +62,6 @@ const BenchmarkPage = () => {
       return row;
     });
   }, [data]);
-
-  // 최신 스냅샷 날짜 추출 (YYYY-MM-DD 포맷)
-  const latestSnapshotDate = useMemo(() => {
-    if (!data?.chart?.labels || data.chart.labels.length === 0) return '';
-    return data.chart.labels[data.chart.labels.length - 1];
-  }, [data]);
-
 
   if (loading) {
     return (
@@ -140,71 +130,64 @@ const BenchmarkPage = () => {
             onClick={refresh}
             className="flex items-center justify-center p-2.5 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-blue-600 hover:bg-slate-50 hover:shadow-sm transition-all"
             title="새로고침"
+            aria-label="새로고침"
           >
             <RefreshCw size={18} />
           </button>
         </div>
       </div>
 
-      {/* 1. 성과 요약 카드 영역 */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {/* 내 포트폴리오 */}
-        <div className="bg-white p-6 rounded-[2rem] border border-blue-100 shadow-sm relative overflow-hidden">
-          <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-blue-500/5 rounded-full blur-xl"></div>
-          <div className="flex justify-between items-start mb-4">
-            <span className="text-sm font-bold text-slate-400">내 총자산</span>
-            <span className="text-xs font-bold px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">
-              {period} {portfolio?.ytd_return >= 0 ? "+" : ""}{portfolio?.ytd_return}%
-            </span>
+      {/* 1. 벤치마크 초과수익률 (Alpha) 분석 표 */}
+      <div className="w-full mb-8">
+        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+          <div className="flex items-center gap-2 mb-6">
+            <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
+            <h3 className="text-lg font-bold text-slate-800">벤치마크 초과수익률 (Alpha) 분석</h3>
           </div>
-          <div className="text-2xl font-black text-slate-800 tracking-tight">
-            ₩ {maskValue(Math.round(portfolio?.actual_latest_valuation ?? portfolio?.total_valuation ?? 0).toLocaleString())}
-          </div>
-          <div className="text-slate-400 text-[10px] mt-2 flex flex-col gap-0.5">
-            <span className="flex items-center gap-1 font-medium">
-              <Wallet size={11} className="text-blue-500" />
-              최신 스냅샷 {portfolio?.actual_latest_date || latestSnapshotDate} 기준
-            </span>
-            {latestSnapshotDate && (
-              <span className="text-slate-400/80 font-medium pl-[15px]">
-                ※ 수익률 비교 기준일: {latestSnapshotDate}
-              </span>
-            )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="bg-slate-50 text-slate-500 text-xs font-bold tracking-wider">
+                <tr>
+                  <th className="px-4 py-3.5 rounded-l-2xl">비교 벤치마크</th>
+                  <th className="px-4 py-3.5 text-right">지수 {period}</th>
+                  <th className="px-4 py-3.5 text-right">내 {period}</th>
+                  <th className="px-4 py-3.5 text-right">초과수익률 (Alpha)</th>
+                  <th className="px-4 py-3.5 text-center rounded-r-2xl">성과 판정</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {alpha_analysis?.map((item) => {
+                  const isPlus = item.alpha >= 0;
+                  return (
+                    <tr key={item.ticker} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="px-4 py-4 font-bold text-slate-700">vs {item.benchmark}</td>
+                      <td className="px-4 py-4 text-right font-medium text-slate-500">{item.benchmark_return >= 0 ? "+" : ""}{item.benchmark_return}%</td>
+                      <td className="px-4 py-4 text-right font-semibold text-blue-600">{item.portfolio_return >= 0 ? "+" : ""}{item.portfolio_return}%</td>
+                      <td className={`px-4 py-4 text-right font-bold ${isPlus ? "text-emerald-500" : "text-rose-500"}`}>
+                        {isPlus ? "+" : ""}{item.alpha}%p
+                      </td>
+                      <td className="px-4 py-4 text-center">
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+                          isPlus ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
+                        }`}>
+                          {item.judgment}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {(!alpha_analysis || alpha_analysis.length === 0) && (
+                  <tr>
+                    <td colSpan="5" className="px-4 py-8 text-center text-slate-400 font-medium">
+                      성과 요약 데이터가 없습니다.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
-
-        {/* 4대 시장 지수 요약 카드 */}
-        {Object.entries(indices || {}).map(([ticker, info]) => {
-          const isUp = info.return >= 0;
-          const isSuperior = info.alpha >= 0;
-          
-          return (
-            <div key={ticker} className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
-              <div className="flex justify-between items-start mb-4">
-                <span className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
-                  {info.name}
-                  <span className="text-[10px] font-mono text-slate-400 bg-slate-50 px-1.5 py-0.5 rounded">
-                    {ticker}
-                  </span>
-                </span>
-                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  isUp ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-                }`}>
-                  {period} {isUp ? "+" : ""}{info.return}%
-                </span>
-              </div>
-              <div className="text-2xl font-black text-slate-800 tracking-tight">
-                {info.value?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </div>
-              <div className="text-xs font-bold mt-2">
-                지수 대비{" "}
-                <span className={isSuperior ? "text-emerald-500" : "text-rose-500"}>
-                  {isSuperior ? "+" : ""}{info.alpha}%p {isSuperior ? "상회" : "하회"}
-                </span>
-              </div>
-            </div>
-          );
-        })}
       </div>
 
       {/* 2. 중앙 비교 추이 차트 */}
@@ -214,7 +197,7 @@ const BenchmarkPage = () => {
           <div>
             <h2 className="text-xl font-bold text-slate-800">누적 수익률 비교 추이 (%)</h2>
             <p className="text-slate-400 text-xs font-medium mt-0.5">
-              조회 기간의 첫 거래일을 0% 기준으로 정규화한 성과 그래프입니다. (하단 관심 종목 클릭 시 차트 실시간 비교 연동)
+              조회 기간의 첫 거래일을 0% 기준으로 정규화한 성과 그래프입니다.
             </p>
           </div>
         </div>
@@ -272,8 +255,6 @@ const BenchmarkPage = () => {
               {activeSeries["KOSDAQ"] && <Line type="monotone" dataKey="KOSDAQ" stroke="#f472b6" strokeWidth={1.5} dot={false} />}
               {activeSeries["S&P 500"] && <Line type="monotone" dataKey="S&P 500" stroke="#34d399" strokeWidth={1.5} dot={false} />}
               {activeSeries["NASDAQ"] && <Line type="monotone" dataKey="NASDAQ" stroke="#a78bfa" strokeWidth={1.5} dot={false} />}
-
-              {/* 관심 종목 라인들 (Lazy Loading) */}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -283,6 +264,7 @@ const BenchmarkPage = () => {
           {/* 내 포트폴리오 토글 */}
           <button
             onClick={() => setActiveSeries(prev => ({ ...prev, "내 포트폴리오": !prev["내 포트폴리오"] }))}
+            aria-pressed={activeSeries["내 포트폴리오"]}
             className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
               activeSeries["내 포트폴리오"]
                 ? "bg-[#38bdf8] text-white shadow-sm shadow-[#38bdf8]/30 scale-105"
@@ -305,6 +287,7 @@ const BenchmarkPage = () => {
               <button
                 key={item.key}
                 onClick={() => setActiveSeries(prev => ({ ...prev, [item.key]: !prev[item.key] }))}
+                aria-pressed={isActive}
                 className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   isActive
                     ? `${item.bg} text-white shadow-sm shadow-black/10 scale-105`
@@ -316,61 +299,6 @@ const BenchmarkPage = () => {
               </button>
             );
           })}
-        </div>
-      </div>
-
-
-      {/* 3. 하단 상세 분석 */}
-      <div className="w-full">
-        {/* 초과수익률 분석 테이블 */}
-        <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
-            <h3 className="text-lg font-bold text-slate-800">벤치마크 초과수익률 (Alpha) 분석</h3>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-slate-50 text-slate-500 text-xs font-bold tracking-wider">
-                <tr>
-                  <th className="px-4 py-3.5 rounded-l-2xl">비교 벤치마크</th>
-                  <th className="px-4 py-3.5 text-right">지수 {period}</th>
-                  <th className="px-4 py-3.5 text-right">내 {period}</th>
-                  <th className="px-4 py-3.5 text-right">초과수익률 (Alpha)</th>
-                  <th className="px-4 py-3.5 text-center rounded-r-2xl">성과 판정</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {alpha_analysis?.map((item) => {
-                  const isPlus = item.alpha >= 0;
-                  return (
-                    <tr key={item.ticker} className="hover:bg-slate-50/50 transition-colors">
-                      <td className="px-4 py-4 font-bold text-slate-700">vs {item.benchmark}</td>
-                      <td className="px-4 py-4 text-right font-medium text-slate-500">{item.benchmark_return >= 0 ? "+" : ""}{item.benchmark_return}%</td>
-                      <td className="px-4 py-4 text-right font-semibold text-blue-600">+{item.portfolio_return}%</td>
-                      <td className={`px-4 py-4 text-right font-bold ${isPlus ? "text-emerald-500" : "text-rose-500"}`}>
-                        {isPlus ? "+" : ""}{item.alpha}%p
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-                          isPlus ? "bg-emerald-50 text-emerald-600" : "bg-rose-50 text-rose-600"
-                        }`}>
-                          {item.judgment}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-                {(!alpha_analysis || alpha_analysis.length === 0) && (
-                  <tr>
-                    <td colSpan="5" className="px-4 py-8 text-center text-slate-400 font-medium">
-                      성과 요약 데이터가 없습니다.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
         </div>
       </div>
 
@@ -387,6 +315,7 @@ const BenchmarkPage = () => {
               <button
                 key={tab.key}
                 onClick={() => setSelectedPeriod(tab.key)}
+                aria-pressed={isActive}
                 className={`px-5 py-2 rounded-xl text-xs font-black transition-all ${
                   isActive
                     ? 'bg-white text-blue-600 shadow-sm shadow-slate-200'
@@ -401,32 +330,12 @@ const BenchmarkPage = () => {
       </div>
 
       {/* 선택된 기간 단위에 따른 성과 비교 테이블 */}
-      {selectedPeriod === 'yearly' && (
-        <PerformanceTable 
-          type="comparison"
-          period="yearly"
-          data={data?.yearly_comparison} 
-          className="mt-6"
-        />
-      )}
-
-      {selectedPeriod === 'monthly' && (
-        <PerformanceTable 
-          type="comparison"
-          period="monthly"
-          data={data?.monthly_comparison} 
-          className="mt-6"
-        />
-      )}
-
-      {selectedPeriod === 'daily' && (
-        <PerformanceTable 
-          type="comparison"
-          period="daily"
-          data={data?.daily_comparison} 
-          className="mt-6"
-        />
-      )}
+      <PerformanceTable 
+        type="comparison"
+        period={selectedPeriod}
+        data={data?.[`${selectedPeriod}_comparison`]} 
+        className="mt-6"
+      />
     </main>
   );
 };
