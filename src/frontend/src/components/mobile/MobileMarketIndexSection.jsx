@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import { TrendingUp, AlertCircle, RefreshCw, Activity, ShieldAlert } from 'lucide-react';
+import MobileMarketExtremeStatsCards from './MobileMarketExtremeStatsCards';
 
 // 4대 대표 시장 지수 정의
 export const INDICES = [
@@ -154,6 +155,7 @@ function MobileIntegratedTooltip({ active, payload, label, activeIndexInfo, char
  * 2. 기간 필터 (1Y, 3Y, 5Y, 10Y, ALL)
  * 3. VIX 상태 요약 카드 (현재 VIX 수치 및 4단계 리스크 배지)
  * 4. 단일 카드 내 3단 밀착 동기화 차트 (1단 종가 pt, 2단 MDD %, 3단 VIX 및 주의 20 / 경고 30 기준선)
+ * 5. 기간 내 2대 극단값(최대 공포 피크 & 최대 낙폭 바닥) 분석 카드
  */
 export default function MobileMarketIndexSection() {
   const [selectedTicker, setSelectedTicker] = useState('^GSPC');
@@ -623,6 +625,9 @@ export default function MobileMarketIndexSection() {
           </div>
         </div>
       </div>
+
+      {/* 4. 기간 내 2대 극단값(최대 공포 피크 & 최대 낙폭 바닥) 분석 카드 */}
+      <MobileMarketExtremeStatsCards chartData={chartData} />
     </div>
   );
 }

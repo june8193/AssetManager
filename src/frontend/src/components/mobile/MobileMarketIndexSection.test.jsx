@@ -195,5 +195,47 @@ describe('MobileMarketIndexSection', () => {
       const retryBtn = screen.getByRole('button', { name: /다시 시도/i });
       expect(retryBtn).toBeInTheDocument();
     });
+
+    it('3단 차트 하단에 기간 내 2대 극단값(최대 공포 피크 & 최대 낙폭 바닥) 카드가 연동 렌더링된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      // 극단값 카드 컨테이너 대기
+      await waitFor(() => {
+        expect(screen.getByTestId('extreme-stats-cards-container')).toBeInTheDocument();
+      });
+
+      // 🟣 최대 공포 (VIX 피크) 카드
+      const maxVixCard = screen.getByTestId('extreme-card-max-vix');
+      expect(maxVixCard).toHaveTextContent('2026-06-01');
+      expect(maxVixCard).toHaveTextContent('18.20 pt');
+      expect(maxVixCard).toHaveTextContent('-2.50%');
+      expect(maxVixCard).toHaveTextContent('5,100.0 pt');
+
+      // 🔴 최대 낙폭 (MDD 바닥) 카드
+      const worstMddCard = screen.getByTestId('extreme-card-worst-mdd');
+      expect(worstMddCard).toHaveTextContent('2026-06-01');
+      expect(worstMddCard).toHaveTextContent('-2.50%');
+      expect(worstMddCard).toHaveTextContent('18.20 pt');
+      expect(worstMddCard).toHaveTextContent('5,100.0 pt');
+    });
+
+    it('지수 칩을 변경하면 2대 극단값 카드의 수치와 당시 종가가 즉시 재계산되어 갱신된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('extreme-card-worst-mdd')).toHaveTextContent('5,100.0 pt');
+      });
+
+      // NASDAQ (^IXIC) 칩 클릭
+      const nasdaqChip = screen.getByTestId('index-chip-^IXIC');
+      fireEvent.click(nasdaqChip);
+
+      // NASDAQ 데이터로 극단값 카드 재계산 및 갱신 대기 (MDD 바닥: -4.00%, 가격: 17,000.0 pt)
+      await waitFor(() => {
+        const worstMddCard = screen.getByTestId('extreme-card-worst-mdd');
+        expect(worstMddCard).toHaveTextContent('-4.00%');
+        expect(worstMddCard).toHaveTextContent('17,000.0 pt');
+      });
+    });
   });
 });
