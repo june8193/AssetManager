@@ -10,7 +10,8 @@ global.fetch = mockFetch;
 const mockHistoricalData = {
   labels: ["2026-06-01", "2026-06-02", "2026-06-03"],
   prices: [5100.0, 5150.0, 5120.0],
-  mdd: [0.0, 0.0, -0.58]
+  mdd: [0.0, 0.0, -0.58],
+  vix: [15.2, 14.8, 16.1]
 };
 
 const mockStatsData = {
@@ -127,4 +128,23 @@ describe('MarketAnalysisPage', () => {
       expect(screen.getByText('+15.20%')).toBeDefined();
     });
   });
+
+  it('MDD 차트 하단에 VIX 변동성 지수(S&P 500) 차트와 최근 VIX 수치가 렌더링된다', async () => {
+    render(
+      <MaskingProvider>
+        <MarketAnalysisPage />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+    });
+
+    // VIX 변동성 지수 타이틀 렌더링 확인
+    expect(screen.getByText(/VIX 변동성 지수 \(S&P 500\)/)).toBeDefined();
+
+    // 최근 VIX 값 렌더링 확인 (mockHistoricalData의 마지막 값: 16.1 -> 16.10)
+    expect(screen.getByText('16.10')).toBeDefined();
+  });
 });
+

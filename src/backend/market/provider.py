@@ -87,7 +87,7 @@ class MarketDataProvider:
             return "KR"
 
         # 미국 대표 시장 지수 심볼
-        if t in ("^GSPC", "^IXIC", "^DJI", "^TNX", "SPX", "NDX", "DJI", "COMP"):
+        if t in ("^GSPC", "^IXIC", "^DJI", "^TNX", "^VIX", "SPX", "NDX", "DJI", "COMP", "VIX"):
             return "US"
 
         # 그 외 알파벳 티커는 미국 주식으로 판정

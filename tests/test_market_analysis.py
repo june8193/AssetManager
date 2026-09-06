@@ -222,6 +222,8 @@ async def test_market_analysis_endpoints(mock_download, db_session: Session):
     assert "labels" in data
     assert "prices" in data
     assert "mdd" in data
+    assert "vix" in data
+    assert len(data["vix"]) == len(data["labels"])
     
     # 2. Stats API
     response = client.get(f"/api/market/analysis/stats?ticker={ticker}&start_date=2025-01-01&end_date=2025-03-31")
@@ -239,3 +241,86 @@ async def test_market_analysis_endpoints(mock_download, db_session: Session):
     assert "year" in data[0]
     assert "kospi" in data[0]
     assert "sp500" in data[0]
+
+
+@pytest.mark.asyncio
+@patch('yfinance.download')
+async def test_market_analysis_service_historical_data_with_vix(mock_download, db_session: Session):
+    """지수 분석 historical 데이터에 날짜 1:1 매핑된 VIX 수치 배열이 포함되는지 검증합니다."""
+    mock_download.return_value = pd.DataFrame()
+    service = MarketAnalysisService(db_session)
+    ticker = "^GSPC"
+    start_date = datetime.date(2025, 1, 6)
+    end_date = datetime.date(2025, 1, 10)
+
+    # 지수 종가 및 VIX 더미 데이터 생성
+    create_dummy_prices(db_session, ticker, start_date, end_date, 5000.0, daily_change=0.01)
+    create_dummy_prices(db_session, "^VIX", start_date, end_date, 15.0, daily_change=-0.02)
+
+    res = await service.get_historical_data(ticker, start_date, end_date)
+
+    assert "vix" in res
+    assert len(res["vix"]) == len(res["labels"])
+    assert len(res["vix"]) == len(res["prices"])
+    assert len(res["vix"]) == len(res["mdd"])
+    assert all(v > 0 for v in res["vix"])
+
+
+@pytest.mark.asyncio
+@patch('yfinance.download')
+async def test_market_analysis_service_vix_forward_fill_on_us_holiday(mock_download, db_session: Session):
+    """한국 지수 조회 시 미국 휴장일(VIX 결측) 구간이 직전 유효 종가로 Forward-fill 보정되는지 검증합니다."""
+    mock_download.return_value = pd.DataFrame()
+    service = MarketAnalysisService(db_session)
+    ticker = "^KS11"
+    
+    # 2025-07-01 (화) ~ 2025-07-08 (화) 평일 생성
+    start_date = datetime.date(2025, 7, 1)
+    end_date = datetime.date(2025, 7, 8)
+    create_dummy_prices(db_session, ticker, start_date, end_date, 2500.0)
+
+    # VIX 데이터 생성: 2025-07-04(미국 독립기념일) 데이터 누락 시뮬레이션
+    vix_prices = [
+        (datetime.date(2025, 7, 1), 15.0),
+        (datetime.date(2025, 7, 2), 16.0),
+        (datetime.date(2025, 7, 3), 17.0),
+        # 7월 4일 결측
+        (datetime.date(2025, 7, 7), 14.0),
+        (datetime.date(2025, 7, 8), 13.5),
+    ]
+    for d, p in vix_prices:
+        db_session.add(HistoricalPrice(ticker="^VIX", price_date=d, close_price=p))
+    db_session.commit()
+
+    res = await service.get_historical_data(ticker, start_date, end_date)
+
+    assert len(res["vix"]) == len(res["labels"])
+    # 2025-07-04 인덱스 찾기
+    idx_0704 = res["labels"].index("2025-07-04")
+    idx_0703 = res["labels"].index("2025-07-03")
+    # 7월 4일 VIX는 7월 3일 VIX(17.0)로 Forward-fill 되어야 함
+    assert res["vix"][idx_0704] == res["vix"][idx_0703]
+    assert res["vix"][idx_0704] == 17.0
+
+
+@pytest.mark.asyncio
+@patch('yfinance.download')
+async def test_market_analysis_service_vix_weekly_downsampling(mock_download, db_session: Session):
+    """3년 초과 기간 조회 시 지수와 동일한 주간(Weekly) 다운샘플링이 VIX에도 적용되는지 검증합니다."""
+    mock_download.return_value = pd.DataFrame()
+    service = MarketAnalysisService(db_session)
+    ticker = "^GSPC"
+    start_4yr = datetime.date(2022, 1, 1)
+    end_4yr = datetime.date(2025, 12, 31)
+
+    create_dummy_prices(db_session, ticker, start_4yr, end_4yr, 4000.0, daily_change=0.0002)
+    create_dummy_prices(db_session, "^VIX", start_4yr, end_4yr, 18.0, daily_change=0.0001)
+
+    res = await service.get_historical_data(ticker, start_4yr, end_4yr)
+
+    assert "vix" in res
+    assert len(res["vix"]) == len(res["labels"])
+    assert len(res["vix"]) == len(res["prices"])
+    assert len(res["vix"]) > 180
+    assert len(res["vix"]) < 300
+    assert all(isinstance(v, float) for v in res["vix"])

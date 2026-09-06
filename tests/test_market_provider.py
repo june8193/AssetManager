@@ -64,6 +64,8 @@ class TestMarketDataProvider:
         assert provider.resolve_country("^IXIC") == "US"
         assert provider.resolve_country("^DJI") == "US"
         assert provider.resolve_country("^TNX") == "US"
+        assert provider.resolve_country("^VIX") == "US"
+        assert provider.resolve_country("VIX") == "US"
 
         # 일반 미국 티커 -> US
         assert provider.resolve_country("AAPL") == "US"
@@ -90,6 +92,8 @@ class TestMarketDataProvider:
         assert provider.get_adapter("kr") is kr_adapter
         assert provider.get_adapter("US") is us_adapter
         assert provider.get_adapter("us") is us_adapter
+        assert provider.get_adapter_for_ticker("^VIX") is us_adapter
+        assert provider.get_adapter_for_ticker("VIX") is us_adapter
 
     @pytest.mark.asyncio
     async def test_get_current_price_market_closed_uses_cache(self, db_session):

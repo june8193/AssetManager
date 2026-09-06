@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """주요 시장 지수의 역사적 가격 데이터, 통계 및 수익률 비교를 처리하는 서비스 모듈입니다."""
 
+import asyncio
 import datetime
 from typing import List, Dict, Any
 import pandas as pd
@@ -25,7 +26,7 @@ class MarketAnalysisService:
     async def get_historical_data(
         self, ticker: str, start_date: datetime.date, end_date: datetime.date
     ) -> Dict[str, Any]:
-        """특정 지수의 역사적 시계열 데이터와 계산된 MDD 추이 데이터를 반환합니다.
+        """특정 지수의 역사적 시계열 데이터와 계산된 MDD 추이, 동기화된 VIX 데이터를 반환합니다.
 
         3년(1095일) 초과 기간을 조회하는 경우 차트 성능 최적화를 위해 주간 종가 단위로 다운샘플링합니다.
 
@@ -35,14 +36,39 @@ class MarketAnalysisService:
             end_date (date): 종료일
 
         Returns:
-            Dict[str, Any]: 날짜 라벨, 지수 값, MDD 리스트를 포함한 딕셔너리
+            Dict[str, Any]: 날짜 라벨, 지수 값, MDD 리스트, VIX 리스트를 포함한 딕셔너리
         """
-        # 1. 역사적 가격 데이터 로드 (캐시 갱신 포함)
-        prices = await self.benchmark_service.get_historical_prices(ticker, start_date, end_date)
+        # 1. 역사적 가격 데이터 및 VIX 데이터 동시 로드 (캐시 갱신 포함)
+        # VIX 결측치(휴장일 등) 보정을 위해 조회 시작일을 여유 있게 설정
+        vix_lookback_start = start_date - datetime.timedelta(days=30)
+        prices, vix_raw = await asyncio.gather(
+            self.benchmark_service.get_historical_prices(ticker, start_date, end_date),
+            self.benchmark_service.get_historical_prices("^VIX", vix_lookback_start, end_date),
+        )
         valid_prices = [p for p in prices if p.close_price > 0.0]
 
         if not valid_prices:
-            return {"labels": [], "prices": [], "mdd": []}
+            return {"labels": [], "prices": [], "mdd": [], "vix": []}
+
+        # 날짜순 정렬 보장
+        valid_prices.sort(key=lambda x: x.price_date)
+        valid_vix = [p for p in vix_raw if p.close_price > 0.0]
+        valid_vix.sort(key=lambda x: x.price_date)
+
+        # 지수의 각 거래일에 대응하는 VIX 수치를 매핑 (미국 휴장일 등으로 결측된 경우 Forward-fill)
+        aligned_vix: List[float] = []
+        vix_idx = 0
+        vix_len = len(valid_vix)
+        last_known_vix = 0.0
+
+        for p in valid_prices:
+            dt = p.price_date
+            while vix_idx < vix_len and valid_vix[vix_idx].price_date <= dt:
+                last_known_vix = valid_vix[vix_idx].close_price
+                vix_idx += 1
+            if last_known_vix == 0.0 and vix_len > 0:
+                last_known_vix = valid_vix[0].close_price
+            aligned_vix.append(round(float(last_known_vix), 2))
 
         # 2. 조회 기간 일수 계산
         total_days = (end_date - start_date).days
@@ -50,22 +76,27 @@ class MarketAnalysisService:
         # 3. 3년(1095일) 초과인 경우 주간 다운샘플링 적용 (pandas 활용)
         if total_days > 1095 and len(valid_prices) > 200:
             df = pd.DataFrame([
-                {"date": p.price_date, "price": p.close_price}
-                for p in valid_prices
+                {
+                    "date": p.price_date,
+                    "price": p.close_price,
+                    "vix": aligned_vix[i],
+                }
+                for i, p in enumerate(valid_prices)
             ])
             df["date"] = pd.to_datetime(df["date"])
             df.set_index("date", inplace=True)
             
             # 주간(W-FRI: 금요일 기준 또는 그 주의 마지막 유효일) 단위로 리샘플링하여 종가 추출
-            # 'W'는 일요일 기준 주간 리샘플링이며, 영업일이 있는 주만 남김
             df_resampled = df.resample("W").last().dropna()
             
             labels = [idx.date().isoformat() for idx in df_resampled.index]
             prices_list = [float(val) for val in df_resampled["price"]]
+            vix_list = [float(val) for val in df_resampled["vix"]]
         else:
             # 3년 이하일 경우 일별 데이터 그대로 사용
             labels = [p.price_date.isoformat() for p in valid_prices]
             prices_list = [p.close_price for p in valid_prices]
+            vix_list = aligned_vix
 
         # 4. MDD 추이 계산 (고점 대비 낙폭)
         mdd_series = []
@@ -82,7 +113,8 @@ class MarketAnalysisService:
         return {
             "labels": labels,
             "prices": prices_list,
-            "mdd": mdd_series
+            "mdd": mdd_series,
+            "vix": vix_list,
         }
 
     async def get_monthly_and_yearly_stats(

@@ -142,8 +142,15 @@ export default function MarketAnalysisPage() {
     return historicalData.labels.map((label, idx) => ({
       date: label,
       value: historicalData.prices[idx],
-      mdd: historicalData.mdd[idx]
+      mdd: historicalData.mdd[idx],
+      vix: historicalData.vix ? historicalData.vix[idx] : null
     }));
+  }, [historicalData]);
+
+  // 최근 VIX 수치
+  const latestVix = useMemo(() => {
+    if (!historicalData?.vix || historicalData.vix.length === 0) return null;
+    return historicalData.vix[historicalData.vix.length - 1];
   }, [historicalData]);
 
   // 수익률 배지 스타일 헬퍼
@@ -395,6 +402,62 @@ export default function MarketAnalysisPage() {
                           dot={false}
                         />
                       </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+
+                {/* 3) VIX 변동성 지수 차트 카드 */}
+                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                  <div className="flex items-center justify-between mb-6 px-2">
+                    <div>
+                      <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                        VIX 변동성 지수 (S&P 500)
+                      </h2>
+                      <p className="text-[10px] text-slate-400 font-bold mt-1">S&P 500 내재 변동성(CBOE VIX) 추이를 나타냅니다.</p>
+                    </div>
+                    {latestVix !== null && (
+                      <div className="text-right">
+                        <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 VIX</span>
+                        <span className="text-lg font-black text-purple-600">{latestVix.toFixed(2)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="h-[180px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData} syncId="marketAnalysisCharts">
+                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                        <XAxis 
+                          dataKey="date" 
+                          stroke="#94a3b8" 
+                          fontSize={11} 
+                          tickLine={false} 
+                          axisLine={false}
+                          dy={10} 
+                        />
+                        <YAxis 
+                          stroke="#94a3b8" 
+                          fontSize={11} 
+                          tickLine={false} 
+                          axisLine={false}
+                          domain={['auto', 'auto']}
+                          tickFormatter={(val) => Math.round(val).toString()}
+                        />
+                        <Tooltip 
+                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '16px', color: '#fff', fontSize: '11px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
+                          labelStyle={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}
+                          formatter={(value) => [`${parseFloat(value).toFixed(2)}`, 'VIX']}
+                        />
+                        <Line 
+                          type="monotone" 
+                          dataKey="vix" 
+                          stroke="#8b5cf6" 
+                          strokeWidth={2} 
+                          dot={false}
+                          activeDot={{ r: 5, strokeWidth: 0, fill: '#8b5cf6' }}
+                        />
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
