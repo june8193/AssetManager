@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
-  AreaChart, Area 
+  AreaChart, Area, ReferenceLine 
 } from 'recharts';
 import { 
   TrendingUp, BarChart3, Calendar, AlertCircle, RefreshCw, 
@@ -27,6 +27,53 @@ const PERIODS = [
   { value: '30Y', label: '30년' },
   { value: 'ALL', label: '전체' }
 ];
+
+/**
+ * VIX 지수 값에 따라 4단계 시장 리스크 상태(안정/주의/경고/위기) 정보를 반환합니다.
+ * @param {number|null|undefined} vix 
+ * @returns {{ level: string, label: string, color: string, bg: string, text: string, border: string } | null}
+ */
+export function getVixStatus(vix) {
+  if (vix === null || vix === undefined || isNaN(vix)) return null;
+  if (vix < 20) {
+    return {
+      level: 'stable',
+      label: '안정',
+      color: '#10B981',
+      bg: 'bg-emerald-50',
+      text: 'text-emerald-700',
+      border: 'border-emerald-200'
+    };
+  }
+  if (vix < 30) {
+    return {
+      level: 'caution',
+      label: '주의',
+      color: '#F59E0B',
+      bg: 'bg-amber-50',
+      text: 'text-amber-700',
+      border: 'border-amber-200'
+    };
+  }
+  if (vix < 40) {
+    return {
+      level: 'warning',
+      label: '경고',
+      color: '#EF4444',
+      bg: 'bg-rose-50',
+      text: 'text-rose-700',
+      border: 'border-rose-200'
+    };
+  }
+  return {
+    level: 'crisis',
+    label: '위기',
+    color: '#991B1B',
+    bg: 'bg-red-100',
+    text: 'text-[#991B1B]',
+    border: 'border-red-300'
+  };
+}
 
 export default function MarketAnalysisPage() {
   const [activeTab, setActiveTab] = useState('individual'); // 'individual' | 'comparison'
@@ -152,6 +199,9 @@ export default function MarketAnalysisPage() {
     if (!historicalData?.vix || historicalData.vix.length === 0) return null;
     return historicalData.vix[historicalData.vix.length - 1];
   }, [historicalData]);
+
+  // VIX 위험도 상태 (안정/주의/경고/위기)
+  const vixStatus = useMemo(() => getVixStatus(latestVix), [latestVix]);
 
   // 수익률 배지 스타일 헬퍼
   const renderReturnBadge = (val) => {
@@ -417,9 +467,19 @@ export default function MarketAnalysisPage() {
                       <p className="text-[10px] text-slate-400 font-bold mt-1">S&P 500 내재 변동성(CBOE VIX) 추이를 나타냅니다.</p>
                     </div>
                     {latestVix !== null && (
-                      <div className="text-right">
-                        <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 VIX</span>
-                        <span className="text-lg font-black text-purple-600">{latestVix.toFixed(2)}</span>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 VIX</span>
+                          <span className="text-lg font-black text-purple-600">{latestVix.toFixed(2)}</span>
+                        </div>
+                        {vixStatus && (
+                          <span
+                            data-testid="vix-status-badge"
+                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black border shadow-sm ${vixStatus.bg} ${vixStatus.text} ${vixStatus.border}`}
+                          >
+                            {vixStatus.label}
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -441,13 +501,31 @@ export default function MarketAnalysisPage() {
                           fontSize={11} 
                           tickLine={false} 
                           axisLine={false}
-                          domain={['auto', 'auto']}
+                          domain={[0, (dataMax) => Math.max(45, Math.ceil(dataMax + 2))]}
                           tickFormatter={(val) => Math.round(val).toString()}
                         />
                         <Tooltip 
                           contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '16px', color: '#fff', fontSize: '11px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
                           labelStyle={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}
                           formatter={(value) => [`${parseFloat(value).toFixed(2)}`, 'VIX']}
+                        />
+                        <ReferenceLine 
+                          y={20} 
+                          stroke="#F59E0B" 
+                          strokeDasharray="3 3" 
+                          label={{ value: '주의 20', position: 'insideTopRight', fill: '#F59E0B', fontSize: 10, fontWeight: 'bold' }} 
+                        />
+                        <ReferenceLine 
+                          y={30} 
+                          stroke="#EF4444" 
+                          strokeDasharray="3 3" 
+                          label={{ value: '경고 30', position: 'insideTopRight', fill: '#EF4444', fontSize: 10, fontWeight: 'bold' }} 
+                        />
+                        <ReferenceLine 
+                          y={40} 
+                          stroke="#991B1B" 
+                          strokeDasharray="3 3" 
+                          label={{ value: '위기 40', position: 'insideTopRight', fill: '#991B1B', fontSize: 10, fontWeight: 'bold' }} 
                         />
                         <Line 
                           type="monotone" 

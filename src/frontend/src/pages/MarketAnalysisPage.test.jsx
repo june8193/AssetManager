@@ -146,5 +146,166 @@ describe('MarketAnalysisPage', () => {
     // 최근 VIX 값 렌더링 확인 (mockHistoricalData의 마지막 값: 16.1 -> 16.10)
     expect(screen.getByText('16.10')).toBeDefined();
   });
+
+  it('VIX 수치에 따라 4단계 상태 배지(안정/주의/경고/위기)가 올바른 텍스트와 색상으로 렌더링된다', async () => {
+    // 1) 20 미만: 안정 (#10B981) - mockHistoricalData.vix[2] = 16.1
+    const { unmount } = render(
+      <MaskingProvider>
+        <MarketAnalysisPage />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+    });
+
+    const stableBadge = screen.getByTestId('vix-status-badge');
+    expect(stableBadge).toBeDefined();
+    expect(stableBadge.textContent).toBe('안정');
+    unmount();
+
+    // 2) 20 이상 30 미만: 주의 (#F59E0B)
+    mockFetch.mockImplementationOnce((url) => {
+      if (url.includes('/api/market/analysis/historical')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ...mockHistoricalData, vix: [20.0, 22.5, 25.4] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockStatsData) });
+    });
+
+    const renderCaution = render(
+      <MaskingProvider>
+        <MarketAnalysisPage />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('25.40')).toBeDefined();
+    });
+    const cautionBadge = screen.getByTestId('vix-status-badge');
+    expect(cautionBadge.textContent).toBe('주의');
+    renderCaution.unmount();
+
+    // 3) 30 이상 40 미만: 경고 (#EF4444)
+    mockFetch.mockImplementationOnce((url) => {
+      if (url.includes('/api/market/analysis/historical')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ...mockHistoricalData, vix: [25.0, 31.0, 35.8] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockStatsData) });
+    });
+
+    const renderWarning = render(
+      <MaskingProvider>
+        <MarketAnalysisPage />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('35.80')).toBeDefined();
+    });
+    const warningBadge = screen.getByTestId('vix-status-badge');
+    expect(warningBadge.textContent).toBe('경고');
+    renderWarning.unmount();
+
+    // 4) 40 이상: 위기 (#991B1B)
+    mockFetch.mockImplementationOnce((url) => {
+      if (url.includes('/api/market/analysis/historical')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ ...mockHistoricalData, vix: [35.0, 42.0, 48.5] }),
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(mockStatsData) });
+    });
+
+    const renderCrisis = render(
+      <MaskingProvider>
+        <MarketAnalysisPage />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText('48.50')).toBeDefined();
+    });
+    const crisisBadge = screen.getByTestId('vix-status-badge');
+    expect(crisisBadge.textContent).toBe('위기');
+    renderCrisis.unmount();
+  });
+
+  it('VIX 차트에 20(주의), 30(경고), 40(위기) 기준선(ReferenceLine) 라벨이 렌더링된다', async () => {
+    render(
+      <MaskingProvider>
+        <MarketAnalysisPage />
+      </MaskingProvider>
+    );
+
+    await waitFor(() => {
+      expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+    });
+
+    // ReferenceLine 라벨 텍스트 존재 확인
+    expect(screen.getByText(/주의 20/)).toBeDefined();
+    expect(screen.getByText(/경고 30/)).toBeDefined();
+    expect(screen.getByText(/위기 40/)).toBeDefined();
+  });
+
+  describe('getVixStatus 헬퍼 함수 경계값 검증', () => {
+    it('null, undefined, NaN 입력 시 null을 반환한다', async () => {
+      const { getVixStatus } = await import('./MarketAnalysisPage');
+      expect(getVixStatus(null)).toBeNull();
+      expect(getVixStatus(undefined)).toBeNull();
+      expect(getVixStatus(NaN)).toBeNull();
+    });
+
+    it('20 미만은 안정 상태(Green #10B981)를 반환한다', async () => {
+      const { getVixStatus } = await import('./MarketAnalysisPage');
+      const status = getVixStatus(19.99);
+      expect(status.level).toBe('stable');
+      expect(status.label).toBe('안정');
+      expect(status.color).toBe('#10B981');
+    });
+
+    it('20 이상 30 미만은 주의 상태(Amber #F59E0B)를 반환한다', async () => {
+      const { getVixStatus } = await import('./MarketAnalysisPage');
+      const status20 = getVixStatus(20.0);
+      expect(status20.level).toBe('caution');
+      expect(status20.label).toBe('주의');
+      expect(status20.color).toBe('#F59E0B');
+
+      const status29 = getVixStatus(29.99);
+      expect(status29.level).toBe('caution');
+      expect(status29.label).toBe('주의');
+    });
+
+    it('30 이상 40 미만은 경고 상태(Red #EF4444)를 반환한다', async () => {
+      const { getVixStatus } = await import('./MarketAnalysisPage');
+      const status30 = getVixStatus(30.0);
+      expect(status30.level).toBe('warning');
+      expect(status30.label).toBe('경고');
+      expect(status30.color).toBe('#EF4444');
+
+      const status39 = getVixStatus(39.99);
+      expect(status39.level).toBe('warning');
+      expect(status39.label).toBe('경고');
+    });
+
+    it('40 이상은 위기 상태(Deep Crimson #991B1B)를 반환한다', async () => {
+      const { getVixStatus } = await import('./MarketAnalysisPage');
+      const status40 = getVixStatus(40.0);
+      expect(status40.level).toBe('crisis');
+      expect(status40.label).toBe('위기');
+      expect(status40.color).toBe('#991B1B');
+
+      const status80 = getVixStatus(80.5);
+      expect(status80.level).toBe('crisis');
+      expect(status80.label).toBe('위기');
+    });
+  });
 });
+
 
