@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 마켓 데이터 프로바이더에서 `^VIX` 심볼을 인식하여 야후 파이낸스 어댑터를 통해 시세를 수집 및 로컬 캐싱한다.
 - [x] 지수 분석 historical API 응답에 선택한 지수의 날짜와 1:1로 매핑된 `vix` 수치 배열이 포함된다.
