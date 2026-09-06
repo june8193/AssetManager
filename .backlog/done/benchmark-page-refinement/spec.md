@@ -1,6 +1,6 @@
 # Feature Spec: 벤치마크 비교 페이지 상단 레이아웃 개선 및 일원화
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
