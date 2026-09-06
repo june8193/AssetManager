@@ -226,4 +226,86 @@ describe('BenchmarkPage', () => {
     expect(screen.queryByText('연간 수익률 비교')).toBeNull();
     expect(screen.queryByText('월간 수익률 비교')).toBeNull();
   });
+
+  it('헤더에 벤치마크 비교 타이틀과 설명 부제목이 올바르게 렌더링된다', () => {
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: mockBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      refresh: vi.fn(),
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    // 제목 및 부제목 텍스트 확인
+    expect(screen.getByRole('heading', { level: 1, name: /벤치마크 비교/i })).toBeDefined();
+    expect(screen.getByText('주요 시장 지수 대비 포트폴리오 성과 및 초과수익률(Alpha)을 비교 분석합니다.')).toBeDefined();
+  });
+
+  it('헤더 우측에 기간 탭 버튼 그룹이 렌더링되고 클릭 시 setPeriod가 호출된다', () => {
+    const setPeriodMock = vi.fn();
+    const refreshMock = vi.fn();
+
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: mockBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: setPeriodMock,
+      refresh: refreshMock,
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    // 기존 select 요소는 존재하지 않아야 함
+    expect(screen.queryByRole('combobox')).toBeNull();
+
+    // 4개 기간 탭 버튼 존재 확인
+    const ytdTab = screen.getByRole('button', { name: '올해 누적 (YTD)' });
+    const oneMonthTab = screen.getByRole('button', { name: '1개월' });
+    const threeMonthTab = screen.getByRole('button', { name: '3개월' });
+    const oneYearTab = screen.getByRole('button', { name: '1년' });
+
+    expect(ytdTab).toBeDefined();
+    expect(oneMonthTab).toBeDefined();
+    expect(threeMonthTab).toBeDefined();
+    expect(oneYearTab).toBeDefined();
+
+    // 활성/비활성 접근성 상태 확인 (기본값: YTD)
+    expect(ytdTab.getAttribute('aria-pressed')).toBe('true');
+    expect(oneMonthTab.getAttribute('aria-pressed')).toBe('false');
+
+    // 탭 클릭 인터랙션 검증
+    fireEvent.click(oneMonthTab);
+    expect(setPeriodMock).toHaveBeenCalledWith('1M');
+
+    fireEvent.click(threeMonthTab);
+    expect(setPeriodMock).toHaveBeenCalledWith('3M');
+
+    fireEvent.click(oneYearTab);
+    expect(setPeriodMock).toHaveBeenCalledWith('1Y');
+
+    fireEvent.click(ytdTab);
+    expect(setPeriodMock).toHaveBeenCalledWith('YTD');
+
+    // 새로고침 버튼 유지 및 클릭 동작 검증
+    const refreshButton = screen.getByRole('button', { name: '새로고침' });
+    expect(refreshButton).toBeDefined();
+    fireEvent.click(refreshButton);
+    expect(refreshMock).toHaveBeenCalledTimes(1);
+  });
 });

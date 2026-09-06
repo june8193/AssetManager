@@ -5,6 +5,14 @@ import { TrendingUp, Wallet, RefreshCw, AlertCircle } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 import PerformanceTable from '../components/PerformanceTable';
 
+// 벤치마크 조회 기간 탭 옵션 정의
+const PERIOD_TABS = [
+  { value: 'YTD', label: '올해 누적 (YTD)' },
+  { value: '1M', label: '1개월' },
+  { value: '3M', label: '3개월' },
+  { value: '1Y', label: '1년' },
+];
+
 /**
  * 벤치마크 비교 대시보드 페이지 컴포넌트입니다.
  * 
@@ -99,22 +107,34 @@ const BenchmarkPage = () => {
         <div>
           <h1 className="text-3xl font-black text-slate-800 flex items-center gap-3">
             <TrendingUp className="text-blue-600" size={32} />
-            시장분석 대시보드
+            벤치마크 비교
           </h1>
-          <p className="text-slate-500 text-sm font-medium mt-1">시장 주요 지수 및 관심 종목과 성과를 분석합니다.</p>
+          <p className="text-slate-500 text-sm font-medium mt-1">
+            주요 시장 지수 대비 포트폴리오 성과 및 초과수익률(Alpha)을 비교 분석합니다.
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <select
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="bg-white border border-slate-200 text-slate-700 text-sm font-bold rounded-xl px-4 py-2.5 shadow-sm outline-none cursor-pointer focus:ring-2 focus:ring-blue-500/20"
-          >
-            <option value="YTD">올해 누적 (YTD)</option>
-            <option value="1M">최근 1개월</option>
-            <option value="3M">최근 3개월</option>
-            <option value="1Y">최근 1년</option>
-          </select>
+          {/* 기간 선택 탭 버튼 그룹 */}
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/80">
+            {PERIOD_TABS.map((tab) => {
+              const isActive = period === tab.value;
+              return (
+                <button
+                  key={tab.value}
+                  onClick={() => setPeriod(tab.value)}
+                  aria-pressed={isActive}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/50'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
 
           <button
             onClick={refresh}
