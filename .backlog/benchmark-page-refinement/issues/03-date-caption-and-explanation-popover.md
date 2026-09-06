@@ -5,7 +5,7 @@
 
 **Blocked by:** 02 — 상단 요약 카드 제거 및 초과수익률 분석 표 최상단 이동
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 초과수익률 분석 표 상단 헤더 영역에 `최신 스냅샷 기준일: YYYY-MM-DD` 및 `수익률 비교 기준일: YYYY-MM-DD` 캡션 텍스트가 표시된다.
 - [x] 캡션 옆에 도움말(`HelpCircle` 또는 `Info`) 아이콘 버튼이 표시된다.
