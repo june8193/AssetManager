@@ -40,6 +40,12 @@ const DEFAULT_THEME = {
 };
 
 /**
+ * 리밸런싱 오차 허용 임계값 (원)
+ * - 사소한 잔액 차이로 인한 불필요한 알림을 방지하기 위해 1,000원 이내는 '적정'으로 판별
+ */
+const REBALANCE_THRESHOLD = 1000;
+
+/**
  * 모바일 비중 카드 컴포넌트 (Read-Only)
  * - 자산군/종목별 현재 평가액, 현재 비중(%), 목표 비중(%), 편차(%), 리밸런싱 필요 금액 렌더링
  * - 진행률 바(Progress Bar) 및 상태 배지(초과/부족/적정) 시각화
@@ -74,12 +80,13 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
   const hasChildren = Array.isArray(item.children) && item.children.length > 0;
   const theme = MAJOR_THEMES[displayName] || DEFAULT_THEME;
 
-  // 상태 배지 판별
-  // diffAmt > 0 : 목표치보다 부족 -> 매수 필요
-  // diffAmt < 0 : 목표치보다 초과 -> 매도 필요
-  const isOver = hasTarget && (diffRatio > 0.5 || diffAmt < -1000);
-  const isUnder = hasTarget && (diffRatio < -0.5 || diffAmt > 1000);
-  const isBalanced = hasTarget && !isOver && !isUnder;
+  // 상태 배지 판별 ('리밸런싱 필요 금액' diffAmt 단일 기준)
+  // diffAmt > REBALANCE_THRESHOLD : 목표치보다 부족 -> 매수 필요
+  // diffAmt < -REBALANCE_THRESHOLD : 목표치보다 초과 -> 매도 필요
+  // |diffAmt| <= REBALANCE_THRESHOLD : 적정
+  const isOver = hasTarget && diffAmt < -REBALANCE_THRESHOLD;
+  const isUnder = hasTarget && diffAmt > REBALANCE_THRESHOLD;
+  const isBalanced = hasTarget && Math.abs(diffAmt) <= REBALANCE_THRESHOLD;
 
   const formatMoney = (val) => {
     const formatted = Math.round(Math.abs(val)).toLocaleString();
@@ -114,24 +121,24 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
               {displayName}
             </span>
 
-            {/* 상태 배지 (목표 비중이 설정된 경우에만 표시) */}
-            {hasTarget && isBalanced && (
-              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
-                적정
-              </span>
-            )}
-            {hasTarget && isUnder && (
-              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                <TrendingUp className="w-2.5 h-2.5" />
-                매수 필요
-              </span>
-            )}
-            {hasTarget && isOver && (
-              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                <TrendingDown className="w-2.5 h-2.5" />
-                매도 필요
-              </span>
+            {/* 상태 배지 (목표 비중이 설정된 경우에만 단일 배지 표시) */}
+            {hasTarget && (
+              isUnder ? (
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                  <TrendingUp className="w-2.5 h-2.5" />
+                  매수 필요
+                </span>
+              ) : isOver ? (
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                  <TrendingDown className="w-2.5 h-2.5" />
+                  매도 필요
+                </span>
+              ) : isBalanced ? (
+                <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                  <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                  적정
+                </span>
+              ) : null
             )}
           </div>
 
@@ -196,7 +203,9 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
                     ? 'bg-amber-400'
                     : isUnder
                     ? 'bg-sky-400'
-                    : 'bg-emerald-400'
+                    : isBalanced
+                    ? 'bg-emerald-400'
+                    : 'bg-slate-600'
                   : 'bg-slate-600'
               }`}
               style={{ width: `${Math.min(Math.max(currentRatio, 0), 100)}%` }}
@@ -204,8 +213,8 @@ export default function MobileRatioCard({ item, totalValuation = 0, level = 'maj
           </div>
         </div>
 
-        {/* 리밸런싱 조정 필요 금액 (목표 비중이 설정된 경우에만 표시) */}
-        {hasTarget && Math.abs(diffAmt) >= 1 && (
+        {/* 리밸런싱 조정 필요 금액 (목표 비중이 설정되고 적정 범위를 벗어난 경우에만 표시) */}
+        {hasTarget && (isUnder || isOver) && (
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
             <span className="text-slate-400 font-medium">
               {diffAmt > 0 ? '매수 필요' : '매도 필요'}
