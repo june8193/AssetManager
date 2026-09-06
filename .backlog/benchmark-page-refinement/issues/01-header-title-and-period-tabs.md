@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 페이지 상단 제목이 '시장분석 대시보드'에서 '벤치마크 비교'로 표시된다.
 - [x] 부제목이 '주요 시장 지수 대비 포트폴리오 성과 및 초과수익률(Alpha)을 비교 분석합니다.'로 표시된다.
