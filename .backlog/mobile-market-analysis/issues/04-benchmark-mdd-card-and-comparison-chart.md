@@ -5,12 +5,12 @@
 
 **Blocked by:** 01 — 하단 네비게이션 탭 바 확장 및 모바일 지수분석 라우트/쉘 페이지 구성
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 기간 선택기(YTD, 1M, 3M, 1Y)가 렌더링되고 변경 시 데이터가 재조회된다.
-- [ ] `/api/market/benchmark` 및 `/api/v1/performance/portfolio` API를 연동하여 포트폴리오 수익률/MDD 및 지수 MDD 데이터를 수신한다.
-- [ ] 상단 `[포트폴리오 & 4대 지수 MDD 요약 카드]`가 렌더링되어 내 포트폴리오의 수익률 및 MDD와 4대 지수의 MDD가 4열 그리드로 표시된다.
-- [ ] 기준일(0%) 기준 정규화 누적 수익률(%) 비교 선 차트가 렌더링된다.
-- [ ] 차트 상단의 범례 칩(`내 포트폴리오`, `S&P 500` 등)을 터치하면 해당 시리즈 라인이 숨김/표시 토글된다.
-- [ ] 상단 헤더의 마스킹 토글 시 포트폴리오 수익률 수치가 마스킹(`***.**%`)된다.
-- [ ] `MobileBenchmarkSection.test.jsx`, `MobileMddSummaryCard.test.jsx` 단위 테스트가 통과한다.
+- [x] 기간 선택기(YTD, 1M, 3M, 1Y)가 렌더링되고 변경 시 데이터가 재조회된다.
+- [x] `/api/market/benchmark` 및 `/api/v1/performance/portfolio` API를 연동하여 포트폴리오 수익률/MDD 및 지수 MDD 데이터를 수신한다.
+- [x] 상단 `[포트폴리오 & 4대 지수 MDD 요약 카드]`가 렌더링되어 내 포트폴리오의 수익률 및 MDD와 4대 지수의 MDD가 4열 그리드로 표시된다.
+- [x] 기준일(0%) 기준 정규화 누적 수익률(%) 비교 선 차트가 렌더링된다.
+- [x] 차트 상단의 범례 칩(`내 포트폴리오`, `S&P 500` 등)을 터치하면 해당 시리즈 라인이 숨김/표시 토글된다.
+- [x] 상단 헤더의 마스킹 토글 시 포트폴리오 수익률 수치가 마스킹(`***.**%`)된다.
+- [x] `MobileBenchmarkSection.test.jsx`, `MobileMddSummaryCard.test.jsx` 단위 테스트가 통과한다.

@@ -21,6 +21,36 @@ const mockIndicesUS = [
   { index_name: 'NASDAQ', current_price: 17500.0, change_rate: 1.74 },
 ];
 
+const mockBenchmarkData = {
+  portfolio: {
+    total_valuation: 150000000,
+    actual_latest_valuation: 150000000,
+    actual_latest_date: '2026-06-03',
+    ytd_return: 12.45,
+  },
+  indices: {
+    '^GSPC': { name: 'S&P 500', return: 8.5, alpha: 3.95, judgment: '아웃퍼폼', value: 5200.0, mdd: -5.4 },
+    '^IXIC': { name: 'NASDAQ', return: 14.2, alpha: -1.75, judgment: '언더퍼폼', value: 17500.0, mdd: -8.2 },
+    '^KS11': { name: 'KOSPI', return: 3.1, alpha: 9.35, judgment: '아웃퍼폼', value: 2650.0, mdd: -4.3 },
+    '^KQ11': { name: 'KOSDAQ', return: -2.4, alpha: 14.85, judgment: '아웃퍼폼', value: 850.0, mdd: -10.5 },
+  },
+  chart: {
+    labels: ['2026-06-01', '2026-06-02', '2026-06-03'],
+    datasets: [
+      { label: '내 포트폴리오', data: [0.0, 1.2, 2.5] },
+      { label: 'S&P 500', data: [0.0, 0.8, 1.5] },
+      { label: 'NASDAQ', data: [0.0, 1.1, 2.1] },
+      { label: 'KOSPI', data: [0.0, -0.3, 0.2] },
+      { label: 'KOSDAQ', data: [0.0, -0.8, -1.2] },
+    ],
+  },
+};
+
+const mockPortfolioPerf = {
+  mdd: -3.85,
+  max_mdd: -6.20,
+};
+
 function renderComponent() {
   return render(
     <MemoryRouter initialEntries={['/m/market']}>
@@ -52,6 +82,18 @@ describe('MobileMarketPage', () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockHistoricalGSPC),
+        });
+      }
+      if (urlStr.includes('/api/market/benchmark') || urlStr.includes('/api/benchmark')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockBenchmarkData),
+        });
+      }
+      if (urlStr.includes('/api/v1/performance/portfolio')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve(mockPortfolioPerf),
         });
       }
       return Promise.resolve({
@@ -131,7 +173,7 @@ describe('MobileMarketPage', () => {
     });
   });
 
-  it('마스킹이 활성화되었을 때 포트폴리오 수익률 수치가 마스킹되어야 한다', () => {
+  it('마스킹이 활성화되었을 때 포트폴리오 수익률 수치가 마스킹되어야 한다', async () => {
     localStorage.setItem('isMasked', 'true');
     try {
       renderComponent();
@@ -139,8 +181,10 @@ describe('MobileMarketPage', () => {
       const compareTabBtn = screen.getByRole('tab', { name: /포트폴리오 비교/i });
       fireEvent.click(compareTabBtn);
 
-      const maskedEl = screen.getByTestId('masked-return');
-      expect(maskedEl).toHaveTextContent('***');
+      await waitFor(() => {
+        const maskedEl = screen.getByTestId('masked-return');
+        expect(maskedEl).toHaveTextContent('***');
+      });
     } finally {
       localStorage.removeItem('isMasked');
     }

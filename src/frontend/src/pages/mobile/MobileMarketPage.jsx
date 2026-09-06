@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { RefreshCw, TrendingUp, BarChart2 } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 import MobileMarketIndexSection from '../../components/mobile/MobileMarketIndexSection';
+import MobileBenchmarkSection from '../../components/mobile/MobileBenchmarkSection';
 
 const SUB_TABS = [
   { id: 'market', label: '시장 지수', icon: TrendingUp },
@@ -20,7 +21,7 @@ export default function MobileMarketPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState(null);
   const toastTimeoutRef = useRef(null);
-  const { maskValue } = useMasking();
+  const { isMasked, maskValue } = useMasking();
 
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -151,19 +152,10 @@ export default function MobileMarketPage() {
           data-testid="portfolio-comparison-view"
           className="space-y-4 animate-in fade-in duration-200"
         >
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm text-center">
-            <BarChart2 className="w-8 h-8 text-sky-400 mx-auto mb-2 opacity-80" />
-            <h2 className="text-sm font-bold text-white mb-1">포트폴리오 비교 분석</h2>
-            <p className="text-xs text-slate-400">
-              내 포트폴리오 수익률과 4대 주요 시장 지수를 벤치마크 비교합니다.
-            </p>
-            <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-center gap-2">
-              <span className="text-[11px] text-slate-400">포트폴리오 수익률:</span>
-              <span data-testid="masked-return" className="text-xs font-bold text-emerald-400 font-mono">
-                {maskValue('+12.4%')}
-              </span>
-            </div>
-          </div>
+          <MobileBenchmarkSection
+            key={refreshKey}
+            isMasked={isMasked}
+          />
         </section>
       )}
     </div>
