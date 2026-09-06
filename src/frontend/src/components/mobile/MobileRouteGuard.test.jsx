@@ -16,6 +16,18 @@ describe('MobileRouteGuard', () => {
     expect(screen.getByTestId('allowed-content')).toBeInTheDocument();
   });
 
+  it('모바일 모드에서 지수분석 경로(/m/market) 접근 시 정상적으로 컨텐츠를 렌더링해야 한다', () => {
+    render(
+      <MemoryRouter initialEntries={['/m/market']}>
+        <MobileRouteGuard isMobile={true}>
+          <div data-testid="market-content">지수분석 페이지</div>
+        </MobileRouteGuard>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('market-content')).toBeInTheDocument();
+  });
+
   it('모바일 모드에서 데스크톱 전용 경로(/db, /system/logs 등) 접근 시 루트(/)로 리다이렉트되어야 한다', () => {
     render(
       <MemoryRouter initialEntries={['/db']}>

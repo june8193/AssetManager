@@ -4,17 +4,20 @@ import { MemoryRouter } from 'react-router-dom';
 import MobileTabBar from './MobileTabBar';
 
 describe('MobileTabBar', () => {
-  it('4대 핵심 탭(대시보드, 자산 조회, 비중 점검, 설정)이 모두 렌더링되어야 한다', () => {
+  it('5대 핵심 탭(대시보드, 자산 조회, 지수분석, 비중 점검, 설정)이 올바른 순서로 모두 렌더링되어야 한다', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <MobileTabBar />
       </MemoryRouter>
     );
 
-    expect(screen.getByRole('link', { name: /대시보드/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /자산 조회/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /비중 점검/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /설정/i })).toBeInTheDocument();
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(5);
+    expect(links[0]).toHaveTextContent('대시보드');
+    expect(links[1]).toHaveTextContent('자산 조회');
+    expect(links[2]).toHaveTextContent('지수분석');
+    expect(links[3]).toHaveTextContent('비중 점검');
+    expect(links[4]).toHaveTextContent('설정');
   });
 
   it('현재 경로에 해당하는 탭이 활성화(active) 스타일을 가져야 한다', () => {
@@ -26,6 +29,21 @@ describe('MobileTabBar', () => {
 
     const ratioLink = screen.getByRole('link', { name: /비중 점검/i });
     expect(ratioLink).toHaveAttribute('data-active', 'true');
+
+    const dashboardLink = screen.getByRole('link', { name: /대시보드/i });
+    expect(dashboardLink).toHaveAttribute('data-active', 'false');
+  });
+
+  it('/m/market 경로에서 지수분석 탭이 활성화되어야 한다', () => {
+    render(
+      <MemoryRouter initialEntries={['/m/market']}>
+        <MobileTabBar />
+      </MemoryRouter>
+    );
+
+    const marketLink = screen.getByRole('link', { name: /지수분석/i });
+    expect(marketLink).toHaveAttribute('data-active', 'true');
+    expect(marketLink).toHaveAttribute('href', '/m/market');
 
     const dashboardLink = screen.getByRole('link', { name: /대시보드/i });
     expect(dashboardLink).toHaveAttribute('data-active', 'false');

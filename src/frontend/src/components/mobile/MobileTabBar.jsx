@@ -1,12 +1,13 @@
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Wallet, PieChart, Settings } from 'lucide-react';
+import { LayoutDashboard, Wallet, TrendingUp, PieChart, Settings } from 'lucide-react';
 
 /**
- * 모바일 하단 4대 탭 바 컴포넌트
+ * 모바일 하단 5대 탭 바 컴포넌트
  * 1. 대시보드 (/)
  * 2. 자산 조회 (/m/assets)
- * 3. 비중 점검 (/m/ratios)
- * 4. 설정 (/m/settings)
+ * 3. 지수분석 (/m/market)
+ * 4. 비중 점검 (/m/ratios)
+ * 5. 설정 (/m/settings)
  */
 export default function MobileTabBar() {
   const location = useLocation();
@@ -24,6 +25,12 @@ export default function MobileTabBar() {
       path: '/m/assets',
       icon: Wallet,
       isActive: pathname.startsWith('/m/assets'),
+    },
+    {
+      name: '지수분석',
+      path: '/m/market',
+      icon: TrendingUp,
+      isActive: pathname.startsWith('/m/market'),
     },
     {
       name: '비중 점검',
