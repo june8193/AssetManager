@@ -1,6 +1,6 @@
 # 시장분석 지수분석 VIX(변동성 지수) 추가 스펙
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
