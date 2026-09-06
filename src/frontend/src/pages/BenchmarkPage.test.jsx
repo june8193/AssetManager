@@ -264,7 +264,7 @@ describe('BenchmarkPage', () => {
     const dailyTab = screen.getByRole('button', { name: '일별' });
     fireEvent.click(dailyTab);
     expect(screen.getByText('일간 수익률 비교')).toBeDefined();
-    expect(screen.getByText('2026-05-05')).toBeDefined();
+    expect(screen.getAllByText('2026-05-05').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText('연간 수익률 비교')).toBeNull();
     expect(screen.queryByText('월간 수익률 비교')).toBeNull();
   });
@@ -350,4 +350,88 @@ describe('BenchmarkPage', () => {
     fireEvent.click(refreshButton);
     expect(refreshMock).toHaveBeenCalledTimes(1);
   });
+
+  it('초과수익률 분석 표 상단에 최신 스냅샷 기준일과 수익률 비교 기준일 캡션 및 도움말 버튼이 렌더링된다', () => {
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: mockBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    // 캡션 텍스트 존재 확인
+    expect(screen.getByText(/최신 스냅샷 기준일:/i)).toBeInTheDocument();
+    expect(screen.getByText('2026-06-06')).toBeInTheDocument();
+    expect(screen.getByText(/수익률 비교 기준일:/i)).toBeInTheDocument();
+    expect(screen.getByText('2026-05-05')).toBeInTheDocument();
+
+    // 도움말 버튼 존재 확인
+    const helpButton = screen.getByRole('button', { name: '기준일 안내' });
+    expect(helpButton).toBeInTheDocument();
+  });
+
+  it('도움말 버튼 클릭 시 3단 설명 팝오버가 열리고, 닫기 버튼 클릭 또는 외부 클릭 시 닫힌다', () => {
+    vi.mocked(useBenchmark).mockReturnValue({
+      data: mockBenchmarkData,
+      loading: false,
+      error: null,
+      period: "YTD",
+      setPeriod: vi.fn(),
+      toggleWatchlistStock: vi.fn(),
+      activeWatchlistDataset: {}
+    });
+
+    render(
+      <MaskingProvider>
+        <BenchmarkPage />
+      </MaskingProvider>
+    );
+
+    // 초기 상태: 팝오버는 닫혀 있음
+    expect(screen.queryByText('왜 필요한가요?')).toBeNull();
+
+    const helpButton = screen.getByRole('button', { name: '기준일 안내' });
+
+    // 도움말 버튼 클릭 -> 팝오버 열림
+    fireEvent.click(helpButton);
+
+    // 3단 설명 문구 존재 확인
+    expect(screen.getByText('최신 스냅샷 기준일')).toBeInTheDocument();
+    expect(screen.getByText(/사용자가 기록한 포트폴리오 자산의 가장 최근 스냅샷 일자/i)).toBeInTheDocument();
+    expect(screen.getByText('수익률 비교 기준일')).toBeInTheDocument();
+    expect(screen.getByText(/시장 지수 데이터와 포트폴리오 스냅샷이 공통으로 존재하는 최근 유효 거래일/i)).toBeInTheDocument();
+    expect(screen.getByText('왜 필요한가요?')).toBeInTheDocument();
+    expect(screen.getByText(/시장 휴장일과 데이터 비대칭으로 인한 왜곡을 방지하고/i)).toBeInTheDocument();
+
+    // 닫기 버튼 클릭 -> 팝오버 닫힘
+    const closeButton = screen.getByRole('button', { name: '닫기' });
+    fireEvent.click(closeButton);
+    expect(screen.queryByText('왜 필요한가요?')).toBeNull();
+
+    // 다시 열기
+    fireEvent.click(helpButton);
+    expect(screen.getByText('왜 필요한가요?')).toBeInTheDocument();
+
+    // Escape 키 입력 -> 팝오버 닫힘
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('왜 필요한가요?')).toBeNull();
+
+    // 다시 열기
+    fireEvent.click(helpButton);
+    expect(screen.getByText('왜 필요한가요?')).toBeInTheDocument();
+
+    // 외부 영역 클릭 -> 팝오버 닫힘
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByText('왜 필요한가요?')).toBeNull();
+  });
 });
+

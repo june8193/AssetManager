@@ -1,7 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { useBenchmark } from '../hooks/useBenchmark';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { TrendingUp, RefreshCw, AlertCircle } from 'lucide-react';
+import { TrendingUp, RefreshCw, AlertCircle, HelpCircle, X } from 'lucide-react';
 import PerformanceTable from '../components/PerformanceTable';
 
 // 벤치마크 조회 기간 탭 옵션 정의
@@ -43,7 +43,47 @@ const BenchmarkPage = () => {
     "NASDAQ": true,
   });
 
-  const { alpha_analysis } = data || {};
+  // 기준일 안내 팝오버 열림/닫힘 상태
+  const [showHelpPopover, setShowHelpPopover] = useState(false);
+  const popoverRef = useRef(null);
+
+  // 팝오버 외부 클릭 및 Escape 키 입력 시 닫기 이벤트 핸들러 등록
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (popoverRef.current && !popoverRef.current.contains(event.target)) {
+        setShowHelpPopover(false);
+      }
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        setShowHelpPopover(false);
+      }
+    };
+
+    if (showHelpPopover) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleKeyDown);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [showHelpPopover]);
+
+  const { alpha_analysis, portfolio } = data || {};
+
+  // 최신 스냅샷 날짜 추출 (YYYY-MM-DD 포맷)
+  const latestSnapshotDate = useMemo(() => {
+    if (!data?.chart?.labels || data.chart.labels.length === 0) return '';
+    return data.chart.labels[data.chart.labels.length - 1];
+  }, [data]);
+
+  // 최신 스냅샷 기준일 및 수익률 비교 기준일
+  const actualSnapshotDate = portfolio?.actual_latest_date || latestSnapshotDate;
+  const comparisonBaselineDate = latestSnapshotDate;
+
 
   // Recharts 형식에 맞게 데이터셋 가공
   const chartData = useMemo(() => {
@@ -140,9 +180,97 @@ const BenchmarkPage = () => {
       {/* 1. 벤치마크 초과수익률 (Alpha) 분석 표 */}
       <div className="w-full mb-8">
         <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-          <div className="flex items-center gap-2 mb-6">
-            <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
-            <h3 className="text-lg font-bold text-slate-800">벤치마크 초과수익률 (Alpha) 분석</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-2">
+              <div className="w-2.5 h-2.5 bg-blue-600 rounded-full"></div>
+              <h3 className="text-lg font-bold text-slate-800">벤치마크 초과수익률 (Alpha) 분석</h3>
+            </div>
+
+            {actualSnapshotDate && (
+              <div className="relative flex items-center gap-2 text-xs text-slate-500 font-medium">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span>
+                    최신 스냅샷 기준일: <strong className="text-slate-700 font-semibold">{actualSnapshotDate}</strong>
+                  </span>
+                  {comparisonBaselineDate && (
+                    <>
+                      <span className="text-slate-300 hidden sm:inline">|</span>
+                      <span>
+                        수익률 비교 기준일: <strong className="text-slate-700 font-semibold">{comparisonBaselineDate}</strong>
+                      </span>
+                    </>
+                  )}
+                </div>
+
+                <div className="relative inline-block" ref={popoverRef}>
+                  <button
+                    type="button"
+                    onClick={() => setShowHelpPopover(prev => !prev)}
+                    aria-label="기준일 안내"
+                    aria-expanded={showHelpPopover}
+                    aria-haspopup="dialog"
+                    title="기준일 안내"
+                    className="p-1 text-slate-400 hover:text-blue-600 hover:bg-slate-100 rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  >
+                    <HelpCircle size={16} />
+                  </button>
+
+                  {showHelpPopover && (
+                    <div className="absolute right-0 top-full mt-2 z-50 w-80 sm:w-96 bg-white p-5 rounded-2xl border border-slate-200 shadow-xl text-left animate-in fade-in zoom-in-95 duration-150">
+                      <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-100">
+                        <span className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
+                          <HelpCircle size={16} className="text-blue-600" />
+                          기준일 및 성과 정규화 안내
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowHelpPopover(false)}
+                          aria-label="닫기"
+                          className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                        >
+                          <X size={16} />
+                        </button>
+                      </div>
+
+                      <div className="space-y-3.5 text-xs">
+                        {/* 1단: 최신 스냅샷 기준일 정의 */}
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-[10px] flex items-center justify-center font-bold">1</span>
+                            최신 스냅샷 기준일
+                          </h4>
+                          <p className="text-slate-600 leading-relaxed pl-5">
+                            사용자가 기록한 포트폴리오 자산의 가장 최근 스냅샷 일자입니다.
+                          </p>
+                        </div>
+
+                        {/* 2단: 수익률 비교 기준일 정의 */}
+                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                          <h4 className="font-bold text-slate-800 mb-1 flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-blue-100 text-blue-600 text-[10px] flex items-center justify-center font-bold">2</span>
+                            수익률 비교 기준일
+                          </h4>
+                          <p className="text-slate-600 leading-relaxed pl-5">
+                            시장 지수 데이터와 포트폴리오 스냅샷이 공통으로 존재하는 최근 유효 거래일입니다.
+                          </p>
+                        </div>
+
+                        {/* 3단: 왜 필요한가요? */}
+                        <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100/60">
+                          <h4 className="font-bold text-blue-900 mb-1 flex items-center gap-1.5">
+                            <span className="w-4 h-4 rounded-full bg-blue-200/80 text-blue-700 text-[10px] flex items-center justify-center font-bold">3</span>
+                            왜 필요한가요?
+                          </h4>
+                          <p className="text-slate-600 leading-relaxed pl-5">
+                            주말 및 시장 휴장일과 데이터 비대칭으로 인한 왜곡을 방지하고, 동일한 시점을 기준으로 정규화된 공정한 초과수익률을 비교하기 위한 안내입니다.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="overflow-x-auto">
