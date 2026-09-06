@@ -393,6 +393,53 @@ describe('MarketAnalysisPage', () => {
       });
     });
   });
+
+  describe('통합 차트 및 상관관계 인사이트', () => {
+    it('지수 종가, MDD, VIX가 1개의 통합 차트 컨테이너 내 3단 밀착 서브플롯으로 렌더링된다', async () => {
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      // 통합 차트 컨테이너 존재 검증
+      expect(screen.getByTestId('integrated-market-chart')).toBeDefined();
+
+      // 상단 요약 바에 3대 지표가 모여있는지 검증
+      expect(screen.getByText(/최근 종가/)).toBeDefined();
+      expect(screen.getByText(/최근 MDD/)).toBeDefined();
+      expect(screen.getByText(/최근 VIX/)).toBeDefined();
+    });
+
+    it('선택된 기간 내 최대 공포(VIX 최고치)와 최대 낙폭(MDD 바닥) 상관관계 인사이트 칩이 올바르게 렌더링된다', async () => {
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      // 상관관계 인사이트 컨테이너 존재 검증
+      const statsContainer = screen.getByTestId('correlation-stats-container');
+      expect(statsContainer).toBeDefined();
+
+      // mockHistoricalData 기준:
+      // vix: [15.2, 14.8, 16.1] -> 최대 VIX는 2026-06-03의 16.10, 당시 MDD는 -0.58%
+      // mdd: [0.0, 0.0, -0.58] -> 최대 낙폭(MDD 바닥)은 2026-06-03의 -0.58%, 당시 VIX는 16.10
+      expect(screen.getByTestId('max-vix-chip')).toBeDefined();
+      expect(screen.getByTestId('worst-mdd-chip')).toBeDefined();
+      expect(screen.getByText(/기간 내 최대 공포 \(VIX 최고치\)/)).toBeDefined();
+      expect(screen.getByText(/기간 내 최대 낙폭 \(MDD 바닥\)/)).toBeDefined();
+    });
+  });
 });
+
 
 

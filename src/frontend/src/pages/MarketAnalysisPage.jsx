@@ -75,6 +75,55 @@ export function getVixStatus(vix) {
   };
 }
 
+/**
+ * 3개 서브플롯(지수, MDD, VIX) 공통 통합 툴팁 컴포넌트입니다.
+ */
+function IntegratedChartTooltip({ active, payload, label, activeIndexInfo, chartData }) {
+  if (!active || !label) return null;
+  const currentPoint = chartData?.find(d => d.date === label) || {};
+  const priceVal = currentPoint.value;
+  const mddVal = currentPoint.mdd;
+  const vixVal = currentPoint.vix;
+
+  return (
+    <div className="bg-slate-900/95 backdrop-blur-md border border-slate-800 p-3.5 rounded-2xl shadow-xl text-white text-xs min-w-[210px] z-50">
+      <div className="font-bold text-slate-400 mb-2 border-b border-slate-800/80 pb-1.5 flex items-center justify-between">
+        <span>{label}</span>
+        <span className="text-[10px] text-slate-500 font-normal">통합 동기화</span>
+      </div>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-blue-400 font-medium">
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: activeIndexInfo?.color || '#3b82f6' }}></span>
+            {activeIndexInfo?.name || '지수'}:
+          </span>
+          <span className="font-black text-white">
+            {priceVal !== undefined && priceVal !== null ? `${priceVal.toLocaleString()} pt` : '-'}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-rose-400 font-medium">
+            <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+            MDD:
+          </span>
+          <span className="font-black text-rose-400">
+            {mddVal !== undefined && mddVal !== null ? `${mddVal.toFixed(2)}%` : '-'}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="flex items-center gap-1.5 text-purple-400 font-medium">
+            <span className="w-2 h-2 rounded-full bg-purple-500"></span>
+            VIX:
+          </span>
+          <span className="font-black text-purple-300">
+            {vixVal !== undefined && vixVal !== null ? `${vixVal.toFixed(2)} pt` : '-'}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function MarketAnalysisPage() {
   const [activeTab, setActiveTab] = useState('individual'); // 'individual' | 'comparison'
   const [selectedTicker, setSelectedTicker] = useState('^GSPC');
@@ -211,6 +260,32 @@ export default function MarketAnalysisPage() {
       vix: historicalData.vix ? historicalData.vix[idx] : null
     }));
   }, [historicalData]);
+
+  // 기간 내 최대 공포(VIX 최고치) 및 최대 낙폭(MDD 바닥) 상관관계 통계 계산
+  const correlationStats = useMemo(() => {
+    if (!chartData || chartData.length === 0) return null;
+
+    let maxVixItem = null;
+    let worstMddItem = null;
+
+    for (const item of chartData) {
+      if (item.vix !== null && item.vix !== undefined && !isNaN(item.vix)) {
+        if (!maxVixItem || item.vix > maxVixItem.vix) {
+          maxVixItem = item;
+        }
+      }
+      if (item.mdd !== null && item.mdd !== undefined && !isNaN(item.mdd)) {
+        if (!worstMddItem || item.mdd < worstMddItem.mdd) {
+          worstMddItem = item;
+        }
+      }
+    }
+
+    return {
+      maxVix: maxVixItem,
+      worstMdd: worstMddItem
+    };
+  }, [chartData]);
 
   // 최근 VIX 수치
   const latestVix = useMemo(() => {
@@ -351,147 +426,69 @@ export default function MarketAnalysisPage() {
                 </div>
               </div>
 
-              {/* 지수 추이 및 MDD 차트 */}
-              <div className="grid grid-cols-1 gap-6">
-                {/* 1) 지수 종가 차트 카드 */}
-                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center justify-between mb-6 px-2">
-                    <div>
-                      <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full" style={{ backgroundColor: activeIndexInfo.color }}></span>
-                        {activeIndexInfo.name} 지수 종가 추이
-                      </h2>
-                      {historicalData?.labels && historicalData.labels.length > 200 && (
-                        <p className="text-[10px] text-slate-400 font-bold mt-1">※ 3년 초과 조회 시 차트 최적화를 위해 주간(Weekly) 종가 데이터를 표시합니다.</p>
-                      )}
-                    </div>
-                    {chartData.length > 0 && (
-                      <div className="text-right">
+              {/* 지수 추이, MDD, VIX 3단 통합 차트 카드 */}
+              <div data-testid="integrated-market-chart" className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
+                {/* 1) 카드 상단 원스톱 헤더 & 요약 바 */}
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-4 border-b border-slate-100">
+                  <div>
+                    <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
+                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: activeIndexInfo.color }}></span>
+                      {activeIndexInfo.name} 지수 종가 추이
+                    </h2>
+                    <p className="text-xs text-slate-400 font-medium mt-1">
+                      지수 종가와 최대 낙폭(MDD), S&P 500 VIX 변동성을 시점별로 동기화하여 상관관계를 분석합니다.
+                    </p>
+                    {historicalData?.labels && historicalData.labels.length > 200 && (
+                      <p className="text-[10px] text-slate-400 font-bold mt-1">※ 3년 초과 조회 시 차트 최적화를 위해 주간(Weekly) 종가 데이터를 표시합니다.</p>
+                    )}
+                  </div>
+
+                  {/* 3대 지표 실시간 요약 배지 그룹 */}
+                  {chartData.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 bg-slate-50/80 p-2.5 rounded-2xl border border-slate-100">
+                      {/* 최근 종가 */}
+                      <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-200/60 shadow-xs">
                         <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 종가</span>
-                        <span className="text-xl font-black text-slate-800">{chartData[chartData.length - 1].value.toLocaleString()}pt</span>
+                        <span className="text-sm font-black text-slate-800">
+                          {chartData[chartData.length - 1].value.toLocaleString()}pt
+                        </span>
                       </div>
-                    )}
-                  </div>
-                  
-                  <div className="h-[300px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} syncId="marketAnalysisCharts">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="#94a3b8" 
-                          fontSize={11} 
-                          tickLine={false} 
-                          axisLine={false}
-                          dy={10} 
-                        />
-                        <YAxis 
-                          stroke="#94a3b8" 
-                          fontSize={11} 
-                          tickLine={false} 
-                          axisLine={false}
-                          domain={['dataMin - 100', 'dataMax + 100']}
-                          tickFormatter={(val) => Math.round(val).toLocaleString()}
-                        />
-                        <Tooltip 
-                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '16px', color: '#fff', fontSize: '11px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
-                          labelStyle={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}
-                          formatter={(value) => [`${parseFloat(value).toLocaleString()} pt`, '지수']}
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="value" 
-                          stroke={activeIndexInfo.color} 
-                          strokeWidth={2.5} 
-                          dot={false}
-                          activeDot={{ r: 6, strokeWidth: 0, fill: activeIndexInfo.color }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
 
-                {/* 2) MDD 차트 카드 */}
-                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center justify-between mb-6 px-2">
-                    <div>
-                      <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                        <span className="w-3 h-3 rounded-full bg-rose-500"></span>
-                        최대 낙폭 (MDD) 추이
-                      </h2>
-                      <p className="text-[10px] text-slate-400 font-bold mt-1">고점 대비 현재 지수의 하락률 추이를 나타냅니다.</p>
-                    </div>
-                    {chartData.length > 0 && (
-                      <div className="text-right">
+                      {/* 최근 MDD */}
+                      <div className="px-3 py-1.5 rounded-xl bg-white border border-slate-200/60 shadow-xs">
                         <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 MDD</span>
-                        <span className="text-lg font-black text-rose-600">{chartData[chartData.length - 1].mdd.toFixed(2)}%</span>
+                        <span className="text-sm font-black text-rose-600">
+                          {chartData[chartData.length - 1].mdd.toFixed(2)}%
+                        </span>
                       </div>
-                    )}
-                  </div>
 
-                  <div className="h-[150px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={chartData} syncId="marketAnalysisCharts">
-                        <defs>
-                          <linearGradient id="colorMdd" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
-                            <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="#94a3b8" 
-                          fontSize={11} 
-                          tickLine={false} 
-                          axisLine={false}
-                          dy={10} 
-                        />
-                        <YAxis 
-                          stroke="#94a3b8" 
-                          fontSize={11} 
-                          tickLine={false} 
-                          axisLine={false}
-                          domain={['dataMin - 2', 0]}
-                          tickFormatter={(val) => `${val}%`}
-                        />
-                        <Tooltip 
-                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '16px', color: '#fff', fontSize: '11px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
-                          labelStyle={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}
-                          formatter={(value) => [`${parseFloat(value).toFixed(2)}%`, 'MDD']}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="mdd" 
-                          stroke="#f43f5e" 
-                          fillOpacity={1} 
-                          fill="url(#colorMdd)" 
-                          strokeWidth={2}
-                          dot={false}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+                      {/* 최근 VIX & 팝오버 가이드 */}
+                      <div 
+                        className="relative px-3 py-1.5 rounded-xl bg-white border border-slate-200/60 shadow-xs flex items-center gap-2"
+                        ref={vixInfoRef} 
+                        data-testid="vix-info-container"
+                        onMouseEnter={() => {
+                          lastMouseEnterRef.current = Date.now();
+                          setIsVixInfoOpen(true);
+                        }}
+                        onMouseLeave={() => setIsVixInfoOpen(false)}
+                      >
+                        <div>
+                          <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 VIX</span>
+                          <span className="text-sm font-black text-purple-600">
+                            {latestVix !== null ? latestVix.toFixed(2) : '-'}
+                          </span>
+                        </div>
+                        
+                        {vixStatus && (
+                          <span
+                            data-testid="vix-status-badge"
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-black border shadow-xs ${vixStatus.bg} ${vixStatus.text} ${vixStatus.border}`}
+                          >
+                            {vixStatus.label}
+                          </span>
+                        )}
 
-                {/* 3) VIX 변동성 지수 차트 카드 */}
-                <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                  <div className="flex items-center justify-between mb-6 px-2">
-                    <div 
-                      className="relative" 
-                      ref={vixInfoRef} 
-                      data-testid="vix-info-container"
-                      onMouseEnter={() => {
-                        lastMouseEnterRef.current = Date.now();
-                        setIsVixInfoOpen(true);
-                      }}
-                      onMouseLeave={() => setIsVixInfoOpen(false)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full bg-purple-500"></span>
-                          VIX 변동성 지수 (S&P 500)
-                        </h2>
                         <button
                           type="button"
                           data-testid="vix-info-button"
@@ -507,155 +504,294 @@ export default function MarketAnalysisPage() {
                           }}
                           className="p-1 rounded-full text-slate-400 hover:text-purple-600 hover:bg-purple-50 transition-colors focus:outline-none"
                         >
-                          <Info size={16} />
+                          <Info size={14} />
                         </button>
+
+                        {/* VIX 설명 팝오버 */}
+                        <AnimatePresence>
+                          {isVixInfoOpen && (
+                            <motion.div
+                              data-testid="vix-info-popover"
+                              role="tooltip"
+                              initial={{ opacity: 0, y: 6, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                              transition={{ duration: 0.15 }}
+                              className="absolute z-50 right-0 top-full mt-2 w-80 sm:w-96 p-5 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 text-left"
+                            >
+                              <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+                                <div className="flex items-center gap-2">
+                                  <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
+                                    <Info size={14} />
+                                  </div>
+                                  <h3 className="text-sm font-black text-slate-800">VIX 지수 &amp; 시장 심리 가이드</h3>
+                                </div>
+                              </div>
+
+                              <div className="mt-3 space-y-3">
+                                <div>
+                                  <h4 className="text-xs font-bold text-purple-700 flex items-center gap-1.5">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                                    CBOE S&P 500 변동성 지수 (VIX)
+                                  </h4>
+                                  <p className="text-[11px] text-slate-600 font-medium leading-relaxed mt-1">
+                                    향후 30일간 S&P 500 옵션 가격에 반영된 시장의 기대 변동성(내재 변동성)을 나타내며, 투자자들의 공포 수준을 측정하는 대표적인 공포 지수입니다.
+                                  </p>
+                                </div>
+
+                                <div className="pt-2 border-t border-slate-100">
+                                  <h4 className="text-[11px] font-black text-slate-700 mb-2">4단계 리스크 기준선 및 통계적 의미</h4>
+                                  <div className="space-y-2">
+                                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500 text-white shrink-0 mt-0.5">안정 (20 미만)</span>
+                                      <div className="text-[11px] text-slate-600">
+                                        <span className="font-bold text-emerald-800">정상 및 안정 국면</span>
+                                        <p className="text-[10px] text-slate-500">역사적 약 65~80% 분포. 시장 심리가 안정적이고 변동성이 낮은 일반적 환경.</p>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-amber-50/70 border border-amber-100">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white shrink-0 mt-0.5">주의 (20 ~ 30)</span>
+                                      <div className="text-[11px] text-slate-600">
+                                        <span className="font-bold text-amber-800">시장 불확실성 증가</span>
+                                        <p className="text-[10px] text-slate-500">역사적 상위 약 20% 수준. 시장 조정 국면 및 단기 변동성 확대 주의 필요.</p>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-red-50/70 border border-red-100">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-red-500 text-white shrink-0 mt-0.5">경고 (30 ~ 40)</span>
+                                      <div className="text-[11px] text-slate-600">
+                                        <span className="font-bold text-red-800">본격 패닉 및 투매</span>
+                                        <p className="text-[10px] text-slate-500">역사적 상위 약 5% 수준. 과도한 공포 확대로 역발상 분할 매수 기회 고려 구간.</p>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex items-start gap-2.5 p-2 rounded-xl bg-rose-50/70 border border-rose-100">
+                                      <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-700 text-white shrink-0 mt-0.5">위기 (40 이상)</span>
+                                      <div className="text-[11px] text-slate-600">
+                                        <span className="font-bold text-rose-900">극단적 시스템 위기</span>
+                                        <p className="text-[10px] text-slate-500">역사적 상위 1% 미만 (리먼·코로나급). 극단적 공포 국면이자 역사적 최적의 매수 기회.</p>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
-                      <p className="text-[10px] text-slate-400 font-bold mt-1">S&P 500 내재 변동성(CBOE VIX) 추이를 나타냅니다.</p>
-
-                      {/* VIX 설명 팝오버 */}
-                      <AnimatePresence>
-                        {isVixInfoOpen && (
-                          <motion.div
-                            data-testid="vix-info-popover"
-                            role="tooltip"
-                            initial={{ opacity: 0, y: 6, scale: 0.98 }}
-                            animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                            transition={{ duration: 0.15 }}
-                            className="absolute z-50 left-0 top-full mt-2 w-80 sm:w-96 p-5 bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-slate-100 text-left"
-                          >
-                            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
-                              <div className="flex items-center gap-2">
-                                <div className="p-1.5 bg-purple-50 text-purple-600 rounded-lg">
-                                  <Info size={14} />
-                                </div>
-                                <h3 className="text-sm font-black text-slate-800">VIX 지수 &amp; 시장 심리 가이드</h3>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 space-y-3">
-                              <div>
-                                <h4 className="text-xs font-bold text-purple-700 flex items-center gap-1.5">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                                  CBOE S&P 500 변동성 지수 (VIX)
-                                </h4>
-                                <p className="text-[11px] text-slate-600 font-medium leading-relaxed mt-1">
-                                  향후 30일간 S&P 500 옵션 가격에 반영된 시장의 기대 변동성(내재 변동성)을 나타내며, 투자자들의 공포 수준을 측정하는 대표적인 공포 지수입니다.
-                                </p>
-                              </div>
-
-                              <div className="pt-2 border-t border-slate-100">
-                                <h4 className="text-[11px] font-black text-slate-700 mb-2">4단계 리스크 기준선 및 통계적 의미</h4>
-                                <div className="space-y-2">
-                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-emerald-50/70 border border-emerald-100">
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-emerald-500 text-white shrink-0 mt-0.5">안정 (20 미만)</span>
-                                    <div className="text-[11px] text-slate-600">
-                                      <span className="font-bold text-emerald-800">정상 및 안정 국면</span>
-                                      <p className="text-[10px] text-slate-500">역사적 약 65~80% 분포. 시장 심리가 안정적이고 변동성이 낮은 일반적 환경.</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-amber-50/70 border border-amber-100">
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-500 text-white shrink-0 mt-0.5">주의 (20 ~ 30)</span>
-                                    <div className="text-[11px] text-slate-600">
-                                      <span className="font-bold text-amber-800">시장 불확실성 증가</span>
-                                      <p className="text-[10px] text-slate-500">역사적 상위 약 20% 수준. 시장 조정 국면 및 단기 변동성 확대 주의 필요.</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-red-50/70 border border-red-100">
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-red-500 text-white shrink-0 mt-0.5">경고 (30 ~ 40)</span>
-                                    <div className="text-[11px] text-slate-600">
-                                      <span className="font-bold text-red-800">본격 패닉 및 투매</span>
-                                      <p className="text-[10px] text-slate-500">역사적 상위 약 5% 수준. 과도한 공포 확대로 역발상 분할 매수 기회 고려 구간.</p>
-                                    </div>
-                                  </div>
-
-                                  <div className="flex items-start gap-2.5 p-2 rounded-xl bg-rose-50/70 border border-rose-100">
-                                    <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-rose-700 text-white shrink-0 mt-0.5">위기 (40 이상)</span>
-                                    <div className="text-[11px] text-slate-600">
-                                      <span className="font-bold text-rose-900">극단적 시스템 위기</span>
-                                      <p className="text-[10px] text-slate-500">역사적 상위 1% 미만 (리먼·코로나급). 극단적 공포 국면이자 역사적 최적의 매수 기회.</p>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
                     </div>
-                    {latestVix !== null && (
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
-                          <span className="text-[10px] font-bold text-slate-400 block uppercase">최근 VIX</span>
-                          <span className="text-lg font-black text-purple-600">{latestVix.toFixed(2)}</span>
-                        </div>
-                        {vixStatus && (
-                          <span
-                            data-testid="vix-status-badge"
-                            className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black border shadow-sm ${vixStatus.bg} ${vixStatus.text} ${vixStatus.border}`}
-                          >
-                            {vixStatus.label}
-                          </span>
-                        )}
+                  )}
+                </div>
+
+                {/* 2) 기간 내 핵심 상관관계 요약 인사이트 칩 */}
+                {correlationStats && (
+                  <div data-testid="correlation-stats-container" className="grid grid-cols-1 md:grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-50/80 border border-slate-100">
+                    {/* 최대 공포 시점 */}
+                    <div data-testid="max-vix-chip" className="flex items-start gap-3 p-3 bg-white rounded-xl border border-slate-200/60 shadow-2xs">
+                      <div className="p-2 rounded-lg bg-purple-50 text-purple-600 shrink-0 mt-0.5">
+                        <AlertCircle size={16} />
                       </div>
-                    )}
+                      <div className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-800">기간 내 최대 공포 (VIX 최고치)</span>
+                          {correlationStats.maxVix?.date && (
+                            <span className="text-[11px] text-slate-400 font-bold">{correlationStats.maxVix.date}</span>
+                          )}
+                        </div>
+                        <p className="text-slate-600 mt-1 font-medium">
+                          VIX <span className="font-black text-purple-600">{correlationStats.maxVix?.vix !== null && correlationStats.maxVix?.vix !== undefined ? correlationStats.maxVix.vix.toFixed(2) : '-'}pt</span>
+                          <span className="mx-1.5 text-slate-300">|</span>
+                          당시 낙폭(MDD): <span className="font-black text-rose-600">{correlationStats.maxVix?.mdd !== undefined ? correlationStats.maxVix.mdd.toFixed(2) : '-'}%</span>
+                          <span className="text-slate-400 ml-1">({correlationStats.maxVix?.value ? correlationStats.maxVix.value.toLocaleString() + 'pt' : '-'})</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 최대 낙폭 시점 */}
+                    <div data-testid="worst-mdd-chip" className="flex items-start gap-3 p-3 bg-white rounded-xl border border-slate-200/60 shadow-2xs">
+                      <div className="p-2 rounded-lg bg-rose-50 text-rose-600 shrink-0 mt-0.5">
+                        <TrendingUp size={16} className="rotate-180" />
+                      </div>
+                      <div className="text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-slate-800">기간 내 최대 낙폭 (MDD 바닥)</span>
+                          {correlationStats.worstMdd?.date && (
+                            <span className="text-[11px] text-slate-400 font-bold">{correlationStats.worstMdd.date}</span>
+                          )}
+                        </div>
+                        <p className="text-slate-600 mt-1 font-medium">
+                          MDD <span className="font-black text-rose-600">{correlationStats.worstMdd?.mdd !== undefined ? correlationStats.worstMdd.mdd.toFixed(2) : '-'}%</span>
+                          <span className="mx-1.5 text-slate-300">|</span>
+                          당시 공포(VIX): <span className="font-black text-purple-600">{correlationStats.worstMdd?.vix !== null && correlationStats.worstMdd?.vix !== undefined ? correlationStats.worstMdd.vix.toFixed(2) + 'pt' : '-'}</span>
+                          <span className="text-slate-400 ml-1">({correlationStats.worstMdd?.value ? correlationStats.worstMdd.value.toLocaleString() + 'pt' : '-'})</span>
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3) 3단 밀착 서브플롯 차트 컨테이너 */}
+                <div className="space-y-2 pt-2">
+                  {/* [1단] 지수 종가 차트 */}
+                  <div>
+                    <div className="flex items-center justify-between px-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: activeIndexInfo.color }}></span>
+                        <span className="text-xs font-black text-slate-700">{activeIndexInfo.name} 종가</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">단위: pt</span>
+                    </div>
+                    
+                    <div className="h-[250px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} syncId="marketAnalysisCharts">
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                          <XAxis 
+                            dataKey="date" 
+                            tick={false}
+                            axisLine={false}
+                            tickLine={false}
+                            height={1}
+                          />
+                          <YAxis 
+                            stroke="#94a3b8" 
+                            fontSize={11} 
+                            tickLine={false} 
+                            axisLine={false}
+                            domain={['dataMin - 100', 'dataMax + 100']}
+                            tickFormatter={(val) => Math.round(val).toLocaleString()}
+                          />
+                          <Tooltip 
+                            content={<IntegratedChartTooltip activeIndexInfo={activeIndexInfo} chartData={chartData} />}
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="value" 
+                            stroke={activeIndexInfo.color} 
+                            strokeWidth={2.5} 
+                            dot={false}
+                            activeDot={{ r: 6, strokeWidth: 0, fill: activeIndexInfo.color }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
 
-                  <div className="h-[180px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} syncId="marketAnalysisCharts">
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                        <XAxis 
-                          dataKey="date" 
-                          stroke="#94a3b8" 
-                          fontSize={11} 
-                          tickLine={false} 
-                          axisLine={false}
-                          dy={10} 
-                        />
-                        <YAxis 
-                          stroke="#94a3b8" 
-                          fontSize={11} 
-                          tickLine={false} 
-                          axisLine={false}
-                          domain={[0, (dataMax) => Math.max(45, Math.ceil(dataMax + 2))]}
-                          tickFormatter={(val) => Math.round(val).toString()}
-                        />
-                        <Tooltip 
-                          contentStyle={{ background: '#0f172a', border: 'none', borderRadius: '16px', color: '#fff', fontSize: '11px', boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)' }} 
-                          labelStyle={{ fontWeight: 'bold', color: '#94a3b8', marginBottom: '4px' }}
-                          formatter={(value) => [`${parseFloat(value).toFixed(2)}`, 'VIX']}
-                        />
-                        <ReferenceLine 
-                          y={20} 
-                          stroke="#F59E0B" 
-                          strokeDasharray="3 3" 
-                          label={{ value: '주의 20', position: 'insideTopRight', fill: '#F59E0B', fontSize: 10, fontWeight: 'bold' }} 
-                        />
-                        <ReferenceLine 
-                          y={30} 
-                          stroke="#EF4444" 
-                          strokeDasharray="3 3" 
-                          label={{ value: '경고 30', position: 'insideTopRight', fill: '#EF4444', fontSize: 10, fontWeight: 'bold' }} 
-                        />
-                        <ReferenceLine 
-                          y={40} 
-                          stroke="#991B1B" 
-                          strokeDasharray="3 3" 
-                          label={{ value: '위기 40', position: 'insideTopRight', fill: '#991B1B', fontSize: 10, fontWeight: 'bold' }} 
-                        />
-                        <Line 
-                          type="monotone" 
-                          dataKey="vix" 
-                          stroke="#8b5cf6" 
-                          strokeWidth={2} 
-                          dot={false}
-                          activeDot={{ r: 5, strokeWidth: 0, fill: '#8b5cf6' }}
-                        />
-                      </LineChart>
-                    </ResponsiveContainer>
+                  {/* [2단] MDD 낙폭 차트 */}
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between px-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+                        <span className="text-xs font-black text-slate-700">최대 낙폭 (MDD)</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">단위: %</span>
+                    </div>
+
+                    <div className="h-[110px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={chartData} syncId="marketAnalysisCharts">
+                          <defs>
+                            <linearGradient id="colorMdd" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25}/>
+                              <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                          <XAxis 
+                            dataKey="date" 
+                            tick={false}
+                            axisLine={false}
+                            tickLine={false}
+                            height={1}
+                          />
+                          <YAxis 
+                            stroke="#94a3b8" 
+                            fontSize={11} 
+                            tickLine={false} 
+                            axisLine={false}
+                            domain={['dataMin - 2', 0]}
+                            tickFormatter={(val) => `${val}%`}
+                          />
+                          <Tooltip 
+                            content={<IntegratedChartTooltip activeIndexInfo={activeIndexInfo} chartData={chartData} />}
+                          />
+                          <Area 
+                            type="monotone" 
+                            dataKey="mdd" 
+                            stroke="#f43f5e" 
+                            fillOpacity={1} 
+                            fill="url(#colorMdd)" 
+                            strokeWidth={2} 
+                            dot={false}
+                          />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* [3단] VIX 변동성 차트 (하단에 최종 날짜 X축 표시) */}
+                  <div className="pt-3 border-t border-slate-100">
+                    <div className="flex items-center justify-between px-2 mb-1.5">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
+                        <span className="text-xs font-black text-slate-700">VIX 변동성 지수 (S&P 500)</span>
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">단위: pt</span>
+                    </div>
+
+                    <div className="h-[150px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartData} syncId="marketAnalysisCharts">
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                          <XAxis 
+                            dataKey="date" 
+                            stroke="#94a3b8" 
+                            fontSize={11} 
+                            tickLine={false} 
+                            axisLine={false}
+                            dy={10} 
+                          />
+                          <YAxis 
+                            stroke="#94a3b8" 
+                            fontSize={11} 
+                            tickLine={false} 
+                            axisLine={false}
+                            domain={[0, (dataMax) => Math.max(45, Math.ceil(dataMax + 2))]}
+                            tickFormatter={(val) => Math.round(val).toString()}
+                          />
+                          <Tooltip 
+                            content={<IntegratedChartTooltip activeIndexInfo={activeIndexInfo} chartData={chartData} />}
+                          />
+                          <ReferenceLine 
+                            y={20} 
+                            stroke="#F59E0B" 
+                            strokeDasharray="3 3" 
+                            label={{ value: '주의 20', position: 'insideTopRight', fill: '#F59E0B', fontSize: 10, fontWeight: 'bold' }} 
+                          />
+                          <ReferenceLine 
+                            y={30} 
+                            stroke="#EF4444" 
+                            strokeDasharray="3 3" 
+                            label={{ value: '경고 30', position: 'insideTopRight', fill: '#EF4444', fontSize: 10, fontWeight: 'bold' }} 
+                          />
+                          <ReferenceLine 
+                            y={40} 
+                            stroke="#991B1B" 
+                            strokeDasharray="3 3" 
+                            label={{ value: '위기 40', position: 'insideTopRight', fill: '#991B1B', fontSize: 10, fontWeight: 'bold' }} 
+                          />
+                          <Line 
+                            type="monotone" 
+                            dataKey="vix" 
+                            stroke="#8b5cf6" 
+                            strokeWidth={2} 
+                            dot={false}
+                            activeDot={{ r: 5, strokeWidth: 0, fill: '#8b5cf6' }}
+                          />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
                 </div>
               </div>
