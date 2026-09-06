@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] 모바일 하단 탭 바(`MobileTabBar`)에 5번째 탭 `지수분석`이 추가되고 올바른 순서(대시보드 | 자산 조회 | 지수분석 | 비중 점검 | 설정)로 렌더링된다.
 - [x] `/m/market` 경로가 `MobileRouteGuard` 화이트리스트에 등록되어 데스크톱 리다이렉트 없이 정상 접근된다.

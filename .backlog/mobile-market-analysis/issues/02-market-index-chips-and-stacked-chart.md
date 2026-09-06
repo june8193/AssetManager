@@ -5,14 +5,14 @@
 
 **Blocked by:** 01 — 하단 네비게이션 탭 바 확장 및 모바일 지수분석 라우트/쉘 페이지 구성
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 상단 4대 지수 칩(S&P 500, NASDAQ, KOSPI, KOSDAQ) 선택 및 기간 필터(1Y, 3Y, 5Y, 10Y, ALL)가 렌더링되고 클릭 시 활성 상태가 변경된다.
-- [ ] `/api/market/analysis/historical` API를 호출하여 선택된 지수와 기간의 시계열 데이터를 정상 조회한다.
-- [ ] 단일 카드 내 3단 밀착 동기화 차트가 렌더링된다:
+- [x] 상단 4대 지수 칩(S&P 500, NASDAQ, KOSPI, KOSDAQ) 선택 및 기간 필터(1Y, 3Y, 5Y, 10Y, ALL)가 렌더링되고 클릭 시 활성 상태가 변경된다.
+- [x] `/api/market/analysis/historical` API를 호출하여 선택된 지수와 기간의 시계열 데이터를 정상 조회한다.
+- [x] 단일 카드 내 3단 밀착 동기화 차트가 렌더링된다:
   - 1단: 지수 종가 선/영역 차트 (Y축: pt)
   - 2단: 최대 낙폭 MDD 언더워터 차트 (Y축: 0% ~ -x%)
   - 3단: VIX 변동성 차트 (Y축: pt)
-- [ ] VIX 차트에 `주의 20pt`(주황색 파선) 및 `경고 30pt`(빨간색 파선) 기준선과 라벨이 정확히 표시된다.
-- [ ] 상단 VIX 상태 요약 카드에 현재 VIX 수치 및 4단계 리스크 배지(안정/주의/경고/위기)가 표시된다.
-- [ ] `MobileMarketIndexSection.test.jsx` 단위/컴포넌트 테스트가 통과한다.
+- [x] VIX 차트에 `주의 20pt`(주황색 파선) 및 `경고 30pt`(빨간색 파선) 기준선과 라벨이 정확히 표시된다.
+- [x] 상단 VIX 상태 요약 카드에 현재 VIX 수치 및 4단계 리스크 배지(안정/주의/경고/위기)가 표시된다.
+- [x] `MobileMarketIndexSection.test.jsx` 단위/컴포넌트 테스트가 통과한다.

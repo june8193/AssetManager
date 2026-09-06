@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { RefreshCw, TrendingUp, BarChart2 } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
+import MobileMarketIndexSection from '../../components/mobile/MobileMarketIndexSection';
 
 const SUB_TABS = [
   { id: 'market', label: '시장 지수', icon: TrendingUp },
@@ -21,6 +22,8 @@ export default function MobileMarketPage() {
   const toastTimeoutRef = useRef(null);
   const { maskValue } = useMasking();
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) {
@@ -34,6 +37,7 @@ export default function MobileMarketPage() {
     setIsRefreshing(true);
     setToastMessage(null);
     try {
+      setRefreshKey((prev) => prev + 1);
       // 쉘 수준 새로고침 시뮬레이션 및 데이터 최신화 알림
       await new Promise((resolve) => setTimeout(resolve, 300));
       setToastMessage({ type: 'success', text: '지수 및 시장 데이터가 최신화되었습니다.' });
@@ -134,13 +138,7 @@ export default function MobileMarketPage() {
           data-testid="market-indices-view"
           className="space-y-4 animate-in fade-in duration-200"
         >
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm text-center">
-            <TrendingUp className="w-8 h-8 text-sky-400 mx-auto mb-2 opacity-80" />
-            <h2 className="text-sm font-bold text-white mb-1">시장 지수 분석</h2>
-            <p className="text-xs text-slate-400">
-              S&amp;P 500, 나스닥, 코스피, 코스닥 지수 추이와 VIX 공포지수를 한눈에 확인합니다.
-            </p>
-          </div>
+          <MobileMarketIndexSection key={refreshKey} />
         </section>
       )}
 
