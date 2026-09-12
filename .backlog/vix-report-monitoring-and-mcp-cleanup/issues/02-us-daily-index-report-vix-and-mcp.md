@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — MCP 도구 계층에서 get_market_indices 퇴역 및 get_market_history 다중 티커 검증
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `.agents/skills/us-daily-index-report/SKILL.md`에서 휴장일 확인이 `check_market_holiday` MCP 도구 호출로 명시되었는가?
 - [ ] `.agents/skills/us-daily-index-report/SKILL.md`에서 지수 및 VIX 데이터 수집이 `get_market_history` MCP 도구(`tickers="^GSPC,^IXIC,^DJI,^VIX"`) 단일 호출로 갱신되었는가?
