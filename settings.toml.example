@@ -23,7 +23,7 @@ max_files = 7           # 보관할 최대 백업 파일 개수 (초과 시 오�
 bot_token = "YOUR_TELEGRAM_BOT_TOKEN"
 allowed_user_ids = [123456789]
 enabled = false
-storage_dir = "./storage"
+storage_dir = "G:/내 드라이브/투자/Asset_jun_bot_storage"
 
 # 네이버 뉴스 검색 API 연동 설정
 [naver]

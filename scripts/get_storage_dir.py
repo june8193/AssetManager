@@ -28,8 +28,10 @@ def get_resolved_storage_dir() -> Path:
     if not storage_dir:
         storage_dir = "./storage"
 
-    resolved_path = Path(storage_dir.strip()).expanduser().resolve()
+    cleaned_dir = storage_dir.strip().strip("'\"")
+    resolved_path = Path(cleaned_dir).expanduser().resolve()
     return resolved_path
+
 
 
 def main() -> None:

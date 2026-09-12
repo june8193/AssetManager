@@ -21,7 +21,7 @@ class TelegramConfig:
     storage_dir: str = "./storage"
 
     def __post_init__(self) -> None:
-        """allowed_user_ids 항목을 정수형으로 정규화합니다."""
+        """allowed_user_ids 항목을 정수형으로 정규화하고 storage_dir 경로의 공백과 따옴표를 정규화합니다."""
         normalized: list[int] = []
         for uid in self.allowed_user_ids:
             try:
@@ -29,6 +29,10 @@ class TelegramConfig:
             except (ValueError, TypeError):
                 continue
         self.allowed_user_ids = normalized
+
+        if self.storage_dir:
+            self.storage_dir = self.storage_dir.strip().strip("'\"")
+
 
     def is_user_allowed(self, user_id: int | str) -> bool:
         """주어진 사용자 ID가 허용 목록에 포함되어 있는지 검사합니다.

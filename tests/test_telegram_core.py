@@ -438,3 +438,33 @@ async def test_client_context_manager_and_aclose():
     mock_http.aclose.assert_awaited_once()
     assert client._http_client is None
 
+
+def test_telegram_config_storage_dir_quotes_and_spaces():
+    """TelegramConfig가 storage_dir에 포함된 공백과 따옴표를 올바르게 제거하는지 검증합니다."""
+    cfg1 = TelegramConfig(storage_dir='  "G:/내 드라이브/투자/Asset_jun_bot_storage"  ')
+    assert cfg1.storage_dir == "G:/내 드라이브/투자/Asset_jun_bot_storage"
+
+    cfg2 = TelegramConfig(storage_dir="  'G:\\내 드라이브\\투자\\Asset_jun_bot_storage'  ")
+    assert cfg2.storage_dir == "G:\\내 드라이브\\투자\\Asset_jun_bot_storage"
+
+
+def test_settings_toml_and_example_storage_dir_sync():
+    """settings.toml 및 settings.toml.example의 storage_dir 기본값이 구글 드라이브 경로로 일원화되어 있는지 검증합니다."""
+    from pathlib import Path
+    import tomllib
+
+    target_path = "G:/내 드라이브/투자/Asset_jun_bot_storage"
+
+    root_dir = Path(__file__).resolve().parent.parent
+    settings_file = root_dir / "settings.toml"
+    example_file = root_dir / "settings.toml.example"
+
+    with open(settings_file, "rb") as f:
+        data = tomllib.load(f)
+    assert data.get("telegram", {}).get("storage_dir") == target_path
+
+    with open(example_file, "rb") as f:
+        example_data = tomllib.load(f)
+    assert example_data.get("telegram", {}).get("storage_dir") == target_path
+
+

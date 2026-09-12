@@ -70,7 +70,27 @@ def test_get_storage_dir_cli(mock_settings):
     assert Path(output) == Path(mock_settings.telegram.storage_dir).resolve()
 
 
+def test_get_storage_dir_with_quotes_and_spaces(monkeypatch):
+    """get_storage_dir가 따옴표 및 공백이 포함된 경로를 안정적으로 해석하여 반환하는지 검증합니다."""
+    from scripts.get_storage_dir import get_resolved_storage_dir
+    from src.backend.config import Settings, TelegramConfig
+
+    # 따옴표와 공백이 포함된 Google Drive 경로
+    test_dir = '  "G:/내 드라이브/투자/Asset_jun_bot_storage"  '
+    settings = Settings(
+        telegram=TelegramConfig(storage_dir=test_dir),
+    )
+    monkeypatch.setattr("src.backend.config._settings_instance", settings)
+
+    resolved = get_resolved_storage_dir()
+    assert Path(resolved).is_absolute()
+    # 양쪽 공백 및 따옴표가 제거된 경로와 일치해야 함
+    expected = Path("G:/내 드라이브/투자/Asset_jun_bot_storage").resolve()
+    assert resolved == expected
+
+
 # ==============================================================================
+
 # 2. send_telegram.py 테스트
 # ==============================================================================
 @pytest.mark.asyncio
