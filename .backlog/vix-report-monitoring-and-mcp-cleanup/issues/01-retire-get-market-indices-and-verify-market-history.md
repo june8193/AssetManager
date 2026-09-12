@@ -5,7 +5,7 @@ FastMCP 프로토콜 상의 직렬화 오류를 유발하고 시계열 조회가
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `src/mcp/tools/market.py`에서 `get_market_indices` 함수가 제거되었는가?
 - [ ] `src/mcp/main.py`에서 `get_market_indices` 임포트 및 도구 등록 코드가 제거되었는가?
