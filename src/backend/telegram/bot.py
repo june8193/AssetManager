@@ -3,11 +3,12 @@
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 from ..config import TelegramConfig, get_settings
 from .client import TelegramClient
-from .commands import CLICommandHandler
+from .commands import CLICommandHandler, RESTART_FLAG_FILENAME
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,21 @@ class TelegramBot:
     async def aclose(self) -> None:
         """봇 내부 클라이언트 리소스를 안전하게 종료합니다."""
         await self.client.aclose()
+
+    async def check_restart_flag(self) -> None:
+        """스토리지 내 재시작 대기 플래그가 발견되면 알림을 전송하고 삭제합니다."""
+        flag_file = os.path.join(self.config.storage_dir, RESTART_FLAG_FILENAME)
+        if os.path.exists(flag_file):
+            logger.info("재시작 플래그 파일 감지: 완료 메시지를 발송하고 파일을 삭제합니다.")
+            try:
+                os.remove(flag_file)
+            except Exception as exc:
+                logger.error(f"재시작 플래그 파일 삭제 실패: {exc}")
+
+            for user_id in self.config.allowed_user_ids:
+                await self.client.send_message(
+                    user_id, "🔄 AssetManager 서버 재시작이 완료되었습니다."
+                )
 
     async def poll_once(self, offset: int | None = None) -> int | None:
         """Telegram 서버로부터 새 업데이트를 1회 롱폴링 수신하여 처리합니다.
@@ -115,6 +131,7 @@ class TelegramBot:
         """텔레그램 클라이언트에 공식 봇 명령어 목록을 등록합니다."""
         commands = [
             {"command": "help", "description": "사용 가능한 명령어 목록 안내"},
+            {"command": "restart", "description": "서버 프로세스 재시작"},
             {"command": "asset", "description": "통합 자산 현황 조회"},
             {"command": "ratio", "description": "자산 비중 및 리밸런싱 현황 조회"},
             {"command": "tx", "description": "최근 거래내역 조회"},
@@ -138,6 +155,7 @@ class TelegramBot:
             stop_event: 폴링 종료를 알리는 asyncio.Event 객체 (옵션)
         """
         logger.info("텔레그램 봇 롱폴링 루프를 시작합니다.")
+        await self.check_restart_flag()
         await self.register_bot_commands()
 
         offset: int | None = None

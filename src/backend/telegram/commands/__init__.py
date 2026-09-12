@@ -8,6 +8,7 @@ from .asset import handle_asset
 from .daily import handle_daily
 from .help import handle_help
 from .ratio import handle_ratio
+from .restart import RESTART_FLAG_FILENAME, handle_restart
 from .sync import handle_sync
 from .tx import handle_transactions
 from .yearly import handle_yearly
@@ -46,7 +47,14 @@ class CLICommandHandler:
             "/yearly": handle_yearly,
             "/daily": handle_daily,
             "/sync": handle_sync,
+            "/restart": self._handle_restart,
         }
+
+    async def _handle_restart(
+        self, client: "TelegramClient", chat_id: int, text: str
+    ) -> None:
+        """/restart 명령어를 위임 처리합니다."""
+        await handle_restart(client, chat_id, text, config=self.config)
 
     async def process_cli_command(self, chat_id: int, text: str) -> None:
         """수신된 텍스트에서 명령어를 추출하여 등록된 핸들러로 전달합니다.
@@ -77,10 +85,12 @@ class CLICommandHandler:
 
 __all__ = [
     "CLICommandHandler",
+    "RESTART_FLAG_FILENAME",
     "handle_asset",
     "handle_daily",
     "handle_help",
     "handle_ratio",
+    "handle_restart",
     "handle_sync",
     "handle_transactions",
     "handle_yearly",

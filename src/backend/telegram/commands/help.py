@@ -12,6 +12,7 @@ logger = logging.getLogger(__name__)
 HELP_MESSAGE = (
     "💡 **AssetManager 텔레그램 봇 명령어 안내**\n"
     "• /help: 사용 가능한 명령어 목록을 확인합니다.\n"
+    "• /restart: 서버를 완전히 재시작합니다 (PM2 연동).\n"
     "• /asset: 통합 자산 현황 및 평가금액, 누적 수익률을 조회합니다.\n"
     "• /ratio: 대분류/소분류 자산 배분 비중 및 리밸런싱 현황을 조회합니다.\n"
     "• /tx [개수] 또는 /transactions [개수]: 최근 거래내역을 조회합니다. (기본 5개)\n"
