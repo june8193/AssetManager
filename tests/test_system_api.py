@@ -190,3 +190,85 @@ def test_get_log_content_path_traversal_blocked(client: TestClient, mock_logs_di
     """
     response = client.get("/api/v1/system/logs/content?filename=../secret.txt")
     assert response.status_code == 404
+
+
+def test_get_log_content_default_fallback(client: TestClient, mock_logs_dir: Path):
+    """파라미터가 생략되었을 때 기본값으로 pm2-err.log 내용을 반환하는지 테스트합니다.
+
+    Args:
+        client (TestClient): FastAPI 테스트 클라이언트 픽스처
+        mock_logs_dir (Path): 임시 로그 디렉터리 픽스처
+    """
+    err_file = mock_logs_dir / "pm2-err.log"
+    err_file.write_text("2026-09-12 12:00:00 [ERROR] Default error message\n", encoding="utf-8")
+
+    response = client.get("/api/v1/system/logs/content")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["filename"] == "pm2-err.log"
+    assert data["total_lines"] == 1
+    assert "Default error message" in data["lines"][0]
+
+
+def test_get_log_content_by_log_type(client: TestClient, mock_logs_dir: Path):
+    """log_type='error' 및 log_type='output' 파라미터로 적절한 로그 파일을 조회하는지 테스트합니다.
+
+    Args:
+        client (TestClient): FastAPI 테스트 클라이언트 픽스처
+        mock_logs_dir (Path): 임시 로그 디렉터리 픽스처
+    """
+    err_file = mock_logs_dir / "pm2-err.log"
+    err_file.write_text("2026-09-12 12:00:00 [ERROR] PM2 error occurred\n", encoding="utf-8")
+
+    out_file = mock_logs_dir / "pm2-out.log"
+    out_file.write_text("2026-09-12 12:00:00 [INFO] PM2 standard output\n", encoding="utf-8")
+
+    # error 타입 조회
+    resp_err = client.get("/api/v1/system/logs/content?log_type=error")
+    assert resp_err.status_code == 200
+    data_err = resp_err.json()
+    assert data_err["filename"] == "pm2-err.log"
+    assert "PM2 error occurred" in data_err["lines"][0]
+
+    # output 타입 조회
+    resp_out = client.get("/api/v1/system/logs/content?log_type=output")
+    assert resp_out.status_code == 200
+    data_out = resp_out.json()
+    assert data_out["filename"] == "pm2-out.log"
+    assert "PM2 standard output" in data_out["lines"][0]
+
+
+def test_get_log_content_invalid_log_type(client: TestClient, mock_logs_dir: Path):
+    """잘못된 log_type 전달 시 400 Bad Request와 명확한 오류 메시지를 반환하는지 테스트합니다.
+
+    Args:
+        client (TestClient): FastAPI 테스트 클라이언트 픽스처
+        mock_logs_dir (Path): 임시 로그 디렉터리 픽스처
+    """
+    response = client.get("/api/v1/system/logs/content?log_type=invalid_type")
+    assert response.status_code == 400
+    detail = response.json().get("detail", "")
+    assert "log_type" in detail
+    assert "error" in detail or "output" in detail
+
+
+def test_get_log_content_filename_precedence(client: TestClient, mock_logs_dir: Path):
+    """filename 파라미터가 명시적으로 전달되면 log_type보다 우선하여 해당 파일을 조회하는지 테스트합니다.
+
+    Args:
+        client (TestClient): FastAPI 테스트 클라이언트 픽스처
+        mock_logs_dir (Path): 임시 로그 디렉터리 픽스처
+    """
+    custom_file = mock_logs_dir / "custom.log"
+    custom_file.write_text("2026-09-12 [INFO] Custom log content\n", encoding="utf-8")
+
+    err_file = mock_logs_dir / "pm2-err.log"
+    err_file.write_text("2026-09-12 [ERROR] PM2 error\n", encoding="utf-8")
+
+    # filename과 log_type이 모두 전달되었을 때 filename 우선
+    response = client.get("/api/v1/system/logs/content?filename=custom.log&log_type=error")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["filename"] == "custom.log"
+    assert "Custom log content" in data["lines"][0]
+

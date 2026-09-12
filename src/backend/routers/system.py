@@ -23,6 +23,12 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent.absolute()
 LOGS_DIR = PROJECT_ROOT / "backups" / "logs"
 ALLOWED_LOG_DIRS = [LOGS_DIR.resolve(), (PROJECT_ROOT / "logs").resolve()]
 
+# 허용할 로그 종류 및 매핑
+LOG_TYPE_MAP = {
+    "error": "pm2-err.log",
+    "output": "pm2-out.log",
+}
+
 
 # --- Pydantic Request/Response Schemas ---
 
@@ -358,15 +364,17 @@ def get_log_files():
 
 @router.get("/logs/content", response_model=LogContentResponse)
 def get_log_content(
-    filename: str = Query(..., description="조회할 로그 파일명"),
+    filename: Optional[str] = Query(None, description="조회할 로그 파일명 (하위 호환용)"),
+    log_type: Optional[str] = Query(None, description="로그 종류 ('error' 또는 'output')"),
     lines: int = Query(100, ge=1, le=2000, description="반환할 최대 라인 수"),
     level: Optional[str] = Query(None, description="로그 레벨 필터 (INFO, WARN, ERROR)"),
     keyword: Optional[str] = Query(None, description="검색 키워드"),
 ):
-    """지정한 로그 파일의 내용(최신 라인, 필터링 적용)을 안전하게 반환합니다.
+    """지정한 로그 파일 또는 종류(log_type)의 내용(최신 라인, 필터링 적용)을 안전하게 반환합니다.
 
     Args:
-        filename (str): 조회할 로그 파일명
+        filename (Optional[str]): 조회할 로그 파일명 (지정 시 log_type보다 우선 적용)
+        log_type (Optional[str]): 로그 종류 ('error' -> pm2-err.log, 'output' -> pm2-out.log)
         lines (int): 추출할 라인 수 (기본 100줄)
         level (Optional[str]): 필터링할 로그 레벨
         keyword (Optional[str]): 검색 키워드
@@ -375,17 +383,35 @@ def get_log_content(
         LogContentResponse: 파일명, 전체 일치 라인 수, 추출 라인 목록
 
     Raises:
-        HTTPException: 경로 접근 권한 오류 (404) 또는 파일 읽기 실패 (500)
+        HTTPException: 유효하지 않은 log_type (400), 경로 접근 권한 오류 또는 파일 부재 (404), 파일 읽기 실패 (500)
     """
+    if log_type is not None:
+        normalized_type = log_type.strip().lower()
+        if normalized_type not in LOG_TYPE_MAP:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"유효하지 않은 log_type입니다: '{log_type}'. 'error' 또는 'output'이어야 합니다.",
+            )
+        resolved_log_type = normalized_type
+    else:
+        resolved_log_type = None
+
+    if filename:
+        target_filename = filename
+    elif resolved_log_type:
+        target_filename = LOG_TYPE_MAP[resolved_log_type]
+    else:
+        target_filename = "pm2-err.log"
+
     target_path = None
     for log_dir in ALLOWED_LOG_DIRS:
-        candidate = (log_dir / filename).resolve()
+        candidate = (log_dir / target_filename).resolve()
         if candidate.is_relative_to(log_dir) and candidate.exists() and candidate.is_file():
             target_path = candidate
             break
 
     if target_path is None:
-        raise HTTPException(status_code=404, detail=f"로그 파일 '{filename}'을(를) 찾을 수 없거나 접근 권한이 없습니다.")
+        raise HTTPException(status_code=404, detail=f"로그 파일 '{target_filename}'을(를) 찾을 수 없거나 접근 권한이 없습니다.")
 
     try:
         with open(target_path, "r", encoding="utf-8", errors="replace") as f:
@@ -408,7 +434,8 @@ def get_log_content(
     tail_lines = filtered_lines[-lines:] if lines < len(filtered_lines) else filtered_lines
 
     return LogContentResponse(
-        filename=filename,
+        filename=target_filename,
         total_lines=len(filtered_lines),
         lines=tail_lines,
     )
+
