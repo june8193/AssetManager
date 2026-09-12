@@ -1,8 +1,10 @@
 # -*- coding: utf-8 -*-
 """AssetManager 로컬 REST API 통신용 데이터 모델 및 예외 정의 모듈입니다.
 
-자산 요약(AssetSummaryResponse), 자산군별 비중 및 리밸런싱(AssetRatiosResponse, AssetRatioItem) 등의
-Pydantic 모델과 API 클라이언트 예외(AssetClientError)를 정의합니다.
+자산 요약(AssetSummaryResponse), 자산군별 비중 및 리밸런싱(AssetRatiosResponse, AssetRatioItem),
+거래 내역(TransactionsResponse, TransactionItem),
+연도별/일별 통계(YearlyStatsResponse, DailyStatsResponse),
+스냅샷(SnapshotsResponse, SnapshotItem) 모델과 API 예외(AssetClientError)를 정의합니다.
 """
 
 from pydantic import BaseModel, Field
@@ -48,3 +50,78 @@ class AssetRatiosResponse(BaseModel):
     major_results: list[AssetRatioItem] = Field(default_factory=list, description="자산 대분류별 비중 목록")
     sub_results: list[AssetRatioItem] = Field(default_factory=list, description="자산 소분류별 비중 목록")
 
+
+class TransactionItem(BaseModel):
+    """개별 거래 내역 정보 모델입니다."""
+
+    id: int | None = Field(None, description="거래 식별자")
+    account_id: int = Field(..., description="계좌 식별자")
+    asset_id: int = Field(..., description="자산 식별자")
+    transaction_date: str = Field(..., description="거래 일자 (YYYY-MM-DD)")
+    type: str = Field(..., description="거래 유형 (BUY, SELL 등)")
+    quantity: float = Field(0.0, description="수량")
+    price: float = Field(0.0, description="단가")
+    total_amount: float = Field(..., description="총 거래 금액")
+    currency: str = Field("KRW", description="통화 (KRW, USD)")
+    exchange_rate: float | None = Field(None, description="환율")
+    memo: str | None = Field(None, description="메모")
+    asset_name: str | None = Field(None, description="자산명")
+    asset_ticker: str | None = Field(None, description="자산 티커")
+    account_display_name: str | None = Field(None, description="계좌 표시 이름")
+
+
+class TransactionsResponse(BaseModel):
+    """거래 내역 목록 응답 모델입니다."""
+
+    transactions: list[TransactionItem] = Field(default_factory=list, description="거래 내역 목록")
+
+
+class YearlyStatItem(BaseModel):
+    """연도별 자산 현황 통계 아이템 모델입니다."""
+
+    year: int = Field(..., description="연도")
+    contribution: float = Field(..., description="순 추가액 (KRW)")
+    profit: float = Field(..., description="연간 투자 수익 (KRW)")
+    roi: float = Field(..., description="연간 투자수익률 (%)")
+    assets: float = Field(..., description="기말 자산 평가액 (KRW)")
+    increase: float = Field(..., description="자산 증감액 (KRW)")
+
+
+class YearlyStatsResponse(BaseModel):
+    """연도별 자산 현황 통계 응답 모델입니다."""
+
+    stats: list[YearlyStatItem] = Field(default_factory=list, description="연도별 자산 현황 목록")
+
+
+class DailyStatItem(BaseModel):
+    """일자별 자산 현황 통계 아이템 모델입니다."""
+
+    date: str = Field(..., description="날짜 (YYYY-MM-DD)")
+    contribution: float = Field(..., description="추가액 (KRW)")
+    profit: float = Field(..., description="투자 수익 (KRW)")
+    roi: float = Field(..., description="투자수익률 (%)")
+    assets: float = Field(..., description="자산 평가액 (KRW)")
+    increase: float = Field(..., description="자산 증감액 (KRW)")
+
+
+class DailyStatsResponse(BaseModel):
+    """일자별 자산 현황 통계 응답 모델입니다."""
+
+    stats: list[DailyStatItem] = Field(default_factory=list, description="일자별 자산 현황 목록")
+
+
+class SnapshotItem(BaseModel):
+    """계좌 상태 스냅샷 정보 모델입니다."""
+
+    id: int = Field(..., description="스냅샷 식별자")
+    account_id: int = Field(..., description="계좌 식별자")
+    snapshot_date: str = Field(..., description="기준 일자 (YYYY-MM-DD)")
+    period_deposit: float = Field(..., description="해당 기간 추가 입금액")
+    total_valuation: float = Field(..., description="총 평가액")
+    total_profit: float = Field(..., description="누적 수익")
+
+
+class SnapshotsResponse(BaseModel):
+    """자산 상태 스냅샷 목록 응답 모델입니다."""
+
+    snapshots: list[SnapshotItem] = Field(default_factory=list, description="자산 상태 스냅샷 목록")

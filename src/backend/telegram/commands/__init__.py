@@ -5,8 +5,11 @@ import logging
 from typing import TYPE_CHECKING, Callable, Awaitable
 
 from .asset import handle_asset
+from .daily import handle_daily
 from .help import handle_help
 from .ratio import handle_ratio
+from .tx import handle_transactions
+from .yearly import handle_yearly
 
 if TYPE_CHECKING:
     from ..client import TelegramClient
@@ -37,6 +40,10 @@ class CLICommandHandler:
             "/help": handle_help,
             "/asset": handle_asset,
             "/ratio": handle_ratio,
+            "/tx": handle_transactions,
+            "/transactions": handle_transactions,
+            "/yearly": handle_yearly,
+            "/daily": handle_daily,
         }
 
     async def process_cli_command(self, chat_id: int, text: str) -> None:
@@ -66,5 +73,12 @@ class CLICommandHandler:
             await self.client.send_message(chat_id, warning_msg)
 
 
-__all__ = ["CLICommandHandler", "handle_asset", "handle_help", "handle_ratio"]
-
+__all__ = [
+    "CLICommandHandler",
+    "handle_asset",
+    "handle_daily",
+    "handle_help",
+    "handle_ratio",
+    "handle_transactions",
+    "handle_yearly",
+]
