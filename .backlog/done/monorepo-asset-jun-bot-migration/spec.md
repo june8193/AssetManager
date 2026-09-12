@@ -1,6 +1,6 @@
 # Feature Spec: Asset-jun-bot 잔여 스킬 및 텔레그램 기능 이관을 통한 AssetManager 모노레포 단일화
 
-Status: ready-for-agent
+Status: done
 
 ## Problem Statement
 
