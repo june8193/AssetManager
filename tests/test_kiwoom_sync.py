@@ -670,7 +670,7 @@ async def test_sync_overseas_dividend_and_tax(
     assert interest_tx.price == 0.0
     assert interest_tx.quantity == 0.0
     assert interest_tx.currency == "USD"
-    assert interest_tx.external_id == "000000004"
+    assert interest_tx.external_id == "20260807_000000004"
 
     tax_tx = db_session.query(Transaction).filter(
         Transaction.account_id == account.id,
@@ -682,7 +682,7 @@ async def test_sync_overseas_dividend_and_tax(
     assert tax_tx.price == 0.0
     assert tax_tx.quantity == 0.0
     assert tax_tx.currency == "KRW"
-    assert tax_tx.external_id == "000000005"
+    assert tax_tx.external_id == "20260807_000000005"
 
 
 @pytest.mark.asyncio
@@ -764,7 +764,7 @@ async def test_sync_exchange_transaction_with_settlement(
     assert abs(exchange_tx.exchange_rate - 1433.75) < 0.01
     assert exchange_tx.currency == "KRW"
     assert exchange_tx.source == "AUTO_KIWOOM"
-    assert exchange_tx.external_id == "000000002"
+    assert exchange_tx.external_id == "20260804_000000002"
 
 
 @pytest.mark.asyncio
@@ -850,7 +850,7 @@ async def test_sync_exchange_transaction_manual_match(
 
     db_session.refresh(manual_tx)
     assert manual_tx.source == "AUTO_KIWOOM"
-    assert manual_tx.external_id == "000000002"
+    assert manual_tx.external_id == "20260804_000000002"
 
     # 중복 생성 없이 총 EXCHANGE 트랜잭션은 1건이어야 함
     all_exchanges = db_session.query(Transaction).filter(
@@ -926,7 +926,7 @@ async def test_sync_exchange_transaction_sell_usd(
     assert exchange_tx.exchange_rate == 1400.0
     assert exchange_tx.currency == "USD"
     assert exchange_tx.source == "AUTO_KIWOOM"
-    assert exchange_tx.external_id == "000000010"
+    assert exchange_tx.external_id == "20260810_000000010"
 
 
 @pytest.mark.asyncio
@@ -1011,6 +1011,252 @@ async def test_sync_overseas_executions_days_1_includes_yesterday(
     assert apple_tx.price == 200.0
     assert apple_tx.total_amount == 2000.0
     assert apple_tx.currency == "USD"
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_exchange_transactions_different_dates_same_trde_no(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """서로 다른 거래일자에 동일한 trde_no="000000002"를 가진 환전 거래가 각각 누락 없이 DB에 정상 커밋되는지 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = MagicMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": "20260825",
+                        "trde_no": "000000002",
+                        "rmrk_nm": "원화주문 외화매수",
+                        "trde_kind_nm": "환전",
+                        "io_tp_nm": "외화매수",
+                        "crnc_cd": "USD",
+                        "trde_amt": "1400000",
+                        "fc_trde_amt": "1000.00",
+                        "trde_unit": "1400.00"
+                    },
+                    {
+                        "trde_dt": "20260910",
+                        "trde_no": "000000002",
+                        "rmrk_nm": "원화주문 외화매수",
+                        "trde_kind_nm": "환전",
+                        "io_tp_nm": "외화매수",
+                        "crnc_cd": "USD",
+                        "trde_amt": "1350000",
+                        "fc_trde_amt": "1000.00",
+                        "trde_unit": "1350.00"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": [], "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=30)
+
+    assert result["status"] == "success"
+
+    account = setup_test_data["accounts"]["5526-9093"]
+    exchanges = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.type == "EXCHANGE"
+    ).order_by(Transaction.transaction_date.asc()).all()
+
+    # 2건 모두 정상 커밋되어야 함
+    assert len(exchanges) == 2
+    assert exchanges[0].transaction_date == datetime.date(2026, 8, 25)
+    assert exchanges[0].external_id == "20260825_000000002"
+    assert exchanges[0].total_amount == 1400000.0
+
+    assert exchanges[1].transaction_date == datetime.date(2026, 9, 10)
+    assert exchanges[1].external_id == "20260910_000000002"
+    assert exchanges[1].total_amount == 1350000.0
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_exchange_legacy_external_id_backward_compatibility(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """과거 레거시 식별자(000000002)로 저장된 환전 거래가 있을 때, 신규 규격(20260825_000000002)으로 재동기화 시 중복으로 인식되어 스킵되는지 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    krw_asset = setup_test_data["assets"]["KRW"]
+    usd_asset = setup_test_data["assets"]["USD"]
+    account = setup_test_data["accounts"]["5526-9093"]
+
+    # 레거시 external_id("000000002")로 저장된 기존 거래
+    legacy_tx = Transaction(
+        account_id=account.id,
+        asset_id=krw_asset.id,
+        target_asset_id=usd_asset.id,
+        transaction_date=datetime.date(2026, 8, 25),
+        type="EXCHANGE",
+        quantity=1000.0,
+        price=1400.0,
+        total_amount=1400000.0,
+        currency="KRW",
+        exchange_rate=1400.0,
+        memo="키움 자동저장 (환전)",
+        source="AUTO_KIWOOM",
+        external_id="000000002"
+    )
+    db_session.add(legacy_tx)
+    db_session.commit()
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = MagicMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": "20260825",
+                        "trde_no": "000000002",
+                        "rmrk_nm": "원화주문 외화매수",
+                        "trde_kind_nm": "환전",
+                        "io_tp_nm": "외화매수",
+                        "crnc_cd": "USD",
+                        "trde_amt": "1400000",
+                        "fc_trde_amt": "1000.00",
+                        "trde_unit": "1400.00"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": [], "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=7)
+
+    assert result["status"] == "success"
+
+    # 중복 감지되어 신규 적재되지 않아야 함
+    exchanges = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.type == "EXCHANGE"
+    ).all()
+    assert len(exchanges) == 1
+    assert exchanges[0].external_id == "000000002"
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_dividend_different_dates_and_legacy_compatibility(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """배당금 거래에서 서로 다른 일자 동일 trde_no 저장 및 레거시 external_id 중복 검사 하위 호환성을 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    apple_asset = setup_test_data["assets"]["AAPL"]
+    account = setup_test_data["accounts"]["5526-9093"]
+
+    # 1. 2026-08-01 레거시 배당금 거래 미리 생성
+    legacy_div = Transaction(
+        account_id=account.id,
+        asset_id=apple_asset.id,
+        transaction_date=datetime.date(2026, 8, 1),
+        type="INTEREST",
+        quantity=0.0,
+        price=0.0,
+        total_amount=50.0,
+        currency="USD",
+        memo="키움 자동저장 (배당금)",
+        source="AUTO_KIWOOM",
+        external_id="000000001"
+    )
+    db_session.add(legacy_div)
+    db_session.commit()
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = MagicMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    # A. 2026-08-01 건 (레거시와 동일 날짜/trde_no -> 중복 스킵되어야 함)
+                    {
+                        "trde_dt": "20260801",
+                        "trde_no": "000000001",
+                        "rmrk_nm": "배당금(외화)입금",
+                        "stk_cd": "AAPL",
+                        "stk_nm": "Apple",
+                        "crnc_cd": "USD",
+                        "fc_trde_amt": "50.0",
+                        "fc_exct_amt": "50.0",
+                        "trde_amt": "0"
+                    },
+                    # B. 2026-09-01 건 (동일 trde_no이나 날짜가 다름 -> 신규 저장되어야 함)
+                    {
+                        "trde_dt": "20260901",
+                        "trde_no": "000000001",
+                        "rmrk_nm": "배당금(외화)입금",
+                        "stk_cd": "AAPL",
+                        "stk_nm": "Apple",
+                        "crnc_cd": "USD",
+                        "fc_trde_amt": "60.0",
+                        "fc_exct_amt": "60.0",
+                        "trde_amt": "0"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": [], "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=40)
+
+    assert result["status"] == "success"
+
+    divs = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.asset_id == apple_asset.id,
+        Transaction.type == "INTEREST"
+    ).order_by(Transaction.transaction_date.asc()).all()
+
+    # 레거시 1건 + 신규 1건 = 총 2건
+    assert len(divs) == 2
+    assert divs[0].transaction_date == datetime.date(2026, 8, 1)
+    assert divs[0].external_id == "000000001"
+    assert divs[0].total_amount == 50.0
+
+    assert divs[1].transaction_date == datetime.date(2026, 9, 1)
+    assert divs[1].external_id == "20260901_000000001"
+    assert divs[1].total_amount == 60.0
+
 
 
 

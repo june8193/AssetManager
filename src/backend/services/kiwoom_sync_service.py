@@ -71,6 +71,46 @@ def normalize_ticker(ticker: str | None) -> str | None:
         return ticker
     return re.sub(r"^A(\d{6})$", r"\1", ticker)
 
+
+def _format_ledger_external_id(raw_ext_id: str | int | None, dt_str: str) -> str | None:
+    """종합원장(kt00015) 수집 항목의 external_id를 {trde_dt}_{raw_id} 규격으로 포맷팅합니다.
+
+    Args:
+        raw_ext_id (str | int | None): API 원본 일련번호 또는 거래번호
+        dt_str (str): YYYYMMDD 형태의 거래일자 문자열
+
+    Returns:
+        str | None: 포맷팅된 외부 식별자 (예: "20260910_000000002") 또는 None
+    """
+    if not raw_ext_id:
+        return None
+    raw_str = str(raw_ext_id).strip()
+    if not raw_str:
+        return None
+    return raw_str if raw_str.startswith(f"{dt_str}_") else f"{dt_str}_{raw_str}"
+
+
+def _get_candidate_external_ids(ext_id: str | None, tx_date: datetime.date) -> set[str]:
+    """신규 포맷({YYYYMMDD}_{ID})과 레거시 ID 간의 상호 매칭을 위한 후보 식별자 세트를 반환합니다.
+
+    Args:
+        ext_id (str | None): 비교 대상 외부 식별자
+        tx_date (datetime.date): 거래 일자 객체
+
+    Returns:
+        set[str]: 레거시 및 신규 규격이 포함된 식별자 세트
+    """
+    if not ext_id:
+        return set()
+    dt_prefix = tx_date.strftime("%Y%m%d")
+    candidates = {ext_id}
+    if "_" in ext_id:
+        candidates.add(ext_id.split("_", 1)[1])
+    else:
+        candidates.add(f"{dt_prefix}_{ext_id}")
+    return candidates
+
+
 class KiwoomTransactionService:
     """키움증권 계좌의 당일 체결 내역 및 배당금 입금 내역을 DB에 자동 저장하는 서비스 클래스입니다.
 
@@ -225,6 +265,13 @@ class KiwoomTransactionService:
                     success_count = 0
                     seen_ext_ids = set()
                     for tx_data in raw_transactions:
+                        ext_id = tx_data.get("external_id")
+                        if ext_id:
+                            if ext_id in seen_ext_ids:
+                                logger.info(f"배치 내 중복 체결번호 스킵: {ext_id}")
+                                continue
+                            seen_ext_ids.add(ext_id)
+
                         if tx_data["type"] == "EXCHANGE":
                             if self._sync_exchange_transaction(db, account, tx_data, unregistered_list, synced_list):
                                 success_count += 1
@@ -233,13 +280,6 @@ class KiwoomTransactionService:
                         ticker = normalize_ticker(tx_data.get("ticker"))
                         if not ticker:
                             continue
-
-                        ext_id = tx_data.get("external_id")
-                        if ext_id:
-                            if ext_id in seen_ext_ids:
-                                logger.info(f"배치 내 중복 체결번호 스킵: {ext_id}")
-                                continue
-                            seen_ext_ids.add(ext_id)
 
                         asset = db.query(Asset).filter(Asset.ticker == ticker).first()
                         if not asset:
@@ -265,10 +305,12 @@ class KiwoomTransactionService:
 
                         # 1) 동일 체결번호(external_id)가 이미 DB에 존재하는 경우 -> 100% 중복 스킵
                         if ext_id:
+                            candidate_ids = _get_candidate_external_ids(ext_id, tx_data["date"])
                             exists_by_ext_id = db.query(Transaction).filter(
                                 Transaction.account_id == account.id,
                                 Transaction.asset_id == asset.id,
-                                Transaction.external_id == ext_id
+                                Transaction.transaction_date == tx_data["date"],
+                                Transaction.external_id.in_(candidate_ids)
                             ).first()
                             if exists_by_ext_id:
                                 logger.info(f"이미 존재(체결번호 중복)하여 저장 스킵: {asset.name} ({ext_id})")
@@ -420,10 +462,12 @@ class KiwoomTransactionService:
 
         # 1) 동일 거래번호(external_id) 중복 체크
         if ext_id:
+            candidate_ids = _get_candidate_external_ids(ext_id, tx_data["date"])
             exists_by_ext_id = db.query(Transaction).filter(
                 Transaction.account_id == account.id,
                 Transaction.type == "EXCHANGE",
-                Transaction.external_id == ext_id
+                Transaction.transaction_date == tx_data["date"],
+                Transaction.external_id.in_(candidate_ids)
             ).first()
             if exists_by_ext_id:
                 logger.info(f"이미 존재(환전 거래번호 중복)하여 저장 스킵: {ext_id}")
@@ -540,11 +584,11 @@ class KiwoomTransactionService:
             rmrk = tx.get("rmrk_nm", "")
             trde_kind = tx.get("trde_kind_nm", "")
             io_tp_nm = tx.get("io_tp_nm", "")
-            ext_id = tx.get("seq") or tx.get("trde_no")
             dt_str = tx.get("trde_dt")
             if not dt_str:
                 continue
             trde_dt = datetime.datetime.strptime(dt_str, "%Y%m%d").date()
+            ext_id = _format_ledger_external_id(tx.get("seq") or tx.get("trde_no"), dt_str)
             tm_str = tx.get("trde_tm") or tx.get("cntr_tm")
             stk_cd = tx.get("stk_cd")
 
