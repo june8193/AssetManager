@@ -5,9 +5,9 @@
 
 **Blocked by:** 01 — MCP 도구 계층에서 get_market_indices 퇴역 및 get_market_history 다중 티커 검증
 
-**Status:** claimed
+**Status:** closed
 
-- [ ] `.agents/skills/us-daily-index-report/SKILL.md`에서 휴장일 확인이 `check_market_holiday` MCP 도구 호출로 명시되었는가?
-- [ ] `.agents/skills/us-daily-index-report/SKILL.md`에서 지수 및 VIX 데이터 수집이 `get_market_history` MCP 도구(`tickers="^GSPC,^IXIC,^DJI,^VIX"`) 단일 호출로 갱신되었는가?
-- [ ] 최근 2거래일 종가 비교를 통해 각 지수 및 VIX의 당일 마감 수치, 전일 대비 변동폭 및 등락률(상승 시 `+`)을 계산하는 로직이 명시되었는가?
-- [ ] VIX 4단계 리스크 등급(🟢/🟡/🟠/🔴)과 상태 설명이 표(Table) 서식 없이 불릿 리스트로 구성된 독립 보고서 템플릿 양식이 정의되었는가?
+- [x] `.agents/skills/us-daily-index-report/SKILL.md`에서 휴장일 확인이 `check_market_holiday` MCP 도구 호출로 명시되었는가?
+- [x] `.agents/skills/us-daily-index-report/SKILL.md`에서 지수 및 VIX 데이터 수집이 `get_market_history` MCP 도구(`tickers="^GSPC,^IXIC,^DJI,^VIX"`) 단일 호출로 갱신되었는가?
+- [x] 최근 2거래일 종가 비교를 통해 각 지수 및 VIX의 당일 마감 수치, 전일 대비 변동폭 및 등락률(상승 시 `+`)을 계산하는 로직이 명시되었는가?
+- [x] VIX 4단계 리스크 등급(🟢/🟡/🟠/🔴)과 상태 설명이 표(Table) 서식 없이 불릿 리스트로 구성된 독립 보고서 템플릿 양식이 정의되었는가?
