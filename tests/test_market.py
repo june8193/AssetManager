@@ -239,3 +239,65 @@ def test_check_market_holiday_no_date_timezone():
         assert data_kr["is_holiday"] is False
         assert data_kr["description"] == "영업일"
 
+
+def test_get_market_history_success_multi_tickers_with_vix():
+    """/api/market/history가 다중 티커 및 ^VIX 조회를 정상 처리하는지 검증합니다."""
+    import datetime
+    from collections import namedtuple
+
+    FakePrice = namedtuple("FakePrice", ["price_date", "close_price"])
+
+    async def mock_get_historical_prices(self, ticker, s_date, e_date):
+        if ticker == "^VIX":
+            return [
+                FakePrice(price_date=datetime.date(2026, 7, 17), close_price=15.5),
+                FakePrice(price_date=datetime.date(2026, 7, 18), close_price=14.8),
+            ]
+        elif ticker == "^GSPC":
+            return [
+                FakePrice(price_date=datetime.date(2026, 7, 17), close_price=5500.0),
+                FakePrice(price_date=datetime.date(2026, 7, 18), close_price=5550.0),
+            ]
+        elif ticker == "^IXIC":
+            return [
+                FakePrice(price_date=datetime.date(2026, 7, 17), close_price=18000.0),
+                FakePrice(price_date=datetime.date(2026, 7, 18), close_price=18200.0),
+            ]
+        elif ticker == "^DJI":
+            return [
+                FakePrice(price_date=datetime.date(2026, 7, 17), close_price=40000.0),
+                FakePrice(price_date=datetime.date(2026, 7, 18), close_price=40200.0),
+            ]
+        return []
+
+    with patch(
+        "src.backend.services.benchmark_service.BenchmarkService.get_historical_prices",
+        new=mock_get_historical_prices,
+    ):
+        response = client.get(
+            "/api/market/history?tickers=^GSPC,^IXIC,^DJI,^VIX&start_date=2026-07-14&end_date=2026-07-18"
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "^GSPC" in data
+        assert "^IXIC" in data
+        assert "^DJI" in data
+        assert "^VIX" in data
+        assert len(data["^VIX"]) == 2
+        assert data["^VIX"][-1]["close_price"] == 14.8
+        assert data["^GSPC"][-1]["close_price"] == 5550.0
+
+
+def test_get_market_history_invalid_date():
+    """날짜 형식이 잘못된 경우 400 에러를 반환하는지 확인합니다."""
+    response = client.get("/api/market/history?tickers=^VIX&start_date=2026/07/14")
+    assert response.status_code == 400
+    assert "날짜 형식" in response.json()["detail"]
+
+
+def test_get_market_history_empty_tickers():
+    """티커가 비어있는 경우 400 에러를 반환하는지 확인합니다."""
+    response = client.get("/api/market/history?tickers=")
+    assert response.status_code == 400
+
+

@@ -15,7 +15,6 @@ from src.mcp.tools.market import (
     get_stock_history,
     refresh_market_prices,
     check_market_holiday,
-    get_market_indices,
 )
 from src.mcp.tools.transactions import get_transactions
 from src.mcp.tools.system import (
@@ -42,7 +41,6 @@ mcp.tool()(get_stock_history)
 mcp.tool()(refresh_market_prices)
 mcp.tool()(get_transactions)
 mcp.tool()(check_market_holiday)
-mcp.tool()(get_market_indices)
 
 # 시스템 DB 탐색 및 로그 조회를 위한 신규 MCP 도구 등록
 mcp.tool()(get_db_tables)

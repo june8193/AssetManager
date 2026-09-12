@@ -21,7 +21,6 @@ from src.mcp.tools.market import (
     get_stock_history,
     refresh_market_prices,
     check_market_holiday,
-    get_market_indices,
 )
 from src.mcp.tools.transactions import (
     get_transactions,
@@ -248,6 +247,43 @@ async def test_get_market_history_mcp(mock_api_client):
     mock_get.assert_called_once_with("/api/market/history", params={"tickers": "^KS11"})
 
 @pytest.mark.asyncio
+async def test_get_market_history_mcp_multi_tickers_with_vix(mock_api_client):
+    """시장 지수 역사적 가격 조회 MCP 도구에서 복수 지수 및 VIX(^VIX) 조회를 테스트합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "^GSPC": [
+            {"date": "2026-07-17", "close_price": 5500.0},
+            {"date": "2026-07-18", "close_price": 5550.0},
+        ],
+        "^IXIC": [
+            {"date": "2026-07-17", "close_price": 18000.0},
+            {"date": "2026-07-18", "close_price": 18200.0},
+        ],
+        "^DJI": [
+            {"date": "2026-07-17", "close_price": 40000.0},
+            {"date": "2026-07-18", "close_price": 40200.0},
+        ],
+        "^VIX": [
+            {"date": "2026-07-17", "close_price": 15.5},
+            {"date": "2026-07-18", "close_price": 14.8},
+        ],
+    }
+
+    tickers = "^GSPC,^IXIC,^DJI,^VIX"
+    result = await get_market_history(tickers=tickers, start_date="2026-07-14", end_date="2026-07-18")
+    assert "error" not in result
+    assert "^GSPC" in result
+    assert "^IXIC" in result
+    assert "^DJI" in result
+    assert "^VIX" in result
+    assert len(result["^VIX"]) == 2
+    assert result["^VIX"][-1]["close_price"] == 14.8
+    mock_get.assert_called_once_with(
+        "/api/market/history",
+        params={"tickers": tickers, "start_date": "2026-07-14", "end_date": "2026-07-18"},
+    )
+
+@pytest.mark.asyncio
 async def test_get_stock_history_mcp(mock_api_client):
     """개별 주가 조회 MCP 도구 결과를 테스트합니다."""
     mock_get, _ = mock_api_client
@@ -326,15 +362,19 @@ async def test_check_market_holiday_mcp(mock_api_client):
     mock_get.assert_called_once_with("/api/market/holiday", params={"country": "KR", "date": "2026-07-18"})
 
 @pytest.mark.asyncio
-async def test_get_market_indices_mcp(mock_api_client):
-    """시장 지수 조회 MCP 도구 결과를 테스트합니다."""
-    mock_get, _ = mock_api_client
-    mock_get.return_value = [
-        {"index_name": "KOSPI", "current_price": 2500.0, "change_rate": 1.2}
-    ]
-    
-    result = await get_market_indices(country="KR")
-    assert "error" not in result
-    assert isinstance(result, list)
-    assert result[0]["index_name"] == "KOSPI"
-    mock_get.assert_called_once_with("/api/market/indices", params={"country": "KR"})
+async def test_get_market_indices_mcp_retired():
+    """get_market_indices 도구가 mcp tools 및 FastMCP 인스턴스에서 안전하게 제거되었는지 검증합니다."""
+    import src.mcp.tools.market as market_tools
+    import src.mcp.main as mcp_main
+
+    # 1. tools.market 모듈에서 get_market_indices 함수 제거 확인
+    assert not hasattr(market_tools, "get_market_indices"), (
+        "get_market_indices 함수가 src/mcp/tools/market.py에서 제거되어야 합니다."
+    )
+
+    # 2. FastMCP 인스턴스에 등록된 도구 목록에서 get_market_indices 부재 확인
+    tools = await mcp_main.mcp._local_provider.list_tools()
+    registered_tool_names = [t.name for t in tools]
+    assert "get_market_indices" not in registered_tool_names, (
+        "get_market_indices 도구가 FastMCP 등록 도구 목록에서 제거되어야 합니다."
+    )

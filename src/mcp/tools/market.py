@@ -132,18 +132,3 @@ async def check_market_holiday(
     except Exception as e:
         return {"error": f"휴장일 조회 중 오류 발생: {str(e)}"}
 
-async def get_market_indices(country: str = "KR") -> dict:
-    """KOSPI/KOSDAQ 또는 미국 지수들의 현재가 및 전일 대비 등락률을 조회합니다.
-
-    Args:
-        country (str): 국가 구분 (KR 또는 US), 기본값 KR.
-
-    Returns:
-        dict: 시장 지수 목록 정보
-    """
-    try:
-        params = {"country": country.upper()}
-        result = await api_client.get("/api/market/indices", params=params)
-        return result
-    except Exception as e:
-        return {"error": f"시장 지수 조회 중 오류 발생: {str(e)}"}
