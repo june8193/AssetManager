@@ -89,7 +89,7 @@
 ## 4. 지원하는 MCP 도구 목록
 
 * **자산 및 성과 분석**: `get_asset_summary`, `get_asset_ratios`, `get_portfolio_status`, `get_yearly_stats`, `get_daily_stats`, `get_snapshots`, `get_transactions`
-* **시장 및 종목 정보**: `get_watchlist_prices`, `get_market_history`, `get_stock_history`, `refresh_market_prices`, `check_market_holiday`, `get_market_indices`
+* **시장 및 종목 정보**: `get_watchlist_prices`, `get_market_history`, `get_stock_history`, `refresh_market_prices`, `check_market_holiday`
 * **원격 서버 DB 및 시스템 로그 점검 (신규)**:
   * `get_db_tables`: 서버 DB 테이블 목록 및 레코드 수 조회
   * `get_db_schema`: 특정 테이블의 컬럼, 데이터 타입 및 제약 조건 조회

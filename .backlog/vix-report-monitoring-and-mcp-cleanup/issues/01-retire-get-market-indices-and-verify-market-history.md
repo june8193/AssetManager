@@ -5,9 +5,9 @@ FastMCP 프로토콜 상의 직렬화 오류를 유발하고 시계열 조회가
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** closed
 
-- [ ] `src/mcp/tools/market.py`에서 `get_market_indices` 함수가 제거되었는가?
-- [ ] `src/mcp/main.py`에서 `get_market_indices` 임포트 및 도구 등록 코드가 제거되었는가?
-- [ ] `tests/test_mcp_server.py`에서 `get_market_indices` 관련 테스트가 정리되고, `get_market_history`가 다중 티커 및 VIX(`^VIX`) 조회를 정상 처리하는 테스트가 통과하는가?
-- [ ] 백엔드 엔드포인트 `/api/market/indices`와 `/api/market/history`에 대한 기존 테스트(`tests/test_market.py`)가 100% 정상 통과하는가?
+- [x] `src/mcp/tools/market.py`에서 `get_market_indices` 함수가 제거되었는가?
+- [x] `src/mcp/main.py`에서 `get_market_indices` 임포트 및 도구 등록 코드가 제거되었는가?
+- [x] `tests/test_mcp_server.py`에서 `get_market_indices` 관련 테스트가 정리되고, `get_market_history`가 다중 티커 및 VIX(`^VIX`) 조회를 정상 처리하는 테스트가 통과하는가?
+- [x] 백엔드 엔드포인트 `/api/market/indices`와 `/api/market/history`에 대한 기존 테스트(`tests/test_market.py`)가 100% 정상 통과하는가?
