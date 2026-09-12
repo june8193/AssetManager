@@ -94,4 +94,4 @@
   * `get_db_tables`: 서버 DB 테이블 목록 및 레코드 수 조회
   * `get_db_schema`: 특정 테이블의 컬럼, 데이터 타입 및 제약 조건 조회
   * `execute_db_query`: Read-Only SELECT SQL 실행 (최대 500행 제한)
-  * `get_system_logs`: 서버 PC 백엔드 최신 시스템/에러 로그 조회 (레벨/키워드 필터 지원)
+  * `get_system_logs`: 서버 PC 백엔드 최신 시스템/에러 로그 조회 (기본값: 최신 에러 로그, `log_type`('error'/'output') 및 레벨/키워드 필터 지원)

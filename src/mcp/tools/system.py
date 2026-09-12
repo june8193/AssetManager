@@ -3,7 +3,7 @@
 개발용 노트북에서 서버 PC 백엔드 API를 호출하여 DB 테이블, 스키마, SELECT 쿼리 및 로그를 조회합니다.
 """
 
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Literal
 from src.mcp.client import api_client
 
 
@@ -57,15 +57,17 @@ async def execute_db_query(query: str, limit: Optional[int] = 500) -> Any:
 
 
 async def get_system_logs(
-    filename: str = "app.log",
+    log_type: Literal["error", "output"] = "error",
     lines: Optional[int] = 100,
     level: Optional[str] = None,
     keyword: Optional[str] = None,
 ) -> Any:
     """서버 PC 백엔드의 최신 시스템/에러 로그 내용 및 라인을 조회합니다.
 
+    인자 없이 호출 시 기본적으로 최신 에러 로그(log_type="error")를 조회합니다.
+
     Args:
-        filename (str): 조회할 로그 파일 명칭 (기본값: app.log)
+        log_type (str): 조회할 로그 유형 ('error': 에러 로그, 'output': 표준 출력 로그, 기본값: 'error')
         lines (Optional[int]): 가져올 최신 라인 수 (기본값: 100)
         level (Optional[str]): 필터링할 로그 레벨 (INFO, WARN, ERROR)
         keyword (Optional[str]): 검색할 키워드
@@ -73,8 +75,11 @@ async def get_system_logs(
     Returns:
         Any: 필터링된 로그 라인 리스트 및 메타데이터 또는 에러 메시지 딕셔너리
     """
+    if log_type not in ("error", "output"):
+        return {"error": f"유효하지 않은 log_type입니다: '{log_type}'. 'error' 또는 'output'이어야 합니다."}
+
     try:
-        params: Dict[str, Any] = {"filename": filename, "lines": lines or 100}
+        params: Dict[str, Any] = {"log_type": log_type, "lines": lines or 100}
         if level:
             params["level"] = level
         if keyword:
@@ -83,3 +88,4 @@ async def get_system_logs(
         return await api_client.get("/api/v1/system/logs/content", params=params)
     except Exception as e:
         return {"error": f"시스템 로그 조회 실패: {str(e)}"}
+

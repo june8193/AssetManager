@@ -53,14 +53,48 @@ async def test_execute_db_query_mcp():
 
 
 @pytest.mark.asyncio
-async def test_get_system_logs_mcp():
-    """get_system_logs MCP 도구가 백엔드 로그 API를 올바르게 호출하는지 테스트합니다."""
-    mock_data = {"filename": "app.log", "total_lines": 1, "lines": ["2026-08-03 [ERROR] Failed"]}
+async def test_get_system_logs_default_mcp():
+    """인자 없이 get_system_logs 호출 시 기본값(log_type='error', lines=100)으로 호출되는지 테스트합니다."""
+    mock_data = {"filename": "pm2-err.log", "total_lines": 1, "lines": ["2026-09-12 [ERROR] Fail"]}
     with patch("src.mcp.tools.system.api_client.get", new_callable=AsyncMock) as mock_get:
         mock_get.return_value = mock_data
-        res = await get_system_logs(filename="app.log", lines=50, level="ERROR", keyword="Failed")
+        res = await get_system_logs()
         mock_get.assert_called_once_with(
             "/api/v1/system/logs/content",
-            params={"filename": "app.log", "lines": 50, "level": "ERROR", "keyword": "Failed"},
+            params={"log_type": "error", "lines": 100},
         )
         assert res == mock_data
+
+
+@pytest.mark.asyncio
+async def test_get_system_logs_with_params_mcp():
+    """log_type='output' 및 필터 파라미터가 포함된 get_system_logs 호출을 테스트합니다."""
+    mock_data = {"filename": "pm2-out.log", "total_lines": 1, "lines": ["2026-09-12 [INFO] Started"]}
+    with patch("src.mcp.tools.system.api_client.get", new_callable=AsyncMock) as mock_get:
+        mock_get.return_value = mock_data
+        res = await get_system_logs(log_type="output", lines=50, level="INFO", keyword="Started")
+        mock_get.assert_called_once_with(
+            "/api/v1/system/logs/content",
+            params={"log_type": "output", "lines": 50, "level": "INFO", "keyword": "Started"},
+        )
+        assert res == mock_data
+
+
+@pytest.mark.asyncio
+async def test_get_system_logs_invalid_log_type_mcp():
+    """유효하지 않은 log_type 전달 시 에러 응답을 반환하는지 테스트합니다."""
+    with patch("src.mcp.tools.system.api_client.get", new_callable=AsyncMock) as mock_get:
+        res = await get_system_logs(log_type="invalid_type")
+        mock_get.assert_not_called()
+        assert "error" in res
+        assert "유효하지 않은 log_type" in res["error"]
+
+
+@pytest.mark.asyncio
+async def test_get_system_logs_api_exception_mcp():
+    """백엔드 API 호출 실패 시 에러 딕셔너리를 반환하는지 테스트합니다."""
+    with patch("src.mcp.tools.system.api_client.get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = Exception("Connection refused")
+        res = await get_system_logs(log_type="error")
+        assert res == {"error": "시스템 로그 조회 실패: Connection refused"}
+
