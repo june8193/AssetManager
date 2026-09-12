@@ -14,10 +14,14 @@ from .models import (
     DailyStatItem,
     DailyStatsResponse,
     KiwoomSyncResponse,
+    PortfolioHoldingItem,
+    PortfolioStatusResponse,
     SnapshotItem,
     SnapshotsResponse,
     TransactionItem,
     TransactionsResponse,
+    WatchlistItemPrice,
+    WatchlistPricesResponse,
     YearlyStatItem,
     YearlyStatsResponse,
 )
@@ -265,4 +269,67 @@ async def sync_kiwoom_transactions(days: int = 7) -> KiwoomSyncResponse:
         params={"days": days},
         response_model=KiwoomSyncResponse,
     )
+
+
+async def get_portfolio_status(date: str | None = None) -> PortfolioStatusResponse:
+    """AssetManager API로부터 전체 포트폴리오 자산 구성 및 보유 종목 현황을 조회하여 반환합니다.
+
+    Args:
+        date: 조회 기준일 (YYYY-MM-DD, 생략 시 오늘)
+
+    Returns:
+        PortfolioStatusResponse: 포트폴리오 상태 응답 모델
+    """
+    client = get_default_client()
+    params = {"date": date} if date else None
+    data = await client.get_json("/api/portfolio/status", params=params)
+
+    holdings = [
+        PortfolioHoldingItem(
+            ticker=item.get("ticker", ""),
+            name=item.get("name", ""),
+            major_category=item.get("major_category", ""),
+            sub_category=item.get("sub_category", ""),
+            country=item.get("country", "KR"),
+            quantity=float(item.get("quantity", 0.0)),
+            current_price=float(item.get("current_price", 0.0)),
+            valuation=float(item.get("valuation", 0.0)),
+            valuation_krw=float(item.get("valuation_krw", 0.0)),
+        )
+        for item in data.get("holdings", [])
+    ]
+
+    return PortfolioStatusResponse(
+        total_valuation_krw=float(data.get("total_valuation_krw", 0.0)),
+        cash_balances=data.get("cash_balances", {}),
+        exchange_rate=float(data.get("exchange_rate", 1.0)),
+        holdings=holdings,
+    )
+
+
+async def get_watchlist_prices(country: str = "KR") -> WatchlistPricesResponse:
+    """AssetManager API로부터 특정 국가의 관심종목 실시간 시세를 조회하여 반환합니다.
+
+    Args:
+        country: 국가 코드 (KR 또는 US)
+
+    Returns:
+        WatchlistPricesResponse: 관심종목 시세 응답 모델
+    """
+    client = get_default_client()
+    params = {"country": country.upper()}
+    data = await client.get_json("/api/watchlist/prices", params=params)
+
+    prices = [
+        WatchlistItemPrice(
+            stock_name=item.get("stock_name", ""),
+            stock_code=item.get("stock_code", ""),
+            current_price=float(item.get("current_price", 0.0)),
+            change_rate=float(item.get("change_rate", 0.0)),
+        )
+        for item in data
+    ]
+
+    return WatchlistPricesResponse(country=country.upper(), prices=prices)
+
 

@@ -176,3 +176,90 @@ class KiwoomSyncResponse(BaseModel):
         default_factory=list, description="동기화 실패 계좌 목록"
     )
 
+
+class MarketIndexItem(BaseModel):
+    """시장 지수 항목 모델입니다."""
+
+    index_name: str = Field(..., description="지수 명칭 (KOSPI, KOSDAQ, S&P 500 등)")
+    current_price: float = Field(..., description="현재 지수 값")
+    change_rate: float = Field(..., description="전일 대비 등락률 (%)")
+
+
+class MarketIndicesResponse(BaseModel):
+    """시장 지수 목록 응답 모델입니다."""
+
+    indices: list[MarketIndexItem] = Field(default_factory=list, description="시장 지수 목록")
+
+
+class MarketHolidayResponse(BaseModel):
+    """시장 휴장일 여부 응답 모델입니다."""
+
+    date: str = Field(..., description="조회 대상 날짜 (YYYY-MM-DD)")
+    country: str = Field("KR", description="국가 코드 (KR 또는 US)")
+    is_holiday: bool = Field(..., description="휴장일 여부")
+    description: str = Field("영업일", description="휴장 사유 또는 영업일")
+
+
+class MarketHistoryItem(BaseModel):
+    """지수 역사적 일자별 가격 모델입니다."""
+
+    date: str = Field(..., description="날짜 (YYYY-MM-DD)")
+    close_price: float = Field(..., description="종가 또는 실시간 현재가")
+
+
+class StockPriceItem(BaseModel):
+    """개별 종목 일자별 주가 모델입니다."""
+
+    date: str = Field(..., description="날짜 (YYYY-MM-DD)")
+    close_price: float = Field(..., description="종가 또는 현재가")
+
+
+class StockPricesResponse(BaseModel):
+    """개별 종목 시세 조회 응답 모델입니다."""
+
+    ticker: str = Field(..., description="종목 코드")
+    name: str = Field("", description="종목명")
+    market: str = Field("", description="시장 구분 (KR, US)")
+    prices: list[StockPriceItem] = Field(default_factory=list, description="시세 목록")
+
+
+class PortfolioHoldingItem(BaseModel):
+    """포트폴리오 보유 종목 아이템 모델입니다."""
+
+    ticker: str = Field(..., description="종목 코드")
+    name: str = Field(..., description="종목명")
+    major_category: str = Field("", description="대분류")
+    sub_category: str = Field("", description="소분류")
+    country: str = Field("KR", description="국가")
+    quantity: float = Field(0.0, description="보유 수량")
+    current_price: float = Field(0.0, description="현재가")
+    valuation: float = Field(0.0, description="외화 평가액")
+    valuation_krw: float = Field(0.0, description="원화 평가액")
+
+
+class PortfolioStatusResponse(BaseModel):
+    """포트폴리오 구성 및 보유 종목 현황 응답 모델입니다."""
+
+    total_valuation_krw: float = Field(0.0, description="총 평가액 (KRW)")
+    cash_balances: dict[str, float] = Field(default_factory=dict, description="통화별 현금 잔고")
+    exchange_rate: float = Field(1.0, description="환율")
+    holdings: list[PortfolioHoldingItem] = Field(default_factory=list, description="보유 종목 목록")
+
+
+class WatchlistItemPrice(BaseModel):
+    """관심종목 시세 아이템 모델입니다."""
+
+    stock_name: str = Field(..., description="종목명")
+    stock_code: str = Field(..., description="종목 코드")
+    current_price: float = Field(0.0, description="현재가")
+    change_rate: float = Field(0.0, description="등락률 (%)")
+
+
+class WatchlistPricesResponse(BaseModel):
+    """관심종목 시세 응답 모델입니다."""
+
+    country: str = Field("KR", description="국가")
+    prices: list[WatchlistItemPrice] = Field(default_factory=list, description="관심종목 시세 목록")
+
+
+

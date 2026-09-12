@@ -55,4 +55,6 @@ actions-runner/
 scratch/
 
 # 안티그래비티 설정폴더
-.agents
+.agents/*
+!.agents/skills/
+
