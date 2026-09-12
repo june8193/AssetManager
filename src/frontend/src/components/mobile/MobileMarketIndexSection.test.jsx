@@ -228,6 +228,71 @@ describe('MobileMarketIndexSection', () => {
       expect(screen.queryByTestId('chart-tier-mdd')).not.toBeInTheDocument();
     });
 
+    it('VIX 탭 활성화 시 헤더 우측에 주의 20 및 경고 30 범례 뱃지가 노출되고 다른 탭에서는 숨겨진다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tab-price')).toBeInTheDocument();
+      });
+
+      // 기본 지수 종가 탭에서는 VIX 범례 뱃지가 없어야 함
+      expect(screen.queryByTestId('vix-legend-badges')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('vix-legend-badge-caution')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('vix-legend-badge-warning')).not.toBeInTheDocument();
+
+      // VIX 탭으로 전환
+      const tabVix = screen.getByTestId('chart-tab-vix');
+      fireEvent.click(tabVix);
+
+      // 헤더 우측에 VIX 범례 뱃지가 노출되어야 함
+      const legendBadges = screen.getByTestId('vix-legend-badges');
+      expect(legendBadges).toBeInTheDocument();
+
+      const cautionBadge = screen.getByTestId('vix-legend-badge-caution');
+      expect(cautionBadge).toBeInTheDocument();
+      expect(cautionBadge).toHaveTextContent('주의 20');
+      expect(cautionBadge.className).toContain('text-amber-400');
+      expect(cautionBadge.className).toContain('border-amber-500');
+
+      const warningBadge = screen.getByTestId('vix-legend-badge-warning');
+      expect(warningBadge).toBeInTheDocument();
+      expect(warningBadge).toHaveTextContent('경고 30');
+      expect(warningBadge.className).toContain('text-rose-400');
+      expect(warningBadge.className).toContain('border-rose-500');
+
+      // 다시 MDD 탭으로 전환하면 범례 뱃지가 사라져야 함
+      const tabMdd = screen.getByTestId('chart-tab-mdd');
+      fireEvent.click(tabMdd);
+      expect(screen.queryByTestId('vix-legend-badges')).not.toBeInTheDocument();
+    });
+
+    it('VIX 차트 내 가로 기준선은 차트 영역 내부 텍스트 라벨 없이 파선으로만 렌더링된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tab-vix')).toBeInTheDocument();
+      });
+
+      // VIX 탭으로 전환
+      fireEvent.click(screen.getByTestId('chart-tab-vix'));
+
+      const vixChart = screen.getByTestId('chart-tier-vix');
+      expect(vixChart).toBeInTheDocument();
+
+      // 차트 SVG/영역 내부에는 곡선을 가리는 '주의 20', '경고 30' 텍스트 라벨이 존재하지 않아야 함
+      // (기존 label={{ value: '주의 20' }} 등으로 인한 SVG 텍스트 오버랩 방지)
+      const chartInnerLabels = vixChart.querySelectorAll('.recharts-reference-line-text');
+      expect(chartInnerLabels.length).toBe(0);
+
+      // 기준선 라인 요소 확인 (strokeDasharray="4 3", strokeWidth="1.2")
+      const refLines = vixChart.querySelectorAll('.recharts-reference-line-line');
+      expect(refLines.length).toBe(2);
+      refLines.forEach((line) => {
+        expect(line.getAttribute('stroke-dasharray')).toBe('4 3');
+        expect(line.getAttribute('stroke-width')).toBe('1.2');
+      });
+    });
+
     it('서브탭 전환 후에도 지수 칩 변경 및 기간 필터 변경 시 단독 차트 데이터와 극단값 카드가 정상 연동된다', async () => {
       render(<MobileMarketIndexSection />);
 

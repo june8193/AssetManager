@@ -510,7 +510,26 @@ export default function MobileMarketIndexSection() {
               {currentTabConfig.unit}
             </span>
           </div>
-          <span className="text-[10px] text-slate-500 font-medium">단독 260px 뷰</span>
+          {activeChartTab === 'vix' ? (
+            <div data-testid="vix-legend-badges" className="flex items-center gap-1.5">
+              <span
+                data-testid="vix-legend-badge-caution"
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-amber-500/40 text-amber-400 bg-amber-500/10 flex items-center gap-1"
+              >
+                <span className="w-2 h-0.5 bg-amber-400 inline-block border-b border-dashed border-amber-400" />
+                주의 20
+              </span>
+              <span
+                data-testid="vix-legend-badge-warning"
+                className="text-[9px] font-bold px-1.5 py-0.5 rounded border border-rose-500/40 text-rose-400 bg-rose-500/10 flex items-center gap-1"
+              >
+                <span className="w-2 h-0.5 bg-rose-500 inline-block border-b border-dashed border-rose-500" />
+                경고 30
+              </span>
+            </div>
+          ) : (
+            <span className="text-[10px] text-slate-500 font-medium">단독 260px 뷰</span>
+          )}
         </div>
 
         {/* [1단] 지수 종가 (Price pt, Area/Line, 높이 260px 대형 단독 뷰) */}
@@ -657,30 +676,18 @@ export default function MobileMarketIndexSection() {
                       />
                     }
                   />
-                  {/* VIX 주의(20) 및 경고(30) 기준선 */}
+                  {/* VIX 주의(20) 및 경고(30) 기준선 (내부 텍스트 라벨 제거, 깔끔한 파선) */}
                   <ReferenceLine
                     y={20}
                     stroke="#f59e0b"
-                    strokeDasharray="3 3"
-                    label={{
-                      value: '주의 20',
-                      position: 'insideTopRight',
-                      fill: '#f59e0b',
-                      fontSize: 9,
-                      fontWeight: 'bold',
-                    }}
+                    strokeDasharray="4 3"
+                    strokeWidth={1.2}
                   />
                   <ReferenceLine
                     y={30}
                     stroke="#ef4444"
-                    strokeDasharray="3 3"
-                    label={{
-                      value: '경고 30',
-                      position: 'insideTopRight',
-                      fill: '#ef4444',
-                      fontSize: 9,
-                      fontWeight: 'bold',
-                    }}
+                    strokeDasharray="4 3"
+                    strokeWidth={1.2}
                   />
                   <Line
                     type="monotone"
