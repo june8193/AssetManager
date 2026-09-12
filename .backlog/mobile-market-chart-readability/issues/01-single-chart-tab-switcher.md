@@ -4,7 +4,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** closed
+**Status:** resolved
 
 - [x] 차트 카드 상단에 `[📈 지수 종가]`, `[📉 낙폭 (MDD)]`, `[⚡ VIX 변동성]` 3개 서브탭 스위처가 렌더링되고 기본 선택값은 `지수 종가`이다.
 - [x] 각 탭 클릭 시 해당 차트 1개만 높이 260px(`h-[260px]`) 단독 뷰로 표시되고 나머지 차트는 화면에서 숨겨진다.
