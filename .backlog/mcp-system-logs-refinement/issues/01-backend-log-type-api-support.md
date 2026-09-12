@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 - [x] `/api/v1/system/logs/content` 엔드포인트가 `log_type` 파라미터(`"error"`, `"output"`)를 지원합니다.
 - [x] `log_type="error"` 요청 시 `pm2-err.log`, `log_type="output"` 요청 시 `pm2-out.log` 파일의 로그 내용을 반환합니다.
