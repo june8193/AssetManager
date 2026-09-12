@@ -54,7 +54,6 @@ actions-runner/
 .scratch/
 scratch/
 
-# 안티그래비티 설정폴더
-.agents/*
-!.agents/skills/
+# 안티그래비티 MCP 설정
+mcp_config.json
 
