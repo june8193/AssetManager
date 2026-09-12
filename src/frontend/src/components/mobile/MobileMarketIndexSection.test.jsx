@@ -164,23 +164,92 @@ describe('MobileMarketIndexSection', () => {
       });
     });
 
-    it('단일 카드 내 3단 밀착 동기화 차트(지수 종가, MDD, VIX 및 기준선)가 렌더링된다', async () => {
+    it('차트 카드 상단에 3개 서브탭 스위처가 렌더링되고 기본값은 지수 종가 단독 뷰(260px)이다', async () => {
       render(<MobileMarketIndexSection />);
 
       await waitFor(() => {
         expect(screen.getByTestId('mobile-stacked-chart-card')).toBeInTheDocument();
       });
 
-      // 1단: 지수 종가
-      expect(screen.getByTestId('chart-tier-price')).toBeInTheDocument();
-      // 2단: MDD
-      expect(screen.getByTestId('chart-tier-mdd')).toBeInTheDocument();
-      // 3단: VIX
-      expect(screen.getByTestId('chart-tier-vix')).toBeInTheDocument();
+      // 3개 서브탭 스위처 렌더링 확인
+      const tabPrice = screen.getByTestId('chart-tab-price');
+      const tabMdd = screen.getByTestId('chart-tab-mdd');
+      const tabVix = screen.getByTestId('chart-tab-vix');
 
-      // VIX 기준선 텍스트 라벨 (주의 20, 경고 30)
-      expect(screen.getByText(/주의 20/)).toBeInTheDocument();
-      expect(screen.getByText(/경고 30/)).toBeInTheDocument();
+      expect(tabPrice).toBeInTheDocument();
+      expect(tabMdd).toBeInTheDocument();
+      expect(tabVix).toBeInTheDocument();
+
+      // 기본 선택값: '지수 종가'
+      expect(tabPrice).toHaveAttribute('aria-pressed', 'true');
+      expect(tabMdd).toHaveAttribute('aria-pressed', 'false');
+      expect(tabVix).toHaveAttribute('aria-pressed', 'false');
+
+      // 1화면 1차트: 기본적으로 지수 종가 차트만 260px 높이로 렌더링되고 나머지는 숨김
+      const priceChart = screen.getByTestId('chart-tier-price');
+      expect(priceChart).toBeInTheDocument();
+      expect(priceChart.querySelector('.h-\\[260px\\]')).toBeInTheDocument();
+
+      expect(screen.queryByTestId('chart-tier-mdd')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('chart-tier-vix')).not.toBeInTheDocument();
+    });
+
+    it('서브탭을 클릭하면 해당 차트 1개만 260px 단독 뷰로 표시되고 이전 차트는 숨겨진다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tab-price')).toBeInTheDocument();
+      });
+
+      // 1. [📉 낙폭 (MDD)] 탭 클릭
+      const tabMdd = screen.getByTestId('chart-tab-mdd');
+      fireEvent.click(tabMdd);
+
+      expect(tabMdd).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByTestId('chart-tab-price')).toHaveAttribute('aria-pressed', 'false');
+
+      const mddChart = screen.getByTestId('chart-tier-mdd');
+      expect(mddChart).toBeInTheDocument();
+      expect(mddChart.querySelector('.h-\\[260px\\]')).toBeInTheDocument();
+      expect(screen.queryByTestId('chart-tier-price')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('chart-tier-vix')).not.toBeInTheDocument();
+
+      // 2. [⚡ VIX 변동성] 탭 클릭
+      const tabVix = screen.getByTestId('chart-tab-vix');
+      fireEvent.click(tabVix);
+
+      expect(tabVix).toHaveAttribute('aria-pressed', 'true');
+      expect(tabMdd).toHaveAttribute('aria-pressed', 'false');
+
+      const vixChart = screen.getByTestId('chart-tier-vix');
+      expect(vixChart).toBeInTheDocument();
+      expect(vixChart.querySelector('.h-\\[260px\\]')).toBeInTheDocument();
+      expect(screen.queryByTestId('chart-tier-price')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('chart-tier-mdd')).not.toBeInTheDocument();
+    });
+
+    it('서브탭 전환 후에도 지수 칩 변경 및 기간 필터 변경 시 단독 차트 데이터와 극단값 카드가 정상 연동된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tab-mdd')).toBeInTheDocument();
+      });
+
+      // MDD 탭으로 전환
+      fireEvent.click(screen.getByTestId('chart-tab-mdd'));
+      expect(screen.getByTestId('chart-tier-mdd')).toBeInTheDocument();
+
+      // NASDAQ 지수 선택
+      const nasdaqChip = screen.getByTestId('index-chip-^IXIC');
+      fireEvent.click(nasdaqChip);
+
+      // 극단값 카드가 NASDAQ 데이터로 갱신되고 MDD 차트가 유지되는지 확인
+      await waitFor(() => {
+        const worstMddCard = screen.getByTestId('extreme-card-worst-mdd');
+        expect(worstMddCard).toHaveTextContent('-4.00%');
+        expect(worstMddCard).toHaveTextContent('17,000.0 pt');
+      });
+      expect(screen.getByTestId('chart-tier-mdd')).toBeInTheDocument();
     });
 
     it('API 호출 실패 시 에러 메시지와 재시도 버튼이 노출된다', async () => {

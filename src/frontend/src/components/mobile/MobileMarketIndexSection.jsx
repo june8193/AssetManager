@@ -31,6 +31,34 @@ export const PERIODS = [
   { value: 'ALL', label: '전체' },
 ];
 
+// 단독 차트 서브탭 정의
+export const CHART_TABS = [
+  {
+    id: 'price',
+    label: '📈 지수 종가',
+    activeColor: 'bg-sky-600',
+    title: (indexName) => `${indexName} 종가 추이`,
+    unit: '단위: pt',
+    bulletColor: (indexColor) => indexColor,
+  },
+  {
+    id: 'mdd',
+    label: '📉 낙폭 (MDD)',
+    activeColor: 'bg-rose-600',
+    title: (indexName) => `${indexName} 최대 낙폭 (MDD)`,
+    unit: '단위: % (0% 고점 기준)',
+    bulletColor: () => '#f43f5e',
+  },
+  {
+    id: 'vix',
+    label: '⚡ VIX 변동성',
+    activeColor: 'bg-purple-600',
+    title: () => 'VIX 공포지수 변동성 (S&P 500)',
+    unit: '단위: pt',
+    bulletColor: () => '#c084fc',
+  },
+];
+
 /**
  * VIX 지수 수치에 따라 4단계 리스크 상태를 산출합니다.
  * (안정 <20, 주의 20~25, 경고 25~30, 위기 >=30)
@@ -160,6 +188,7 @@ function MobileIntegratedTooltip({ active, payload, label, activeIndexInfo, char
 export default function MobileMarketIndexSection() {
   const [selectedTicker, setSelectedTicker] = useState('^GSPC');
   const [selectedPeriod, setSelectedPeriod] = useState('3Y');
+  const [activeChartTab, setActiveChartTab] = useState('price'); // 'price' | 'mdd' | 'vix'
   const [historicalData, setHistoricalData] = useState(null);
   const [indicesPrices, setIndicesPrices] = useState({});
   const [loading, setLoading] = useState(false);
@@ -168,6 +197,10 @@ export default function MobileMarketIndexSection() {
   const activeIndexInfo = useMemo(() => {
     return INDICES.find((idx) => idx.ticker === selectedTicker) || INDICES[0];
   }, [selectedTicker]);
+
+  const currentTabConfig = useMemo(() => {
+    return CHART_TABS.find((tab) => tab.id === activeChartTab) || CHART_TABS[0];
+  }, [activeChartTab]);
 
   // 1. 4대 지수 실시간/최근 시세 요약 로드
   const fetchIndicesPrices = useCallback(async () => {
@@ -426,10 +459,10 @@ export default function MobileMarketIndexSection() {
         </div>
       </div>
 
-      {/* 3. 단일 카드 내 데스크탑형 3단 밀착 동기화 차트 */}
+      {/* 3. 1화면 1차트 서브탭 스위처 및 대형 단독 뷰 (260px) */}
       <div
         data-testid="mobile-stacked-chart-card"
-        className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-lg space-y-2 relative"
+        className="bg-slate-900 border border-slate-800 rounded-3xl p-4 shadow-lg space-y-3 relative"
       >
         {loading && (
           <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm rounded-3xl z-20 flex items-center justify-center gap-2">
@@ -438,192 +471,230 @@ export default function MobileMarketIndexSection() {
           </div>
         )}
 
-        {/* 차트 헤더 */}
+        {/* 서브탭 스위처: [📈 지수 종가] | [📉 낙폭 (MDD)] | [⚡ VIX 변동성] */}
+        <div className="flex bg-slate-950/60 border border-slate-800/80 p-1 rounded-2xl shadow-inner gap-1">
+          {CHART_TABS.map((tab) => {
+            const isSelected = activeChartTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                data-testid={`chart-tab-${tab.id}`}
+                aria-pressed={isSelected}
+                onClick={() => setActiveChartTab(tab.id)}
+                className={`flex-1 py-1.5 text-xs rounded-xl transition-all flex items-center justify-center gap-1 ${
+                  isSelected
+                    ? `${tab.activeColor} text-white shadow-sm font-extrabold`
+                    : 'text-slate-400 hover:text-slate-200 font-bold'
+                }`}
+              >
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 차트 헤더: 선택된 서브탭에 따른 동적 타이틀 및 안내 */}
         <div className="flex items-center justify-between pb-1 border-b border-slate-800/80">
           <div className="flex items-center gap-2">
             <div
               className="w-2.5 h-2.5 rounded-full"
-              style={{ backgroundColor: activeIndexInfo.color }}
+              style={{
+                backgroundColor: currentTabConfig.bulletColor(activeIndexInfo.color),
+              }}
             />
             <h2 className="text-xs font-extrabold text-white">
-              {activeIndexInfo.name} <span className="text-slate-400 font-normal">3단 분석</span>
+              {currentTabConfig.title(activeIndexInfo.name)}
             </h2>
+            <span className="text-[10px] text-slate-400 font-mono">
+              {currentTabConfig.unit}
+            </span>
           </div>
-          <span className="text-[10px] text-slate-500 font-medium">동기화 연동</span>
+          <span className="text-[10px] text-slate-500 font-medium">단독 260px 뷰</span>
         </div>
 
-        {/* [1단] 지수 종가 (Price pt, Area/Line, 높이 약 96px, Y축 분리) */}
-        <div data-testid="chart-tier-price" className="space-y-1">
-          <div className="flex items-center justify-between px-1 text-[10px] text-slate-400">
-            <span className="font-semibold text-slate-300">지수 종가</span>
-            <span className="font-mono">단위: pt</span>
+        {/* [1단] 지수 종가 (Price pt, Area/Line, 높이 260px 대형 단독 뷰) */}
+        {activeChartTab === 'price' && (
+          <div data-testid="chart-tier-price" className="space-y-1">
+            <div className="h-[260px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} syncId="mobileMarketChart">
+                  <defs>
+                    <linearGradient id="mobilePriceGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor={activeIndexInfo.color} stopOpacity={0.25} />
+                      <stop offset="95%" stopColor={activeIndexInfo.color} stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#64748b"
+                    fontSize={9}
+                    tickLine={false}
+                    axisLine={false}
+                    dy={4}
+                    tickFormatter={(str) => (str ? str.slice(2, 7) : '')}
+                  />
+                  <YAxis
+                    orientation="right"
+                    stroke="#64748b"
+                    fontSize={9}
+                    tickLine={false}
+                    axisLine={false}
+                    width={38}
+                    domain={['dataMin - 10', 'dataMax + 10']}
+                    tickFormatter={(val) => Math.round(val).toLocaleString()}
+                  />
+                  <Tooltip
+                    content={
+                      <MobileIntegratedTooltip
+                        activeIndexInfo={activeIndexInfo}
+                        chartData={chartData}
+                      />
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke={activeIndexInfo.color}
+                    strokeWidth={2}
+                    fill="url(#mobilePriceGradient)"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0, fill: activeIndexInfo.color }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-[96px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} syncId="mobileMarketChart">
-                <defs>
-                  <linearGradient id="mobilePriceGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor={activeIndexInfo.color} stopOpacity={0.25} />
-                    <stop offset="95%" stopColor={activeIndexInfo.color} stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="date" tick={false} axisLine={false} tickLine={false} height={1} />
-                <YAxis
-                  orientation="right"
-                  stroke="#64748b"
-                  fontSize={9}
-                  tickLine={false}
-                  axisLine={false}
-                  width={38}
-                  domain={['dataMin - 10', 'dataMax + 10']}
-                  tickFormatter={(val) => Math.round(val).toLocaleString()}
-                />
-                <Tooltip
-                  content={
-                    <MobileIntegratedTooltip
-                      activeIndexInfo={activeIndexInfo}
-                      chartData={chartData}
-                    />
-                  }
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke={activeIndexInfo.color}
-                  strokeWidth={2}
-                  fill="url(#mobilePriceGradient)"
-                  dot={false}
-                  activeDot={{ r: 4, strokeWidth: 0, fill: activeIndexInfo.color }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        )}
 
-        {/* [2단] 최대 낙폭 (MDD %, Area Underwater 0% 하향, 높이 약 56px, Y축 분리) */}
-        <div data-testid="chart-tier-mdd" className="space-y-1 pt-1 border-t border-slate-800/60">
-          <div className="flex items-center justify-between px-1 text-[10px] text-slate-400">
-            <span className="font-semibold text-rose-400">최대 낙폭 (MDD)</span>
-            <span className="font-mono">단위: %</span>
+        {/* [2단] 최대 낙폭 (MDD %, Area Underwater, 높이 260px 대형 단독 뷰) */}
+        {activeChartTab === 'mdd' && (
+          <div data-testid="chart-tier-mdd" className="space-y-1">
+            <div className="h-[260px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={chartData} syncId="mobileMarketChart">
+                  <defs>
+                    <linearGradient id="mobileMddGradient" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#64748b"
+                    fontSize={9}
+                    tickLine={false}
+                    axisLine={false}
+                    dy={4}
+                    tickFormatter={(str) => (str ? str.slice(2, 7) : '')}
+                  />
+                  <YAxis
+                    orientation="right"
+                    stroke="#64748b"
+                    fontSize={9}
+                    tickLine={false}
+                    axisLine={false}
+                    width={38}
+                    domain={['dataMin - 2', 0]}
+                    tickFormatter={(val) => `${Math.round(val)}%`}
+                  />
+                  <Tooltip
+                    content={
+                      <MobileIntegratedTooltip
+                        activeIndexInfo={activeIndexInfo}
+                        chartData={chartData}
+                      />
+                    }
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="mdd"
+                    stroke="#f43f5e"
+                    strokeWidth={1.8}
+                    fill="url(#mobileMddGradient)"
+                    dot={false}
+                    activeDot={{ r: 3, strokeWidth: 0, fill: '#f43f5e' }}
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-[56px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData} syncId="mobileMarketChart">
-                <defs>
-                  <linearGradient id="mobileMddGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#f43f5e" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis dataKey="date" tick={false} axisLine={false} tickLine={false} height={1} />
-                <YAxis
-                  orientation="right"
-                  stroke="#64748b"
-                  fontSize={9}
-                  tickLine={false}
-                  axisLine={false}
-                  width={38}
-                  domain={['dataMin - 2', 0]}
-                  tickFormatter={(val) => `${Math.round(val)}%`}
-                />
-                <Tooltip
-                  content={
-                    <MobileIntegratedTooltip
-                      activeIndexInfo={activeIndexInfo}
-                      chartData={chartData}
-                    />
-                  }
-                />
-                <Area
-                  type="monotone"
-                  dataKey="mdd"
-                  stroke="#f43f5e"
-                  strokeWidth={1.8}
-                  fill="url(#mobileMddGradient)"
-                  dot={false}
-                  activeDot={{ r: 3, strokeWidth: 0, fill: '#f43f5e' }}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        )}
 
-        {/* [3단] VIX 변동성 (pt, Line, 높이 약 50px, Y축 분리, 하단 공통 X축) */}
-        <div data-testid="chart-tier-vix" className="space-y-1 pt-1 border-t border-slate-800/60">
-          <div className="flex items-center justify-between px-1 text-[10px] text-slate-400">
-            <span className="font-semibold text-purple-400">VIX 변동성 (S&amp;P 500)</span>
-            <span className="font-mono">단위: pt</span>
+        {/* [3단] VIX 변동성 (pt, Line, 높이 260px 대형 단독 뷰) */}
+        {activeChartTab === 'vix' && (
+          <div data-testid="chart-tier-vix" className="space-y-1">
+            <div className="h-[260px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={chartData} syncId="mobileMarketChart">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    stroke="#64748b"
+                    fontSize={9}
+                    tickLine={false}
+                    axisLine={false}
+                    dy={4}
+                    tickFormatter={(str) => (str ? str.slice(2, 7) : '')}
+                  />
+                  <YAxis
+                    orientation="right"
+                    stroke="#64748b"
+                    fontSize={9}
+                    tickLine={false}
+                    axisLine={false}
+                    width={38}
+                    domain={[0, (max) => Math.max(45, Math.ceil(max + 2))]}
+                    tickFormatter={(val) => Math.round(val).toString()}
+                  />
+                  <Tooltip
+                    content={
+                      <MobileIntegratedTooltip
+                        activeIndexInfo={activeIndexInfo}
+                        chartData={chartData}
+                      />
+                    }
+                  />
+                  {/* VIX 주의(20) 및 경고(30) 기준선 */}
+                  <ReferenceLine
+                    y={20}
+                    stroke="#f59e0b"
+                    strokeDasharray="3 3"
+                    label={{
+                      value: '주의 20',
+                      position: 'insideTopRight',
+                      fill: '#f59e0b',
+                      fontSize: 9,
+                      fontWeight: 'bold',
+                    }}
+                  />
+                  <ReferenceLine
+                    y={30}
+                    stroke="#ef4444"
+                    strokeDasharray="3 3"
+                    label={{
+                      value: '경고 30',
+                      position: 'insideTopRight',
+                      fill: '#ef4444',
+                      fontSize: 9,
+                      fontWeight: 'bold',
+                    }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="vix"
+                    stroke="#c084fc"
+                    strokeWidth={1.8}
+                    dot={false}
+                    activeDot={{ r: 3, strokeWidth: 0, fill: '#c084fc' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className="h-[68px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} syncId="mobileMarketChart">
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                <XAxis
-                  dataKey="date"
-                  stroke="#64748b"
-                  fontSize={9}
-                  tickLine={false}
-                  axisLine={false}
-                  dy={4}
-                  tickFormatter={(str) => (str ? str.slice(2, 7) : '')}
-                />
-                <YAxis
-                  orientation="right"
-                  stroke="#64748b"
-                  fontSize={9}
-                  tickLine={false}
-                  axisLine={false}
-                  width={38}
-                  domain={[0, (max) => Math.max(45, Math.ceil(max + 2))]}
-                  tickFormatter={(val) => Math.round(val).toString()}
-                />
-                <Tooltip
-                  content={
-                    <MobileIntegratedTooltip
-                      activeIndexInfo={activeIndexInfo}
-                      chartData={chartData}
-                    />
-                  }
-                />
-                {/* VIX 주의(20) 및 경고(30) 기준선 */}
-                <ReferenceLine
-                  y={20}
-                  stroke="#f59e0b"
-                  strokeDasharray="3 3"
-                  label={{
-                    value: '주의 20',
-                    position: 'insideTopRight',
-                    fill: '#f59e0b',
-                    fontSize: 9,
-                    fontWeight: 'bold',
-                  }}
-                />
-                <ReferenceLine
-                  y={30}
-                  stroke="#ef4444"
-                  strokeDasharray="3 3"
-                  label={{
-                    value: '경고 30',
-                    position: 'insideTopRight',
-                    fill: '#ef4444',
-                    fontSize: 9,
-                    fontWeight: 'bold',
-                  }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="vix"
-                  stroke="#c084fc"
-                  strokeWidth={1.8}
-                  dot={false}
-                  activeDot={{ r: 3, strokeWidth: 0, fill: '#c084fc' }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        )}
       </div>
 
       {/* 4. 기간 내 2대 극단값(최대 공포 피크 & 최대 낙폭 바닥) 분석 카드 */}
