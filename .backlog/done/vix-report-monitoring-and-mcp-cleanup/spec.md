@@ -1,6 +1,6 @@
 # 미국 일간·주간 및 월간 보고서 VIX 모니터링 추가 및 MCP 시장지수 도구 통합 스펙
 
-Status: ready-for-agent
+Status: closed
 
 ## Problem Statement
 
