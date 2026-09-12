@@ -136,44 +136,113 @@ export function calculateDateRange(period) {
 }
 
 /**
- * 모바일 최적화 통합 동기화 툴팁
+ * 모바일 차트 상단 고정 통합 초슬림 인스펙터 바 (Slim Inspector Bar)
+ *
+ * 터치/호버 시 날짜와 [지수 종가 | MDD | VIX] 3대 수치를 차트 상단에 한눈에 노출하며,
+ * 활성 탭에 해당하는 수치를 시각적으로 하이라이트합니다.
+ * 터치 종료 시 즉시 소멸하여 차트 곡선을 일체 가리지 않습니다.
  */
-function MobileIntegratedTooltip({ active, payload, label, activeIndexInfo, chartData }) {
-  if (!active || !label) return null;
-  // payload[0]?.payload에서 $O(1)로 호버된 데이터 포인트 우선 획득
-  const currentPoint = payload?.[0]?.payload || chartData?.find((d) => d.date === label) || {};
-  const priceVal = currentPoint.value;
-  const mddVal = currentPoint.mdd;
-  const vixVal = currentPoint.vix;
-
+export function MobileSlimInspectorBar({ hoveredData, activeChartTab }) {
   return (
-    <div className="bg-slate-900/95 backdrop-blur-md border border-slate-700/80 p-2.5 rounded-xl shadow-xl text-white text-[11px] min-w-[170px] z-50">
-      <div className="font-bold text-slate-400 mb-1.5 border-b border-slate-800 pb-1 flex items-center justify-between text-[10px]">
-        <span>{label}</span>
-        <span className="text-slate-500">동기화</span>
-      </div>
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-slate-300 font-medium truncate">{activeIndexInfo?.name || '지수'}:</span>
-          <span className="font-bold text-white font-mono">
-            {priceVal !== undefined && priceVal !== null ? `${Number(priceVal).toLocaleString()} pt` : '-'}
+    <div
+      data-testid="slim-inspector-bar"
+      className="bg-slate-950/70 border border-slate-800/80 px-3 py-1.5 rounded-xl min-h-[36px] flex items-center justify-between text-xs transition-colors"
+    >
+      {hoveredData ? (
+        <div data-testid="inspector-values" className="flex items-center justify-between w-full">
+          {/* 날짜 */}
+          <span
+            data-testid="inspector-date"
+            className="text-slate-400 font-mono text-[10px] font-semibold"
+          >
+            {hoveredData.date}
           </span>
+
+          {/* 3대 지표 수치 */}
+          <div className="flex items-center gap-2 font-mono text-[11px]">
+            {/* 1. 지수 종가 */}
+            <div
+              data-testid="inspector-price-group"
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-all ${
+                activeChartTab === 'price'
+                  ? 'bg-sky-500/20 text-white font-black ring-1 ring-sky-500/40'
+                  : 'text-slate-300 opacity-70'
+              }`}
+            >
+              <span className="text-[9px] text-slate-400">지수</span>
+              <span data-testid="inspector-price-value" className="font-bold">
+                {hoveredData.value !== undefined && hoveredData.value !== null
+                  ? `${Number(hoveredData.value).toLocaleString(undefined, { maximumFractionDigits: 1 })} pt`
+                  : '-'}
+              </span>
+            </div>
+
+            <span className="text-slate-700">|</span>
+
+            {/* 2. MDD */}
+            <div
+              data-testid="inspector-mdd-group"
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-all ${
+                activeChartTab === 'mdd'
+                  ? 'bg-rose-500/20 text-rose-300 font-black ring-1 ring-rose-500/40'
+                  : 'text-rose-400 opacity-70'
+              }`}
+            >
+              <span className="text-[9px] text-rose-400/80">MDD</span>
+              <span data-testid="inspector-mdd-value" className="font-bold">
+                {hoveredData.mdd !== undefined && hoveredData.mdd !== null
+                  ? `${Number(hoveredData.mdd).toFixed(2)}%`
+                  : '-'}
+              </span>
+            </div>
+
+            <span className="text-slate-700">|</span>
+
+            {/* 3. VIX */}
+            <div
+              data-testid="inspector-vix-group"
+              className={`flex items-center gap-1 px-1.5 py-0.5 rounded transition-all ${
+                activeChartTab === 'vix'
+                  ? 'bg-purple-500/20 text-purple-200 font-black ring-1 ring-purple-500/40'
+                  : 'text-purple-400 opacity-70'
+              }`}
+            >
+              <span className="text-[9px] text-purple-400/80">VIX</span>
+              <span data-testid="inspector-vix-value" className="font-bold">
+                {hoveredData.vix !== undefined && hoveredData.vix !== null
+                  ? `${Number(hoveredData.vix).toFixed(2)} pt`
+                  : '-'}
+              </span>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-rose-400 font-medium">MDD:</span>
-          <span className="font-bold text-rose-400 font-mono">
-            {mddVal !== undefined && mddVal !== null ? `${Number(mddVal).toFixed(2)}%` : '-'}
+      ) : (
+        <div
+          data-testid="inspector-placeholder"
+          className="flex items-center justify-between w-full text-[10px] text-slate-500"
+        >
+          <span className="flex items-center gap-1">
+            <span>💡</span> 차트를 터치하여 날짜별 지표 탐색
           </span>
+          <span className="font-mono text-[9px] text-slate-600">지수 · MDD · VIX 동시 탐색</span>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-purple-400 font-medium">VIX:</span>
-          <span className="font-bold text-purple-300 font-mono">
-            {vixVal !== undefined && vixVal !== null ? `${Number(vixVal).toFixed(2)} pt` : '-'}
-          </span>
-        </div>
-      </div>
+      )}
     </div>
   );
+}
+
+/**
+ * Recharts Tooltip과 React 상단 인스펙터 바 상태를 동기화하는 브릿지 컴포넌트
+ * (곡선을 가리는 기본 170px 팝업 박스를 렌더링하지 않고 null을 반환)
+ */
+function ChartTooltipSync({ active, payload, onSync }) {
+  useEffect(() => {
+    if (active && payload && payload.length > 0 && payload[0]?.payload) {
+      const nextPoint = payload[0].payload;
+      onSync((prev) => (prev?.date === nextPoint.date ? prev : nextPoint));
+    }
+  }, [active, payload, onSync]);
+  return null;
 }
 
 /**
@@ -189,10 +258,26 @@ export default function MobileMarketIndexSection() {
   const [selectedTicker, setSelectedTicker] = useState('^GSPC');
   const [selectedPeriod, setSelectedPeriod] = useState('3Y');
   const [activeChartTab, setActiveChartTab] = useState('price'); // 'price' | 'mdd' | 'vix'
+  const [hoveredData, setHoveredData] = useState(null);
   const [historicalData, setHistoricalData] = useState(null);
   const [indicesPrices, setIndicesPrices] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  const handleInteractionEnd = useCallback(() => {
+    setHoveredData(null);
+  }, []);
+
+  const handleChartMove = useCallback((state) => {
+    if (state && state.activePayload && state.activePayload.length > 0 && state.activePayload[0]?.payload) {
+      const nextPoint = state.activePayload[0].payload;
+      setHoveredData((prev) => (prev?.date === nextPoint.date ? prev : nextPoint));
+    }
+  }, []);
+
+  useEffect(() => {
+    setHoveredData(null);
+  }, [activeChartTab, selectedTicker, selectedPeriod]);
 
   const activeIndexInfo = useMemo(() => {
     return INDICES.find((idx) => idx.ticker === selectedTicker) || INDICES[0];
@@ -532,12 +617,30 @@ export default function MobileMarketIndexSection() {
           )}
         </div>
 
+        {/* [개선된 통합 툴팁: 지수·MDD·VIX 통합 초슬림 인스펙터 바, 손 떼면 즉시 소멸] */}
+        <MobileSlimInspectorBar
+          hoveredData={hoveredData}
+          activeChartTab={activeChartTab}
+        />
+
         {/* [1단] 지수 종가 (Price pt, Area/Line, 높이 260px 대형 단독 뷰) */}
         {activeChartTab === 'price' && (
           <div data-testid="chart-tier-price" className="space-y-1">
-            <div className="h-[260px] w-full">
+            <div
+              data-testid="mobile-chart-canvas-container"
+              className="h-[260px] w-full"
+              onMouseLeave={handleInteractionEnd}
+              onTouchEnd={handleInteractionEnd}
+              onTouchCancel={handleInteractionEnd}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} syncId="mobileMarketChart">
+                <AreaChart
+                  data={chartData}
+                  syncId="mobileMarketChart"
+                  onMouseMove={handleChartMove}
+                  onTouchMove={handleChartMove}
+                  onMouseLeave={handleInteractionEnd}
+                >
                   <defs>
                     <linearGradient id="mobilePriceGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor={activeIndexInfo.color} stopOpacity={0.25} />
@@ -565,12 +668,9 @@ export default function MobileMarketIndexSection() {
                     tickFormatter={(val) => Math.round(val).toLocaleString()}
                   />
                   <Tooltip
-                    content={
-                      <MobileIntegratedTooltip
-                        activeIndexInfo={activeIndexInfo}
-                        chartData={chartData}
-                      />
-                    }
+                    active={Boolean(hoveredData)}
+                    cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
+                    content={<ChartTooltipSync onSync={setHoveredData} />}
                   />
                   <Area
                     type="monotone"
@@ -590,9 +690,21 @@ export default function MobileMarketIndexSection() {
         {/* [2단] 최대 낙폭 (MDD %, Area Underwater, 높이 260px 대형 단독 뷰) */}
         {activeChartTab === 'mdd' && (
           <div data-testid="chart-tier-mdd" className="space-y-1">
-            <div className="h-[260px] w-full">
+            <div
+              data-testid="mobile-chart-canvas-container"
+              className="h-[260px] w-full"
+              onMouseLeave={handleInteractionEnd}
+              onTouchEnd={handleInteractionEnd}
+              onTouchCancel={handleInteractionEnd}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} syncId="mobileMarketChart">
+                <AreaChart
+                  data={chartData}
+                  syncId="mobileMarketChart"
+                  onMouseMove={handleChartMove}
+                  onTouchMove={handleChartMove}
+                  onMouseLeave={handleInteractionEnd}
+                >
                   <defs>
                     <linearGradient id="mobileMddGradient" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.25} />
@@ -620,12 +732,9 @@ export default function MobileMarketIndexSection() {
                     tickFormatter={(val) => `${Math.round(val)}%`}
                   />
                   <Tooltip
-                    content={
-                      <MobileIntegratedTooltip
-                        activeIndexInfo={activeIndexInfo}
-                        chartData={chartData}
-                      />
-                    }
+                    active={Boolean(hoveredData)}
+                    cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
+                    content={<ChartTooltipSync onSync={setHoveredData} />}
                   />
                   <Area
                     type="monotone"
@@ -645,9 +754,21 @@ export default function MobileMarketIndexSection() {
         {/* [3단] VIX 변동성 (pt, Line, 높이 260px 대형 단독 뷰) */}
         {activeChartTab === 'vix' && (
           <div data-testid="chart-tier-vix" className="space-y-1">
-            <div className="h-[260px] w-full">
+            <div
+              data-testid="mobile-chart-canvas-container"
+              className="h-[260px] w-full"
+              onMouseLeave={handleInteractionEnd}
+              onTouchEnd={handleInteractionEnd}
+              onTouchCancel={handleInteractionEnd}
+            >
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={chartData} syncId="mobileMarketChart">
+                <LineChart
+                  data={chartData}
+                  syncId="mobileMarketChart"
+                  onMouseMove={handleChartMove}
+                  onTouchMove={handleChartMove}
+                  onMouseLeave={handleInteractionEnd}
+                >
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
                   <XAxis
                     dataKey="date"
@@ -669,12 +790,9 @@ export default function MobileMarketIndexSection() {
                     tickFormatter={(val) => Math.round(val).toString()}
                   />
                   <Tooltip
-                    content={
-                      <MobileIntegratedTooltip
-                        activeIndexInfo={activeIndexInfo}
-                        chartData={chartData}
-                      />
-                    }
+                    active={Boolean(hoveredData)}
+                    cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
+                    content={<ChartTooltipSync onSync={setHoveredData} />}
                   />
                   {/* VIX 주의(20) 및 경고(30) 기준선 (내부 텍스트 라벨 제거, 깔끔한 파선) */}
                   <ReferenceLine

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import MobileMarketIndexSection, { getVixStatus } from './MobileMarketIndexSection';
+import MobileMarketIndexSection, { getVixStatus, MobileSlimInspectorBar } from './MobileMarketIndexSection';
 
 const mockHistoricalGSPC = {
   labels: ['2026-06-01', '2026-06-02', '2026-06-03'],
@@ -370,6 +370,149 @@ describe('MobileMarketIndexSection', () => {
         expect(worstMddCard).toHaveTextContent('-4.00%');
         expect(worstMddCard).toHaveTextContent('17,000.0 pt');
       });
+    });
+  });
+
+  describe('티켓 03: 지수·MDD·VIX 통합 초슬림 인스펙터 툴팁 및 터치 종료 즉시 소멸', () => {
+    it('기본 상태(미터치/미호버)에서는 차트 상단 슬림 바에 탐색 안내 문구가 노출되고 기존의 170px 불투명 팝업은 존재하지 않는다', async () => {
+      const { container } = render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('slim-inspector-bar')).toBeInTheDocument();
+      });
+
+      // 슬림 인스펙터 바 존재 확인
+      const slimBar = screen.getByTestId('slim-inspector-bar');
+      expect(slimBar).toBeInTheDocument();
+
+      // 기본 상태 플레이스홀더 안내 문구 노출 확인
+      const placeholder = screen.getByTestId('inspector-placeholder');
+      expect(placeholder).toBeInTheDocument();
+      expect(placeholder).toHaveTextContent('차트를 터치하여 날짜별 지표 탐색');
+
+      // 기존 170px 불투명 플로팅 팝업 박스(min-w-[170px])가 DOM에 전혀 존재하지 않는지 검증
+      const legacyPopups = container.querySelectorAll('.min-w-\\[170px\\]');
+      expect(legacyPopups.length).toBe(0);
+    });
+
+    it('MobileSlimInspectorBar 단위: 호버/터치 데이터 수신 시 날짜와 함께 지수, MDD, VIX 3대 수치가 동시 노출된다', () => {
+      const mockHoveredPoint = {
+        date: '2026-06-15',
+        value: 5864.6,
+        mdd: -2.5,
+        vix: 15.24,
+      };
+
+      render(
+        <MobileSlimInspectorBar
+          hoveredData={mockHoveredPoint}
+          activeChartTab="price"
+        />
+      );
+
+      // 3대 지표 수치 표시 컨테이너 노출
+      expect(screen.getByTestId('inspector-values')).toBeInTheDocument();
+
+      // 날짜
+      expect(screen.getByTestId('inspector-date')).toHaveTextContent('2026-06-15');
+
+      // 지수 종가
+      expect(screen.getByTestId('inspector-price-value')).toHaveTextContent('5,864.6 pt');
+
+      // MDD
+      expect(screen.getByTestId('inspector-mdd-value')).toHaveTextContent('-2.50%');
+
+      // VIX
+      expect(screen.getByTestId('inspector-vix-value')).toHaveTextContent('15.24 pt');
+    });
+
+    it('MobileSlimInspectorBar 단위: 활성화된 서브탭(price/mdd/vix)에 따라 해당 지표 영역이 시각적으로 강조(하이라이트)된다', () => {
+      const mockHoveredPoint = {
+        date: '2026-06-15',
+        value: 5864.6,
+        mdd: -2.5,
+        vix: 15.24,
+      };
+
+      // 1. 'price' 탭 활성화: 지수 수치 하이라이트 (bg-sky-500/20, ring-1, font-black 등)
+      const { rerender } = render(
+        <MobileSlimInspectorBar
+          hoveredData={mockHoveredPoint}
+          activeChartTab="price"
+        />
+      );
+
+      const priceGroup = screen.getByTestId('inspector-price-group');
+      const mddGroup = screen.getByTestId('inspector-mdd-group');
+      const vixGroup = screen.getByTestId('inspector-vix-group');
+
+      expect(priceGroup.className).toContain('bg-sky-500/20');
+      expect(priceGroup.className).toContain('ring-sky-500');
+      expect(mddGroup.className).toContain('opacity-70');
+      expect(vixGroup.className).toContain('opacity-70');
+
+      // 2. 'mdd' 탭 활성화: MDD 수치 하이라이트 (bg-rose-500/20, ring-1 등)
+      rerender(
+        <MobileSlimInspectorBar
+          hoveredData={mockHoveredPoint}
+          activeChartTab="mdd"
+        />
+      );
+
+      expect(priceGroup.className).toContain('opacity-70');
+      expect(mddGroup.className).toContain('bg-rose-500/20');
+      expect(mddGroup.className).toContain('ring-rose-500');
+      expect(vixGroup.className).toContain('opacity-70');
+
+      // 3. 'vix' 탭 활성화: VIX 수치 하이라이트 (bg-purple-500/20, ring-1 등)
+      rerender(
+        <MobileSlimInspectorBar
+          hoveredData={mockHoveredPoint}
+          activeChartTab="vix"
+        />
+      );
+
+      expect(priceGroup.className).toContain('opacity-70');
+      expect(mddGroup.className).toContain('opacity-70');
+      expect(vixGroup.className).toContain('bg-purple-500/20');
+      expect(vixGroup.className).toContain('ring-purple-500');
+    });
+
+    it('모바일 터치 종료(touchEnd) 및 mouseLeave 시 호버 데이터가 리셋되고 슬림 바가 즉각 안내 문구로 복귀한다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tier-price')).toBeInTheDocument();
+      });
+
+      const canvasContainer = screen.getByTestId('mobile-chart-canvas-container');
+      expect(canvasContainer).toBeInTheDocument();
+
+      // touchEnd 발생 시 즉시 리셋 확인
+      fireEvent.touchEnd(canvasContainer);
+      expect(screen.getByTestId('inspector-placeholder')).toBeInTheDocument();
+
+      // mouseLeave 발생 시 즉시 리셋 확인
+      fireEvent.mouseLeave(canvasContainer);
+      expect(screen.getByTestId('inspector-placeholder')).toBeInTheDocument();
+    });
+
+    it('서브탭 전환(MDD, VIX) 상태에서도 슬림 인스펙터 바가 항상 동일하게 상단에 유지된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('slim-inspector-bar')).toBeInTheDocument();
+      });
+
+      // MDD 서브탭 전환
+      fireEvent.click(screen.getByTestId('chart-tab-mdd'));
+      expect(screen.getByTestId('slim-inspector-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('chart-tier-mdd')).toBeInTheDocument();
+
+      // VIX 서브탭 전환
+      fireEvent.click(screen.getByTestId('chart-tab-vix'));
+      expect(screen.getByTestId('slim-inspector-bar')).toBeInTheDocument();
+      expect(screen.getByTestId('chart-tier-vix')).toBeInTheDocument();
     });
   });
 });
