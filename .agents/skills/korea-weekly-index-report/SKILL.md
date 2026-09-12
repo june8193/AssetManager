@@ -25,9 +25,16 @@ description: 국내(KOSPI/KOSDAQ) 주간 지수 현황 보고서 작성 및 텔�
   - [ ] 대상 기간 내 존재하는 일일 보고서 내용 요약 완료
 
 ### 3단계: 주간 지수 변동 데이터 조회 & 계산
-- `uv run python scripts/query_market.py --action history --tickers "^KS11,^KQ11" --start-date "[시작일]" --end-date "[종료일]"` 실행
-- 변동금액 및 변동률(`(종료가 - 시작가) / 시작가 * 100`) 직접 계산 (상승 시 `+` 기호)
+1. **지수 시계열 데이터 조회 (MCP 도구 호출)**:
+   - `get_market_history` MCP 도구를 호출하여 대상 주간의 일별 시계열을 수집합니다.
+   - 인자: `tickers="^KS11,^KQ11"`, `start_date="[시작일]"`, `end_date="[종료일]"`
+2. **KOSPI/KOSDAQ 주간 변동률 계산 로직**:
+   - 각 지수(`^KS11`, `^KQ11`)의 주간 첫 거래일 종가(시작가)와 마지막 거래일 종가(종료가)를 추출합니다:
+     - 주간 변동폭 = 종료가 - 시작가
+     - 주간 등락률(%) = ((종료가 - 시작가) / 시작가) * 100
+     - 부호 표기 원칙: 상승 시 `+` 부호 필수 기재 (예: `+1.23%`, `+30.50pt`), 하락 시 `-` 부호
 - **완료 검증 조건 (Completion Criterion)**:
+  - [ ] `get_market_history` MCP 도구를 통해 KOSPI/KOSDAQ 주간 데이터 조회 완료
   - [ ] KOSPI/KOSDAQ 주간 변동률 계산 완료
 
 ### 4단계: 주간 보고서 마크다운 생성 및 저장

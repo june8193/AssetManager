@@ -14,19 +14,35 @@ description: 국내(KOSPI/KOSDAQ) 일일 지수 마감 보고서 작성 및 텔�
 ## Workflows
 
 ### 0단계: 주말 및 휴장일 여부 확인 (Pre-check)
-- `uv run python scripts/query_market.py --action holiday --country KR` 실행 ➔ `IS_HOLIDAY`, `DESCRIPTION` 기억
-- `IS_HOLIDAY == True`인 경우: 지수/뉴스 수집을 건너뛰고 간이 휴장일 보고서 작성 후 3단계로 이동.
+- `check_market_holiday` MCP 도구 호출:
+  - 인자: `country="KR"` (특정 일자 조회 필요 시 `date="YYYY-MM-DD"`, 생략 시 오늘)
+  - 반환값의 `is_holiday` 및 `description` 확인
+- `is_holiday == True`인 경우: 지수/뉴스 수집을 건너뛰고 간이 휴장일 안내 보고서 작성 후 3단계로 이동.
 - **완료 검증 조건 (Completion Criterion)**:
   - [ ] 휴장일 여부 판정이 정상 완료되었는가?
 
 ### 1단계: 지수 데이터 및 뉴스 수집
 - 평일(`is_holiday == False`):
-  1. 지수 데이터: `uv run python scripts/query_market.py --action indices --country KR` 실행 (KOSPI/KOSDAQ)
-  2. 뉴스 수집: CLI 스크립트 실행 (최소 2회, 최대 4회)
+  1. **지수 데이터 수집 (MCP 단일 호출)**:
+     - `get_market_history` MCP 도구를 단일 호출하여 최근 5일간(주말/휴장일 고려)의 일별 시계열을 수집합니다.
+     - 인자: `tickers="^KS11,^KQ11"`, `start_date="YYYY-MM-DD"`(조회일 기준 5~7일 전)
+  2. **마감 수치 및 등락률 계산 로직**:
+     - 각 티커(`^KS11`, `^KQ11`)별 시계열 데이터에서 날짜순으로 정렬된 가장 최근 2개 거래일 종가를 추출합니다:
+       - 전 거래일 종가: C_prev
+       - 당일(최근 거래일) 종가: C_today
+     - 변동폭 및 등락률 계산:
+       - 변동폭(Change) = C_today - C_prev
+       - 등락률(%) = ((C_today - C_prev) / C_prev) * 100
+     - 부호 표기 원칙:
+       - 상승 시 `+` 부호 필수 기재 (예: `+1.23%`, `+30.50pt`)
+       - 하락 시 `-` 부호 기재 (예: `-0.45%`, `-12.30pt`)
+       - 보합 시 `0.00%`, `0.00pt`
+  3. **뉴스 수집**: CLI 스크립트 실행 (최소 2회, 최대 4회)
      - `uv run python scripts/query_news.py --query "국내 주식 시장 마감 시황 요약" --date "YYYY-MM-DD"`
      - `uv run python scripts/query_news.py --query "한국 경제 주요 뉴스" --date "YYYY-MM-DD"`
 - **완료 검증 조건 (Completion Criterion)**:
-  - [ ] 평일인 경우 코스피/코스닥 마감 지수와 뉴스 2건 이상의 링크/제목이 확보되었는가?
+  - [ ] `get_market_history` MCP 도구를 통해 코스피/코스닥 최근 2거래일 종가 및 변동률 계산이 완료되었는가?
+  - [ ] 뉴스 2건 이상의 링크/제목이 확보되었는가?
 
 ### 2단계: 마크다운 파일 생성 및 저장
 - `uv run python scripts/get_storage_dir.py` ➔ `STORAGE_DIR` 획득
