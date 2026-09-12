@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — MCP 도구 계층에서 get_market_indices 퇴역 및 get_market_history 다중 티커 검증
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `.agents/skills/us-weekly-index-report/SKILL.md`의 주간 지수 조회 단계에서 `get_market_history` MCP 도구(또는 해당 쿼리)의 티커 목록에 `^VIX`(`tickers="^GSPC,^IXIC,^DJI,^VIX"`)가 포함되었는가?
 - [ ] 주간 VIX 데이터 분석 시 주간 시작일 대비 종료일 등락률 외에 기간 내 최고치/최저치 범위(High-Low Range)를 산출하는 워크플로우가 명시되었는가?
