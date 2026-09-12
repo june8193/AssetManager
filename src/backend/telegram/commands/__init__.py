@@ -4,7 +4,9 @@
 import logging
 from typing import TYPE_CHECKING, Callable, Awaitable
 
+from .asset import handle_asset
 from .help import handle_help
+from .ratio import handle_ratio
 
 if TYPE_CHECKING:
     from ..client import TelegramClient
@@ -33,6 +35,8 @@ class CLICommandHandler:
         # 커맨드 매핑 테이블
         self.handlers: dict[str, Callable[["TelegramClient", int, str], Awaitable[None]]] = {
             "/help": handle_help,
+            "/asset": handle_asset,
+            "/ratio": handle_ratio,
         }
 
     async def process_cli_command(self, chat_id: int, text: str) -> None:
@@ -62,4 +66,5 @@ class CLICommandHandler:
             await self.client.send_message(chat_id, warning_msg)
 
 
-__all__ = ["CLICommandHandler", "handle_help"]
+__all__ = ["CLICommandHandler", "handle_asset", "handle_help", "handle_ratio"]
+

@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] `settings.toml` 및 `settings.toml.example`에 `[telegram]`(bot_token, allowed_user_ids, enabled, storage_dir) 및 `[naver]` 섹션이 추가되고 환경변수 오버라이드가 지원된다.
 - [x] 텔레그램 Bot API 통신(`getUpdates` 롱폴링, `sendMessage`)을 수행하는 비동기 클라이언트가 동작한다.
