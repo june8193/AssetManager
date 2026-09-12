@@ -13,6 +13,7 @@ from .models import (
     AssetSummaryResponse,
     DailyStatItem,
     DailyStatsResponse,
+    KiwoomSyncResponse,
     SnapshotItem,
     SnapshotsResponse,
     TransactionItem,
@@ -247,3 +248,21 @@ async def get_snapshots() -> SnapshotsResponse:
     ]
 
     return SnapshotsResponse(snapshots=snapshots)
+
+
+async def sync_kiwoom_transactions(days: int = 7) -> KiwoomSyncResponse:
+    """키움증권 거래내역 동기화 API를 호출하여 최신 체결내역을 DB에 동기화합니다.
+
+    Args:
+        days: 동기화 대상 과거 기간 (일 수, 기본값: 7일)
+
+    Returns:
+        동기화 결과 응답 모델 (KiwoomSyncResponse)
+    """
+    client = get_default_client()
+    return await client.post_json(
+        "/api/kiwoom/sync-transactions",
+        params={"days": days},
+        response_model=KiwoomSyncResponse,
+    )
+

@@ -8,6 +8,7 @@ from .asset import handle_asset
 from .daily import handle_daily
 from .help import handle_help
 from .ratio import handle_ratio
+from .sync import handle_sync
 from .tx import handle_transactions
 from .yearly import handle_yearly
 
@@ -44,6 +45,7 @@ class CLICommandHandler:
             "/transactions": handle_transactions,
             "/yearly": handle_yearly,
             "/daily": handle_daily,
+            "/sync": handle_sync,
         }
 
     async def process_cli_command(self, chat_id: int, text: str) -> None:
@@ -79,6 +81,7 @@ __all__ = [
     "handle_daily",
     "handle_help",
     "handle_ratio",
+    "handle_sync",
     "handle_transactions",
     "handle_yearly",
 ]

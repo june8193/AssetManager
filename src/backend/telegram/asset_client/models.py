@@ -125,3 +125,54 @@ class SnapshotsResponse(BaseModel):
     """자산 상태 스냅샷 목록 응답 모델입니다."""
 
     snapshots: list[SnapshotItem] = Field(default_factory=list, description="자산 상태 스냅샷 목록")
+
+
+class KiwoomSyncTransactionItem(BaseModel):
+    """키움증권 동기화 성공 거래 항목 모델입니다."""
+
+    type: str = Field(..., description="거래 유형 (BUY, SELL, INTEREST, TAX 등)")
+    asset_name: str = Field(..., description="자산명")
+    quantity: float = Field(0.0, description="체결 수량")
+    price: float = Field(0.0, description="체결 단가")
+    total_amount: float = Field(..., description="총 거래 금액")
+    currency: str = Field("KRW", description="통화 (KRW, USD)")
+    is_manual_matched: bool = Field(False, description="수동 입력 거래 매칭 여부")
+    traded_at: str | None = Field(None, description="체결 일시 (YYYY-MM-DD HH:MM 또는 YYYY-MM-DD)")
+
+
+class KiwoomUnregisteredAssetItem(BaseModel):
+    """키움증권 동기화 시 미등록 자산 항목 모델입니다."""
+
+    ticker: str = Field(..., description="종목 코드")
+    name: str = Field(..., description="종목명")
+    type: str = Field(..., description="거래 유형 (BUY, SELL 등)")
+    quantity: float = Field(0.0, description="수량")
+    price: float = Field(0.0, description="단가")
+    total_amount: float = Field(..., description="총 거래 금액")
+    currency: str = Field("KRW", description="통화 (KRW, USD)")
+    traded_at: str | None = Field(None, description="체결 일시")
+
+
+class KiwoomFailedAccountItem(BaseModel):
+    """동기화 실패 계좌 항목 모델입니다."""
+
+    account_name: str = Field(..., description="계좌 명칭")
+    error: str = Field(..., description="오류 메시지")
+
+
+class KiwoomSyncResponse(BaseModel):
+    """키움증권 거래내역 동기화 API 응답 Pydantic 모델입니다."""
+
+    status: str = Field("success", description="동기화 상태 (success 또는 error)")
+    success_count: int = Field(0, description="성공적으로 저장된 거래 건수")
+    pending_count: int = Field(0, description="미등록으로 생략된 거래 건수")
+    synced_transactions: list[KiwoomSyncTransactionItem] = Field(
+        default_factory=list, description="동기화 완료된 거래 목록"
+    )
+    unregistered_assets: list[KiwoomUnregisteredAssetItem] = Field(
+        default_factory=list, description="미등록 자산 거래 목록"
+    )
+    failed_accounts: list[KiwoomFailedAccountItem] = Field(
+        default_factory=list, description="동기화 실패 계좌 목록"
+    )
+

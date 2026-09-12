@@ -8,6 +8,7 @@ from .asset_api import (
     get_snapshots,
     get_transactions,
     get_yearly_stats,
+    sync_kiwoom_transactions,
 )
 from .client import AssetApiClient, get_default_client
 from .models import (
@@ -17,6 +18,10 @@ from .models import (
     AssetSummaryResponse,
     DailyStatItem,
     DailyStatsResponse,
+    KiwoomFailedAccountItem,
+    KiwoomSyncResponse,
+    KiwoomSyncTransactionItem,
+    KiwoomUnregisteredAssetItem,
     SnapshotItem,
     SnapshotsResponse,
     TransactionItem,
@@ -33,6 +38,10 @@ __all__ = [
     "AssetSummaryResponse",
     "DailyStatItem",
     "DailyStatsResponse",
+    "KiwoomFailedAccountItem",
+    "KiwoomSyncResponse",
+    "KiwoomSyncTransactionItem",
+    "KiwoomUnregisteredAssetItem",
     "SnapshotItem",
     "SnapshotsResponse",
     "TransactionItem",
@@ -46,4 +55,5 @@ __all__ = [
     "get_snapshots",
     "get_transactions",
     "get_yearly_stats",
+    "sync_kiwoom_transactions",
 ]

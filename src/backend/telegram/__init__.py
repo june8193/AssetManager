@@ -4,11 +4,13 @@
 from .client import TelegramClient, markdown_to_html, remove_markdown_markup
 from .bot import TelegramBot
 from .commands import CLICommandHandler
+from .scheduler import MarketCloseScheduler
 
 __all__ = [
     "TelegramClient",
     "TelegramBot",
     "CLICommandHandler",
+    "MarketCloseScheduler",
     "markdown_to_html",
     "remove_markdown_markup",
 ]
