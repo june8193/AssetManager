@@ -14,6 +14,10 @@ logger = logging.getLogger("KiwoomTransactionService")
 # 미국 주식은 한국 시간 기준 야간(22:30~익일 06:00)에 장이 열리므로 실시간 당일 동기화 시 전일(T-1) 및 당일(T) 2일치 오프셋을 순회
 OVERSEAS_REALTIME_DAY_OFFSETS = [1, 0]
 
+# 종합원장 소급 매매 파싱 시 제외할 해외 거래소 식별 키워드
+_FOREIGN_EXCHANGE_KEYWORDS = ("미국", "해외", "나스닥", "뉴욕", "아멕스", "NYSE", "NASDAQ", "AMEX")
+
+
 def _safe_float(val, default: float = 0.0) -> float:
     if val is None or val == "":
         return default
@@ -109,6 +113,45 @@ def _get_candidate_external_ids(ext_id: str | None, tx_date: datetime.date) -> s
     else:
         candidates.add(f"{dt_prefix}_{ext_id}")
     return candidates
+
+
+def _is_valid_domestic_ledger_trade(
+    trde_amt: float,
+    fc_trde_amt: float,
+    stex_nm: str,
+    stk_cd: str | None
+) -> bool:
+    """종합원장(kt00015) 매매 거래가 정상 국내 주식 매매인지 검증합니다.
+
+    다음 조건 중 하나라도 해당하면 해외주식 매매이거나 비정상 데이터로 판단하여 제외(False 반환)합니다:
+    1) 원화 거래금액(trde_amt) <= 0
+    2) 외화 거래금액(fc_trde_amt) > 0
+    3) 거래소명(stex_nm)이 '미국' 또는 해외 거래소인 경우
+    4) 종목코드(stk_cd)가 표준 6자리 숫자가 아닌 경우
+
+    Args:
+        trde_amt (float): 원화 거래금액
+        fc_trde_amt (float): 외화 거래금액
+        stex_nm (str): 거래소명 (예: 'KRX', '미국' 등)
+        stk_cd (str | None): 종목코드 (예: '005930', 'VOO')
+
+    Returns:
+        bool: 정상 국내 주식 매매 거래 여부
+    """
+    if trde_amt <= 0:
+        return False
+    if fc_trde_amt > 0:
+        return False
+
+    stex_upper = stex_nm.upper()
+    if any(keyword.upper() in stex_upper for keyword in _FOREIGN_EXCHANGE_KEYWORDS):
+        return False
+
+    clean_ticker = normalize_ticker(stk_cd)
+    if not clean_ticker or not re.match(r"^\d{6}$", clean_ticker):
+        return False
+
+    return True
 
 
 class KiwoomTransactionService:
@@ -675,10 +718,16 @@ class KiwoomTransactionService:
 
             # D. 소급 주식 매매
             elif is_retroactive and any(m in rmrk for m in ["장내매수", "장내매도", "매매", "매수", "매도"]):
+                trde_amt = _safe_float(tx.get("trde_amt"))
+                fc_amt = _safe_float(tx.get("fc_trde_amt") or tx.get("fc_exct_amt"))
+                stex_nm = str(tx.get("stex_nm") or "").strip()
+
+                if not _is_valid_domestic_ledger_trade(trde_amt, fc_amt, stex_nm, stk_cd):
+                    continue
+
                 cntr_dt_str = tx.get("cntr_dt") or tx.get("trde_dt")
                 cntr_date = datetime.datetime.strptime(cntr_dt_str, "%Y%m%d").date()
                 qty = _safe_float(tx.get("trde_qty_jwa_cnt"))
-                trde_amt = _safe_float(tx.get("trde_amt"))
                 price = trde_amt / qty if qty > 0 else 0
 
                 raw_txs.append({

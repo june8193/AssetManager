@@ -1258,6 +1258,210 @@ async def test_sync_dividend_different_dates_and_legacy_compatibility(
     assert divs[1].total_amount == 60.0
 
 
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_retroactive_overseas_stock_ignored_from_ledger_only_us_api_saved(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """종합원장에 해외주식 매수 내역(원화 0원)과 미국 체결 API에 정상 체결이 동시에 존재할 때 0달러 거래 없이 미국 체결 1건만 저장되는지 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    account = setup_test_data["accounts"]["6066-7729"]
+
+    # VOO 자산 생성
+    voo_asset = Asset(
+        ticker="VOO",
+        name="Vanguard S&P 500 ETF",
+        major_category="주식",
+        sub_category="코어(지수)",
+        country="US"
+    )
+    db_session.add(voo_asset)
+    db_session.commit()
+
+    today_str = datetime.date.today().strftime("%Y%m%d")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = MagicMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015": # 종합원장 소급 조회 (원화 0원, 외화체결 9124.69달러, 미국 거래소)
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    {
+                        "trde_dt": today_str,
+                        "trde_no": "000000100",
+                        "rmrk_nm": "장내매수",
+                        "stk_cd": "VOO",
+                        "stk_nm": "Vanguard S&P 500 ETF",
+                        "stex_nm": "미국",
+                        "trde_amt": "0",
+                        "fc_trde_amt": "9124.69",
+                        "trde_qty_jwa_cnt": "13"
+                    }
+                ]
+            }
+        elif api_id == "ust21510": # 미국 체결 API (정상 단가 701.90, 수량 13)
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "result_list": [
+                    {
+                        "ord_no": "ORD_VOO_001",
+                        "stk_cd": "VOO",
+                        "frgn_stk_nm": "Vanguard S&P 500 ETF",
+                        "slby_tp": "2",
+                        "slby_tp_nm": "매수",
+                        "cntr_uv": "701.90",
+                        "cntr_qty": "13",
+                        "ord_stat": "체결완료"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": [], "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=7)
+
+    assert result["status"] == "success"
+
+    # DB에 저장된 VOO 거래 검증
+    voo_txs = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.asset_id == voo_asset.id
+    ).all()
+
+    # 0달러 원장 거래는 스킵되고 오직 미국 체결 1건만 존재해야 함
+    assert len(voo_txs) == 1
+    saved_tx = voo_txs[0]
+    assert saved_tx.type == "BUY"
+    assert saved_tx.quantity == 13.0
+    assert saved_tx.price == 701.90
+    assert saved_tx.currency == "USD"
+    assert saved_tx.external_id == "ORD_VOO_001"
+    assert abs(saved_tx.total_amount - (13.0 * 701.90)) < 0.01
+
+    # 0달러인 거래는 전혀 없어야 함
+    zero_price_txs = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.price == 0.0,
+        Transaction.type.in_(["BUY", "SELL"])
+    ).all()
+    assert len(zero_price_txs) == 0
+
+
+@pytest.mark.asyncio
+@patch("src.backend.services.kiwoom_sync_service.KiwoomAuthManager")
+@patch("httpx.AsyncClient.post")
+async def test_sync_retroactive_filters_foreign_or_zero_amount_variations(
+    mock_post, mock_auth_class, db_session: Session, setup_test_data
+):
+    """종합원장 소급 매매 파싱 시 trde_amt<=0, fc_trde_amt>0, 해외거래소, 비숫자 티커 건은 스킵되고 정상 국내주식만 저장되는지 검증합니다."""
+    mock_auth = mock_auth_class.return_value
+    mock_auth.base_url = "https://api.kiwoom.com"
+    mock_auth.get_valid_token = AsyncMock(return_value="valid_token")
+
+    account = setup_test_data["accounts"]["5526-9093"]
+    samsung = setup_test_data["assets"]["005930"]
+    today_str = datetime.date.today().strftime("%Y%m%d")
+
+    def mock_api_responses(url, *args, **kwargs):
+        headers = kwargs.get("headers", {})
+        api_id = headers.get("api-id")
+        mock_response = MagicMock()
+        mock_response.raise_for_status = lambda: None
+
+        if api_id == "kt00015":
+            mock_response.json = lambda: {
+                "return_code": 0,
+                "trst_ovrl_trde_prps_array": [
+                    # 1. 외화 거래금액 > 0 (해외주식) -> 스킵되어야 함
+                    {
+                        "trde_dt": today_str,
+                        "trde_no": "000000201",
+                        "rmrk_nm": "장내매수",
+                        "stk_cd": "AAPL",
+                        "stk_nm": "Apple",
+                        "stex_nm": "미국",
+                        "trde_amt": "0",
+                        "fc_trde_amt": "1500.00",
+                        "trde_qty_jwa_cnt": "10"
+                    },
+                    # 2. 원화 거래금액 <= 0 -> 스킵되어야 함
+                    {
+                        "trde_dt": today_str,
+                        "trde_no": "000000202",
+                        "rmrk_nm": "장내매수",
+                        "stk_cd": "005930",
+                        "stk_nm": "삼성전자",
+                        "stex_nm": "KRX",
+                        "trde_amt": "0",
+                        "fc_trde_amt": "0",
+                        "trde_qty_jwa_cnt": "5"
+                    },
+                    # 3. 비숫자 티커 및 해외거래소 -> 스킵되어야 함
+                    {
+                        "trde_dt": today_str,
+                        "trde_no": "000000203",
+                        "rmrk_nm": "장내매수",
+                        "stk_cd": "TSLA",
+                        "stk_nm": "Tesla",
+                        "stex_nm": "나스닥",
+                        "trde_amt": "500000",
+                        "fc_trde_amt": "0",
+                        "trde_qty_jwa_cnt": "2"
+                    },
+                    # 4. 정상 국내 주식 매매 (원화 > 0, 외화 = 0, 6자리 숫자 종목코드, 국내 거래소) -> 저장되어야 함
+                    {
+                        "trde_dt": today_str,
+                        "trde_no": "000000204",
+                        "rmrk_nm": "장내매수",
+                        "stk_cd": "005930",
+                        "stk_nm": "삼성전자",
+                        "stex_nm": "KRX",
+                        "trde_amt": "720000",
+                        "fc_trde_amt": "0",
+                        "trde_qty_jwa_cnt": "10"
+                    }
+                ]
+            }
+        else:
+            mock_response.json = lambda: {"return_code": 0, "cntr": [], "result_list": []}
+        return mock_response
+
+    mock_post.side_effect = mock_api_responses
+
+    service = KiwoomTransactionService()
+    result = await service.sync_transactions(db_session, days=7)
+
+    assert result["status"] == "success"
+
+    # 계좌의 모든 주식 매매 트랜잭션 조회
+    txs = db_session.query(Transaction).filter(
+        Transaction.account_id == account.id,
+        Transaction.type.in_(["BUY", "SELL"])
+    ).all()
+
+    # 오직 정상 국내주식 1건(삼성전자 10주 720,000원)만 저장되어야 함
+    assert len(txs) == 1
+    assert txs[0].asset_id == samsung.id
+    assert txs[0].quantity == 10.0
+    assert txs[0].price == 72000.0
+    assert txs[0].total_amount == 720000.0
+    assert txs[0].currency == "KRW"
+    assert txs[0].external_id == f"{today_str}_000000204"
+
+
+
 
 
 
