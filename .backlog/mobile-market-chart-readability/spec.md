@@ -1,6 +1,6 @@
 # Feature Spec: 모바일 웹 지수분석 메뉴 차트 가독성 개선
 
-Status: ready-for-agent
+Status: done
 
 ## Problem Statement
 

@@ -668,7 +668,6 @@ export default function MobileMarketIndexSection() {
                     tickFormatter={(val) => Math.round(val).toLocaleString()}
                   />
                   <Tooltip
-                    active={Boolean(hoveredData)}
                     cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
                     content={<ChartTooltipSync onSync={setHoveredData} />}
                   />
@@ -732,7 +731,6 @@ export default function MobileMarketIndexSection() {
                     tickFormatter={(val) => `${Math.round(val)}%`}
                   />
                   <Tooltip
-                    active={Boolean(hoveredData)}
                     cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
                     content={<ChartTooltipSync onSync={setHoveredData} />}
                   />
@@ -790,7 +788,6 @@ export default function MobileMarketIndexSection() {
                     tickFormatter={(val) => Math.round(val).toString()}
                   />
                   <Tooltip
-                    active={Boolean(hoveredData)}
                     cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
                     content={<ChartTooltipSync onSync={setHoveredData} />}
                   />
