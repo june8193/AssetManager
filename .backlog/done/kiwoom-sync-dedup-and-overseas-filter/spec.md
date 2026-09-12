@@ -1,6 +1,6 @@
-﻿# Feature Spec: 키움증권 동기화 환전 중복 방지 및 해외주식 0달러 적재 필터링
+# Feature Spec: 키움증권 동기화 환전 중복 방지 및 해외주식 0달러 적재 필터링
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
