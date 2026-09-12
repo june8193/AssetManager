@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — MCP 도구 계층에서 get_market_indices 퇴역 및 get_market_history 다중 티커 검증
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 - [ ] `.agents/skills/asset-monthly-report/SKILL.md`에서 지수 및 VIX 수집 시 `get_market_history` MCP 도구(`tickers="^GSPC,^IXIC,^KS11,^VIX"`)를 호출하도록 명시되었는가?
 - [ ] 포트폴리오 월간 성과(`get_daily_stats`), 기말 상태(`get_portfolio_status`), 자산 비중(`get_asset_ratios`), 매매 내역(`get_transactions`) 등 핵심 데이터 조회가 MCP 도구 기반으로 명시되었는가?
