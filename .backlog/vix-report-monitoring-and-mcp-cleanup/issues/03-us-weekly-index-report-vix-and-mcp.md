@@ -5,9 +5,9 @@
 
 **Blocked by:** 01 — MCP 도구 계층에서 get_market_indices 퇴역 및 get_market_history 다중 티커 검증
 
-**Status:** claimed
+**Status:** closed
 
-- [ ] `.agents/skills/us-weekly-index-report/SKILL.md`의 주간 지수 조회 단계에서 `get_market_history` MCP 도구(또는 해당 쿼리)의 티커 목록에 `^VIX`(`tickers="^GSPC,^IXIC,^DJI,^VIX"`)가 포함되었는가?
-- [ ] 주간 VIX 데이터 분석 시 주간 시작일 대비 종료일 등락률 외에 기간 내 최고치/최저치 범위(High-Low Range)를 산출하는 워크플로우가 명시되었는가?
-- [ ] VIX 4단계 리스크 기준에 따른 주간 공포/안정 추세(예: 안정권 유지, 주중 일시 경고 진입 등) 진단이 포함된 보고서 템플릿 양식이 정의되었는가?
-- [ ] 텔레그램 모바일 서식 가독성을 위해 표(Table) 서식이 배제되고 불릿 리스트로 구성되었는가?
+- [x] `.agents/skills/us-weekly-index-report/SKILL.md`의 주간 지수 조회 단계에서 `get_market_history` MCP 도구(또는 해당 쿼리)의 티커 목록에 `^VIX`(`tickers="^GSPC,^IXIC,^DJI,^VIX"`)가 포함되었는가?
+- [x] 주간 VIX 데이터 분석 시 주간 시작일 대비 종료일 등락률 외에 기간 내 최고치/최저치 범위(High-Low Range)를 산출하는 워크플로우가 명시되었는가?
+- [x] VIX 4단계 리스크 기준에 따른 주간 공포/안정 추세(예: 안정권 유지, 주중 일시 경고 진입 등) 진단이 포함된 보고서 템플릿 양식이 정의되었는가?
+- [x] 텔레그램 모바일 서식 가독성을 위해 표(Table) 서식이 배제되고 불릿 리스트로 구성되었는가?

@@ -1,11 +1,11 @@
 ---
 name: us-weekly-index-report
-description: 미국(S&P500/NASDAQ/DOW) 주간 지수 현황 보고서 작성 및 텔레그램 발송 스킬. Use when executing scheduled US weekly market report task or requested to generate US weekly briefing.
+description: 미국(S&P500/NASDAQ/DOW/VIX) 주간 지수 현황 보고서 작성 및 텔레그램 발송 스킬. Use when executing scheduled US weekly market report task or requested to generate US weekly briefing.
 ---
 
 # 미국 시장 주간 지수 현황 보고서 작성 (US Weekly Index Report)
 
-최근 1주일간의 미국 시장 일일 보고서를 요약하고 주간 지수 변동률(S&P 500, NASDAQ, DOW)을 수집하여 주간 마크다운 보고서를 작성 후 텔레그램으로 전송하는 스킬입니다.
+최근 1주일간의 미국 시장 일일 보고서를 요약하고 미국 3대 주가지수(S&P 500, NASDAQ, DOW JONES) 및 CBOE 변동성 지수(VIX) 주간 변동 데이터를 수집·분석하여, VIX 4단계 리스크 기준 및 주간 변동 범위(High-Low) 기반의 주간 마크다운 보고서를 작성 후 텔레그램으로 전송하는 스킬입니다.
 
 ⚠️ **계획 모드 및 승인 생략**: 구현 계획서 작성 없이 즉시 워크플로우를 실행합니다.
 
@@ -19,24 +19,73 @@ description: 미국(S&P500/NASDAQ/DOW) 주간 지수 현황 보고서 작성 및
   - [ ] 주간 시작일(일)과 종료일(토) 날짜 계산 완료
 
 ### 2단계: 일일 보고서 수집 및 파싱
-- `uv run python scripts/get_storage_dir.py` ➔ `STORAGE_DIR` 획득
+- `uv run python scripts/get_storage_dir.py` 실행 ➔ `STORAGE_DIR` 획득
 - `STORAGE_DIR/reports/us_market/daily/US_market_daily_report_YYYYMMDD.md` 7일치 존재 여부 확인 및 파싱
 - **완료 검증 조건 (Completion Criterion)**:
   - [ ] 대상 기간 내 존재하는 미국 일일 보고서 내용 요약 완료
 
-### 3단계: 주간 지수 변동 데이터 조회 & 계산
-- `uv run python scripts/query_market.py --action history --tickers "^GSPC,^IXIC,^DJI" --start-date "[시작일]" --end-date "[종료일]"` 실행
-- 변동금액 및 변동률(`(종료가 - 시작가) / 시작가 * 100`) 직접 계산 (상승 시 `+` 기호)
+### 3단계: 주간 지수 변동 및 VIX 데이터 조회 & 계산
+1. **지수 및 VIX 시계열 데이터 조회 (MCP 도구 호출)**:
+   - `get_market_history` MCP 도구를 호출하여 대상 주간의 일별 시계열을 수집합니다.
+   - 인자: `tickers="^GSPC,^IXIC,^DJI,^VIX"`, `start_date="[시작일]"`, `end_date="[종료일]"`
+2. **3대 지수 주간 변동률 계산 로직**:
+   - 각 지수(`^GSPC`, `^IXIC`, `^DJI`)의 주간 첫 거래일 종가(시작가)와 마지막 거래일 종가(종료가)를 추출합니다:
+     - 주간 변동폭 = 종료가 - 시작가
+     - 주간 등락률(%) = ((종료가 - 시작가) / 시작가) * 100
+     - 부호 표기 원칙: 상승 시 `+` 부호 필수 (예: `+2.15%`, `+110.50pt`), 하락 시 `-` 부호
+3. **주간 VIX 데이터 분석 로직 (High-Low Range 및 리스크 평가)**:
+   - 주간 마감 종가 및 주간 시작일 대비 변동폭 / 등락률 산출:
+     - 변동폭 = 종료가 - 시작가
+     - 등락률(%) = ((종료가 - 시작가) / 시작가) * 100
+   - **주간 변동 범위(High-Low Range) 산출**:
+     - 주간 기간 내 일별 종가 중 최고치(High)와 최저치(Low)를 산출하여 주간 변동폭(Range = High - Low) 파악
+     - 예: 주간 최저 14.20 ~ 주간 최고 17.80 (변동폭: 3.60pt)
+   - **VIX 4단계 리스크 등급 분류**:
+     - 주간 마감 VIX 수치 및 주중 최고치를 기준으로 리스크 단계를 진단합니다:
+       - 🟢 **안정**: VIX < 20 (시장 심리 안정)
+       - 🟡 **주의**: 20 ≤ VIX < 25 (단기 변동성 확대 주의)
+       - 🟠 **경고**: 25 ≤ VIX < 30 (시장 불안 심리 고조)
+       - 🔴 **위기**: VIX ≥ 30 (극심한 공포 및 위기 국면)
+   - **주간 공포/안정 추세 진단**:
+     - 마감 등급뿐 아니라 주간 변동 범위(High-Low)를 바탕으로 주간 시장 공포 심리의 전개 추세를 진단합니다.
+     - 예: "주중 안정권 유지", "주중 일시 주의/경고 진입 후 반락 안정", "지속적인 변동성 확대로 경고 국면 진입" 등
 - **완료 검증 조건 (Completion Criterion)**:
-  - [ ] 미국 3대 지수 주간 변동률 계산 완료
+  - [ ] `get_market_history` MCP 도구를 통해 3대 지수 및 `^VIX` 주간 데이터 조회 완료
+  - [ ] 3대 지수 주간 변동률 및 VIX 주간 등락률 계산 완료
+  - [ ] 주간 VIX 최고치/최저치(High-Low Range) 산출 및 변동폭 분석 완료
+  - [ ] VIX 4단계 리스크 기준 기반 주간 공포/안정 추세 진단 완료
 
 ### 4단계: 주간 보고서 마크다운 생성 및 저장
-- `STORAGE_DIR/reports/us_market/weekly/US_market_weekly_report_YYYYMMDD.md` 생성
-- 텔레그램 깨짐 방지를 위해 **표(Table) 서식 절대 금지**
+- `STORAGE_DIR/reports/us_market/weekly/US_market_weekly_report_YYYYMMDD.md` 파일 생성
+- **서식 규칙**:
+  - 모바일 텔레그램 화면 줄바꿈 깨짐을 방지하기 위해 **표(Table) 서식은 절대 사용하지 않으며**, 불릿 리스트와 이모지를 활용합니다.
+  - VIX 모니터링은 독립된 섹션으로 구성하여 주간 마감가, 등락폭/등락률, 주간 변동 범위(최저~최고), 리스크 등급 이모지(🟢/🟡/🟠/🔴) 및 공포/안정 추세 진단을 명확히 표시합니다.
+- **보고서 템플릿 양식**:
+```markdown
+# 🇺🇸 미국 시장 주간 지수 현황 (YYYY-MM-DD ~ YYYY-MM-DD)
+> 한국 시간: YYYY-MM-DD HH:MM
+
+### 📊 3대 주요 지수 주간 마감 현황
+- **S&P 500**: 5,550.00 (+110.50pt, +2.03%)
+- **NASDAQ**: 18,200.00 (+450.00pt, +2.54%)
+- **DOW JONES**: 40,200.00 (+350.00pt, +0.88%)
+
+### 🌡️ 변동성 지수 (VIX) 주간 동향
+- **주간 마감**: 14.80 (-1.50pt, -9.20%)
+- **주간 변동 범위**: 14.20 ~ 17.80 (변동폭: 3.60pt)
+- **리스크 등급**: 🟢 안정 (시장 심리 안정)
+- **주간 공포/안정 추세 진단**: 주간 내내 VIX 지수가 14~17선에 머물며 20 미만의 안정권을 확고히 유지했습니다. 주중 돌발 악재에 따른 변동성 스파이크 없이 시장 심리가 안정적인 상승세를 지지하고 있습니다.
+
+### 📅 주간 시황 및 일일 보고서 핵심 요약
+- **[MM/DD (요일)]**: 핵심 시황 요약 내용
+- **[MM/DD (요일)]**: 핵심 시황 요약 내용
+- **[MM/DD (요일)]**: 핵심 시황 요약 내용
+```
 - **완료 검증 조건 (Completion Criterion)**:
-  - [ ] 미국 주간 마크다운 보고서 저장 완료
+  - [ ] 표(Table) 서식 없이 독립 VIX 섹션(High-Low 변동 범위 및 공포/안정 추세 진단 포함)이 반영된 주간 마크다운 보고서 저장 완료
 
 ### 5단계: 텔레그램 전송 (Telegram Notification)
-- 텔레그램 전송: `uv run python scripts/send_telegram.py "[전문 + 파일경로]"`
+- `uv run python scripts/send_telegram.py "[전문 + 파일경로]"` 실행
+- 로그 `"Telegram message sent successfully..."` 검증 후 종료
 - **완료 검증 조건 (Completion Criterion)**:
   - [ ] 텔레그램 전송 성공 로그 확인 완료
