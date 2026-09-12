@@ -1,6 +1,6 @@
 # Feature Spec: Asset-jun-bot 텔레그램 봇 및 리포트 스킬의 AssetManager 서버 통합
 
-Triage: ready-for-agent
+Triage: resolved
 
 ## Problem Statement
 

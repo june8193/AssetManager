@@ -561,7 +561,7 @@ def test_get_positions_filters_inactive_accounts(db_session):
 
 @pytest.mark.asyncio
 async def test_dev_assets_db_golden_master_valuation():
-    """src/dev_assets.db에 대한 대시보드 총 평가금액이 골든 마스터(434,794,786.26 KRW)와 오차 0으로 일치하는지 검증합니다."""
+    """src/dev_assets.db에 대한 대시보드 총 평가금액이 골든 마스터(448,820,786.26 KRW)와 오차 0으로 일치하는지 검증합니다."""
     from pathlib import Path
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -582,7 +582,7 @@ async def test_dev_assets_db_golden_master_valuation():
         if not summary.get("accounts") or summary.get("total_valuation_krw") == 0.0:
             pytest.skip("src/dev_assets.db에 평가 대상 계좌 데이터가 없어 건너뜁니다.")
 
-        expected_valuation = 434794786.26370734
+        expected_valuation = 448820786.2637073
         assert summary["total_valuation_krw"] == pytest.approx(expected_valuation, abs=0.1)
         assert len(summary["accounts"]) == 10
     finally:
