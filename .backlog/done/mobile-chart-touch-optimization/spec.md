@@ -1,6 +1,6 @@
-﻿# 모바일 시장 지수 차트 터치 인터랙션 최적화 및 슬라이드 세로선 실시간 추종 명세서
+# 모바일 시장 지수 차트 터치 인터랙션 최적화 및 슬라이드 세로선 실시간 추종 명세서
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 

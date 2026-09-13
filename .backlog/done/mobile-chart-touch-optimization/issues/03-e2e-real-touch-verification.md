@@ -4,7 +4,7 @@
 
 **Blocked by:** 02 — SVG 영역 채우기(Area) 포인터 간섭 차단 및 3대 차트 일괄 적용 (pointer-events-none)
 
-**Status:** completed
+**Status:** resolved
 
 - [x] 개발 서버(`uv run scripts/dev.py`) 환경에서 모바일 뷰포트(390×844) E2E 검증이 성공한다.
 - [x] 지수 종가 차트에서 touchStart 즉시 첫 지표 데이터가 인스펙터에 표시된다.
