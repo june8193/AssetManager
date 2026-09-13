@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -239,7 +239,9 @@ function ChartTooltipSync({ active, payload, onSync }) {
   useEffect(() => {
     if (active && payload && payload.length > 0 && payload[0]?.payload) {
       const nextPoint = payload[0].payload;
-      onSync((prev) => (prev?.date === nextPoint.date ? prev : nextPoint));
+      onSync(nextPoint);
+    } else if (!active) {
+      onSync(null);
     }
   }, [active, payload, onSync]);
   return null;
@@ -263,17 +265,6 @@ export default function MobileMarketIndexSection() {
   const [indicesPrices, setIndicesPrices] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  const handleInteractionEnd = useCallback(() => {
-    setHoveredData(null);
-  }, []);
-
-  const handleChartMove = useCallback((state) => {
-    if (state && state.activePayload && state.activePayload.length > 0 && state.activePayload[0]?.payload) {
-      const nextPoint = state.activePayload[0].payload;
-      setHoveredData((prev) => (prev?.date === nextPoint.date ? prev : nextPoint));
-    }
-  }, []);
 
   useEffect(() => {
     setHoveredData(null);
@@ -387,6 +378,104 @@ export default function MobileMarketIndexSection() {
   }, [historicalData]);
 
   const vixStatus = useMemo(() => getVixStatus(latestVix), [latestVix]);
+
+  const containerRef = useRef(null);
+  const isInteractingRef = useRef(false);
+
+  const handleInteractionEnd = useCallback(() => {
+    isInteractingRef.current = false;
+    setHoveredData(null);
+  }, []);
+
+  const handleTooltipSync = useCallback((nextPoint) => {
+    if (!isInteractingRef.current) {
+      setHoveredData(null);
+      return;
+    }
+    setHoveredData(nextPoint);
+  }, []);
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+
+    const onEnd = handleInteractionEnd;
+    el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onEnd, { passive: true });
+    el.addEventListener('pointerup', onEnd, { passive: true });
+    el.addEventListener('pointercancel', onEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+      el.removeEventListener('pointerup', onEnd);
+      el.removeEventListener('pointercancel', onEnd);
+    };
+  }, [activeChartTab, handleInteractionEnd]);
+
+  // 터치 좌표로부터 가장 근접한 chartData 항목을 실시간 추출
+  const getDataPointFromTouch = useCallback(
+    (event) => {
+      if (!chartData || chartData.length === 0) return null;
+      const touch = event.touches?.[0] || event.changedTouches?.[0] || event;
+      if (!touch || typeof touch.clientX !== 'number') return null;
+
+      const container = containerRef.current;
+      if (!container) return null;
+
+      const rect = container.getBoundingClientRect();
+      // Recharts 우측 YAxis width(38px) 및 차트 내부 패딩 고려
+      const chartLeft = rect.left + 5;
+      const chartWidth = rect.width - 38 - 10;
+      if (chartWidth <= 0) return null;
+
+      const relX = touch.clientX - chartLeft;
+      const ratio = Math.max(0, Math.min(1, relX / chartWidth));
+      const index = Math.round(ratio * (chartData.length - 1));
+      return chartData[index] || null;
+    },
+    [chartData]
+  );
+
+  const handleChartMove = useCallback(
+    (state, event) => {
+      isInteractingRef.current = true;
+      if (state && state.activePayload && state.activePayload.length > 0 && state.activePayload[0]?.payload) {
+        const nextPoint = state.activePayload[0].payload;
+        setHoveredData((prev) => (prev?.date === nextPoint.date ? prev : nextPoint));
+        return;
+      }
+      if (
+        state &&
+        state.activeTooltipIndex !== null &&
+        state.activeTooltipIndex !== undefined &&
+        chartData &&
+        chartData[state.activeTooltipIndex]
+      ) {
+        const nextPoint = chartData[state.activeTooltipIndex];
+        setHoveredData((prev) => (prev?.date === nextPoint.date ? prev : nextPoint));
+        return;
+      }
+      if (event) {
+        const point = getDataPointFromTouch(event);
+        if (point) {
+          setHoveredData((prev) => (prev?.date === point.date ? prev : point));
+        }
+      }
+    },
+    [chartData, getDataPointFromTouch]
+  );
+
+  const handleTouchStartDirect = useCallback(
+    (e) => {
+      isInteractingRef.current = true;
+      const point = getDataPointFromTouch(e);
+      if (point) {
+        setHoveredData(point);
+      }
+    },
+    [getDataPointFromTouch]
+  );
 
   // 에러 발생 시 UI
   if (error && !loading) {
@@ -627,8 +716,11 @@ export default function MobileMarketIndexSection() {
         {activeChartTab === 'price' && (
           <div data-testid="chart-tier-price" className="space-y-1">
             <div
+              ref={containerRef}
               data-testid="mobile-chart-canvas-container"
               className="h-[260px] w-full touch-none select-none"
+              onTouchStart={handleTouchStartDirect}
+              onPointerDown={handleTouchStartDirect}
               onMouseLeave={handleInteractionEnd}
               onTouchEnd={handleInteractionEnd}
               onTouchCancel={handleInteractionEnd}
@@ -640,6 +732,8 @@ export default function MobileMarketIndexSection() {
                   onMouseMove={handleChartMove}
                   onTouchStart={handleChartMove}
                   onTouchMove={handleChartMove}
+                  onTouchEnd={handleInteractionEnd}
+                  onTouchCancel={handleInteractionEnd}
                   onMouseLeave={handleInteractionEnd}
                 >
                   <defs>
@@ -670,7 +764,7 @@ export default function MobileMarketIndexSection() {
                   />
                   <Tooltip
                     cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
-                    content={<ChartTooltipSync onSync={setHoveredData} />}
+                    content={<ChartTooltipSync onSync={handleTooltipSync} />}
                   />
                   <Area
                     type="monotone"
@@ -693,8 +787,11 @@ export default function MobileMarketIndexSection() {
         {activeChartTab === 'mdd' && (
           <div data-testid="chart-tier-mdd" className="space-y-1">
             <div
+              ref={containerRef}
               data-testid="mobile-chart-canvas-container"
               className="h-[260px] w-full touch-none select-none"
+              onTouchStart={handleTouchStartDirect}
+              onPointerDown={handleTouchStartDirect}
               onMouseLeave={handleInteractionEnd}
               onTouchEnd={handleInteractionEnd}
               onTouchCancel={handleInteractionEnd}
@@ -706,6 +803,8 @@ export default function MobileMarketIndexSection() {
                   onMouseMove={handleChartMove}
                   onTouchStart={handleChartMove}
                   onTouchMove={handleChartMove}
+                  onTouchEnd={handleInteractionEnd}
+                  onTouchCancel={handleInteractionEnd}
                   onMouseLeave={handleInteractionEnd}
                 >
                   <defs>
@@ -736,7 +835,7 @@ export default function MobileMarketIndexSection() {
                   />
                   <Tooltip
                     cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
-                    content={<ChartTooltipSync onSync={setHoveredData} />}
+                    content={<ChartTooltipSync onSync={handleTooltipSync} />}
                   />
                   <Area
                     type="monotone"
@@ -759,8 +858,11 @@ export default function MobileMarketIndexSection() {
         {activeChartTab === 'vix' && (
           <div data-testid="chart-tier-vix" className="space-y-1">
             <div
+              ref={containerRef}
               data-testid="mobile-chart-canvas-container"
               className="h-[260px] w-full touch-none select-none"
+              onTouchStart={handleTouchStartDirect}
+              onPointerDown={handleTouchStartDirect}
               onMouseLeave={handleInteractionEnd}
               onTouchEnd={handleInteractionEnd}
               onTouchCancel={handleInteractionEnd}
@@ -772,6 +874,8 @@ export default function MobileMarketIndexSection() {
                   onMouseMove={handleChartMove}
                   onTouchStart={handleChartMove}
                   onTouchMove={handleChartMove}
+                  onTouchEnd={handleInteractionEnd}
+                  onTouchCancel={handleInteractionEnd}
                   onMouseLeave={handleInteractionEnd}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
@@ -796,7 +900,7 @@ export default function MobileMarketIndexSection() {
                   />
                   <Tooltip
                     cursor={{ stroke: '#94a3b8', strokeWidth: 1, strokeDasharray: '3 3' }}
-                    content={<ChartTooltipSync onSync={setHoveredData} />}
+                    content={<ChartTooltipSync onSync={handleTooltipSync} />}
                   />
                   {/* VIX 주의(20) 및 경고(30) 기준선 (내부 텍스트 라벨 제거, 깔끔한 파선) */}
                   <ReferenceLine
