@@ -628,7 +628,7 @@ export default function MobileMarketIndexSection() {
           <div data-testid="chart-tier-price" className="space-y-1">
             <div
               data-testid="mobile-chart-canvas-container"
-              className="h-[260px] w-full"
+              className="h-[260px] w-full touch-none select-none"
               onMouseLeave={handleInteractionEnd}
               onTouchEnd={handleInteractionEnd}
               onTouchCancel={handleInteractionEnd}
@@ -638,6 +638,7 @@ export default function MobileMarketIndexSection() {
                   data={chartData}
                   syncId="mobileMarketChart"
                   onMouseMove={handleChartMove}
+                  onTouchStart={handleChartMove}
                   onTouchMove={handleChartMove}
                   onMouseLeave={handleInteractionEnd}
                 >
@@ -691,7 +692,7 @@ export default function MobileMarketIndexSection() {
           <div data-testid="chart-tier-mdd" className="space-y-1">
             <div
               data-testid="mobile-chart-canvas-container"
-              className="h-[260px] w-full"
+              className="h-[260px] w-full touch-none select-none"
               onMouseLeave={handleInteractionEnd}
               onTouchEnd={handleInteractionEnd}
               onTouchCancel={handleInteractionEnd}
@@ -701,6 +702,7 @@ export default function MobileMarketIndexSection() {
                   data={chartData}
                   syncId="mobileMarketChart"
                   onMouseMove={handleChartMove}
+                  onTouchStart={handleChartMove}
                   onTouchMove={handleChartMove}
                   onMouseLeave={handleInteractionEnd}
                 >
@@ -754,7 +756,7 @@ export default function MobileMarketIndexSection() {
           <div data-testid="chart-tier-vix" className="space-y-1">
             <div
               data-testid="mobile-chart-canvas-container"
-              className="h-[260px] w-full"
+              className="h-[260px] w-full touch-none select-none"
               onMouseLeave={handleInteractionEnd}
               onTouchEnd={handleInteractionEnd}
               onTouchCancel={handleInteractionEnd}
@@ -764,6 +766,7 @@ export default function MobileMarketIndexSection() {
                   data={chartData}
                   syncId="mobileMarketChart"
                   onMouseMove={handleChartMove}
+                  onTouchStart={handleChartMove}
                   onTouchMove={handleChartMove}
                   onMouseLeave={handleInteractionEnd}
                 >

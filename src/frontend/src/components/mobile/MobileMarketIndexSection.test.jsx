@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import * as recharts from 'recharts';
 import MobileMarketIndexSection, { getVixStatus, MobileSlimInspectorBar } from './MobileMarketIndexSection';
 
 const mockHistoricalGSPC = {
@@ -515,4 +516,91 @@ describe('MobileMarketIndexSection', () => {
       expect(screen.getByTestId('chart-tier-vix')).toBeInTheDocument();
     });
   });
+
+  describe('티켓 01: 모바일 차트 터치 이벤트 연결 및 캔버스 제스처 격리 (touch-none & onTouchStart)', () => {
+    it('지수 종가 차트 캔버스 컨테이너에 touch-none 및 select-none 클래스가 적용되어 스크롤 및 텍스트 선택이 방지된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mobile-chart-canvas-container')).toBeInTheDocument();
+      });
+
+      const canvasContainer = screen.getByTestId('mobile-chart-canvas-container');
+      expect(canvasContainer.className).toContain('touch-none');
+      expect(canvasContainer.className).toContain('select-none');
+    });
+
+    it('MDD 및 VIX 서브탭 차트 캔버스 컨테이너에도 touch-none 및 select-none 클래스가 적용된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tab-mdd')).toBeInTheDocument();
+      });
+
+      // MDD 탭 확인
+      fireEvent.click(screen.getByTestId('chart-tab-mdd'));
+      const mddContainer = screen.getByTestId('mobile-chart-canvas-container');
+      expect(mddContainer.className).toContain('touch-none');
+      expect(mddContainer.className).toContain('select-none');
+
+      // VIX 탭 확인
+      fireEvent.click(screen.getByTestId('chart-tab-vix'));
+      const vixContainer = screen.getByTestId('mobile-chart-canvas-container');
+      expect(vixContainer.className).toContain('touch-none');
+      expect(vixContainer.className).toContain('select-none');
+    });
+
+    it('터치 취소(touchCancel) 이벤트 발생 시 호버 데이터가 리셋되고 슬림 바가 즉각 안내 문구로 복귀한다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('mobile-chart-canvas-container')).toBeInTheDocument();
+      });
+
+      const canvasContainer = screen.getByTestId('mobile-chart-canvas-container');
+
+      // touchCancel 이벤트 발생 시 즉시 리셋 확인
+      fireEvent.touchCancel(canvasContainer);
+      expect(screen.getByTestId('inspector-placeholder')).toBeInTheDocument();
+    });
+
+    it('지수 종가(AreaChart), MDD(AreaChart), VIX(LineChart)에 onTouchStart 핸들러가 바인딩되어 터치 즉시 첫 포인트 데이터가 연동된다', async () => {
+      const areaSpy = vi.spyOn(recharts.AreaChart, 'render');
+      const lineSpy = vi.spyOn(recharts.LineChart, 'render');
+
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tier-price')).toBeInTheDocument();
+      });
+
+      // 1. 지수 종가 AreaChart
+      expect(areaSpy).toHaveBeenCalled();
+      const priceProps = areaSpy.mock.calls[areaSpy.mock.calls.length - 1][0];
+      expect(priceProps.onTouchStart).toBeDefined();
+      expect(typeof priceProps.onTouchStart).toBe('function');
+      expect(priceProps.onTouchStart).toBe(priceProps.onTouchMove);
+
+      // 2. MDD AreaChart
+      fireEvent.click(screen.getByTestId('chart-tab-mdd'));
+      expect(screen.getByTestId('chart-tier-mdd')).toBeInTheDocument();
+      const mddProps = areaSpy.mock.calls[areaSpy.mock.calls.length - 1][0];
+      expect(mddProps.onTouchStart).toBeDefined();
+      expect(typeof mddProps.onTouchStart).toBe('function');
+      expect(mddProps.onTouchStart).toBe(mddProps.onTouchMove);
+
+      // 3. VIX LineChart
+      fireEvent.click(screen.getByTestId('chart-tab-vix'));
+      expect(screen.getByTestId('chart-tier-vix')).toBeInTheDocument();
+      expect(lineSpy).toHaveBeenCalled();
+      const vixProps = lineSpy.mock.calls[lineSpy.mock.calls.length - 1][0];
+      expect(vixProps.onTouchStart).toBeDefined();
+      expect(typeof vixProps.onTouchStart).toBe('function');
+      expect(vixProps.onTouchStart).toBe(vixProps.onTouchMove);
+
+      areaSpy.mockRestore();
+      lineSpy.mockRestore();
+    });
+  });
 });
+
