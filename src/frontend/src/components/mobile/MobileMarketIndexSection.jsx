@@ -680,6 +680,8 @@ export default function MobileMarketIndexSection() {
                     fill="url(#mobilePriceGradient)"
                     dot={false}
                     activeDot={{ r: 4, strokeWidth: 0, fill: activeIndexInfo.color }}
+                    className="pointer-events-none"
+                    style={{ pointerEvents: 'none' }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -744,6 +746,8 @@ export default function MobileMarketIndexSection() {
                     fill="url(#mobileMddGradient)"
                     dot={false}
                     activeDot={{ r: 3, strokeWidth: 0, fill: '#f43f5e' }}
+                    className="pointer-events-none"
+                    style={{ pointerEvents: 'none' }}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -814,6 +818,8 @@ export default function MobileMarketIndexSection() {
                     strokeWidth={1.8}
                     dot={false}
                     activeDot={{ r: 3, strokeWidth: 0, fill: '#c084fc' }}
+                    className="pointer-events-none"
+                    style={{ pointerEvents: 'none' }}
                   />
                 </LineChart>
               </ResponsiveContainer>

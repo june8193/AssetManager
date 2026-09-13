@@ -602,5 +602,127 @@ describe('MobileMarketIndexSection', () => {
       lineSpy.mockRestore();
     });
   });
+
+  describe('티켓 02: SVG 영역 채우기(Area) 포인터 간섭 차단 및 3대 차트 일괄 적용 (pointer-events-none)', () => {
+    it('지수 종가 차트의 Area 요소에 pointer-events-none 클래스 및 style pointerEvents: none이 적용된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      const priceContainer = screen.getByTestId('chart-tier-price');
+      let areaElement = null;
+      await waitFor(() => {
+        areaElement = priceContainer.querySelector('.recharts-area');
+        expect(areaElement).toBeInTheDocument();
+      });
+
+      expect(areaElement.className.baseVal || areaElement.className).toContain('pointer-events-none');
+      const areaPath = areaElement.querySelector('.recharts-area-area');
+      expect(areaPath).toBeInTheDocument();
+      expect(areaPath.style.pointerEvents).toBe('none');
+    });
+
+    it('MDD 낙폭 차트의 Area 요소에도 pointer-events-none 클래스 및 style pointerEvents: none이 적용된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tab-mdd')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('chart-tab-mdd'));
+      expect(screen.getByTestId('chart-tier-mdd')).toBeInTheDocument();
+
+      const mddContainer = screen.getByTestId('chart-tier-mdd');
+      let areaElement = null;
+      await waitFor(() => {
+        areaElement = mddContainer.querySelector('.recharts-area');
+        expect(areaElement).toBeInTheDocument();
+      });
+
+      expect(areaElement.className.baseVal || areaElement.className).toContain('pointer-events-none');
+      const areaPath = areaElement.querySelector('.recharts-area-area');
+      expect(areaPath).toBeInTheDocument();
+      expect(areaPath.style.pointerEvents).toBe('none');
+    });
+
+    it('VIX 변동성 차트의 Line 요소에도 pointer-events-none 클래스 및 style pointerEvents: none이 일괄 적용된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tab-vix')).toBeInTheDocument();
+      });
+
+      fireEvent.click(screen.getByTestId('chart-tab-vix'));
+      expect(screen.getByTestId('chart-tier-vix')).toBeInTheDocument();
+
+      const vixContainer = screen.getByTestId('chart-tier-vix');
+      let lineElement = null;
+      await waitFor(() => {
+        lineElement = vixContainer.querySelector('.recharts-line');
+        expect(lineElement).toBeInTheDocument();
+      });
+
+      expect(lineElement.className.baseVal || lineElement.className).toContain('pointer-events-none');
+      const linePath = lineElement.querySelector('.recharts-line-curve');
+      expect(linePath).toBeInTheDocument();
+      expect(linePath.style.pointerEvents).toBe('none');
+    });
+
+    it('3개 서브탭 전체에서 캔버스 컨테이너와 SVG path/group 요소에 동일한 터치 격리 규격이 일괄 적용된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      const tabs = [
+        { id: 'price', rootSelector: '.recharts-area', pathSelector: '.recharts-area-area' },
+        { id: 'mdd', rootSelector: '.recharts-area', pathSelector: '.recharts-area-area' },
+        { id: 'vix', rootSelector: '.recharts-line', pathSelector: '.recharts-line-curve' },
+      ];
+
+      for (const tab of tabs) {
+        if (tab.id !== 'price') {
+          fireEvent.click(screen.getByTestId(`chart-tab-${tab.id}`));
+        }
+        const tier = screen.getByTestId(`chart-tier-${tab.id}`);
+        const canvas = tier.querySelector('[data-testid="mobile-chart-canvas-container"]');
+        expect(canvas).toBeInTheDocument();
+        expect(canvas.className).toContain('touch-none');
+        expect(canvas.className).toContain('select-none');
+
+        let svgElement = null;
+        await waitFor(() => {
+          svgElement = tier.querySelector(tab.rootSelector);
+          expect(svgElement).toBeInTheDocument();
+        });
+
+        expect(svgElement.className.baseVal || svgElement.className).toContain('pointer-events-none');
+        const innerPath = svgElement.querySelector(tab.pathSelector);
+        expect(innerPath).toBeInTheDocument();
+        expect(innerPath.style.pointerEvents).toBe('none');
+      }
+    });
+
+    it('3개 서브탭 전환 시에도 터치 이벤트(touchStart, touchEnd, touchCancel)에 따른 인스펙터 바 추종 및 즉시 소멸 동작이 일관되게 유지된다', async () => {
+      render(<MobileMarketIndexSection />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('chart-tier-price')).toBeInTheDocument();
+      });
+
+      const tabs = ['price', 'mdd', 'vix'];
+      for (const tab of tabs) {
+        if (tab !== 'price') {
+          fireEvent.click(screen.getByTestId(`chart-tab-${tab}`));
+        }
+        const tier = screen.getByTestId(`chart-tier-${tab}`);
+        const canvas = tier.querySelector('[data-testid="mobile-chart-canvas-container"]');
+        expect(canvas).toBeInTheDocument();
+
+        // 캔버스 터치 종료 시 즉시 플레이스홀더 복귀 검증
+        fireEvent.touchEnd(canvas);
+        expect(screen.getByTestId('inspector-placeholder')).toBeInTheDocument();
+
+        // 터치 취소 시 즉시 플레이스홀더 복귀 검증
+        fireEvent.touchCancel(canvas);
+        expect(screen.getByTestId('inspector-placeholder')).toBeInTheDocument();
+      }
+    });
+  });
 });
 
