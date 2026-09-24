@@ -13,19 +13,25 @@ description: 미국(S&P500/NASDAQ/DOW/VIX) 일일 지수 마감 보고서 작성
 
 ## Workflows
 
-### 0단계: 주말 및 휴장일 여부 확인 (Pre-check)
+### 0단계: 휴장일 여부 확인 (Pre-check)
 - `check_market_holiday` MCP 도구 호출:
-  - 인자: `country="US"` (특정 일자 조회 필요 시 `date="YYYY-MM-DD"`, 생략 시 오늘)
+  - 인자: `country="US"` (생략 시 미국 뉴욕 현지 시각 자동 적용)
   - 반환값의 `is_holiday` 및 `description` 확인
-- `is_holiday == True`인 경우:
-  - 지수/뉴스 수집을 건너뛰고 간이 휴장일 안내 보고서를 작성한 후 3단계(텔레그램 전송)로 바로 이동합니다.
+  - **시차 및 요일 기준**:
+    - 한국 시간 **화~토요일 아침**: 직전 미국 평일(월~금) 장의 영업 여부를 검사 (정상 개장일이면 `is_holiday: False`, 미국 공휴일이면 `is_holiday: True`)
+    - 한국 시간 **일요일 아침**: 미국 현지 토요일(주말 휴장) ➔ `is_holiday: True` (`description: "주말"`)
+    - 한국 시간 **월요일 아침**: 미국 현지 일요일(주말 휴장) ➔ `is_holiday: True` (`description: "주말"`)
+- **분기 처리**:
+  - **휴장일(`is_holiday == True`)인 경우**:
+    - **지수/VIX/뉴스 수집(1단계)을 일절 수행하지 않고**, 직전 거래일 데이터를 재사용하지 않습니다.
+    - [2단계 - 휴장일 보고서 양식]으로 마크다운 파일을 생성한 후 3단계(텔레그램 전송)로 바로 이동합니다.
 - **완료 검증 조건 (Completion Criterion)**:
   - [ ] 휴장일 여부 판정이 정상 완료되었는가?
 
-### 1단계: 시장 데이터(지수·VIX) 및 뉴스 수집
-- 평일(`is_holiday == False`):
+### 1단계: 시장 데이터(지수·VIX) 및 뉴스 수집 (영업일 전용)
+- **영업일(`is_holiday == False`)인 경우에만 수행**:
   1. **지수 및 VIX 데이터 수집 (MCP 단일 호출)**:
-     - `get_market_history` MCP 도구를 단일 호출하여 최근 5일간(주말/휴장일 고려)의 일별 시계열을 수집합니다.
+     - `get_market_history` MCP 도구를 단일 호출하여 최근 5일간의 일별 시계열을 수집합니다.
      - 인자: `tickers="^GSPC,^IXIC,^DJI,^VIX"`, `start_date="YYYY-MM-DD"`(조회일 기준 5~7일 전)
   2. **마감 수치 및 등락률 계산 로직**:
      - 각 티커별 시계열 데이터에서 날짜순으로 정렬된 가장 최근 2개 거래일 종가를 추출합니다:
@@ -47,18 +53,33 @@ description: 미국(S&P500/NASDAQ/DOW/VIX) 일일 지수 마감 보고서 작성
      - `uv run python scripts/query_us_news.py --limit 5` 실행
      - 수집된 영문 뉴스를 핵심 시황 위주로 자연스러운 한국어로 번역 및 요약
 - **완료 검증 조건 (Completion Criterion)**:
-  - [ ] 3대 지수의 종가·등락률 및 VIX 마감 수치·변동폭(pt) 계산이 완료되었는가?
-  - [ ] VIX 4단계 리스크 등급 판정이 정상적으로 도출되었는가?
-  - [ ] 한글 번역 뉴스 요약이 확보되었는가?
+  - [ ] (영업일인 경우) 3대 지수의 종가·등락률 및 VIX 마감 수치·변동폭(pt) 계산이 완료되었는가?
+  - [ ] (영업일인 경우) VIX 4단계 리스크 등급 판정이 정상적으로 도출되었는가?
+  - [ ] (영업일인 경우) 한글 번역 뉴스 요약이 확보되었는가?
 
 ### 2단계: 마크다운 파일 생성 및 저장
 - `uv run python scripts/get_storage_dir.py` 실행 ➔ `STORAGE_DIR` 획득
 - `STORAGE_DIR/reports/us_market/daily/US_market_daily_report_YYYYMMDD.md` 파일 생성
-- **서식 규칙**:
-  - 한국 시간과 미국 현지 시장 날짜를 병기합니다.
+- **공통 서식 규칙**:
   - 모바일 텔레그램 화면 줄바꿈 깨짐을 방지하기 위해 **표(Table) 서식은 절대 사용하지 않으며**, 불릿 리스트와 이모지를 활용합니다.
-  - VIX 모니터링은 독립된 섹션으로 구성하여 리스크 등급 이모지(🟢/🟡/🟠/🔴)와 상태 설명을 명확히 표시합니다. (VIX는 % 변동률을 기재하지 않고 포인트 변동폭만 표기)
-- **보고서 템플릿 양식**:
+
+#### Case A. 휴장일 보고서 양식 (`is_holiday == True`)
+```markdown
+# 🇺🇸 미국 시장 일일 마감 보고서 (YYYY-MM-DD)
+
+📅 **일자**: YYYY년 MM월 DD일 (한국 시간: YYYY-MM-DD HH:MM / 현지 기준: YYYY-MM-DD)
+🔴 **증시 상태**: 휴장일 ({description})
+
+---
+
+### 📢 안내 사항
+미국 현지 시장(NYSE / NASDAQ)이 **{description}**(으)로 인해 **휴장**입니다.
+지수 데이터 및 뉴스 수집, 리포트 생성을 건너뜁니다.
+
+즐거운 하루 보내시기 바랍니다! 🎈
+```
+
+#### Case B. 영업일 보고서 양식 (`is_holiday == False`)
 ```markdown
 # 🇺🇸 미국 시장 일일 지수 현황 (YYYY-MM-DD)
 > 한국 시간: YYYY-MM-DD HH:MM / 현지 기준: YYYY-MM-DD
@@ -78,8 +99,9 @@ description: 미국(S&P500/NASDAQ/DOW/VIX) 일일 지수 마감 보고서 작성
 - **[뉴스 헤드라인 2]**: 요약 내용
 - **[뉴스 헤드라인 3]**: 요약 내용
 ```
+
 - **완료 검증 조건 (Completion Criterion)**:
-  - [ ] 표(Table) 서식 없이 독립 VIX 섹션이 포함된 마크다운 파일이 정상 생성되었는가?
+  - [ ] 지정된 경로에 상태별(휴장일 안내 또는 영업일 현황) 마크다운 파일 생성이 완료되었는가?
 
 ### 3단계: 텔레그램 알림 전송 (Telegram Notification)
 - `uv run python scripts/send_telegram.py "[마크다운보고서전문 + 생성파일경로]"` 실행
