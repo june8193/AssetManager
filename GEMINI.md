@@ -6,7 +6,7 @@
 - **언어 정책**: 대답(Reply), 아티팩트(Artifact) 문서, Docstring(Google Style) 및 주석, Git 커밋 메시지 모두 항상 **한국어**로 작성합니다.
 - **Python 실행**: 모든 파이썬 스크립트 실행은 반드시 `uv`를 사용합니다 (`uv run <script_path>`, 예: `uv run pytest`, `uv run scripts/dev.py`).
 - **PowerShell 환경**: Windows 환경이므로 `&&` 대신 `;` 사용, 리다이렉션은 `2>$null`, `grep` 대신 `Select-String`, `rm -rf` 대신 `Remove-Item -Recurse -Force`를 사용합니다.
-- **Scratch 스크립트 관리**: 임시 테스트/분석을 위해 `scratch/` 폴더에 작성한 스크립트도 Git 커밋으로 이력을 관리합니다.
+- **Scratch 스크립트 관리**: 임시 테스트/분석을 위한 `scratch/` 폴더는 `.gitignore` 대상이므로 Git 커밋에 포함하지 않습니다 (`git add -f` 등으로 강제 추가 금지).
 
 ## 2. TDD (Test Driven Development) 규칙
 - **개발 절차 (Red-Green-Refactor)**: 
