@@ -300,6 +300,115 @@ async def test_query_news_search_and_html_cleaning(mock_settings):
         assert filtered_items[0]["title"] == '"코스피 반등 성공"... 외국인 순매수'
 
 
+@pytest.mark.asyncio
+async def test_query_news_date_pagination_and_early_exit(mock_settings):
+    """query_news.py가 날짜순(sort=date) 검색 시 페이지네이션을 통해 타겟 날짜 기사를 찾고, 과거 날짜 도달 시 즉시 탐색을 종료하는지 검증합니다."""
+    from scripts.query_news import search_naver_news
+
+    # 1페이지 (start=1): 2026-09-25 기사들 (타겟 날짜 2026-09-24보다 미래)
+    page1_response = {
+        "total": 500,
+        "start": 1,
+        "display": 100,
+        "items": [
+            {
+                "title": "오늘(25일) 최신 속보 1",
+                "link": "https://n.news.naver.com/25-1",
+                "description": "오늘 장 개장 전 뉴스",
+                "pubDate": "Fri, 25 Sep 2026 08:00:00 +0900",
+            },
+            {
+                "title": "오늘(25일) 최신 속보 2",
+                "link": "https://n.news.naver.com/25-2",
+                "description": "오늘 장 개장 전 뉴스 2",
+                "pubDate": "Fri, 25 Sep 2026 07:00:00 +0900",
+            },
+        ],
+    }
+
+    # 2페이지 (start=101): 2026-09-24 타겟 기사 2개 + 2026-09-23 과거 기사 1개
+    page2_response = {
+        "total": 500,
+        "start": 101,
+        "display": 100,
+        "items": [
+            {
+                "title": "어제(24일) 코스피 마감 시황",
+                "link": "https://n.news.naver.com/24-1",
+                "description": "코스피 마감 기사 내용",
+                "pubDate": "Thu, 24 Sep 2026 16:00:00 +0900",
+            },
+            {
+                "title": "어제(24일) 증시 마감 요약",
+                "link": "https://n.news.naver.com/24-2",
+                "description": "외국인 매수 마감",
+                "pubDate": "Thu, 24 Sep 2026 15:30:00 +0900",
+            },
+            {
+                "title": "그제(23일) 지난 기사",
+                "link": "https://n.news.naver.com/23-1",
+                "description": "그제 지난 뉴스",
+                "pubDate": "Wed, 23 Sep 2026 18:00:00 +0900",
+            },
+        ],
+    }
+
+    resp1 = httpx.Response(status_code=200, json=page1_response, request=httpx.Request("GET", "https://openapi.naver.com/v1/search/news.json"))
+    resp2 = httpx.Response(status_code=200, json=page2_response, request=httpx.Request("GET", "https://openapi.naver.com/v1/search/news.json"))
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get:
+        mock_get.side_effect = [resp1, resp2]
+
+        items = await search_naver_news(query="코스피 마감", display=10, sort="date", target_date="2026-09-24")
+
+        # 1) 타겟 날짜인 2026-09-24 기사 2개만 수집되었는지 확인
+        assert len(items) == 2
+        assert items[0]["title"] == "어제(24일) 코스피 마감 시황"
+        assert items[1]["title"] == "어제(24일) 증시 마감 요약"
+
+        # 2) 2페이지에서 2026-09-23을 만나 조기 종료(Early Exit)되었으므로 총 2회만 호출되었는지 검증 (3페이지 호출 안 함)
+        assert mock_get.call_count == 2
+
+
+@pytest.mark.asyncio
+async def test_query_news_rate_limit_retry(mock_settings):
+    """query_news.py가 429 Too Many Requests 발생 시 백오프 대기 후 재시도하여 성공하는지 검증합니다."""
+    from scripts.query_news import search_naver_news
+
+    resp_429 = httpx.Response(
+        status_code=429,
+        request=httpx.Request("GET", "https://openapi.naver.com/v1/search/news.json"),
+    )
+    resp_200 = httpx.Response(
+        status_code=200,
+        json={
+            "total": 1,
+            "start": 1,
+            "display": 1,
+            "items": [
+                {
+                    "title": "재시도 성공 기사",
+                    "link": "https://n.news.naver.com/success",
+                    "description": "성공 내용",
+                    "pubDate": "Fri, 25 Sep 2026 08:00:00 +0900",
+                }
+            ],
+        },
+        request=httpx.Request("GET", "https://openapi.naver.com/v1/search/news.json"),
+    )
+
+    with patch("httpx.AsyncClient.get", new_callable=AsyncMock) as mock_get, \
+         patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+        mock_get.side_effect = [resp_429, resp_200]
+
+        items = await search_naver_news(query="코스피", display=1)
+        assert len(items) == 1
+        assert items[0]["title"] == "재시도 성공 기사"
+        assert mock_get.call_count == 2
+        assert mock_sleep.call_count == 1
+
+
+
 # ==============================================================================
 # 5. query_us_news.py 테스트
 # ==============================================================================

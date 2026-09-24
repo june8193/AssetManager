@@ -37,6 +37,32 @@ def clean_html_text(text: str) -> str:
     return clean
 
 
+def _compare_pub_date(pub_date_str: str, target_date_str: str) -> int:
+    """뉴스 발행일(RFC 822)과 지정한 특정 날짜(YYYY-MM-DD)의 선후 관계를 비교합니다.
+
+    Args:
+        pub_date_str: RFC 822 형식의 뉴스 발행 일시 (예: 'Fri, 19 Jun 2026 15:30:00 +0900')
+        target_date_str: 비교 대상 날짜 문자열 (YYYY-MM-DD)
+
+    Returns:
+        1: 뉴스 발행일이 대상 날짜보다 미래인 경우 (pub_date > target_date)
+        0: 날짜가 일치하거나 파싱할 수 없는 경우 (pub_date == target_date)
+        -1: 뉴스 발행일이 대상 날짜보다 과거인 경우 (pub_date < target_date)
+    """
+    if not pub_date_str or not target_date_str:
+        return 0
+    try:
+        dt = parsedate_to_datetime(pub_date_str)
+        extracted_date = dt.strftime("%Y-%m-%d")
+        if extracted_date > target_date_str:
+            return 1
+        elif extracted_date < target_date_str:
+            return -1
+        return 0
+    except Exception:
+        return 0
+
+
 def _match_pub_date(pub_date_str: str, target_date_str: str) -> bool:
     """뉴스 발행일(RFC 822)이 지정한 특정 날짜(YYYY-MM-DD)와 일치하는지 비교합니다.
 
@@ -47,14 +73,40 @@ def _match_pub_date(pub_date_str: str, target_date_str: str) -> bool:
     Returns:
         날짜가 일치하면 True, 그렇지 않거나 에러 발생 시 False
     """
-    if not pub_date_str or not target_date_str:
-        return True
-    try:
-        dt = parsedate_to_datetime(pub_date_str)
-        extracted_date = dt.strftime("%Y-%m-%d")
-        return extracted_date == target_date_str
-    except Exception:
-        return False
+    return _compare_pub_date(pub_date_str, target_date_str) == 0
+
+
+async def _fetch_naver_news_page(
+    client: httpx.AsyncClient,
+    url: str,
+    headers: dict[str, str],
+    params: dict[str, Any],
+    max_retries: int = 3,
+) -> dict[str, Any]:
+    """네이버 뉴스 검색 API를 호출하며, 429 Too Many Requests 발생 시 백오프 재시도합니다.
+
+    Args:
+        client: httpx 비동기 클라이언트
+        url: 요청 대상 API URL
+        headers: 요청 헤더 (클라이언트 ID 및 시크릿)
+        params: 쿼리 파라미터 (query, display, start, sort)
+        max_retries: 최대 재시도 횟수 (기본값: 3)
+
+    Returns:
+        네이버 검색 API 응답 딕셔너리
+
+    Raises:
+        httpx.HTTPStatusError: 재시도 후에도 비정상 응답이 지속되는 경우
+    """
+    for attempt in range(max_retries):
+        response = await client.get(url, headers=headers, params=params)
+        if response.status_code == 429 and attempt < max_retries - 1:
+            await asyncio.sleep(0.5 * (2**attempt))
+            continue
+        response.raise_for_status()
+        return response.json()
+    response.raise_for_status()
+    return {}
 
 
 async def search_naver_news(
@@ -64,6 +116,9 @@ async def search_naver_news(
     target_date: str | None = None,
 ) -> list[dict[str, Any]]:
     """네이버 뉴스 검색 API를 호출하고 가공한 뉴스 목록을 반환합니다.
+
+    날짜 필터(target_date)가 지정된 경우, 해당 날짜의 기사만 수집하기 위해
+    페이지네이션(start 파라미터)을 수행하며, sort='date'인 경우 과거 날짜 도달 시 조기 종료합니다.
 
     Args:
         query: 검색 키워드
@@ -90,42 +145,60 @@ async def search_naver_news(
         "X-Naver-Client-Secret": client_secret,
     }
 
-    # 날짜 필터가 지정된 경우 필터링 후에도 충분한 개수를 보장하기 위해 display 개수를 늘립니다.
-    api_display = min(100, max(50, display * 3)) if target_date else display
-
-    params = {
-        "query": query,
-        "display": api_display,
-        "sort": sort,
-    }
+    results: list[dict[str, Any]] = []
+    max_start = 1000  # 네이버 뉴스 검색 API start 파라미터 최대치
+    page_size = 100 if target_date else display
+    current_start = 1
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(url, headers=headers, params=params)
-            response.raise_for_status()
-            data = response.json()
+            while current_start <= max_start and len(results) < display:
+                params = {
+                    "query": query,
+                    "display": page_size,
+                    "start": current_start,
+                    "sort": sort,
+                }
 
-            items = data.get("items", [])
-            results: list[dict[str, Any]] = []
-
-            for item in items:
-                pub_date_str = item.get("pubDate", "")
-
-                if target_date and not _match_pub_date(pub_date_str, target_date):
-                    continue
-
-                results.append(
-                    {
-                        "title": clean_html_text(item.get("title", "")),
-                        "link": item.get("link", ""),
-                        "originallink": item.get("originallink", ""),
-                        "description": clean_html_text(item.get("description", "")),
-                        "pubDate": pub_date_str,
-                    }
-                )
-
-                if len(results) >= display:
+                data = await _fetch_naver_news_page(client, url, headers, params)
+                items = data.get("items", [])
+                if not items:
                     break
+
+                stop_early = False
+                for item in items:
+                    pub_date_str = item.get("pubDate", "")
+
+                    if target_date:
+                        cmp = _compare_pub_date(pub_date_str, target_date)
+                        if cmp > 0:
+                            # 타겟 날짜보다 미래 기사 -> 다음 기사 탐색
+                            continue
+                        elif cmp < 0:
+                            # 타겟 날짜보다 과거 기사
+                            if sort == "date":
+                                # 날짜순 정렬 시 이미 과거로 넘어갔으므로 이후 기사는 모두 과거임 -> 즉시 종료
+                                stop_early = True
+                                break
+                            continue
+
+                    results.append(
+                        {
+                            "title": clean_html_text(item.get("title", "")),
+                            "link": item.get("link", ""),
+                            "originallink": item.get("originallink", ""),
+                            "description": clean_html_text(item.get("description", "")),
+                            "pubDate": pub_date_str,
+                        }
+                    )
+
+                    if len(results) >= display:
+                        break
+
+                if stop_early or not target_date or len(results) >= display:
+                    break
+
+                current_start += page_size
 
             return results
 

@@ -38,8 +38,9 @@ description: 국내(KOSPI/KOSDAQ) 일일 지수 마감 보고서 작성 및 텔�
        - 하락 시 `-` 부호 기재 (예: `-0.45%`, `-12.30pt`)
        - 보합 시 `0.00%`, `0.00pt`
   3. **뉴스 수집**: CLI 스크립트 실행 (최소 2회, 최대 4회)
-     - `uv run python scripts/query_news.py --query "국내 주식 시장 마감 시황 요약" --date "YYYY-MM-DD"`
-     - `uv run python scripts/query_news.py --query "한국 경제 주요 뉴스" --date "YYYY-MM-DD"`
+     - `uv run python scripts/query_news.py --query "코스피 마감" --date "YYYY-MM-DD"`
+     - `uv run python scripts/query_news.py --query "코스닥 마감" --date "YYYY-MM-DD"`
+     - (선택/보조) `uv run python scripts/query_news.py --query "국내 증시 마감" --date "YYYY-MM-DD"`
 - **완료 검증 조건 (Completion Criterion)**:
   - [ ] `get_market_history` MCP 도구를 통해 코스피/코스닥 최근 2거래일 종가 및 변동률 계산이 완료되었는가?
   - [ ] 뉴스 2건 이상의 링크/제목이 확보되었는가?
