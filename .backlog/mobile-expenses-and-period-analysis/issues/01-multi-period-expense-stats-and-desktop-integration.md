@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** done
+**Status:** resolved
 
 - [x] 백엔드 `GET /api/expenses/stats` 엔드포인트에 `start_month`, `end_month` 쿼리 파라미터 지원 및 기존 `year_month` 하위 호환 유지
 - [x] 통계 응답 스키마에 `monthly_average`, `period_months`, `period_total`, `prev_period_total`, `prev_period_change_amount`, `prev_period_change_rate` 추가 및 기간 내 모든 월을 포함하는 `monthly_trends`와 누적 `category_breakdown` 산출
