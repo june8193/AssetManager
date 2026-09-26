@@ -58,6 +58,7 @@ name = "assetmanager"
 version = "2.0.3"
 source = { virtual = "." }
 dependencies = [
+    { name = "beautifulsoup4" },
     { name = "fastapi" },
     { name = "fastmcp" },
     { name = "holidays" },
@@ -76,6 +77,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "beautifulsoup4", specifier = ">=4.12.0" },
     { name = "fastapi" },
     { name = "fastmcp", specifier = ">=3.4.4" },
     { name = "holidays", specifier = ">=0.25" },

@@ -5,12 +5,12 @@
 
 **Blocked by:** 01 — 지출 DB 스키마 구축 및 결제수단/카테고리 관리 기능
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Acceptance criteria
 
-- [ ] 카카오뱅크 암호화 엑셀 파서가 `msoffcrypto-tool` + `openpyxl`을 통해 메모리상에서 복호화 및 출금/입금 거래를 파싱한다.
-- [ ] 출금 거래는 양수 지출 금액으로 정규화되고, 입금/카드대금/이체 등 원본 거래구분이 보존된다.
-- [ ] 현대카드 VestMail 보안 HTML 파서가 Node.js VM 복호화 러너를 통해 복호화된 UTF-8 HTML에서 이용일자, 가맹점명, 이용금액 행을 정확히 추출한다.
-- [ ] 두 파서 모두 잘못된 비밀번호 전달 시 적절한 암호 오류 에러를 반환한다.
-- [ ] 실제 샘플 파일(`hyundaicard_2608.html`, `카카오뱅크_거래내역_...xlsx`) 및 격리된 모의 데이터를 통한 백엔드 단위/통합 테스트(`tests/test_expense_parser.py`)가 100% 통과한다.
+- [x] 카카오뱅크 암호화 엑셀 파서가 `msoffcrypto-tool` + `openpyxl`을 통해 메모리상에서 복호화 및 출금/입금 거래를 파싱한다.
+- [x] 출금 거래는 양수 지출 금액으로 정규화되고, 입금/카드대금/이체 등 원본 거래구분이 보존된다.
+- [x] 현대카드 VestMail 보안 HTML 파서가 Node.js VM 복호화 러너를 통해 복호화된 UTF-8 HTML에서 이용일자, 가맹점명, 이용금액 행을 정확히 추출한다.
+- [x] 두 파서 모두 잘못된 비밀번호 전달 시 적절한 암호 오류 에러를 반환한다.
+- [x] 실제 샘플 파일(`hyundaicard_2608.html`, `카카오뱅크_거래내역_...xlsx`) 및 격리된 모의 데이터를 통한 백엔드 단위/통합 테스트(`tests/test_expense_parser.py`)가 100% 통과한다.
