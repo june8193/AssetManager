@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — 단일 카테고리 마스터 통합 및 2차 카테고리 체계 폐지
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 명세서 파싱 미리보기 API(`POST /api/expenses/upload-preview`)에서 모든 추출 거래가 `category_id=None`, `is_excluded=False`로 반환된다.
 - [x] 미리보기 응답 스키마 및 업로드 모달(`ExpenseUploadModal`) 테이블에서 2차 카테고리 열 및 관련 필드가 제거된다.
