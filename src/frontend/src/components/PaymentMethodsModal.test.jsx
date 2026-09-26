@@ -21,7 +21,6 @@ describe('PaymentMethodsModal 컴포넌트', () => {
       institution: '카카오뱅크',
       alias: '장준 카카오뱅크',
       account_number: '3333',
-      default_password: '950811',
       is_active: true,
     },
     {
@@ -30,7 +29,6 @@ describe('PaymentMethodsModal 컴포넌트', () => {
       institution: '현대카드',
       alias: '장준 현대카드',
       account_number: '1002',
-      default_password: '950811',
       is_active: true,
     },
   ];
@@ -53,7 +51,7 @@ describe('PaymentMethodsModal 컴포넌트', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('isOpen이 true이면 결제수단 목록이 렌더링된다', async () => {
+  it('isOpen이 true이면 결제수단 목록이 렌더링되고 비밀번호 컬럼이 존재하지 않는다', async () => {
     render(
       <PaymentMethodsModal isOpen={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
     );
@@ -65,9 +63,13 @@ describe('PaymentMethodsModal 컴포넌트', () => {
       expect(screen.getByText('장준 현대카드')).toBeInTheDocument();
       expect(screen.getByText('3333')).toBeInTheDocument();
     });
+
+    // 테이블 헤더에 비밀번호 컬럼이 없어야 함
+    expect(screen.queryByRole('columnheader', { name: /비밀번호/i })).not.toBeInTheDocument();
+    expect(screen.queryByText('••••••')).not.toBeInTheDocument();
   });
 
-  it('결제수단 추가 버튼 클릭 시 폼이 표시되고 신규 등록을 수행한다', async () => {
+  it('결제수단 추가 버튼 클릭 시 비밀번호 입력란 없이 신규 등록을 수행한다', async () => {
     render(
       <PaymentMethodsModal isOpen={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
     );
@@ -81,6 +83,9 @@ describe('PaymentMethodsModal 컴포넌트', () => {
 
     expect(screen.getByText('새 결제수단 추가')).toBeInTheDocument();
 
+    // 폼 내에 기본 복호화 비밀번호 필드가 없어야 함
+    expect(screen.queryByText(/기본 복호화 비밀번호/i)).not.toBeInTheDocument();
+
     // 폼 입력
     const instInput = screen.getByPlaceholderText('예: 현대카드, 카카오뱅크');
     fireEvent.change(instInput, { target: { value: '신한카드' } });
@@ -93,6 +98,9 @@ describe('PaymentMethodsModal 컴포넌트', () => {
 
     await waitFor(() => {
       expect(expenseService.createPaymentMethod).toHaveBeenCalledWith(
+        expect.not.objectContaining({ default_password: expect.anything() })
+      );
+      expect(expenseService.createPaymentMethod).toHaveBeenCalledWith(
         expect.objectContaining({
           institution: '신한카드',
           alias: '장준 신한카드',
@@ -102,7 +110,7 @@ describe('PaymentMethodsModal 컴포넌트', () => {
     });
   });
 
-  it('수정 버튼 클릭 시 폼에 기존 값이 채워지고 수정 저장을 수행한다', async () => {
+  it('수정 버튼 클릭 시 비밀번호 입력란 없이 수정 저장을 수행한다', async () => {
     render(
       <PaymentMethodsModal isOpen={true} onClose={mockOnClose} onSuccess={mockOnSuccess} />
     );
@@ -115,6 +123,7 @@ describe('PaymentMethodsModal 컴포넌트', () => {
     fireEvent.click(editBtns[0]);
 
     expect(screen.getByText('결제수단 정보 수정')).toBeInTheDocument();
+    expect(screen.queryByText(/기본 복호화 비밀번호/i)).not.toBeInTheDocument();
 
     const aliasInput = screen.getByPlaceholderText('예: 장준 현대카드');
     fireEvent.change(aliasInput, { target: { value: '장준 카뱅 수정' } });
@@ -123,6 +132,10 @@ describe('PaymentMethodsModal 컴포넌트', () => {
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
+      expect(expenseService.updatePaymentMethod).toHaveBeenCalledWith(
+        1,
+        expect.not.objectContaining({ default_password: expect.anything() })
+      );
       expect(expenseService.updatePaymentMethod).toHaveBeenCalledWith(
         1,
         expect.objectContaining({

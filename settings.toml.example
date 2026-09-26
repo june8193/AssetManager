@@ -30,7 +30,3 @@ storage_dir = "G:/내 드라이브/투자/Asset_jun_bot_storage"
 client_id = "YOUR_NAVER_CLIENT_ID"
 client_secret = "YOUR_NAVER_CLIENT_SECRET"
 
-# 지출 모니터링 명세서 복호화 설정
-[expenses]
-default_password = "YOUR_DEFAULT_PASSWORD" # 명세서 자동 복호화용 기본 비밀번호 (생년월일 6자리 등)
-

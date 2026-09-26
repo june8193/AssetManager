@@ -23,7 +23,6 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
     institution: '',
     alias: '',
     account_number: '',
-    default_password: '',
     is_active: true,
   });
 
@@ -56,7 +55,6 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
       institution: '',
       alias: '',
       account_number: '',
-      default_password: '',
       is_active: true,
     });
   };
@@ -74,7 +72,6 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
       institution: item.institution,
       alias: item.alias || '',
       account_number: item.account_number || '',
-      default_password: item.default_password || '',
       is_active: item.is_active,
     });
   };
@@ -139,7 +136,7 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
             </div>
             <div>
               <h2 className="text-lg font-bold text-slate-800">결제수단 관리</h2>
-              <p className="text-xs text-slate-500">카드 및 계좌의 소유주, 식별번호, 자동 복호화 비밀번호를 관리합니다</p>
+              <p className="text-xs text-slate-500">카드 및 계좌의 소유주, 식별번호를 관리합니다</p>
             </div>
           </div>
           <button 
@@ -242,17 +239,6 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-slate-600 mb-1 font-medium">기본 복호화 비밀번호</label>
-                  <input
-                    type="password"
-                    placeholder="예: 950811"
-                    value={formData.default_password}
-                    onChange={(e) => setFormData({ ...formData, default_password: e.target.value })}
-                    className="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                </div>
-
                 <div className="flex items-center pt-5">
                   <label className="flex items-center gap-2 cursor-pointer text-slate-700">
                     <input
@@ -293,7 +279,6 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
                   <th className="px-3 py-2.5">소유주</th>
                   <th className="px-3 py-2.5">기관 / 별칭</th>
                   <th className="px-3 py-2.5">식별번호</th>
-                  <th className="px-3 py-2.5">비밀번호</th>
                   <th className="px-3 py-2.5 text-center">상태</th>
                   <th className="px-3 py-2.5 text-right">관리</th>
                 </tr>
@@ -301,7 +286,7 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
               <tbody className="divide-y divide-slate-100">
                 {methods.length === 0 ? (
                   <tr>
-                    <td colSpan="6" className="text-center py-8 text-slate-400">
+                    <td colSpan="5" className="text-center py-8 text-slate-400">
                       등록된 결제수단이 없습니다.
                     </td>
                   </tr>
@@ -321,9 +306,6 @@ export default function PaymentMethodsModal({ isOpen, onClose, onSuccess }) {
                       </td>
                       <td className="px-3 py-2.5 font-mono text-slate-600">
                         {pm.account_number || '-'}
-                      </td>
-                      <td className="px-3 py-2.5 font-mono text-slate-400">
-                        {pm.default_password ? '••••••' : '-'}
                       </td>
                       <td className="px-3 py-2.5 text-center">
                         <span className={`inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium ${

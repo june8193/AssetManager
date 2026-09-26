@@ -117,7 +117,6 @@ def seed_expense_masters(db_or_conn) -> None:
             "institution": "카카오뱅크",
             "alias": "장준 카카오뱅크",
             "account_number": "3333",
-            "default_password": "950811",
             "is_active": True,
         },
         {
@@ -125,7 +124,6 @@ def seed_expense_masters(db_or_conn) -> None:
             "institution": "현대카드",
             "alias": "장준 현대카드",
             "account_number": "1002",
-            "default_password": "950811",
             "is_active": True,
         },
     ]
@@ -169,8 +167,8 @@ def seed_expense_masters(db_or_conn) -> None:
             ).fetchone()
             if not row:
                 db_or_conn.execute(
-                    text("INSERT INTO payment_methods (owner, institution, alias, account_number, default_password, is_active, created_at) "
-                         "VALUES (:owner, :institution, :alias, :account_number, :default_password, :is_active, datetime('now', 'localtime'))"),
+                    text("INSERT INTO payment_methods (owner, institution, alias, account_number, is_active, created_at) "
+                         "VALUES (:owner, :institution, :alias, :account_number, :is_active, datetime('now', 'localtime'))"),
                     pm_data,
                 )
 

@@ -61,7 +61,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     expenseService.commitExpenses.mockResolvedValue({ status: 'success', count: 2 });
   });
 
-  it('모달이 열리면 업로드 드래그앤드롭 영역과 비밀번호 필드가 렌더링된다', () => {
+  it('모달이 열리면 업로드 드래그앤드롭 영역과 1회성 비밀번호 필드 및 안내문구가 렌더링된다', () => {
     render(
       <ExpenseUploadModal
         isOpen={true}
@@ -73,7 +73,9 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
 
     expect(screen.getByText(/명세서 업로드 및 검토/i)).toBeInTheDocument();
     expect(screen.getByText(/파일을 드래그하여 놓거나/i)).toBeInTheDocument();
-    expect(screen.getByPlaceholderText(/미입력 시 기본 비밀번호 사용/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/필요 시 복호화 비밀번호 1회 입력/i)).toBeInTheDocument();
+    expect(screen.getByText(/암호화된 명세서 복호화에만 1회성으로 사용됩니다/i)).toBeInTheDocument();
+    expect(screen.queryByText(/미입력 시 기본 비밀번호 사용/i)).not.toBeInTheDocument();
   });
 
   it('결제수단 드롭다운에 자동 감지 옵션이 없고 결제수단을 선택해주세요 안내 문구가 기본 표시된다', () => {
@@ -115,7 +117,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     expect(parseBtn).toBeDisabled();
   });
 
-  it('파일과 결제수단을 모두 선택하고 미리보기 파싱을 실행하면 정상적으로 호출되고 프리뷰가 렌더링된다', async () => {
+  it('파일과 결제수단을 모두 선택하고 일회성 비밀번호를 입력하여 미리보기 파싱을 실행하면 정상적으로 호출되고 프리뷰가 렌더링된다', async () => {
     render(
       <ExpenseUploadModal
         isOpen={true}
@@ -137,8 +139,8 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
     expect(parseBtn).not.toBeDisabled();
 
-    // 비밀번호 입력
-    const passwordInput = screen.getByPlaceholderText(/미입력 시 기본 비밀번호 사용/i);
+    // 일회성 비밀번호 입력
+    const passwordInput = screen.getByPlaceholderText(/필요 시 복호화 비밀번호 1회 입력/i);
     fireEvent.change(passwordInput, { target: { value: '950811' } });
 
     // 미리보기 파싱 버튼 클릭

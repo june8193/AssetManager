@@ -368,7 +368,6 @@ class PaymentMethod(Base):
         institution (str): 금융기관/카드사 (예: '현대카드', '카카오뱅크')
         alias (str): 결제수단 별칭 (예: '장준 현대카드')
         account_number (str): 계좌번호 또는 카드 식별번호 (예: '3333', '1002')
-        default_password (str): 자동 복호화용 기본 비밀번호
         is_active (bool): 활성화 여부
         created_at (datetime): 생성 일시
     """
@@ -379,7 +378,6 @@ class PaymentMethod(Base):
     institution = Column(String, nullable=False, index=True)
     alias = Column(String, nullable=True)
     account_number = Column(String, nullable=True)
-    default_password = Column(String, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.datetime.now)
 

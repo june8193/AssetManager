@@ -20,9 +20,10 @@ def test_expense_schema_tables_exist(db_session: Session):
     assert "expense_categories" in table_names
     assert "expenses" in table_names
 
-    # payment_methods 컬럼 검증
-    pm_cols = {col["name"] for col in inspector.get_columns("payment_methods")}
-    assert {"id", "owner", "institution", "alias", "account_number", "default_password", "is_active", "created_at"}.issubset(pm_cols)
+    # payment_methods 모델 컬럼 검증 (default_password 제거 확인)
+    model_col_names = {col.name for col in PaymentMethod.__table__.columns}
+    assert {"id", "owner", "institution", "alias", "account_number", "is_active", "created_at"}.issubset(model_col_names)
+    assert "default_password" not in model_col_names
 
     # expense_categories 컬럼 검증
     cat_cols = {col["name"] for col in inspector.get_columns("expense_categories")}
@@ -37,7 +38,7 @@ def test_seed_expense_masters(db_session: Session):
     """기본 결제수단 및 카테고리 시드 데이터 적재를 검증합니다."""
     seed_expense_masters(db_session)
 
-    # 결제수단 시드 검증
+    # 결제수단 시드 검증 (비밀번호 저장 없음 확인)
     pms = db_session.query(PaymentMethod).all()
     pm_map = {(pm.owner, pm.institution): pm for pm in pms}
     assert ("장준", "카카오뱅크") in pm_map
@@ -46,13 +47,13 @@ def test_seed_expense_masters(db_session: Session):
     kb = pm_map[("장준", "카카오뱅크")]
     assert kb.alias == "장준 카카오뱅크"
     assert kb.account_number == "3333"
-    assert kb.default_password == "950811"
+    assert not hasattr(kb, "default_password")
     assert kb.is_active is True
 
     hd = pm_map[("장준", "현대카드")]
     assert hd.alias == "장준 현대카드"
     assert hd.account_number == "1002"
-    assert hd.default_password == "950811"
+    assert not hasattr(hd, "default_password")
     assert hd.is_active is True
 
     # 카테고리 시드 검증
@@ -90,13 +91,12 @@ def test_payment_methods_api_crud(client: TestClient, db_session: Session):
     assert len(data) == 2
     assert any(pm["alias"] == "장준 카카오뱅크" for pm in data)
 
-    # 3. POST /api/expenses/payment-methods 신규 등록
+    # 3. POST /api/expenses/payment-methods 신규 등록 (비밀번호 필드 없음)
     new_pm = {
         "owner": "성은",
         "institution": "지역화폐",
         "alias": "성은 수원페이",
         "account_number": "5555",
-        "default_password": "960101",
         "is_active": True,
     }
     res = client.post("/api/expenses/payment-methods", json=new_pm)
@@ -105,6 +105,7 @@ def test_payment_methods_api_crud(client: TestClient, db_session: Session):
     assert created["id"] is not None
     assert created["owner"] == "성은"
     assert created["alias"] == "성은 수원페이"
+    assert "default_password" not in created
     pm_id = created["id"]
 
     # 4. 소유주 필터링 GET

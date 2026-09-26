@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..models import PaymentMethod, ExpenseCategory, Expense
-from ..config import get_settings
 from ..services.expense_parser_service import ExpenseParserService
 from ..parsers.exceptions import (
     ExpenseParserError,
@@ -344,7 +343,7 @@ def _assign_category_and_exclusion(
 @router.post("/upload-preview", response_model=ExpenseUploadPreviewResponse)
 async def upload_expense_preview(
     file: UploadFile = File(..., description="업로드할 명세서 파일 (HTML 또는 XLSX)"),
-    password: Optional[str] = Form(None, description="복호화 비밀번호 (미입력 시 결제수단 또는 시스템 기본 비밀번호 사용)"),
+    password: Optional[str] = Form(None, description="일회성 복호화 비밀번호 (암호화된 명세서의 경우 필수, 미입력 시 비밀번호 없이 시도)"),
     payment_method_id: int = Form(..., description="결제수단 ID (필수)"),
     db: Session = Depends(get_db),
 ):
@@ -352,7 +351,7 @@ async def upload_expense_preview(
 
     Args:
         file (UploadFile): 업로드된 명세서 파일.
-        password (Optional[str]): 복호화 비밀번호.
+        password (Optional[str]): 1회성 복호화 비밀번호 (저장되지 않음).
         payment_method_id (int): 필수 결제수단 ID.
         db (Session): 데이터베이스 세션.
 
@@ -387,62 +386,26 @@ async def upload_expense_preview(
             detail=str(exc),
         )
 
-    # 1. 비밀번호 후보군 구성
-    password_candidates: list[str] = []
-    has_explicit_password = bool(password and password.strip())
+    # 1. 일회성 복호화 비밀번호 처리 (미입력 시 None)
+    clean_password = password.strip() if password and password.strip() else None
 
-    if has_explicit_password:
-        # 사용자가 직접 비밀번호를 입력한 경우 해당 비밀번호만 사용 (오버라이드)
-        password_candidates.append(password.strip())
-    else:
-        # 미입력 시: 지정 결제수단 -> 금융기관 매칭 결제수단 -> settings.toml 순서로 폴백
-        if selected_pm.default_password and selected_pm.default_password.strip():
-            password_candidates.append(selected_pm.default_password.strip())
-
-        # 해당 금융기관의 등록 결제수단 기본 비밀번호 추가
-        inst_pms = db.query(PaymentMethod).filter(PaymentMethod.institution == detected_institution).all()
-        for pm in inst_pms:
-            if pm.default_password and pm.default_password.strip():
-                if pm.default_password.strip() not in password_candidates:
-                    password_candidates.append(pm.default_password.strip())
-
-        # settings.toml 기본 비밀번호 추가
-        settings = get_settings()
-        if settings.expenses.default_password and settings.expenses.default_password.strip():
-            spw = settings.expenses.default_password.strip()
-            if spw not in password_candidates:
-                password_candidates.append(spw)
-
-        if "" not in password_candidates:
-            password_candidates.append("")
-
-    # 2. 파싱 시도 (비밀번호 후보 순서대로)
-    parse_result = None
-    last_error = None
-
-    for cand_pwd in password_candidates:
-        try:
-            parse_result = parser_service.parse(
-                file_bytes=file_bytes,
-                filename=filename,
-                password=cand_pwd,
-                institution=detected_institution,
-            )
-            break
-        except InvalidPasswordError as exc:
-            last_error = exc
-            continue
-        except (ExpenseParserError, UnsupportedFileFormatError) as exc:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"명세서 파싱 실패: {exc}",
-            )
-
-    if parse_result is None:
-        error_msg = str(last_error) if last_error else "명세서 복호화에 실패했습니다. 비밀번호를 확인해주세요."
+    # 2. 파싱 시도 (오직 사용자가 요청으로 전달한 비밀번호만 사용)
+    try:
+        parse_result = parser_service.parse(
+            file_bytes=file_bytes,
+            filename=filename,
+            password=clean_password,
+            institution=detected_institution,
+        )
+    except InvalidPasswordError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=error_msg,
+            detail=str(exc) or "명세서 복호화에 실패했습니다. 비밀번호를 확인해주세요.",
+        )
+    except (ExpenseParserError, UnsupportedFileFormatError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"명세서 파싱 실패: {exc}",
         )
 
     # 3. 카테고리 매칭 및 통계 제외 플래그 부여

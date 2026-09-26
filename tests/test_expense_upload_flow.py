@@ -85,8 +85,24 @@ def test_upload_preview_nonexistent_payment_method_id(client, fixtures_dir):
     assert response.status_code == 404, f"Expected 404, got {response.status_code}: {response.text}"
 
 
-def test_upload_preview_kakaobank_success(client, db_session, fixtures_dir):
-    """카카오뱅크 엑셀 파일을 업로드하여 비밀번호 없이 결제수단 기본 비밀번호로 자동 복호화 및 미리보기 데이터를 성공적으로 반환받는지 검증합니다."""
+def test_upload_preview_kakaobank_without_password_fails(client, db_session, fixtures_dir):
+    """암호화된 카카오뱅크 엑셀 파일을 일회성 비밀번호 없이 업로드 시 복호화 실패(400)를 반환하는지 검증합니다."""
+    kb_file = fixtures_dir / "카카오뱅크_거래내역_N1991286375_2026092609021842.xlsx"
+    pm = db_session.query(PaymentMethod).filter_by(institution="카카오뱅크").first()
+    assert pm is not None, "카카오뱅크 결제수단이 시드 데이터에 있어야 합니다."
+
+    with open(kb_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("kakaobank_statement.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"payment_method_id": pm.id},
+        )
+
+    assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+
+
+def test_upload_preview_kakaobank_success_with_password(client, db_session, fixtures_dir):
+    """카카오뱅크 엑셀 파일을 업로드할 때 사용자가 일회성 복호화 비밀번호를 입력하면 성공적으로 파싱되는지 검증합니다."""
     kb_file = fixtures_dir / "카카오뱅크_거래내역_N1991286375_2026092609021842.xlsx"
     pm = db_session.query(PaymentMethod).filter_by(institution="카카오뱅크").first()
     assert pm is not None, "카카오뱅크 결제수단이 시드 데이터에 있어야 합니다."
@@ -94,11 +110,10 @@ def test_upload_preview_kakaobank_success(client, db_session, fixtures_dir):
     assert kb_file.exists(), f"픽스처 파일이 없습니다: {kb_file}"
 
     with open(kb_file, "rb") as f:
-        # 비밀번호를 제공하지 않아도 등록된 결제수단 기본 비밀번호(950811)로 자동 복호화
         response = client.post(
             "/api/expenses/upload-preview",
             files={"file": ("kakaobank_statement.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-            data={"payment_method_id": pm.id},
+            data={"payment_method_id": pm.id, "password": "950811"},
         )
 
     assert response.status_code == 200, response.text
@@ -260,32 +275,25 @@ def test_commit_expenses_invalid_payment_method(client, db_session):
     assert response.status_code == 404
 
 
-def test_upload_preview_settings_password_fallback(client, db_session, fixtures_dir, monkeypatch):
-    """결제수단에 default_password가 없더라도 settings.toml / 환경변수의 default_password로 자동 복호화되는지 검증합니다."""
-    # DB의 모든 payment_method의 default_password를 None으로 초기화
-    db_session.query(PaymentMethod).update({PaymentMethod.default_password: None})
-    db_session.commit()
-
-    # 환경변수 또는 get_settings()를 통해 fallback 비밀번호 제공
+def test_upload_preview_no_stored_password_fallback_when_password_missing(client, db_session, fixtures_dir, monkeypatch):
+    """요청 시 password가 전달되지 않으면 설정이나 DB의 폴백 없이 즉시 복호화 실패(400)를 반환하는지 검증합니다."""
+    # 환경변수에 구 비밀번호가 설정되어 있더라도 무시되어야 함
     monkeypatch.setenv("EXPENSES_DEFAULT_PASSWORD", "950811")
-    from src.backend.config import get_settings
-    get_settings(reload=True)
 
     hc_file = fixtures_dir / "hyundaicard_2608.html"
     pm = db_session.query(PaymentMethod).filter_by(institution="현대카드").first()
     assert pm is not None, "현대카드 결제수단이 있어야 합니다."
 
     with open(hc_file, "rb") as f:
+        # password 파라미터 미전달
         response = client.post(
             "/api/expenses/upload-preview",
             files={"file": ("hyundaicard_2608.html", f, "text/html")},
             data={"payment_method_id": pm.id},
         )
 
-    assert response.status_code == 200, response.text
-    data = response.json()
-    assert data["year_month"] == "2026-08"
-    assert len(data["transactions"]) > 0
+    # 폴백 체인이 제거되었으므로 400 에러가 발생해야 함
+    assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
 
 
 def test_commit_expenses_multi_month_and_flexible_date_overwrite(client, db_session):

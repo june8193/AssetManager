@@ -14,7 +14,6 @@ class PaymentMethodBase(BaseModel):
     institution: str
     alias: Optional[str] = None
     account_number: Optional[str] = None
-    default_password: Optional[str] = None
     is_active: bool = True
 
 
@@ -29,7 +28,6 @@ class PaymentMethodUpdate(BaseModel):
     institution: Optional[str] = None
     alias: Optional[str] = None
     account_number: Optional[str] = None
-    default_password: Optional[str] = None
     is_active: Optional[bool] = None
 
 

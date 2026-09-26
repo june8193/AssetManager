@@ -5,11 +5,11 @@
 
 **Blocked by:** 01 — 결제수단 선택 필수화 및 자동 감지 삭제
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `settings.toml`에서 `[expenses] default_password` 설정이 제거되고, 설정 로더 모델에서 관련 항목이 정리된다.
-- [ ] `PaymentMethod` DB 모델 및 스키마에서 `default_password` 필드가 제거된다.
-- [ ] 결제수단 관리 모달(`PaymentMethodsModal`)의 등록/수정 폼과 목록 테이블에서 비밀번호 입력란 및 마스킹 컬럼이 제거된다.
-- [ ] 명세서 업로드 모달(`ExpenseUploadModal`)의 비밀번호 입력 안내 문구가 '필요 시 복호화 비밀번호 1회 입력' 형태로 단순화된다.
-- [ ] 백엔드 파싱 처리 시 저장된 비밀번호 폴백 체인(결제수단/settings.toml)이 제거되고, 사용자가 요청으로 전달한 비밀번호만으로 복호화를 시도한다.
-- [ ] 관련 백엔드 API 테스트 및 결제수단/업로드 컴포넌트 테스트가 통과한다.
+- [x] `settings.toml`에서 `[expenses] default_password` 설정이 제거되고, 설정 로더 모델에서 관련 항목이 정리된다.
+- [x] `PaymentMethod` DB 모델 및 스키마에서 `default_password` 필드가 제거된다.
+- [x] 결제수단 관리 모달(`PaymentMethodsModal`)의 등록/수정 폼과 목록 테이블에서 비밀번호 입력란 및 마스킹 컬럼이 제거된다.
+- [x] 명세서 업로드 모달(`ExpenseUploadModal`)의 비밀번호 입력 안내 문구가 '필요 시 복호화 비밀번호 1회 입력' 형태로 단순화된다.
+- [x] 백엔드 파싱 처리 시 저장된 비밀번호 폴백 체인(결제수단/settings.toml)이 제거되고, 사용자가 요청으로 전달한 비밀번호만으로 복호화를 시도한다.
+- [x] 관련 백엔드 API 테스트 및 결제수단/업로드 컴포넌트 테스트가 통과한다.

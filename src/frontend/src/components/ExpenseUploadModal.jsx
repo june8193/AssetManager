@@ -354,7 +354,7 @@ export default function ExpenseUploadModal({
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="미입력 시 기본 비밀번호 사용 (생년월일 6자리)"
+                  placeholder="필요 시 복호화 비밀번호 1회 입력 (생년월일 6자리 등)"
                   className="w-full bg-slate-900 border border-slate-700 rounded-lg pl-3 pr-10 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500"
                 />
                 <button
@@ -366,7 +366,7 @@ export default function ExpenseUploadModal({
                 </button>
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                등록된 결제수단의 기본 비밀번호 또는 settings.toml의 [expenses] 기본값이 자동 적용됩니다.
+                비밀번호는 저장되지 않으며, 암호화된 명세서 복호화에만 1회성으로 사용됩니다.
               </p>
             </div>
 

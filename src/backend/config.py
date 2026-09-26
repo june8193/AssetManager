@@ -60,9 +60,9 @@ class NaverConfig:
 
 @dataclass
 class ExpensesConfig:
-    """지출 모니터링 및 복호화 설정 정보를 저장하는 데이터 클래스입니다."""
+    """지출 관리 설정 정보를 저장하는 데이터 클래스입니다."""
 
-    default_password: str = ""
+    pass
 
 
 @dataclass
@@ -189,15 +189,7 @@ class Settings:
         )
 
         # 6. Expenses
-        exp_dict = data.get("expenses", {})
-        exp_default_pw = exp_dict.get("default_password", "")
-        env_exp_pw = os.getenv("EXPENSES_DEFAULT_PASSWORD")
-        if env_exp_pw is not None:
-            exp_default_pw = env_exp_pw
-
-        expenses_config = ExpensesConfig(
-            default_password=exp_default_pw,
-        )
+        expenses_config = ExpensesConfig()
 
         return cls(
             base_url=base_url,
