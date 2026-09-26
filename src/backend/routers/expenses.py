@@ -280,70 +280,6 @@ def delete_expense_category(
 # ==========================================
 
 
-
-def _assign_category_and_exclusion(
-    db: Session,
-    transactions: list[dict],
-) -> list[dict]:
-    """거래 목록에 카테고리를 자동 매칭하고 카드대금 등의 통계 제외(is_excluded) 여부를 판별합니다.
-
-    Args:
-        db (Session): 데이터베이스 세션.
-        transactions (list[dict]): 원본 파싱된 거래 목록.
-
-    Returns:
-        list[dict]: 카테고리 ID 및 is_excluded 플래그가 부여된 거래 목록.
-    """
-    categories = db.query(ExpenseCategory).all()
-    cat_by_name = {c.name: c.id for c in categories}
-    default_cat_id = None
-    if "생활/기타" in cat_by_name:
-        default_cat_id = cat_by_name["생활/기타"]
-    elif categories:
-        default_cat_id = categories[0].id
-
-    category_rules = [
-        ("식비/카페", ["식당", "카페", "커피", "스타벅스", "맥도날드", "버거", "베이커리", "파리바게뜨", "배달의민족", "요기요", "쿠팡이츠", "음식점", "김밥", "치킨", "피자", "CU", "GS25", "세븐일레븐", "마트"]),
-        ("쇼핑", ["쿠팡", "네이버페이", "스마트스토어", "11번가", "지마켓", "마켓컬리", "이마트", "홈플러스", "롯데마트", "다이소", "올리브영", "무신사", "백화점", "아울렛"]),
-        ("교통/차량", ["코레일", "SRT", "티머니", "택시", "카카오T", "지하철", "버스", "주유", "GS칼텍스", "SK에너지", "에쓰오일", "HD현대오일", "하이패스", "주차"]),
-        ("주거/통신", ["관리비", "도시가스", "한전", "전기요금", "KT", "SKT", "LGU", "통신요금", "인터넷", "수도요금"]),
-        ("의료/건강", ["병원", "의원", "약국", "치과", "안과", "이비인후과", "내과", "정형외과", "한의원", "피트니스", "헬스"]),
-        ("문화/여가", ["CGV", "롯데시네마", "메가박스", "넷플릭스", "유튜브", "티빙", "웨이브", "도서", "교보문고", "yes24", "알라딘", "호텔", "리조트", "골프"]),
-        ("금융/보험", ["이자", "수수료", "보험", "삼성화재", "현대해상", "DB손보", "KB손보", "메리츠", "생명"]),
-    ]
-
-    exclude_keywords = [
-        "현대카드", "신용카드", "체크카드", "카드대금", "카드결제", "카드출금",
-        "카드자동이체", "대금결제", "카드승인결제", "타행이체",
-    ]
-
-    for tx in transactions:
-        merchant = (tx.get("merchant") or "").strip()
-        memo = (tx.get("memo") or "").strip()
-        text_to_check = f"{merchant} {memo}"
-
-        is_excluded = False
-        for kw in exclude_keywords:
-            if kw in text_to_check:
-                is_excluded = True
-                break
-        tx["is_excluded"] = is_excluded
-
-        matched_cat_id = None
-        for cat_name, kw_list in category_rules:
-            if cat_name in cat_by_name:
-                for kw in kw_list:
-                    if kw.lower() in text_to_check.lower():
-                        matched_cat_id = cat_by_name[cat_name]
-                        break
-            if matched_cat_id:
-                break
-
-        tx["category_id"] = matched_cat_id or default_cat_id
-
-    return transactions
-
-
 @router.post("/upload-preview", response_model=ExpenseUploadPreviewResponse)
 async def upload_expense_preview(
     file: UploadFile = File(..., description="업로드할 명세서 파일 (HTML 또는 XLSX)"),
@@ -363,7 +299,7 @@ async def upload_expense_preview(
         HTTPException: 파일이 비어있거나, 비밀번호 오류, 지원하지 않는 형식 등 파싱 실패 시 400/404 반환.
 
     Returns:
-        ExpenseUploadPreviewResponse: 매칭된 결제수단 및 추출된 거래 목록.
+        ExpenseUploadPreviewResponse: 매칭된 결제수단 및 추출된 거래 목록 (초기값 category_id=None, is_excluded=False).
     """
     file_bytes = await file.read()
     filename = file.filename or ""
@@ -412,9 +348,8 @@ async def upload_expense_preview(
             detail=f"명세서 파싱 실패: {exc}",
         )
 
-    # 3. 카테고리 매칭 및 통계 제외 플래그 부여
+    # 3. 거래 목록 구성 (자동 추천/제외 없이 미분류 및 통계 반영 기본값 고정)
     raw_transactions = parse_result.get("transactions", [])
-    processed_transactions = _assign_category_and_exclusion(db, raw_transactions)
 
     preview_transactions = [
         ExpenseUploadPreviewTransaction(
@@ -424,10 +359,10 @@ async def upload_expense_preview(
             amount=tx["amount"],
             original_type=tx.get("original_type"),
             memo=tx.get("memo"),
-            category_id=tx.get("category_id"),
-            is_excluded=tx.get("is_excluded", False),
+            category_id=None,
+            is_excluded=False,
         )
-        for tx in processed_transactions
+        for tx in raw_transactions
     ]
 
     return ExpenseUploadPreviewResponse(

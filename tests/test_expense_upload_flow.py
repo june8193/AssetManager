@@ -125,9 +125,11 @@ def test_upload_preview_kakaobank_success_with_password(client, db_session, fixt
     assert data["payment_method"]["owner"] == "장준"
     assert len(data["transactions"]) > 0
 
-    # 카드대금 출금 건 등 is_excluded 자동 판단 확인
-    excluded_items = [t for t in data["transactions"] if t.get("is_excluded")]
-    assert len(excluded_items) > 0, "현대카드 출금 건 등은 is_excluded가 True여야 합니다."
+    # 모든 거래는 category_id=None(미분류), is_excluded=False(통계반영 기본)로 반환되어야 함
+    for tx in data["transactions"]:
+        assert tx.get("category_id") is None, f"category_id는 None이어야 합니다: {tx}"
+        assert tx.get("is_excluded") is False, f"is_excluded는 False여야 합니다: {tx}"
+        assert "sub_category_id" not in tx or tx.get("sub_category_id") is None, f"sub_category_id는 없어야 합니다: {tx}"
 
 
 def test_upload_preview_hyundaicard_success(client, db_session, fixtures_dir):
@@ -153,9 +155,11 @@ def test_upload_preview_hyundaicard_success(client, db_session, fixtures_dir):
     assert data["payment_method"]["institution"] == "현대카드"
     assert len(data["transactions"]) > 0
 
-    # 각 거래에 기본 카테고리가 매칭되었는지 확인
+    # 모든 거래는 category_id=None, is_excluded=False여야 함
     for tx in data["transactions"]:
-        assert tx.get("category_id") is not None
+        assert tx.get("category_id") is None, f"category_id는 None이어야 합니다: {tx}"
+        assert tx.get("is_excluded") is False, f"is_excluded는 False여야 합니다: {tx}"
+        assert "sub_category_id" not in tx or tx.get("sub_category_id") is None, f"sub_category_id는 없어야 합니다: {tx}"
 
 
 def test_upload_preview_invalid_password(client, db_session, fixtures_dir):

@@ -27,7 +27,6 @@ import { expenseService } from '../services/expenseService';
  * @param {Function} [props.onSuccess] - 등록 완료 콜백
  * @param {Array} [props.paymentMethods] - 결제수단 목록 (선택)
  * @param {Array} [props.categories] - 카테고리 목록 (선택)
- * @param {Array} [props.subCategories] - 2차 카테고리 목록 (선택)
  */
 export default function ExpenseUploadModal({
   isOpen,
@@ -35,7 +34,6 @@ export default function ExpenseUploadModal({
   onSuccess,
   paymentMethods: propPaymentMethods,
   categories: propCategories,
-  subCategories: propSubCategories,
 }) {
   const [step, setStep] = useState('upload'); // 'upload' | 'preview'
   const [file, setFile] = useState(null);
@@ -49,7 +47,6 @@ export default function ExpenseUploadModal({
 
   const [paymentMethods, setPaymentMethods] = useState(propPaymentMethods || []);
   const [categories, setCategories] = useState(propCategories || []);
-  const [subCategories, setSubCategories] = useState(propSubCategories || []);
 
   // 프리뷰 상태
   const [previewData, setPreviewData] = useState(null);
@@ -79,17 +76,6 @@ export default function ExpenseUploadModal({
         .catch((err) => console.error('카테고리 목록 조회 실패:', err));
     }
   }, [propCategories, isOpen]);
-
-  useEffect(() => {
-    if (propSubCategories) {
-      setSubCategories(propSubCategories);
-    } else if (isOpen) {
-      expenseService
-        .getSubCategories()
-        .then((res) => setSubCategories(res || []))
-        .catch((err) => console.error('2차 카테고리 목록 조회 실패:', err));
-    }
-  }, [propSubCategories, isOpen]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -184,16 +170,6 @@ export default function ExpenseUploadModal({
     );
   };
 
-  const handleSubCategoryChange = (index, subCategoryId) => {
-    setPreviewTransactions((prev) =>
-      prev.map((item, idx) =>
-        idx === index
-          ? { ...item, sub_category_id: subCategoryId ? Number(subCategoryId) : null }
-          : item
-      )
-    );
-  };
-
   const handleMemoChange = (index, newMemo) => {
     setPreviewTransactions((prev) =>
       prev.map((item, idx) => (idx === index ? { ...item, memo: newMemo } : item))
@@ -231,7 +207,6 @@ export default function ExpenseUploadModal({
           merchant: tx.merchant,
           amount: tx.amount,
           category_id: tx.category_id,
-          sub_category_id: tx.sub_category_id ? Number(tx.sub_category_id) : null,
           is_excluded: tx.is_excluded,
           memo: tx.memo,
           original_type: tx.original_type,
@@ -501,7 +476,6 @@ export default function ExpenseUploadModal({
                     <th className="py-2.5 px-3 w-24">구분</th>
                     <th className="py-2.5 px-3 w-28 text-right">금액</th>
                     <th className="py-2.5 px-3 w-36">카테고리</th>
-                    <th className="py-2.5 px-3 w-36">2차 카테고리</th>
                     <th className="py-2.5 px-3 w-40">메모</th>
                   </tr>
                 </thead>
@@ -552,28 +526,13 @@ export default function ExpenseUploadModal({
                         <select
                           value={tx.category_id || ''}
                           onChange={(e) => handleCategoryChange(idx, e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
+                          disabled={tx.is_excluded}
+                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-800 disabled:text-slate-500"
                         >
                           <option value="">카테고리 선택</option>
                           {categories.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.name}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      {/* 2차 카테고리 */}
-                      <td className="py-2.5 px-3">
-                        <select
-                          value={tx.sub_category_id || ''}
-                          onChange={(e) => handleSubCategoryChange(idx, e.target.value)}
-                          className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-blue-500"
-                        >
-                          <option value="">(선택 안함)</option>
-                          {subCategories.map((sc) => (
-                            <option key={sc.id} value={sc.id}>
-                              {sc.name}
                             </option>
                           ))}
                         </select>

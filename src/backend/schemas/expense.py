@@ -131,8 +131,11 @@ class ExpenseUploadPreviewTransaction(BaseModel):
     original_type: Optional[str] = None
     memo: Optional[str] = None
     category_id: Optional[int] = None
-    sub_category_id: Optional[int] = None
     is_excluded: bool = False
+
+
+# 호환용 별칭 정의
+ExpensePreviewItem = ExpenseUploadPreviewTransaction
 
 
 class ExpenseUploadPreviewResponse(BaseModel):

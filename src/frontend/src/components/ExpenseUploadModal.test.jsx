@@ -280,20 +280,13 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     });
   });
 
-  it('미리보기 화면에 2차 카테고리 선택 드롭다운이 렌더링되고 변경 시 commitExpenses에 sub_category_id가 전달된다', async () => {
-    const mockSubCategories = [
-      { id: 10, name: '구독료', color: '#8B5CF6' },
-      { id: 11, name: '모임회비', color: '#EC4899' },
-    ];
-    expenseService.getSubCategories = vi.fn().mockResolvedValue(mockSubCategories);
-
+  it('미리보기 테이블에 2차 카테고리 열 및 관련 셀렉트가 렌더링되지 않는다', async () => {
     render(
       <ExpenseUploadModal
         isOpen={true}
         onClose={vi.fn()}
         paymentMethods={mockPaymentMethods}
         categories={mockCategories}
-        subCategories={mockSubCategories}
       />
     );
 
@@ -310,28 +303,58 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
 
     await waitFor(() => {
       expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
-      expect(screen.getByText('2차 카테고리')).toBeInTheDocument();
     });
 
-    // 2차 카테고리 옵션 확인 및 첫 번째 행을 '구독료'(id: 10)로 선택
-    const allComboboxes = screen.getAllByRole('combobox');
-    // 2차 카테고리 셀렉트박스 찾기: option '구독료'를 포함하는 셀렉트
-    const subCatSelect = allComboboxes.find((sel) =>
-      Array.from(sel.options).some((opt) => opt.text === '구독료')
-    );
-    expect(subCatSelect).toBeDefined();
-    fireEvent.change(subCatSelect, { target: { value: '10' } });
+    // 2차 카테고리 헤더가 없어야 함
+    expect(screen.queryByText('2차 카테고리')).not.toBeInTheDocument();
+  });
 
-    // 커밋 버튼 클릭
-    const commitBtn = screen.getByRole('button', { name: /등록 및 덮어쓰기/i });
-    fireEvent.click(commitBtn);
+  it('업로드 미리보기 테이블에서 거래의 통계 제외 체크박스를 체크하면 카테고리 선택 드롭다운이 disabled 처리되고, 체크 해제 시 다시 활성화된다', async () => {
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    const file = new File(['dummy'], 'statement.xlsx');
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // 결제수단 선택
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
 
     await waitFor(() => {
-      expect(expenseService.commitExpenses).toHaveBeenCalledTimes(1);
+      expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
     });
 
-    const commitPayload = expenseService.commitExpenses.mock.calls[0][0];
-    expect(commitPayload.items[0].sub_category_id).toBe(10);
+    const checkboxes = screen.getAllByRole('checkbox');
+    // mockPreviewResponse: 첫 번째(스타벅스) is_excluded: false, 두 번째(현대카드대금) is_excluded: true
+    const starbucksCheckbox = checkboxes[0];
+    const cardPayCheckbox = checkboxes[1];
+
+    // 카테고리 셀렉트박스들 (테이블 행 내의 셀렉트박스)
+    const catSelects = document.querySelectorAll('tbody select');
+    const starbucksCatSelect = catSelects[0];
+    const cardPayCatSelect = catSelects[1];
+
+    // 초기 상태: 스타벅스(통계 반영)는 활성화, 현대카드대금(통계 제외)은 비활성화
+    expect(starbucksCatSelect).not.toBeDisabled();
+    expect(cardPayCatSelect).toBeDisabled();
+
+    // 스타벅스 제외 체크박스 클릭 -> 카테고리 셀렉트 비활성화
+    fireEvent.click(starbucksCheckbox);
+    expect(starbucksCatSelect).toBeDisabled();
+
+    // 스타벅스 제외 체크박스 다시 클릭 (해제) -> 카테고리 셀렉트 다시 활성화
+    fireEvent.click(starbucksCheckbox);
+    expect(starbucksCatSelect).not.toBeDisabled();
   });
 });
 
