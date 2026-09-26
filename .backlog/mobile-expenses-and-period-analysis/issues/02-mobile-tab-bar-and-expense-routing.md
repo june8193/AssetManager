@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately.
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `src/frontend/src/components/mobile/MobileTabBar.jsx` 컴포넌트에 '지출' 탭(`Receipt` 아이콘, 경로 `/m/expenses`)을 세 번째 위치에 추가
 - [x] 6개 탭이 한 화면 너비(390px 스마트폰 기준)에서 줄바꿈이나 짤림 없이 균형 있게 표시되도록 탭 바 레이아웃 스타일(패딩, 아이콘 및 폰트 크기) 최적화
