@@ -78,6 +78,42 @@ export const expenseService = {
   },
 
   /**
+   * 지출 자동분류 규칙 목록을 조회합니다.
+   * @returns {Promise<Array>} 규칙 목록 배열
+   */
+  async getRules() {
+    return apiClient.get('/api/expenses/rules');
+  },
+
+  /**
+   * 새로운 지출 자동분류 규칙을 등록합니다.
+   * @param {Object} data - 등록할 규칙 정보 ({ keyword: string, category_id?: number, is_excluded?: boolean })
+   * @returns {Promise<Object>} 생성된 규칙 객체
+   */
+  async createRule(data) {
+    return apiClient.post('/api/expenses/rules', data);
+  },
+
+  /**
+   * 기존 지출 자동분류 규칙을 수정합니다.
+   * @param {number} id - 규칙 ID
+   * @param {Object} data - 수정할 규칙 정보 ({ keyword?: string, category_id?: number, is_excluded?: boolean })
+   * @returns {Promise<Object>} 수정된 규칙 객체
+   */
+  async updateRule(id, data) {
+    return apiClient.put(`/api/expenses/rules/${id}`, data);
+  },
+
+  /**
+   * 지출 자동분류 규칙을 삭제합니다.
+   * @param {number} id - 규칙 ID
+   * @returns {Promise<null>}
+   */
+  async deleteRule(id) {
+    return apiClient.delete(`/api/expenses/rules/${id}`);
+  },
+
+  /**
    * 2차 카테고리(특성/태그) 목록을 조회합니다. (2차 카테고리 폐지에 따른 호환용)
    * @deprecated 단일 카테고리 마스터로 통합됨
    * @returns {Promise<Array>} 빈 배열

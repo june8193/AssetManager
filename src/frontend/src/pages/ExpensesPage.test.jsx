@@ -12,6 +12,10 @@ vi.mock('../services/expenseService', () => ({
     getExpenses: vi.fn(),
     getCategories: vi.fn(),
     getPaymentMethods: vi.fn(),
+    getRules: vi.fn().mockResolvedValue([]),
+    createRule: vi.fn(),
+    updateRule: vi.fn(),
+    deleteRule: vi.fn(),
     updateExpense: vi.fn(),
     deleteExpense: vi.fn(),
   },
@@ -488,6 +492,22 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
         })
       );
       expect(screen.getByText('추가로드 가맹점')).toBeInTheDocument();
+    });
+  });
+
+  it('자동분류 규칙 버튼 클릭 시 자동분류 규칙 모달이 열려야 한다', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /자동분류 규칙/i })).toBeInTheDocument();
+    });
+
+    const rulesBtn = screen.getByRole('button', { name: /자동분류 규칙/i });
+    fireEvent.click(rulesBtn);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('expense-rules-modal')).toBeInTheDocument();
+      expect(screen.getByText('자동분류 규칙 관리')).toBeInTheDocument();
     });
   });
 });

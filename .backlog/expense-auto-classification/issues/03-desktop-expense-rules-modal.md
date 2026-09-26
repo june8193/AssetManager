@@ -5,14 +5,14 @@
 
 **Blocked by:** 01 — 자동분류 규칙 데이터 모델 및 백엔드 CRUD API 구축
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `expenseService.js`에 규칙 CRUD API 클라이언트 함수 구현 (`getRules`, `createRule`, `updateRule`, `deleteRule`)
-- [ ] `ExpenseRulesModal.jsx` 컴포넌트 구현:
+- [x] `expenseService.js`에 규칙 CRUD API 클라이언트 함수 구현 (`getRules`, `createRule`, `updateRule`, `deleteRule`)
+- [x] `ExpenseRulesModal.jsx` 컴포넌트 구현:
   - 규칙 목록 테이블 (키워드 뱃지, 매칭 카테고리 태그 및 컬러 닷 또는 '통계 제외' 뱃지, 등록일자, 수정/삭제 버튼)
   - 실시간 키워드 검색/필터 입력창
   - 신규 등록 및 수정 폼 (키워드 입력, `[카테고리 분류]` / `[통계 제외]` 라디오 선택, 카테고리 셀렉트 활성/비활성 제어)
   - 폼 유효성 검사 (키워드 필수, 카테고리 분류 시 카테고리 필수 선택)
-- [ ] `ExpensesPage.jsx` 상단 액션 바에 `[자동분류 규칙]` 버튼 추가 및 모달 열림/닫힘 상태 연동
-- [ ] 규칙 추가/수정/삭제 시 최신 규칙 목록 즉시 갱신 및 업로드 모달과의 동기화 보장
-- [ ] 프론트엔드 컴포넌트 테스트(`ExpenseRulesModal.test.jsx`) 작성 및 통과
+- [x] `ExpensesPage.jsx` 상단 액션 바에 `[자동분류 규칙]` 버튼 추가 및 모달 열림/닫힘 상태 연동
+- [x] 규칙 추가/수정/삭제 시 최신 규칙 목록 즉시 갱신 및 업로드 모달과의 동기화 보장
+- [x] 프론트엔드 컴포넌트 테스트(`ExpenseRulesModal.test.jsx`) 작성 및 통과
