@@ -11,6 +11,7 @@ vi.mock('../services/expenseService', () => ({
     getStats: vi.fn(),
     getExpenses: vi.fn(),
     getCategories: vi.fn(),
+    getSubCategories: vi.fn(),
     getPaymentMethods: vi.fn(),
     updateExpense: vi.fn(),
     deleteExpense: vi.fn(),
@@ -52,6 +53,11 @@ const mockCategories = [
   { id: 3, name: '생활/기타', color: '#95A5A6' },
 ];
 
+const mockSubCategories = [
+  { id: 10, name: '구독료', color: '#8B5CF6' },
+  { id: 11, name: '모임회비', color: '#EC4899' },
+];
+
 const mockPaymentMethods = [
   { id: 1, owner: '장준', institution: '현대카드', alias: '장준 현대카드' },
   { id: 2, owner: '장준', institution: '카카오뱅크', alias: '장준 카카오뱅크' },
@@ -74,6 +80,10 @@ const mockStats = {
     { category_id: 1, category_name: '식비/카페', color: '#FF6B6B', amount: 50000, percentage: 50.0 },
     { category_id: 2, category_name: '쇼핑', color: '#4ECDC4', amount: 50000, percentage: 50.0 },
   ],
+  sub_category_breakdown: [
+    { id: 10, sub_category_id: 10, name: '구독료', color: '#8B5CF6', total_amount: 30000, amount: 30000, count: 2, percentage: 30.0 },
+    { id: 11, sub_category_id: 11, name: '모임회비', color: '#EC4899', total_amount: 20000, amount: 20000, count: 1, percentage: 20.0 },
+  ],
   payment_method_breakdown: [
     { payment_method_id: 1, alias: '장준 현대카드', institution: '현대카드', owner: '장준', amount: 60000, percentage: 60.0 },
     { payment_method_id: 3, alias: '성은 지역화폐', institution: '지역화폐', owner: '성은', amount: 40000, percentage: 40.0 },
@@ -93,6 +103,10 @@ const mockExpenses = [
     institution: '현대카드',
     category_id: 1,
     category_name: '식비/카페',
+    sub_category_id: 10,
+    sub_category: { id: 10, name: '구독료', color: '#8B5CF6' },
+    sub_category_name: '구독료',
+    sub_category_color: '#8B5CF6',
     is_excluded: false,
     memo: '아이스 아메리카노',
   },
@@ -108,6 +122,10 @@ const mockExpenses = [
     institution: '현대카드',
     category_id: 2,
     category_name: '쇼핑',
+    sub_category_id: null,
+    sub_category: null,
+    sub_category_name: null,
+    sub_category_color: null,
     is_excluded: false,
     memo: '생필품 구매',
   },
@@ -123,6 +141,10 @@ const mockExpenses = [
     institution: '카카오뱅크',
     category_id: null,
     category_name: '미분류',
+    sub_category_id: null,
+    sub_category: null,
+    sub_category_name: null,
+    sub_category_color: null,
     is_excluded: true,
     memo: '카드대금 출금',
   },
@@ -142,6 +164,7 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
     expenseService.getStats.mockResolvedValue(mockStats);
     expenseService.getExpenses.mockResolvedValue(mockExpenses);
     expenseService.getCategories.mockResolvedValue(mockCategories);
+    expenseService.getSubCategories.mockResolvedValue(mockSubCategories);
     expenseService.getPaymentMethods.mockResolvedValue(mockPaymentMethods);
   });
 
@@ -313,6 +336,71 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
     fireEvent.click(catBtn);
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: '지출 카테고리 관리' })).toBeInTheDocument();
+    });
+  });
+
+  it('거래 원장 테이블에 2차 카테고리 태그 뱃지가 렌더링되고 인라인으로 수정할 수 있다', async () => {
+    expenseService.updateExpense.mockResolvedValue({
+      ...mockExpenses[0],
+      sub_category_id: 11,
+      sub_category: { id: 11, name: '모임회비', color: '#EC4899' },
+      sub_category_name: '모임회비',
+      sub_category_color: '#EC4899',
+    });
+
+    renderComponent();
+
+    // 2차 카테고리 태그 뱃지('구독료') 노출 확인
+    await waitFor(() => {
+      expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      expect(screen.getAllByText('구독료').length).toBeGreaterThanOrEqual(1);
+    });
+
+    // 테이블 첫 번째 행의 2차 카테고리 셀렉트박스 (value: '10'인 셀렉트)
+    const selects = screen.getAllByRole('combobox');
+    const subCatSelect = selects.find((sel) => sel.value === '10');
+    expect(subCatSelect).toBeDefined();
+
+    // '모임회비'(id: 11)로 변경
+    fireEvent.change(subCatSelect, { target: { value: '11' } });
+
+    await waitFor(() => {
+      expect(expenseService.updateExpense).toHaveBeenCalledWith(101, { sub_category_id: 11 });
+    });
+  });
+
+  it('2차 카테고리 필터 선택 시 해당 sub_category_id로 거래 내역을 조회해야 한다', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(expenseService.getExpenses).toHaveBeenCalled();
+    });
+
+    // 2차 카테고리 필터 셀렉트박스 찾기
+    const selects = screen.getAllByRole('combobox');
+    const filterSelect = selects.find((sel) =>
+      Array.from(sel.options).some((opt) => opt.text === '2차 카테고리: 전체')
+    );
+    expect(filterSelect).toBeDefined();
+
+    // '구독료'(id: 10) 선택
+    fireEvent.change(filterSelect, { target: { value: '10' } });
+
+    await waitFor(() => {
+      expect(expenseService.getExpenses).toHaveBeenCalledWith(
+        expect.objectContaining({ sub_category_id: '10' })
+      );
+    });
+  });
+
+  it('대시보드 상단에 2차 카테고리(지출 특성/구독료 등) 요약이 렌더링된다', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      // stats.sub_category_breakdown 데이터인 구독료(30,000원), 모임회비(20,000원) 요약 영역 확인
+      expect(screen.getByText(/지출 특성 요약/i)).toBeInTheDocument();
+      expect(screen.getAllByText('구독료').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText(/30,000/).length).toBeGreaterThanOrEqual(1);
     });
   });
 });

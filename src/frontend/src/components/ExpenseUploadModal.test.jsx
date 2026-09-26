@@ -8,6 +8,7 @@ vi.mock('../services/expenseService', () => ({
   expenseService: {
     getPaymentMethods: vi.fn(),
     getCategories: vi.fn(),
+    getSubCategories: vi.fn(),
     uploadPreview: vi.fn(),
     commitExpenses: vi.fn(),
   },
@@ -57,6 +58,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     vi.clearAllMocks();
     expenseService.getPaymentMethods.mockResolvedValue(mockPaymentMethods);
     expenseService.getCategories.mockResolvedValue(mockCategories);
+    expenseService.getSubCategories.mockResolvedValue([]);
     expenseService.uploadPreview.mockResolvedValue(mockPreviewResponse);
     expenseService.commitExpenses.mockResolvedValue({ status: 'success', count: 2 });
   });
@@ -278,4 +280,58 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     });
   });
 
+  it('미리보기 화면에 2차 카테고리 선택 드롭다운이 렌더링되고 변경 시 commitExpenses에 sub_category_id가 전달된다', async () => {
+    const mockSubCategories = [
+      { id: 10, name: '구독료', color: '#8B5CF6' },
+      { id: 11, name: '모임회비', color: '#EC4899' },
+    ];
+    expenseService.getSubCategories = vi.fn().mockResolvedValue(mockSubCategories);
+
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+        subCategories={mockSubCategories}
+      />
+    );
+
+    const file = new File(['dummy'], 'statement.xlsx');
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // 결제수단 선택
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      expect(screen.getByText('2차 카테고리')).toBeInTheDocument();
+    });
+
+    // 2차 카테고리 옵션 확인 및 첫 번째 행을 '구독료'(id: 10)로 선택
+    const allComboboxes = screen.getAllByRole('combobox');
+    // 2차 카테고리 셀렉트박스 찾기: option '구독료'를 포함하는 셀렉트
+    const subCatSelect = allComboboxes.find((sel) =>
+      Array.from(sel.options).some((opt) => opt.text === '구독료')
+    );
+    expect(subCatSelect).toBeDefined();
+    fireEvent.change(subCatSelect, { target: { value: '10' } });
+
+    // 커밋 버튼 클릭
+    const commitBtn = screen.getByRole('button', { name: /등록 및 덮어쓰기/i });
+    fireEvent.click(commitBtn);
+
+    await waitFor(() => {
+      expect(expenseService.commitExpenses).toHaveBeenCalledTimes(1);
+    });
+
+    const commitPayload = expenseService.commitExpenses.mock.calls[0][0];
+    expect(commitPayload.items[0].sub_category_id).toBe(10);
+  });
 });
+

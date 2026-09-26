@@ -109,6 +109,7 @@ class ExpenseBase(BaseModel):
     owner: str
     institution: str
     category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
     is_excluded: bool = False
     memo: Optional[str] = None
     source_file: Optional[str] = None
@@ -129,6 +130,7 @@ class ExpenseUpdate(BaseModel):
     owner: Optional[str] = None
     institution: Optional[str] = None
     category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
     is_excluded: Optional[bool] = None
     memo: Optional[str] = None
     source_file: Optional[str] = None
@@ -142,6 +144,9 @@ class ExpenseResponse(ExpenseBase):
     created_at: Optional[datetime] = None
     category_name: Optional[str] = None
     payment_method_alias: Optional[str] = None
+    sub_category: Optional[ExpenseSubCategoryResponse] = None
+    sub_category_name: Optional[str] = None
+    sub_category_color: Optional[str] = None
 
 
 # --- 명세서 업로드 미리보기 및 커밋 스키마 ---
@@ -155,6 +160,7 @@ class ExpenseUploadPreviewTransaction(BaseModel):
     original_type: Optional[str] = None
     memo: Optional[str] = None
     category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
     is_excluded: bool = False
 
 
@@ -173,9 +179,14 @@ class ExpenseCommitItem(BaseModel):
     merchant: str
     amount: float
     category_id: Optional[int] = None
+    sub_category_id: Optional[int] = None
     is_excluded: bool = False
     memo: Optional[str] = None
     original_type: Optional[str] = None
+
+
+# 호환용 별칭 정의
+ExpenseBatchItem = ExpenseCommitItem
 
 
 class ExpenseCommitRequest(BaseModel):
@@ -212,6 +223,19 @@ class CategoryBreakdownItem(BaseModel):
     percentage: float
 
 
+class SubCategoryBreakdownItem(BaseModel):
+    """2차 카테고리(특성/태그)별 지출 집계 항목 스키마입니다."""
+    id: Optional[int] = None
+    sub_category_id: Optional[int] = None
+    name: str
+    sub_category_name: Optional[str] = None
+    color: str = "#8B5CF6"
+    total_amount: float
+    amount: Optional[float] = None
+    count: int = 0
+    percentage: float = 0.0
+
+
 class PaymentMethodBreakdownItem(BaseModel):
     """결제수단별 지출 요약 항목 스키마입니다."""
     payment_method_id: Optional[int] = None
@@ -232,5 +256,6 @@ class ExpenseStatsResponse(BaseModel):
     excluded_total: float
     monthly_trends: list[MonthlyTrendItem]
     category_breakdown: list[CategoryBreakdownItem]
+    sub_category_breakdown: list[SubCategoryBreakdownItem] = []
     payment_method_breakdown: list[PaymentMethodBreakdownItem]
 
