@@ -17,6 +17,8 @@ dependencies = [
     "holidays>=0.25",
     "fastmcp>=3.4.4",
     "pytest-xdist>=3.5.0",
+    "msoffcrypto-tool>=6.0.0",
+    "openpyxl>=3.1.5",
 ]
 
 [tool.pytest.ini_options]
