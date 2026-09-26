@@ -37,7 +37,6 @@ from .expense import (
     ExpenseUpdate,
     ExpenseResponse,
     ExpenseBatchItem,
-    SubCategoryBreakdownItem,
 )
 from .common import MessageResponse
 
@@ -79,7 +78,6 @@ __all__ = [
     "ExpenseUpdate",
     "ExpenseResponse",
     "ExpenseBatchItem",
-    "SubCategoryBreakdownItem",
 ]
 
 

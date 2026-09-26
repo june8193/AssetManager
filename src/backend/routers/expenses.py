@@ -31,7 +31,6 @@ from ..schemas.expense import (
     ExpenseStatsResponse,
     MonthlyTrendItem,
     CategoryBreakdownItem,
-    SubCategoryBreakdownItem,
     PaymentMethodBreakdownItem,
 )
 
@@ -530,16 +529,12 @@ def _serialize_expense(exp: Expense) -> ExpenseResponse:
         owner=exp.owner,
         institution=exp.institution,
         category_id=exp.category_id,
-        sub_category_id=None,
         is_excluded=exp.is_excluded,
         memo=exp.memo,
         source_file=exp.source_file,
         created_at=exp.created_at,
         category_name=category_name,
         payment_method_alias=payment_method_alias,
-        sub_category=None,
-        sub_category_name=None,
-        sub_category_color=None,
     )
 
 
@@ -753,9 +748,6 @@ def get_expense_stats(
             )
         )
 
-    # 2차 카테고리는 폐지되었으므로 빈 목록 반환 (호환성 유지)
-    sub_category_breakdown = []
-
     # 결제수단별 비중 집계
     pm_rows = (
         base_query.filter(
@@ -799,7 +791,6 @@ def get_expense_stats(
         excluded_total=float(excluded_total),
         monthly_trends=monthly_trends,
         category_breakdown=category_breakdown,
-        sub_category_breakdown=sub_category_breakdown,
         payment_method_breakdown=payment_method_breakdown,
     )
 

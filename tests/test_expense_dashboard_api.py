@@ -269,6 +269,51 @@ def test_get_expense_stats_calculation(client, sample_data):
     assert trends.get("2026-07") == 80000.0
     assert trends.get("2026-06") == 70000.0
 
+    # 2차 카테고리 폐지에 따라 sub_category_breakdown 필드는 완전히 제거되어야 함
+    assert "sub_category_breakdown" not in stats
+
+
+def test_get_expense_stats_includes_subscription_and_club_dues(client, db_session, sample_data):
+    """구독료 및 모임회비 단일 카테고리가 stats의 category_breakdown에 정상 집계되는지 검증합니다."""
+    cat_sub = db_session.query(ExpenseCategory).filter(ExpenseCategory.name == "구독료").first()
+    cat_dues = db_session.query(ExpenseCategory).filter(ExpenseCategory.name == "모임회비").first()
+    pm_hyundai = sample_data["pm_hyundai"]
+
+    e_sub = Expense(
+        transaction_date=datetime(2026, 8, 5, 10, 0),
+        year_month="2026-08",
+        merchant="넷플릭스 정기구독",
+        amount=17000.0,
+        payment_method_id=pm_hyundai.id,
+        owner="장준",
+        institution="현대카드",
+        category_id=cat_sub.id if cat_sub else None,
+        is_excluded=False,
+    )
+    e_dues = Expense(
+        transaction_date=datetime(2026, 8, 12, 19, 0),
+        year_month="2026-08",
+        merchant="동창회 모임회비",
+        amount=30000.0,
+        payment_method_id=pm_hyundai.id,
+        owner="장준",
+        institution="현대카드",
+        category_id=cat_dues.id if cat_dues else None,
+        is_excluded=False,
+    )
+    db_session.add_all([e_sub, e_dues])
+    db_session.commit()
+
+    res = client.get("/api/expenses/stats?year_month=2026-08")
+    assert res.status_code == 200
+    stats = res.json()
+
+    cat_breakdown = {c["category_name"]: c["amount"] for c in stats["category_breakdown"]}
+    assert "구독료" in cat_breakdown
+    assert cat_breakdown["구독료"] == 17000.0
+    assert "모임회비" in cat_breakdown
+    assert cat_breakdown["모임회비"] == 30000.0
+
 
 def test_get_expense_stats_owner_filtering(client, sample_data):
     """소유주별 탭 필터링 시 통계가 해당 소유주 데이터만으로 정확히 집계되는지 검증합니다."""

@@ -47,7 +47,6 @@ export default function ExpensesPage() {
   const [stats, setStats] = useState(null);
   const [expenses, setExpenses] = useState([]);
   const [categories, setCategories] = useState([]);
-  const [subCategories, setSubCategories] = useState([]);
   const [paymentMethods, setPaymentMethods] = useState([]);
 
   // 필터 상태
@@ -55,7 +54,6 @@ export default function ExpensesPage() {
   const [selectedMonth, setSelectedMonth] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedSubCategory, setSelectedSubCategory] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('');
   const [selectedExcludedFilter, setSelectedExcludedFilter] = useState('all'); // 'all' | 'included' | 'excluded'
 
@@ -86,16 +84,14 @@ export default function ExpensesPage() {
     return list;
   }, []);
 
-  // 마스터 데이터(카테고리, 2차 카테고리, 결제수단) 조회
+  // 마스터 데이터(카테고리, 결제수단) 조회
   const fetchMasters = useCallback(async () => {
     try {
-      const [catList, subCatList, pmList] = await Promise.all([
+      const [catList, pmList] = await Promise.all([
         expenseService.getCategories(),
-        expenseService.getSubCategories(),
         expenseService.getPaymentMethods(),
       ]);
       setCategories(catList || []);
-      setSubCategories(subCatList || []);
       setPaymentMethods(pmList || []);
     } catch (err) {
       console.error('마스터 정보 조회 실패:', err);
@@ -125,7 +121,6 @@ export default function ExpensesPage() {
       if (activeMonth) expenseParams.year_month = activeMonth;
       if (selectedOwner && selectedOwner !== '전체') expenseParams.owner = selectedOwner;
       if (selectedCategory) expenseParams.category_id = selectedCategory;
-      if (selectedSubCategory) expenseParams.sub_category_id = selectedSubCategory;
       if (selectedInstitution) expenseParams.institution = selectedInstitution;
       if (selectedExcludedFilter === 'included') expenseParams.is_excluded = false;
       if (selectedExcludedFilter === 'excluded') expenseParams.is_excluded = true;
@@ -142,7 +137,6 @@ export default function ExpensesPage() {
     selectedMonth,
     selectedOwner,
     selectedCategory,
-    selectedSubCategory,
     selectedInstitution,
     selectedExcludedFilter,
     searchKeyword,
@@ -181,38 +175,6 @@ export default function ExpensesPage() {
       setStats(newStats);
     } catch (err) {
       alert(`카테고리 변경 실패: ${err.message}`);
-    }
-  };
-
-  // 인라인 2차 카테고리 수정 핸들러
-  const handleSubCategoryChange = async (expenseId, newSubCategoryId) => {
-    try {
-      const subId = newSubCategoryId ? Number(newSubCategoryId) : null;
-      await expenseService.updateExpense(expenseId, { sub_category_id: subId });
-
-      const matchedSub = subCategories.find((s) => s.id === subId);
-      setExpenses((prev) =>
-        prev.map((item) =>
-          item.id === expenseId
-            ? {
-                ...item,
-                sub_category_id: subId,
-                sub_category: matchedSub || null,
-                sub_category_name: matchedSub ? matchedSub.name : null,
-                sub_category_color: matchedSub ? matchedSub.color : null,
-              }
-            : item
-        )
-      );
-
-      // 대시보드 통계 새로고침
-      const statsParams = {};
-      if (selectedMonth) statsParams.year_month = selectedMonth;
-      if (selectedOwner && selectedOwner !== '전체') statsParams.owner = selectedOwner;
-      const newStats = await expenseService.getStats(statsParams);
-      setStats(newStats);
-    } catch (err) {
-      alert(`2차 카테고리 변경 실패: ${err.message}`);
     }
   };
 
@@ -497,36 +459,6 @@ export default function ExpensesPage() {
             </div>
           </div>
         </div>
-
-        {/* 2차 카테고리(지출 특성) 요약 섹션 */}
-        {stats?.sub_category_breakdown && stats.sub_category_breakdown.length > 0 && (
-          <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-700">지출 특성 요약</span>
-              <span className="text-xs text-slate-400">구독료·모임회비 등 정기/특성 지출</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-2.5">
-              {stats.sub_category_breakdown.map((sc) => (
-                <div
-                  key={sc.id || sc.sub_category_id || sc.name}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-slate-200 shadow-xs text-xs"
-                >
-                  <span
-                    className="w-2.5 h-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: sc.color || '#8B5CF6' }}
-                  />
-                  <span className="font-semibold text-slate-800">{sc.name || sc.sub_category_name}</span>
-                  <span className="font-bold text-slate-900 font-mono">
-                    {formatCurrency(sc.total_amount ?? sc.amount ?? 0)}
-                  </span>
-                  {sc.count > 0 && (
-                    <span className="text-[11px] text-slate-400">({sc.count}건)</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* 3. 시각화 차트 섹션: 최근 월별 추이 바차트 & 카테고리 비중 도넛차트 */}
@@ -741,20 +673,6 @@ export default function ExpensesPage() {
               ))}
             </select>
 
-            {/* 2차 카테고리 필터 */}
-            <select
-              value={selectedSubCategory}
-              onChange={(e) => setSelectedSubCategory(e.target.value)}
-              className="py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-medium"
-            >
-              <option value="">2차 카테고리: 전체</option>
-              {subCategories.map((sc) => (
-                <option key={sc.id} value={sc.id}>
-                  {sc.name}
-                </option>
-              ))}
-            </select>
-
             {/* 금융기관 필터 */}
             {institutionOptions.length > 0 && (
               <select
@@ -783,13 +701,12 @@ export default function ExpensesPage() {
             </select>
 
             {/* 필터 초기화 버튼 */}
-            {(searchKeyword || selectedCategory || selectedSubCategory || selectedInstitution || selectedExcludedFilter !== 'all') && (
+            {(searchKeyword || selectedCategory || selectedInstitution || selectedExcludedFilter !== 'all') && (
               <button
                 type="button"
                 onClick={() => {
                   setSearchKeyword('');
                   setSelectedCategory('');
-                  setSelectedSubCategory('');
                   setSelectedInstitution('');
                   setSelectedExcludedFilter('all');
                 }}
@@ -813,7 +730,6 @@ export default function ExpensesPage() {
                 <th className="py-3 px-4">소유주</th>
                 <th className="py-3 px-4 text-right">금액</th>
                 <th className="py-3 px-4">카테고리</th>
-                <th className="py-3 px-4">2차 카테고리</th>
                 <th className="py-3 px-4 text-center">통계 제외</th>
                 <th className="py-3 px-4 text-center">관리</th>
               </tr>
@@ -821,7 +737,7 @@ export default function ExpensesPage() {
             <tbody className="divide-y divide-slate-100">
               {expenses.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
                     <Receipt size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm">해당 조건에 일치하는 지출 내역이 없습니다.</p>
                   </td>
@@ -874,44 +790,18 @@ export default function ExpensesPage() {
                       </span>
                     </td>
 
-                    {/* 1차 카테고리 및 2차 카테고리 태그 뱃지 */}
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <div className="flex items-center gap-1.5">
-                        <select
-                          value={tx.category_id || ''}
-                          onChange={(e) => handleCategoryChange(tx.id, e.target.value)}
-                          className="text-xs bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        >
-                          <option value="">미분류</option>
-                          {categories.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name}
-                            </option>
-                          ))}
-                        </select>
-                        {tx.sub_category && (
-                          <span
-                            className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold text-white shadow-xs shrink-0"
-                            style={{ backgroundColor: tx.sub_category.color || tx.sub_category_color || '#8B5CF6' }}
-                            title="2차 카테고리 태그"
-                          >
-                            {tx.sub_category.name || tx.sub_category_name}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-
-                    {/* 2차 카테고리 인라인 셀렉트 */}
+                    {/* 카테고리 */}
                     <td className="py-3 px-4 whitespace-nowrap">
                       <select
-                        value={tx.sub_category_id || ''}
-                        onChange={(e) => handleSubCategoryChange(tx.id, e.target.value)}
-                        className="text-xs bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        value={tx.category_id || ''}
+                        onChange={(e) => handleCategoryChange(tx.id, e.target.value)}
+                        disabled={Boolean(tx.is_excluded)}
+                        className="text-xs bg-white border border-slate-200 rounded px-2 py-1 text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                       >
-                        <option value="">(선택 안함)</option>
-                        {subCategories.map((sc) => (
-                          <option key={sc.id} value={sc.id}>
-                            {sc.name}
+                        <option value="">미분류</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
                           </option>
                         ))}
                       </select>
@@ -954,7 +844,6 @@ export default function ExpensesPage() {
         onSuccess={handleUploadSuccess}
         paymentMethods={paymentMethods}
         categories={categories}
-        subCategories={subCategories}
       />
 
       <PaymentMethodsModal
