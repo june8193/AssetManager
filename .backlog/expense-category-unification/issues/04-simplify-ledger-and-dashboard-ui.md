@@ -5,7 +5,7 @@
 
 **Blocked by:** 03 — 미분류 거래 커밋 방지 및 원장 저장 유효성 검증
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `Expense` 모델 및 스키마에서 `sub_category_id` 및 관련 필드가 완전히 정리된다.
 - [x] 대시보드 통계 API(`GET /api/expenses/stats`) 및 응답 스키마에서 `sub_category_breakdown`이 제거된다.
