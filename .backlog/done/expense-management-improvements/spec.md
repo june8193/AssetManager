@@ -1,6 +1,6 @@
 # 지출관리 개선 사양서 (Expense Management Improvements Spec)
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
