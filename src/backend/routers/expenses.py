@@ -484,6 +484,40 @@ def delete_expense_rule(
     return None
 
 
+def match_expense_rule(
+    merchant: Optional[str],
+    rules: List[ExpenseRule],
+) -> tuple[Optional[int], bool]:
+    """가맹점명에 등록된 자동분류 규칙들을 순차 평가하여 (category_id, is_excluded)를 반환합니다.
+
+    - 대소문자 구분 없이(Case-Insensitive) 가맹점명(merchant)에 규칙 키워드가 부분 일치(substring)하는지 검사합니다.
+    - 규칙 목록은 사전에 키워드 길이 내림차순(더 긴 키워드 우선) 및 최신순으로 정렬되어 전달되어야 합니다.
+    - 매칭된 규칙이 is_excluded == True인 경우: (None, True) 반환.
+    - 매칭된 규칙이 is_excluded == False인 경우: (rule.category_id, False) 반환.
+    - 일치하는 규칙이 없는 경우: 기본값 (None, False) 반환.
+
+    Args:
+        merchant (Optional[str]): 원시 거래의 가맹점명.
+        rules (List[ExpenseRule]): 우선순위 정렬된 활성 자동분류 규칙 목록.
+
+    Returns:
+        tuple[Optional[int], bool]: (매칭된 카테고리 ID 또는 None, 통계 제외 여부).
+    """
+    if not merchant:
+        return None, False
+
+    merchant_lower = merchant.strip().lower()
+    for rule in rules:
+        if rule.keyword:
+            keyword_lower = rule.keyword.strip().lower()
+            if keyword_lower and keyword_lower in merchant_lower:
+                if rule.is_excluded:
+                    return None, True
+                return rule.category_id, False
+
+    return None, False
+
+
 # ==========================================
 # 명세서 업로드 미리보기 및 커밋 엔드포인트
 # ==========================================
@@ -508,7 +542,7 @@ async def upload_expense_preview(
         HTTPException: 파일이 비어있거나, 비밀번호 오류, 지원하지 않는 형식 등 파싱 실패 시 400/404 반환.
 
     Returns:
-        ExpenseUploadPreviewResponse: 매칭된 결제수단 및 추출된 거래 목록 (초기값 category_id=None, is_excluded=False).
+        ExpenseUploadPreviewResponse: 매칭된 결제수단 및 추출된 거래 목록 (규칙 기반 자동분류 적용).
     """
     file_bytes = await file.read()
     filename = file.filename or ""
@@ -557,22 +591,37 @@ async def upload_expense_preview(
             detail=f"명세서 파싱 실패: {exc}",
         )
 
-    # 3. 거래 목록 구성 (자동 추천/제외 없이 미분류 및 통계 반영 기본값 고정)
+    # 3. 활성 자동분류 규칙 목록 조회 (키워드 길이 내림차순, 최신순 정렬)
+    active_rules = (
+        db.query(ExpenseRule)
+        .order_by(
+            func.length(ExpenseRule.keyword).desc(),
+            ExpenseRule.created_at.desc(),
+            ExpenseRule.id.desc(),
+        )
+        .all()
+    )
+
+    # 4. 거래 목록 구성 및 자동분류 규칙 매칭
     raw_transactions = parse_result.get("transactions", [])
 
-    preview_transactions = [
-        ExpenseUploadPreviewTransaction(
-            transaction_date=tx["transaction_date"],
-            year_month=tx.get("year_month") or parse_result.get("year_month", ""),
-            merchant=tx["merchant"],
-            amount=tx["amount"],
-            original_type=tx.get("original_type"),
-            memo=tx.get("memo"),
-            category_id=None,
-            is_excluded=False,
+    preview_transactions = []
+    for tx in raw_transactions:
+        merchant_name = tx.get("merchant") or ""
+        matched_category_id, is_excluded = match_expense_rule(merchant_name, active_rules)
+
+        preview_transactions.append(
+            ExpenseUploadPreviewTransaction(
+                transaction_date=tx["transaction_date"],
+                year_month=tx.get("year_month") or parse_result.get("year_month", ""),
+                merchant=merchant_name,
+                amount=tx["amount"],
+                original_type=tx.get("original_type"),
+                memo=tx.get("memo"),
+                category_id=matched_category_id,
+                is_excluded=is_excluded,
+            )
         )
-        for tx in raw_transactions
-    ]
 
     return ExpenseUploadPreviewResponse(
         payment_method=PaymentMethodResponse.model_validate(selected_pm),

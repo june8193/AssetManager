@@ -5,12 +5,12 @@
 
 **Blocked by:** 01 — 자동분류 규칙 데이터 모델 및 백엔드 CRUD API 구축
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] `POST /api/expenses/upload-preview` 파이프라인에서 활성 `ExpenseRule` 목록을 길이 내림차순으로 조회하여 메모리 매칭 수행
-- [ ] 대소문자 구분 없이(Case-Insensitive) 가맹점명(`merchant`)에 규칙 키워드가 포함되어 있는지 부분 일치 검사
-- [ ] 복수 규칙이 동시 일치하는 경우 더 긴(구체적인) 키워드를 가진 규칙을 최우선 매칭 (예: '쿠팡이츠' > '쿠팡')
-- [ ] 매칭된 규칙이 `is_excluded == True`인 경우 거래의 `is_excluded = True`, `category_id = None` 주입
-- [ ] 매칭된 규칙이 `is_excluded == False`인 경우 거래의 `is_excluded = False`, `category_id = rule.category_id` 주입
-- [ ] 일치하는 규칙이 없는 경우 기본값 `is_excluded = False`, `category_id = None` 유지
-- [ ] 업로드 미리보기 매칭 통합 테스트(`tests/test_expense_preview_matching.py`) 작성 및 통과
+- [x] `POST /api/expenses/upload-preview` 파이프라인에서 활성 `ExpenseRule` 목록을 길이 내림차순으로 조회하여 메모리 매칭 수행
+- [x] 대소문자 구분 없이(Case-Insensitive) 가맹점명(`merchant`)에 규칙 키워드가 포함되어 있는지 부분 일치 검사
+- [x] 복수 규칙이 동시 일치하는 경우 더 긴(구체적인) 키워드를 가진 규칙을 최우선 매칭 (예: '쿠팡이츠' > '쿠팡')
+- [x] 매칭된 규칙이 `is_excluded == True`인 경우 거래의 `is_excluded = True`, `category_id = None` 주입
+- [x] 매칭된 규칙이 `is_excluded == False`인 경우 거래의 `is_excluded = False`, `category_id = rule.category_id` 주입
+- [x] 일치하는 규칙이 없는 경우 기본값 `is_excluded = False`, `category_id = None` 유지
+- [x] 업로드 미리보기 매칭 통합 테스트(`tests/test_expense_preview_matching.py`) 작성 및 통과
