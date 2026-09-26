@@ -115,3 +115,54 @@ class ExpenseResponse(ExpenseBase):
     created_at: Optional[datetime] = None
     category_name: Optional[str] = None
     payment_method_alias: Optional[str] = None
+
+
+# --- 명세서 업로드 미리보기 및 커밋 스키마 ---
+
+class ExpenseUploadPreviewTransaction(BaseModel):
+    """명세서에서 추출된 단일 거래 미리보기 스키마입니다."""
+    transaction_date: str
+    year_month: str
+    merchant: str
+    amount: float
+    original_type: Optional[str] = None
+    memo: Optional[str] = None
+    category_id: Optional[int] = None
+    is_excluded: bool = False
+
+
+class ExpenseUploadPreviewResponse(BaseModel):
+    """명세서 업로드 미리보기 응답 스키마입니다."""
+    payment_method: Optional[PaymentMethodResponse] = None
+    year_month: str
+    source_file: str
+    transactions: list[ExpenseUploadPreviewTransaction]
+
+
+class ExpenseCommitItem(BaseModel):
+    """확정 등록할 개별 지출 거래 항목 스키마입니다."""
+    transaction_date: str | datetime
+    year_month: Optional[str] = None
+    merchant: str
+    amount: float
+    category_id: Optional[int] = None
+    is_excluded: bool = False
+    memo: Optional[str] = None
+    original_type: Optional[str] = None
+
+
+class ExpenseCommitRequest(BaseModel):
+    """지출 내역 일괄 확정(덮어쓰기) 등록 요청 스키마입니다."""
+    payment_method_id: int
+    year_month: str
+    source_file: Optional[str] = None
+    items: list[ExpenseCommitItem]
+
+
+class ExpenseCommitResponse(BaseModel):
+    """지출 내역 일괄 확정 등록 결과 응답 스키마입니다."""
+    status: str = "success"
+    message: str
+    count: int
+    year_month: str
+    payment_method_id: int

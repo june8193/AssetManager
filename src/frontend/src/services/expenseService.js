@@ -76,4 +76,32 @@ export const expenseService = {
   async deleteCategory(id) {
     return apiClient.delete(`/api/expenses/categories/${id}`);
   },
+
+  /**
+   * 명세서 파일을 업로드하여 거래 미리보기 데이터를 조회합니다.
+   * @param {File} file - 업로드할 명세서 파일
+   * @param {string} [password] - 복호화 비밀번호
+   * @param {number} [paymentMethodId] - 결제수단 ID
+   * @returns {Promise<Object>} 파싱된 거래 및 결제수단 미리보기 정보
+   */
+  async uploadPreview(file, password, paymentMethodId) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (password) {
+      formData.append('password', password);
+    }
+    if (paymentMethodId !== undefined && paymentMethodId !== null) {
+      formData.append('payment_method_id', String(paymentMethodId));
+    }
+    return apiClient.post('/api/expenses/upload-preview', formData);
+  },
+
+  /**
+   * 검토 완료된 지출 거래 목록을 확정 적재(덮어쓰기)합니다.
+   * @param {Object} data - 확정 적재 페이로드 ({ payment_method_id, year_month, source_file, items })
+   * @returns {Promise<Object>} 커밋 결과 정보
+   */
+  async commitExpenses(data) {
+    return apiClient.post('/api/expenses/commit', data);
+  },
 };

@@ -96,4 +96,51 @@ describe('expenseService 단위 테스트', () => {
       expect(apiClient.delete).toHaveBeenCalledWith('/api/expenses/categories/3');
     });
   });
+
+  describe('명세서 업로드 및 확정 적재 API', () => {
+    it('uploadPreview 호출 시 FormData와 함께 POST 요청을 전송한다', async () => {
+      const mockFile = new File(['dummy content'], 'statement.xlsx', { type: 'application/vnd.ms-excel' });
+      const mockResponse = {
+        payment_method: { id: 1, institution: '카카오뱅크' },
+        year_month: '2026-08',
+        transactions: [],
+      };
+      apiClient.post.mockResolvedValue(mockResponse);
+
+      const res = await expenseService.uploadPreview(mockFile, '950811', 1);
+
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      const [path, formData] = apiClient.post.mock.calls[0];
+      expect(path).toBe('/api/expenses/upload-preview');
+      expect(formData).toBeInstanceOf(FormData);
+      expect(formData.get('file')).toBe(mockFile);
+      expect(formData.get('password')).toBe('950811');
+      expect(formData.get('payment_method_id')).toBe('1');
+      expect(res).toBe(mockResponse);
+    });
+
+    it('commitExpenses 호출 시 payload와 함께 POST 요청을 전송한다', async () => {
+      const payload = {
+        payment_method_id: 1,
+        year_month: '2026-08',
+        source_file: 'statement.xlsx',
+        items: [
+          {
+            transaction_date: '2026-08-01 12:00:00',
+            merchant: '식당',
+            amount: 15000,
+            category_id: 1,
+            is_excluded: false,
+          },
+        ],
+      };
+      const mockResult = { status: 'success', count: 1 };
+      apiClient.post.mockResolvedValue(mockResult);
+
+      const res = await expenseService.commitExpenses(payload);
+
+      expect(apiClient.post).toHaveBeenCalledWith('/api/expenses/commit', payload);
+      expect(res).toBe(mockResult);
+    });
+  });
 });

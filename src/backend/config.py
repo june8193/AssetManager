@@ -59,6 +59,13 @@ class NaverConfig:
 
 
 @dataclass
+class ExpensesConfig:
+    """지출 모니터링 및 복호화 설정 정보를 저장하는 데이터 클래스입니다."""
+
+    default_password: str = ""
+
+
+@dataclass
 class DatabaseConfig:
     """데이터베이스 연결 설정 데이터 클래스입니다."""
 
@@ -84,6 +91,7 @@ class Settings:
     backup: BackupConfig = field(default_factory=BackupConfig)
     telegram: TelegramConfig = field(default_factory=TelegramConfig)
     naver: NaverConfig = field(default_factory=NaverConfig)
+    expenses: ExpensesConfig = field(default_factory=ExpensesConfig)
 
     @classmethod
     def load_from_toml(cls, filepath: str | None = None) -> "Settings":
@@ -180,6 +188,17 @@ class Settings:
             client_secret=naver_secret,
         )
 
+        # 6. Expenses
+        exp_dict = data.get("expenses", {})
+        exp_default_pw = exp_dict.get("default_password", "")
+        env_exp_pw = os.getenv("EXPENSES_DEFAULT_PASSWORD")
+        if env_exp_pw is not None:
+            exp_default_pw = env_exp_pw
+
+        expenses_config = ExpensesConfig(
+            default_password=exp_default_pw,
+        )
+
         return cls(
             base_url=base_url,
             ws_url=ws_url,
@@ -187,6 +206,7 @@ class Settings:
             backup=backup_config,
             telegram=tg_config,
             naver=naver_config,
+            expenses=expenses_config,
         )
 
 
