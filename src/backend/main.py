@@ -37,7 +37,9 @@ from .routers import (
     system,
     dividend,
     performance,
+    expenses,
 )
+
 
 
 def is_in_testing_environment() -> bool:
@@ -194,6 +196,8 @@ app.include_router(kiwoom.router)
 app.include_router(system.router)
 app.include_router(dividend.router)
 app.include_router(performance.router)
+app.include_router(expenses.router)
+
 
 if __name__ == "__main__":
     import uvicorn

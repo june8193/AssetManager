@@ -5,13 +5,15 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** completed
+
 
 ## Acceptance criteria
 
-- [ ] `settings.toml` 백업 경로에 마이그레이션 전 안전 백업 파일(`assets_YYYYMMDD_HHMMSS.db`)이 생성된다.
-- [ ] `payment_methods`, `expense_categories`, `expenses` 테이블이 SQLite 스키마에 추가된다.
-- [ ] 기본 결제수단(장준 카카오뱅크, 장준 현대카드) 및 기본 카테고리(식비/카페, 쇼핑, 주거/통신 등) 시드 데이터가 적재된다.
-- [ ] 결제수단 CRUD 백엔드 API (`/api/expenses/payment-methods`) 및 단위 테스트가 구현되어 정상 통과한다.
-- [ ] 카테고리 CRUD 백엔드 API (`/api/expenses/categories`) 및 단위 테스트가 구현되어 정상 통과한다.
-- [ ] 프론트엔드 모달 컴포넌트를 통해 사용자가 결제수단과 카테고리를 UI에서 원활히 추가/수정/삭제할 수 있다.
+- [x] `settings.toml` 백업 경로에 마이그레이션 전 안전 백업 파일(`assets_YYYYMMDD_HHMMSS.db`)이 생성된다.
+- [x] `payment_methods`, `expense_categories`, `expenses` 테이블이 SQLite 스키마에 추가된다.
+- [x] 기본 결제수단(장준 카카오뱅크, 장준 현대카드) 및 기본 카테고리(식비/카페, 쇼핑, 주거/통신 등) 시드 데이터가 적재된다.
+- [x] 결제수단 CRUD 백엔드 API (`/api/expenses/payment-methods`) 및 단위 테스트가 구현되어 정상 통과한다.
+- [x] 카테고리 CRUD 백엔드 API (`/api/expenses/categories`) 및 단위 테스트가 구현되어 정상 통과한다.
+- [x] 프론트엔드 모달 컴포넌트를 통해 사용자가 결제수단과 카테고리를 UI에서 원활히 추가/수정/삭제할 수 있다.
+

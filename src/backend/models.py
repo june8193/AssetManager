@@ -356,3 +356,93 @@ class SystemSetting(Base):
     value = Column(String(255), nullable=False)
     updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
 
+
+# --- 지출 모니터링 전용 모델 ---
+
+class PaymentMethod(Base):
+    """결제수단(은행 계좌, 신용카드, 체크카드, 지역화폐 등) 마스터 정보를 관리하는 모델입니다.
+
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        owner (str): 소유주 (예: '장준', '성은')
+        institution (str): 금융기관/카드사 (예: '현대카드', '카카오뱅크')
+        alias (str): 결제수단 별칭 (예: '장준 현대카드')
+        account_number (str): 계좌번호 또는 카드 식별번호 (예: '3333', '1002')
+        default_password (str): 자동 복호화용 기본 비밀번호
+        is_active (bool): 활성화 여부
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "payment_methods"
+
+    id = Column(Integer, primary_key=True, index=True)
+    owner = Column(String, nullable=False, index=True)
+    institution = Column(String, nullable=False, index=True)
+    alias = Column(String, nullable=True)
+    account_number = Column(String, nullable=True)
+    default_password = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    expenses = relationship("Expense", back_populates="payment_method")
+
+
+
+class ExpenseCategory(Base):
+    """지출 카테고리 마스터 정보를 관리하는 모델입니다.
+
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        name (str): 카테고리명 (예: '식비/카페', '쇼핑')
+        color (str): UI 및 차트 표시용 HEX 색상 코드 (예: '#FF6B6B')
+        is_default (bool): 시스템 기본 카테고리 여부
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "expense_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    color = Column(String, nullable=False, default="#95A5A6")
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    expenses = relationship("Expense", back_populates="category")
+
+
+class Expense(Base):
+    """지출 거래 내역 원장을 저장하는 모델입니다.
+
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        transaction_date (datetime): 거래 일시
+        year_month (str): 정산 대상 년월 (예: '2026-08')
+        merchant (str): 가맹점명 또는 거래 내용
+        amount (float): 지출 금액 (원)
+        payment_method_id (int): 결제수단 FK (선택)
+        owner (str): 소유주 (예: '장준', '성은')
+        institution (str): 금융기관/카드사 (예: '현대카드', '카카오뱅크')
+        category_id (int): 카테고리 FK (선택)
+        is_excluded (bool): 통계 집계 제외 여부 (기본 0/False)
+        memo (str): 비고 및 사용자 메모
+        source_file (str): 데이터 출처 파일명
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    transaction_date = Column(DateTime, nullable=False, index=True)
+    year_month = Column(String, nullable=False, index=True)
+    merchant = Column(String, nullable=False, index=True)
+    amount = Column(Float, nullable=False)
+    payment_method_id = Column(Integer, ForeignKey("payment_methods.id", ondelete="SET NULL"), nullable=True, index=True)
+    owner = Column(String, nullable=False, index=True)
+    institution = Column(String, nullable=False, index=True)
+    category_id = Column(Integer, ForeignKey("expense_categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_excluded = Column(Boolean, default=False, nullable=False)
+    memo = Column(String, nullable=True)
+    source_file = Column(String, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    payment_method = relationship("PaymentMethod", back_populates="expenses")
+    category = relationship("ExpenseCategory", back_populates="expenses")
+
+
