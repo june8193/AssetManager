@@ -366,3 +366,89 @@ def test_commit_expenses_multi_month_and_flexible_date_overwrite(client, db_sess
     assert merchants == {"7월 말 식당 (수정)", "8월 신규 편의점"}
 
 
+def test_commit_expenses_rejects_unclassified_included_transaction(client, db_session):
+    """통계 반영 거래 중 카테고리가 누락된(None 또는 <= 0) 항목이 있으면 HTTP 400 Bad Request로 커밋을 거부하는지 검증합니다."""
+    pm = db_session.query(PaymentMethod).first()
+    cat = db_session.query(ExpenseCategory).first()
+    year_month = "2026-08"
+
+    # 통계 반영 거래 2건 중 1건의 category_id가 None
+    payload = {
+        "payment_method_id": pm.id,
+        "year_month": year_month,
+        "source_file": "test_unclassified.xlsx",
+        "items": [
+            {
+                "transaction_date": "2026-08-01 12:00:00",
+                "year_month": year_month,
+                "merchant": "카테고리 지정 완료 식당",
+                "amount": 10000.0,
+                "category_id": cat.id,
+                "is_excluded": False,
+            },
+            {
+                "transaction_date": "2026-08-02 13:00:00",
+                "year_month": year_month,
+                "merchant": "카테고리 누락 식당",
+                "amount": 15000.0,
+                "category_id": None,
+                "is_excluded": False,
+            },
+        ],
+    }
+
+    response = client.post("/api/expenses/commit", json=payload)
+    assert response.status_code == 400, f"Expected 400, got {response.status_code}: {response.text}"
+    detail = response.json().get("detail", "")
+    assert "카테고리" in detail or "미분류" in detail
+
+    # DB에 저장되지 않았는지 검증
+    saved_records = db_session.query(Expense).filter_by(payment_method_id=pm.id, year_month=year_month).all()
+    assert len(saved_records) == 0, "400 에러 발생 시 원장에 데이터가 저장되어서는 안 됩니다."
+
+
+def test_commit_expenses_allows_excluded_transaction_without_category(client, db_session):
+    """통계 제외(is_excluded=True) 거래는 카테고리가 없어도(None) 정상적으로 저장을 허용하는지 검증합니다."""
+    pm = db_session.query(PaymentMethod).first()
+    cat = db_session.query(ExpenseCategory).first()
+    year_month = "2026-08"
+
+    payload = {
+        "payment_method_id": pm.id,
+        "year_month": year_month,
+        "source_file": "test_excluded_no_cat.xlsx",
+        "items": [
+            {
+                "transaction_date": "2026-08-01 12:00:00",
+                "year_month": year_month,
+                "merchant": "일반 식당",
+                "amount": 12000.0,
+                "category_id": cat.id,
+                "is_excluded": False,
+            },
+            {
+                "transaction_date": "2026-08-05 15:00:00",
+                "year_month": year_month,
+                "merchant": "카드대금 이체 (통계제외)",
+                "amount": 500000.0,
+                "category_id": None,
+                "is_excluded": True,
+            },
+        ],
+    }
+
+    response = client.post("/api/expenses/commit", json=payload)
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["count"] == 2
+
+    # DB 검증: 통계 제외 항목은 category_id=None으로 적재되어야 함
+    saved_records = db_session.query(Expense).filter_by(payment_method_id=pm.id, year_month=year_month).all()
+    assert len(saved_records) == 2
+    excluded_item = next(r for r in saved_records if r.merchant == "카드대금 이체 (통계제외)")
+    assert excluded_item.is_excluded is True
+    assert excluded_item.category_id is None
+
+
+

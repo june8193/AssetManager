@@ -436,6 +436,18 @@ def commit_expenses(
             detail=f"ID가 {payload.payment_method_id}인 결제수단을 찾을 수 없습니다.",
         )
 
+    # 통계 반영 거래 중 카테고리가 지정되지 않은 항목 검증
+    unclassified_items = [
+        it
+        for it in payload.items
+        if not it.is_excluded and (not it.category_id or it.category_id <= 0)
+    ]
+    if unclassified_items:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"미분류된 거래가 {len(unclassified_items)}건 있습니다. 모든 유효 지출에 카테고리를 지정해야 저장할 수 있습니다.",
+        )
+
     try:
         # 다중 월 승인건이 섞여있더라도 중복 누적이 발생하지 않도록 대상 월 집합 계산
         target_months = {payload.year_month} | {

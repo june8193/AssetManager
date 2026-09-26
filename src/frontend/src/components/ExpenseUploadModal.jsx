@@ -185,6 +185,9 @@ export default function ExpenseUploadModal({
   const excludedItems = previewTransactions.filter((item) => item.is_excluded);
   const excludedCount = excludedItems.length;
   const excludedAmount = excludedItems.reduce((acc, curr) => acc + (curr.amount || 0), 0);
+  const unclassifiedCount = includedItems.filter(
+    (item) => !item.category_id || Number(item.category_id) <= 0
+  ).length;
 
   // --- 커밋 (확정 덮어쓰기) 핸들러 ---
   const handleCommit = async () => {
@@ -465,6 +468,16 @@ export default function ExpenseUploadModal({
               </span>
             </div>
 
+            {/* 미분류 거래 경고 알림 */}
+            {unclassifiedCount > 0 && (
+              <div className="px-6 py-2 bg-rose-500/10 border-b border-rose-500/20 flex items-center gap-2 text-xs text-rose-300">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>
+                  {`미분류된 거래가 ${unclassifiedCount}건 있습니다. 모든 유효 지출에 카테고리를 지정해야 저장할 수 있습니다.`}
+                </span>
+              </div>
+            )}
+
             {/* 테이블 영역 */}
             <div className="flex-1 overflow-y-auto min-h-0">
               <table className="w-full text-left text-xs border-collapse">
@@ -576,7 +589,7 @@ export default function ExpenseUploadModal({
                 <button
                   type="button"
                   onClick={handleCommit}
-                  disabled={committing || totalCount === 0}
+                  disabled={committing || totalCount === 0 || unclassifiedCount > 0}
                   className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm flex items-center gap-2 transition-colors"
                 >
                   {committing ? (
@@ -587,7 +600,7 @@ export default function ExpenseUploadModal({
                   ) : (
                     <>
                       <CheckCircle className="w-4 h-4" />
-                      <span>등록 및 덮어쓰기</span>
+                      <span>확정 및 저장</span>
                     </>
                   )}
                 </button>

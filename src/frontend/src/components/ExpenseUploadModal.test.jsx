@@ -205,7 +205,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     expect(starbucksCatSelect.value).toBe('2');
   });
 
-  it('확정 등록 및 덮어쓰기 버튼을 클릭하면 commitExpenses가 호출되고 onSuccess 콜백이 실행된다', async () => {
+  it('확정 및 저장 버튼을 클릭하면 commitExpenses가 호출되고 onSuccess 콜백이 실행된다', async () => {
     const onSuccessMock = vi.fn();
     const onCloseMock = vi.fn();
 
@@ -231,10 +231,10 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.click(parseBtn);
 
     await waitFor(() => {
-      expect(screen.getByText(/등록 및 덮어쓰기/i)).toBeInTheDocument();
+      expect(screen.getByText(/확정 및 저장/i)).toBeInTheDocument();
     });
 
-    const commitBtn = screen.getByRole('button', { name: /등록 및 덮어쓰기/i });
+    const commitBtn = screen.getByRole('button', { name: /확정 및 저장/i });
     fireEvent.click(commitBtn);
 
     await waitFor(() => {
@@ -356,5 +356,142 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.click(starbucksCheckbox);
     expect(starbucksCatSelect).not.toBeDisabled();
   });
+
+  it('통계 반영 거래 중 카테고리가 미분류된 거래가 있으면 경고 배너가 표시되고 확정 및 저장 버튼이 비활성화된다', async () => {
+    const unclassifiedPreviewResponse = {
+      payment_method: mockPaymentMethods[0],
+      year_month: '2026-08',
+      source_file: '카카오뱅크_명세서.xlsx',
+      transactions: [
+        {
+          transaction_date: '2026-08-01 12:00:00',
+          year_month: '2026-08',
+          merchant: '미분류 식당',
+          amount: 15000,
+          original_type: '출금',
+          memo: '점심',
+          category_id: null,
+          is_excluded: false,
+        },
+        {
+          transaction_date: '2026-08-10 18:00:00',
+          year_month: '2026-08',
+          merchant: '카드대금 결제',
+          amount: 350000,
+          original_type: '출금',
+          memo: '카드대금',
+          category_id: null,
+          is_excluded: true, // 통계 제외는 카테고리 없어도 허용
+        },
+      ],
+    };
+    expenseService.uploadPreview.mockResolvedValueOnce(unclassifiedPreviewResponse);
+
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    const file = new File(['dummy'], 'statement.xlsx');
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('미분류 식당')).toBeInTheDocument();
+    });
+
+    // 경고 배너 노출 확인: "미분류된 거래가 1건 있습니다. 모든 유효 지출에 카테고리를 지정해야 저장할 수 있습니다."
+    expect(
+      screen.getByText(/미분류된 거래가 1건 있습니다\. 모든 유효 지출에 카테고리를 지정해야 저장할 수 있습니다\./i)
+    ).toBeInTheDocument();
+
+    // 확정 및 저장 버튼 비활성화 확인
+    const commitBtn = screen.getByRole('button', { name: /확정 및 저장|등록 및 덮어쓰기/i });
+    expect(commitBtn).toBeDisabled();
+
+    // 1) 미분류 거래에 카테고리 지정 시 경고 배너가 사라지고 버튼 활성화
+    const catSelects = document.querySelectorAll('tbody select');
+    const firstCatSelect = catSelects[0];
+    fireEvent.change(firstCatSelect, { target: { value: '1' } });
+
+    expect(
+      screen.queryByText(/미분류된 거래가 1건 있습니다/i)
+    ).not.toBeInTheDocument();
+    expect(commitBtn).not.toBeDisabled();
+  });
+
+  it('통계 제외(is_excluded=True)로 체크된 거래는 카테고리가 없어도 미분류 건수에서 제외되어 버튼이 활성화된다', async () => {
+    const unclassifiedPreviewResponse = {
+      payment_method: mockPaymentMethods[0],
+      year_month: '2026-08',
+      source_file: '카카오뱅크_명세서.xlsx',
+      transactions: [
+        {
+          transaction_date: '2026-08-01 12:00:00',
+          year_month: '2026-08',
+          merchant: '미분류 통계제외 거래',
+          amount: 50000,
+          original_type: '출금',
+          memo: '타행이체',
+          category_id: null,
+          is_excluded: false,
+        },
+      ],
+    };
+    expenseService.uploadPreview.mockResolvedValueOnce(unclassifiedPreviewResponse);
+
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    const file = new File(['dummy'], 'statement.xlsx');
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('미분류 통계제외 거래')).toBeInTheDocument();
+    });
+
+    const commitBtn = screen.getByRole('button', { name: /확정 및 저장|등록 및 덮어쓰기/i });
+    expect(commitBtn).toBeDisabled();
+
+    // 통계 제외 체크박스를 클릭하여 제외 처리
+    const checkboxes = screen.getAllByRole('checkbox');
+    fireEvent.click(checkboxes[0]);
+
+    // 경고 배너가 사라지고 버튼이 활성화되어야 함
+    expect(
+      screen.queryByText(/미분류된 거래가/i)
+    ).not.toBeInTheDocument();
+    expect(commitBtn).not.toBeDisabled();
+
+    // 저장 버튼 클릭 시 commitExpenses 호출 가능 확인
+    fireEvent.click(commitBtn);
+    await waitFor(() => {
+      expect(expenseService.commitExpenses).toHaveBeenCalled();
+    });
+  });
 });
+
 
