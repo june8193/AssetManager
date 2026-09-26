@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — 다기간 지출 통계 API 확장 및 데스크탑 기간 분석 연동, 02 — 모바일 6대 탭 바 확장 및 지출 라우트(/m/expenses) 기반 구축, 03 — 모바일 전용 지출 관리 화면(MobileExpensesPage) 및 기간 직접 지정 패널 구현
 
-**Status:** closed
+**Status:** resolved
 
 - [x] `uv run scripts/dev.py`로 개발 서버(`src/dev_assets.db` 격리) 백그라운드 구동
 - [x] 데스크탑 환경(`http://localhost:5173/expenses`) E2E 검증:
