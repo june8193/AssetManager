@@ -1,6 +1,6 @@
 # Feature Spec: 지출 모니터링 메뉴 신설 및 명세서(현대카드/카카오뱅크) 자동 복호화·등록
 
-Status: ready-for-agent
+Status: completed
 
 ## Problem Statement
 
