@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] 기본 카테고리 마스터 시드 및 테이블에 '구독료'(#8B5CF6), '모임회비'(#EC4899)가 정규 카테고리로 등록/유지된다.
 - [x] 2차 카테고리 모델(`ExpenseSubCategory`) 및 관련 API 엔드포인트(`GET/POST/PUT/DELETE /api/expenses/sub-categories*`)가 제거된다.
