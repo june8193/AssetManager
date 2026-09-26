@@ -28,6 +28,18 @@ describe('MobileRouteGuard', () => {
     expect(screen.getByTestId('market-content')).toBeInTheDocument();
   });
 
+  it('모바일 모드에서 지출 경로(/m/expenses) 접근 시 정상적으로 컨텐츠를 렌더링해야 한다', () => {
+    render(
+      <MemoryRouter initialEntries={['/m/expenses']}>
+        <MobileRouteGuard isMobile={true}>
+          <div data-testid="expenses-content">지출 페이지</div>
+        </MobileRouteGuard>
+      </MemoryRouter>
+    );
+
+    expect(screen.getByTestId('expenses-content')).toBeInTheDocument();
+  });
+
   it('모바일 모드에서 데스크톱 전용 경로(/db, /system/logs 등) 접근 시 루트(/)로 리다이렉트되어야 한다', () => {
     render(
       <MemoryRouter initialEntries={['/db']}>

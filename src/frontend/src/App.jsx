@@ -10,6 +10,7 @@ import MobileAssetsPage from './pages/mobile/MobileAssetsPage';
 import MobileRatiosPage from './pages/mobile/MobileRatiosPage';
 import MobileSettingsPage from './pages/mobile/MobileSettingsPage';
 import MobileMarketPage from './pages/mobile/MobileMarketPage';
+import MobileExpensesPage from './pages/mobile/MobileExpensesPage';
 import BenchmarkPage from './pages/BenchmarkPage';
 import MarketAnalysisPage from './pages/MarketAnalysisPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
@@ -40,6 +41,7 @@ function MobileAppRoutes() {
           <Route path="/dashboard" element={<MobileDashboardPage />} />
           <Route path="/m/dashboard" element={<MobileDashboardPage />} />
           <Route path="/m/assets" element={<MobileAssetsPage />} />
+          <Route path="/m/expenses" element={<MobileExpensesPage />} />
           <Route path="/m/market" element={<MobileMarketPage />} />
           <Route path="/m/ratios" element={<MobileRatiosPage />} />
           <Route path="/m/settings" element={<MobileSettingsPage />} />

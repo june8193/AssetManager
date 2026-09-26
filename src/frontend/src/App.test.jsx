@@ -41,6 +41,7 @@ describe('App 적응형 레이아웃 분기', () => {
     expect(screen.getByText('AssetManager')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /대시보드/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /자산 조회/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /지출/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /비중 점검/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /설정/i })).toBeInTheDocument();
 
