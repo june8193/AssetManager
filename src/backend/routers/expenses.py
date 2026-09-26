@@ -8,7 +8,7 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import PaymentMethod, ExpenseCategory, Expense
+from ..models import PaymentMethod, ExpenseCategory, ExpenseSubCategory, Expense
 from ..services.expense_parser_service import ExpenseParserService
 from ..parsers.exceptions import (
     ExpenseParserError,
@@ -22,6 +22,9 @@ from ..schemas.expense import (
     ExpenseCategoryCreate,
     ExpenseCategoryUpdate,
     ExpenseCategoryResponse,
+    ExpenseSubCategoryCreate,
+    ExpenseSubCategoryUpdate,
+    ExpenseSubCategoryResponse,
     ExpenseUploadPreviewResponse,
     ExpenseUploadPreviewTransaction,
     ExpenseCommitRequest,
@@ -267,6 +270,137 @@ def delete_expense_category(
         )
 
     db.delete(category)
+    db.commit()
+    return None
+
+
+# ==========================================
+# 지출 2차 카테고리 (Expense Sub-Categories) 엔드포인트
+# ==========================================
+
+@router.get("/sub-categories", response_model=List[ExpenseSubCategoryResponse])
+def get_expense_sub_categories(db: Session = Depends(get_db)):
+    """등록된 지출 2차 카테고리(지출 특성/태그) 목록을 조회합니다.
+
+    Args:
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        List[ExpenseSubCategoryResponse]: 2차 카테고리 목록.
+    """
+    return db.query(ExpenseSubCategory).order_by(
+        ExpenseSubCategory.is_default.desc(),
+        ExpenseSubCategory.id.asc(),
+    ).all()
+
+
+@router.post("/sub-categories", response_model=ExpenseSubCategoryResponse, status_code=status.HTTP_201_CREATED)
+def create_expense_sub_category(
+    payload: ExpenseSubCategoryCreate,
+    db: Session = Depends(get_db),
+):
+    """새로운 지출 2차 카테고리(특성/태그)를 등록합니다.
+
+    Args:
+        payload (ExpenseSubCategoryCreate): 등록할 2차 카테고리 정보.
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: 동일한 이름의 2차 카테고리가 이미 존재하는 경우 400 반환.
+
+    Returns:
+        ExpenseSubCategoryResponse: 생성된 2차 카테고리 객체.
+    """
+    existing = db.query(ExpenseSubCategory).filter(ExpenseSubCategory.name == payload.name).first()
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"2차 카테고리 '{payload.name}'(이)가 이미 존재합니다.",
+        )
+
+    new_sub = ExpenseSubCategory(**payload.model_dump())
+    db.add(new_sub)
+    db.commit()
+    db.refresh(new_sub)
+    return new_sub
+
+
+@router.put("/sub-categories/{sub_category_id}", response_model=ExpenseSubCategoryResponse)
+def update_expense_sub_category(
+    sub_category_id: int,
+    payload: ExpenseSubCategoryUpdate,
+    db: Session = Depends(get_db),
+):
+    """기존 지출 2차 카테고리 정보를 수정합니다.
+
+    Args:
+        sub_category_id (int): 수정할 2차 카테고리 ID.
+        payload (ExpenseSubCategoryUpdate): 갱신할 필드 정보.
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: 2차 카테고리를 찾을 수 없을 때 404, 중복 이름 발생 시 400 반환.
+
+    Returns:
+        ExpenseSubCategoryResponse: 수정된 2차 카테고리 객체.
+    """
+    sub_cat = db.query(ExpenseSubCategory).filter(ExpenseSubCategory.id == sub_category_id).first()
+    if not sub_cat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ID가 {sub_category_id}인 2차 카테고리를 찾을 수 없습니다.",
+        )
+
+    update_data = payload.model_dump(exclude_unset=True)
+    if "name" in update_data and update_data["name"] != sub_cat.name:
+        dup = db.query(ExpenseSubCategory).filter(
+            ExpenseSubCategory.name == update_data["name"],
+            ExpenseSubCategory.id != sub_category_id,
+        ).first()
+        if dup:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"2차 카테고리 '{update_data['name']}'(이)가 이미 존재합니다.",
+            )
+
+    for key, value in update_data.items():
+        setattr(sub_cat, key, value)
+
+    db.commit()
+    db.refresh(sub_cat)
+    return sub_cat
+
+
+@router.delete("/sub-categories/{sub_category_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_expense_sub_category(
+    sub_category_id: int,
+    db: Session = Depends(get_db),
+):
+    """지출 2차 카테고리를 삭제합니다.
+
+    기본 제공 항목(is_default=True)은 삭제할 수 없습니다.
+
+    Args:
+        sub_category_id (int): 삭제할 2차 카테고리 ID.
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: 카테고리를 찾을 수 없을 때 404, 기본 항목 삭제 시도시 400 반환.
+    """
+    sub_cat = db.query(ExpenseSubCategory).filter(ExpenseSubCategory.id == sub_category_id).first()
+    if not sub_cat:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ID가 {sub_category_id}인 2차 카테고리를 찾을 수 없습니다.",
+        )
+
+    if sub_cat.is_default:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="기본 2차 카테고리는 삭제할 수 없습니다.",
+        )
+
+    db.delete(sub_cat)
     db.commit()
     return None
 

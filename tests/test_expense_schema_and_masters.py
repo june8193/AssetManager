@@ -6,18 +6,19 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 from sqlalchemy import inspect
 
-from src.backend.models import PaymentMethod, ExpenseCategory, Expense
+from src.backend.models import PaymentMethod, ExpenseCategory, ExpenseSubCategory, Expense
 from src.backend.database import engine
 from src.backend.migrations import run_migrations, seed_expense_masters
 
 
 def test_expense_schema_tables_exist(db_session: Session):
-    """지출 관리 3개 테이블(payment_methods, expense_categories, expenses)의 스키마 구조를 검증합니다."""
+    """지출 관리 4개 테이블(payment_methods, expense_categories, expense_sub_categories, expenses)의 스키마 구조를 검증합니다."""
     inspector = inspect(engine)
     table_names = inspector.get_table_names()
 
     assert "payment_methods" in table_names
     assert "expense_categories" in table_names
+    assert "expense_sub_categories" in table_names
     assert "expenses" in table_names
 
     # payment_methods 모델 컬럼 검증 (default_password 제거 확인)
@@ -28,6 +29,10 @@ def test_expense_schema_tables_exist(db_session: Session):
     # expense_categories 컬럼 검증
     cat_cols = {col["name"] for col in inspector.get_columns("expense_categories")}
     assert {"id", "name", "color", "is_default", "created_at"}.issubset(cat_cols)
+
+    # expense_sub_categories 컬럼 검증
+    sub_cat_cols = {col["name"] for col in inspector.get_columns("expense_sub_categories")}
+    assert {"id", "name", "color", "is_default", "created_at"}.issubset(sub_cat_cols)
 
     # expenses 컬럼 검증
     exp_cols = {col["name"] for col in inspector.get_columns("expenses")}
@@ -73,10 +78,22 @@ def test_seed_expense_masters(db_session: Session):
         assert name in cat_names
         assert cat_names[name] == color
 
+    # 2차 카테고리 시드 검증
+    sub_categories = db_session.query(ExpenseSubCategory).all()
+    sub_cat_names = {cat.name: cat.color for cat in sub_categories}
+    expected_sub_categories = {
+        "구독료": "#8B5CF6",
+        "모임회비": "#EC4899",
+    }
+    for name, color in expected_sub_categories.items():
+        assert name in sub_cat_names
+        assert sub_cat_names[name] == color
+
     # 중복 실행 시에도 중복 적재되지 않아야 함 (멱등성)
     seed_expense_masters(db_session)
     assert db_session.query(PaymentMethod).count() == 2
     assert db_session.query(ExpenseCategory).count() == 8
+    assert db_session.query(ExpenseSubCategory).count() == 2
 
 
 def test_payment_methods_api_crud(client: TestClient, db_session: Session):
@@ -175,4 +192,56 @@ def test_categories_api_crud(client: TestClient, db_session: Session):
 
     # 7. 존재하지 않는 ID 수정 시 404
     res_nf = client.put("/api/expenses/categories/99999", json={"name": "없음"})
+    assert res_nf.status_code == 404
+
+
+def test_sub_categories_api_crud(client: TestClient, db_session: Session):
+    """지출 2차 카테고리(지출 특성/태그) API CRUD 엔드포인트를 검증합니다."""
+    # 1. 초기 시드 데이터 적재
+    seed_expense_masters(db_session)
+
+    # 2. GET /api/expenses/sub-categories 목록 조회
+    res = client.get("/api/expenses/sub-categories")
+    assert res.status_code == 200
+    data = res.json()
+    assert len(data) == 2
+    sub_names = [sc["name"] for sc in data]
+    assert "구독료" in sub_names
+    assert "모임회비" in sub_names
+
+    # 3. POST /api/expenses/sub-categories 신규 생성
+    new_sub = {
+        "name": "경조사",
+        "color": "#10B981",
+    }
+    res = client.post("/api/expenses/sub-categories", json=new_sub)
+    assert res.status_code == 201
+    created = res.json()
+    assert created["name"] == "경조사"
+    assert created["color"] == "#10B981"
+    assert created["is_default"] is False
+    sub_id = created["id"]
+
+    # 4. 동일 이름 2차 카테고리 등록 시 400 에러
+    res_dup = client.post("/api/expenses/sub-categories", json=new_sub)
+    assert res_dup.status_code == 400
+
+    # 5. PUT /api/expenses/sub-categories/{id} 수정
+    res_update = client.put(f"/api/expenses/sub-categories/{sub_id}", json={"name": "경조사비", "color": "#059669"})
+    assert res_update.status_code == 200
+    assert res_update.json()["name"] == "경조사비"
+    assert res_update.json()["color"] == "#059669"
+
+    # 6. 기본 항목(is_default=True) 삭제 시도 시 400 에러 (삭제 방지 정책)
+    default_sub = next(sc for sc in data if sc["is_default"] is True)
+    res_del_default = client.delete(f"/api/expenses/sub-categories/{default_sub['id']}")
+    assert res_del_default.status_code == 400
+    assert "기본" in res_del_default.json()["detail"]
+
+    # 7. 일반 항목 DELETE /api/expenses/sub-categories/{id} 삭제
+    res_del = client.delete(f"/api/expenses/sub-categories/{sub_id}")
+    assert res_del.status_code == 204
+
+    # 8. 존재하지 않는 ID 수정 시 404
+    res_nf = client.put("/api/expenses/sub-categories/99999", json={"name": "없음"})
     assert res_nf.status_code == 404

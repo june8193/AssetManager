@@ -68,6 +68,35 @@ class ExpenseCategoryResponse(ExpenseCategoryBase):
     created_at: Optional[datetime] = None
 
 
+# --- 지출 2차 카테고리 (Expense Sub-Category) 스키마 ---
+
+class ExpenseSubCategoryBase(BaseModel):
+    """지출 2차 카테고리(특성/태그) 공통 속성 스키마입니다."""
+    name: str
+    color: str = "#8B5CF6"
+    is_default: bool = False
+
+
+class ExpenseSubCategoryCreate(ExpenseSubCategoryBase):
+    """지출 2차 카테고리 생성 요청 스키마입니다."""
+    pass
+
+
+class ExpenseSubCategoryUpdate(BaseModel):
+    """지출 2차 카테고리 수정 요청 스키마입니다."""
+    name: Optional[str] = None
+    color: Optional[str] = None
+    is_default: Optional[bool] = None
+
+
+class ExpenseSubCategoryResponse(ExpenseSubCategoryBase):
+    """지출 2차 카테고리 응답 스키마입니다."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    created_at: Optional[datetime] = None
+
+
 # --- 지출 거래 원장 (Expense) 스키마 ---
 
 class ExpenseBase(BaseModel):

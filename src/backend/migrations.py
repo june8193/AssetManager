@@ -88,9 +88,13 @@ def run_migrations(engine: Engine) -> None:
                 conn.commit()
 
             # 지출 관리 테이블 자동 생성 (Base.metadata.create_all 사용)
-            from .models import PaymentMethod, ExpenseCategory, Expense
+            from .models import PaymentMethod, ExpenseCategory, ExpenseSubCategory, Expense
             from .database import Base
             Base.metadata.create_all(bind=engine)
+
+            # expenses 테이블 2차 카테고리 컬럼 마이그레이션
+            _add_column_if_missing(conn, "expenses", "sub_category_id", "INTEGER")
+            conn.commit()
 
             # 지출 마스터 기본 시드 적재
             seed_expense_masters(conn)
@@ -101,7 +105,7 @@ def run_migrations(engine: Engine) -> None:
 
 
 def seed_expense_masters(db_or_conn) -> None:
-    """지출 관리의 기본 결제수단 및 카테고리 시드 데이터를 적재합니다.
+    """지출 관리의 기본 결제수단 및 카테고리, 2차 카테고리 시드 데이터를 적재합니다.
 
     이미 존재하는 항목은 건너뛰며, 중복 적재되지 않습니다.
 
@@ -109,7 +113,7 @@ def seed_expense_masters(db_or_conn) -> None:
         db_or_conn: SQLAlchemy Session 또는 Connection 객체
     """
     from sqlalchemy.orm import Session
-    from .models import PaymentMethod, ExpenseCategory
+    from .models import PaymentMethod, ExpenseCategory, ExpenseSubCategory
 
     default_payment_methods = [
         {
@@ -139,6 +143,11 @@ def seed_expense_masters(db_or_conn) -> None:
         {"name": "생활/기타", "color": "#95A5A6", "is_default": True},
     ]
 
+    default_sub_categories = [
+        {"name": "구독료", "color": "#8B5CF6", "is_default": True},
+        {"name": "모임회비", "color": "#EC4899", "is_default": True},
+    ]
+
     if isinstance(db_or_conn, Session):
         session = db_or_conn
         # 결제수단 시드 적재
@@ -156,6 +165,12 @@ def seed_expense_masters(db_or_conn) -> None:
             exists = session.query(ExpenseCategory).filter_by(name=cat_data["name"]).first()
             if not exists:
                 session.add(ExpenseCategory(**cat_data))
+
+        # 2차 카테고리 시드 적재
+        for sub_cat_data in default_sub_categories:
+            exists = session.query(ExpenseSubCategory).filter_by(name=sub_cat_data["name"]).first()
+            if not exists:
+                session.add(ExpenseSubCategory(**sub_cat_data))
 
         session.commit()
     else:
@@ -183,6 +198,19 @@ def seed_expense_masters(db_or_conn) -> None:
                          "VALUES (:name, :color, :is_default, datetime('now', 'localtime'))"),
                     cat_data,
                 )
+
+        for sub_cat_data in default_sub_categories:
+            row = db_or_conn.execute(
+                text("SELECT id FROM expense_sub_categories WHERE name = :name"),
+                {"name": sub_cat_data["name"]},
+            ).fetchone()
+            if not row:
+                db_or_conn.execute(
+                    text("INSERT INTO expense_sub_categories (name, color, is_default, created_at) "
+                         "VALUES (:name, :color, :is_default, datetime('now', 'localtime'))"),
+                    sub_cat_data,
+                )
+
         db_or_conn.commit()
 
 

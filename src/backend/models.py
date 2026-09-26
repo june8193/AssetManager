@@ -406,6 +406,27 @@ class ExpenseCategory(Base):
     expenses = relationship("Expense", back_populates="category")
 
 
+class ExpenseSubCategory(Base):
+    """지출 2차 카테고리(지출 특성/태그) 마스터 정보를 관리하는 모델입니다.
+
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        name (str): 2차 카테고리명 (예: '구독료', '모임회비')
+        color (str): UI 및 태그 표시용 HEX 색상 코드 (예: '#8B5CF6')
+        is_default (bool): 시스템 기본 항목 여부
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "expense_sub_categories"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, unique=True, index=True, nullable=False)
+    color = Column(String, nullable=False, default="#8B5CF6")
+    is_default = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    expenses = relationship("Expense", back_populates="sub_category")
+
+
 class Expense(Base):
     """지출 거래 내역 원장을 저장하는 모델입니다.
 
@@ -418,7 +439,8 @@ class Expense(Base):
         payment_method_id (int): 결제수단 FK (선택)
         owner (str): 소유주 (예: '장준', '성은')
         institution (str): 금융기관/카드사 (예: '현대카드', '카카오뱅크')
-        category_id (int): 카테고리 FK (선택)
+        category_id (int): 1차 카테고리 FK (선택)
+        sub_category_id (int): 2차 카테고리(특성/태그) FK (선택)
         is_excluded (bool): 통계 집계 제외 여부 (기본 0/False)
         memo (str): 비고 및 사용자 메모
         source_file (str): 데이터 출처 파일명
@@ -435,6 +457,7 @@ class Expense(Base):
     owner = Column(String, nullable=False, index=True)
     institution = Column(String, nullable=False, index=True)
     category_id = Column(Integer, ForeignKey("expense_categories.id", ondelete="SET NULL"), nullable=True, index=True)
+    sub_category_id = Column(Integer, ForeignKey("expense_sub_categories.id", ondelete="SET NULL"), nullable=True, index=True)
     is_excluded = Column(Boolean, default=False, nullable=False)
     memo = Column(String, nullable=True)
     source_file = Column(String, nullable=True)
@@ -442,5 +465,6 @@ class Expense(Base):
 
     payment_method = relationship("PaymentMethod", back_populates="expenses")
     category = relationship("ExpenseCategory", back_populates="expenses")
+    sub_category = relationship("ExpenseSubCategory", back_populates="expenses")
 
 
