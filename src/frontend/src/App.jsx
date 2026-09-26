@@ -25,6 +25,7 @@ import DividendAnalysisPage from './pages/DividendAnalysisPage';
 import PerformanceAnalysisPage from './pages/PerformanceAnalysisPage';
 import DbExplorerPage from './pages/DbExplorerPage';
 import SystemLogPage from './pages/SystemLogPage';
+import ExpensesPage from './pages/ExpensesPage';
 import TitleManager from './components/TitleManager';
 
 /**
@@ -71,6 +72,7 @@ function DesktopAppRoutes() {
           <Route path="/simulation/asset-allocation" element={<AssetAllocationSimulationPage />} />
           <Route path="/simulation/compound-interest" element={<CompoundInterestPage />} />
           <Route path="/connection" element={<ConnectionPage />} />
+          <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/db" element={<DbManagementPage />} />
           <Route path="/db/snapshots/new" element={<SnapshotWizardPage />} />
           <Route path="/db/watchlist-sector" element={<WatchlistSectorPage />} />

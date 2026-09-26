@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart, DollarSign, Server } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart, DollarSign, Server, Receipt } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -8,6 +8,7 @@ import { useMasking } from '../contexts/MaskingContext';
  */
 const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
+  { path: '/expenses', label: '지출 관리', icon: Receipt },
   { 
     label: '시장분석', 
     icon: TrendingUp,

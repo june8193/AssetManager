@@ -7,6 +7,7 @@ vi.mock('./apiClient', () => ({
     get: vi.fn(),
     post: vi.fn(),
     put: vi.fn(),
+    patch: vi.fn(),
     delete: vi.fn(),
   },
 }));
@@ -143,4 +144,48 @@ describe('expenseService 단위 테스트', () => {
       expect(res).toBe(mockResult);
     });
   });
+
+  describe('지출 내역 및 통계 API', () => {
+    it('getExpenses 호출 시 올바른 쿼리 파라미터를 전달한다', async () => {
+      const mockExpenses = [{ id: 10, merchant: '스타벅스' }];
+      apiClient.get.mockResolvedValue(mockExpenses);
+
+      const params = { year_month: '2026-08', owner: '장준' };
+      const res = await expenseService.getExpenses(params);
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/expenses', params);
+      expect(res).toBe(mockExpenses);
+    });
+
+    it('getStats 호출 시 올바른 파라미터를 전달한다', async () => {
+      const mockStats = { current_total: 100000, monthly_trends: [] };
+      apiClient.get.mockResolvedValue(mockStats);
+
+      const params = { year_month: '2026-08', owner: '장준' };
+      const res = await expenseService.getStats(params);
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/expenses/stats', params);
+      expect(res).toBe(mockStats);
+    });
+
+    it('updateExpense 호출 시 PATCH 요청을 전달한다', async () => {
+      const payload = { category_id: 2, is_excluded: true };
+      const mockResult = { id: 10, ...payload };
+      apiClient.patch.mockResolvedValue(mockResult);
+
+      const res = await expenseService.updateExpense(10, payload);
+
+      expect(apiClient.patch).toHaveBeenCalledWith('/api/expenses/10', payload);
+      expect(res).toBe(mockResult);
+    });
+
+    it('deleteExpense 호출 시 DELETE 요청을 전달한다', async () => {
+      apiClient.delete.mockResolvedValue(null);
+
+      await expenseService.deleteExpense(10);
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/api/expenses/10');
+    });
+  });
 });
+

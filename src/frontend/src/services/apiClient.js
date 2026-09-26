@@ -192,6 +192,16 @@ export const apiClient = {
   },
 
   /**
+   * PATCH 요청을 수행합니다.
+   * @param {string} path - API 경로
+   * @param {any} [body] - 요청 본문 데이터
+   * @param {RequestInit} [options] - 추가 fetch 옵션
+   */
+  patch(path, body, options) {
+    return request(path, { ...options, method: 'PATCH', body });
+  },
+
+  /**
    * DELETE 요청을 수행합니다.
    * @param {string} path - API 경로
    * @param {RequestInit} [options] - 추가 fetch 옵션

@@ -104,4 +104,42 @@ export const expenseService = {
   async commitExpenses(data) {
     return apiClient.post('/api/expenses/commit', data);
   },
+
+  /**
+   * 지출 거래 목록을 조회합니다.
+   * @param {Object} [params] - 필터 파라미터 ({ year_month, owner, category_id, institution, is_excluded, search })
+   * @returns {Promise<Array>} 지출 내역 목록
+   */
+  async getExpenses(params) {
+    return apiClient.get('/api/expenses', params);
+  },
+
+  /**
+   * 지출 대시보드 통계(당월 총액, MoM, 추이, 카테고리/결제수단 비중)를 조회합니다.
+   * @param {Object} [params] - 필터 파라미터 ({ year_month, owner })
+   * @returns {Promise<Object>} 지출 통계 객체
+   */
+  async getStats(params) {
+    return apiClient.get('/api/expenses/stats', params);
+  },
+
+  /**
+   * 단일 지출 내역을 수정합니다.
+   * @param {number} id - 지출 거래 ID
+   * @param {Object} data - 수정할 필드 객체
+   * @returns {Promise<Object>} 수정된 거래 객체
+   */
+  async updateExpense(id, data) {
+    return apiClient.patch(`/api/expenses/${id}`, data);
+  },
+
+  /**
+   * 단일 지출 내역을 삭제합니다.
+   * @param {number} id - 지출 거래 ID
+   * @returns {Promise<null>}
+   */
+  async deleteExpense(id) {
+    return apiClient.delete(`/api/expenses/${id}`);
+  },
 };
+

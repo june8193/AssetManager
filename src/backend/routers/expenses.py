@@ -4,7 +4,8 @@
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy import or_, func
+from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..models import PaymentMethod, ExpenseCategory, Expense
@@ -26,6 +27,12 @@ from ..schemas.expense import (
     ExpenseUploadPreviewTransaction,
     ExpenseCommitRequest,
     ExpenseCommitResponse,
+    ExpenseResponse,
+    ExpenseUpdate,
+    ExpenseStatsResponse,
+    MonthlyTrendItem,
+    CategoryBreakdownItem,
+    PaymentMethodBreakdownItem,
 )
 
 router = APIRouter(
@@ -644,4 +651,365 @@ def commit_expenses(
         year_month=payload.year_month,
         payment_method_id=payload.payment_method_id,
     )
+
+
+# ==========================================
+# 지출 원장 및 대시보드 통계 엔드포인트
+# ==========================================
+
+def _serialize_expense(exp: Expense) -> ExpenseResponse:
+    """Expense ORM 인스턴스를 응답 스키마로 직렬화하며 외래키 연관 필드를 보강합니다.
+
+    Args:
+        exp (Expense): 지출 ORM 객체.
+
+    Returns:
+        ExpenseResponse: 카테고리명 및 결제수단 별칭이 포함된 응답 객체.
+    """
+    category_name = exp.category.name if exp.category else "미분류"
+    payment_method_alias = (
+        exp.payment_method.alias
+        if exp.payment_method and exp.payment_method.alias
+        else (exp.payment_method.institution if exp.payment_method else exp.institution)
+    )
+    return ExpenseResponse(
+        id=exp.id,
+        transaction_date=exp.transaction_date,
+        year_month=exp.year_month,
+        merchant=exp.merchant,
+        amount=exp.amount,
+        payment_method_id=exp.payment_method_id,
+        owner=exp.owner,
+        institution=exp.institution,
+        category_id=exp.category_id,
+        is_excluded=exp.is_excluded,
+        memo=exp.memo,
+        source_file=exp.source_file,
+        created_at=exp.created_at,
+        category_name=category_name,
+        payment_method_alias=payment_method_alias,
+    )
+
+
+def _get_prev_year_month(ym: str) -> str:
+    """주어진 'YYYY-MM' 형식의 전월을 계산하여 반환합니다.
+
+    Args:
+        ym (str): 기준 년월.
+
+    Returns:
+        str: 전월 'YYYY-MM'.
+    """
+    try:
+        dt = datetime.strptime(ym, "%Y-%m")
+        if dt.month == 1:
+            return f"{dt.year - 1}-12"
+        return f"{dt.year}-{dt.month - 1:02d}"
+    except Exception:
+        return ym
+
+
+def _get_recent_months(ym: str, count: int = 12) -> list[str]:
+    """기준 년월을 포함하여 직전 N개월의 년월 문자열 리스트를 과거순으로 반환합니다.
+
+    Args:
+        ym (str): 기준 년월.
+        count (int): 반환할 개월 수 (기본 12).
+
+    Returns:
+        list[str]: 'YYYY-MM' 형식의 리스트 (오름차순).
+    """
+    try:
+        dt = datetime.strptime(ym, "%Y-%m")
+    except Exception:
+        dt = datetime.now()
+    months = []
+    y, m = dt.year, dt.month
+    for _ in range(count):
+        months.append(f"{y:04d}-{m:02d}")
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+    months.reverse()
+    return months
+
+
+@router.get("", response_model=List[ExpenseResponse])
+def get_expenses(
+    year_month: Optional[str] = Query(None, description="정산년월 필터 (예: '2026-08')"),
+    owner: Optional[str] = Query(None, description="소유주 필터 (예: '장준', '성은')"),
+    category_id: Optional[int] = Query(None, description="카테고리 ID 필터"),
+    institution: Optional[str] = Query(None, description="금융기관 필터 (예: '현대카드')"),
+    is_excluded: Optional[bool] = Query(None, description="통계 제외 여부 필터"),
+    search: Optional[str] = Query(None, description="검색어 (가맹점명 또는 메모)"),
+    db: Session = Depends(get_db),
+):
+    """다양한 조건(년월, 소유주, 카테고리, 기관, 통계제외 여부, 검색)으로 지출 거래 내역 목록을 조회합니다.
+
+    Args:
+        year_month (Optional[str]): 정산년월 조건.
+        owner (Optional[str]): 소유주 조건 ('전체' 지정 시 전체).
+        category_id (Optional[int]): 카테고리 ID 조건.
+        institution (Optional[str]): 금융기관 조건.
+        is_excluded (Optional[bool]): 통계 제외 여부 조건.
+        search (Optional[str]): 가맹점명 또는 메모 검색어.
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        List[ExpenseResponse]: 지출 거래 목록 (최신순 정렬).
+    """
+    query = db.query(Expense).options(
+        joinedload(Expense.category),
+        joinedload(Expense.payment_method),
+    )
+
+    if year_month:
+        query = query.filter(Expense.year_month == year_month)
+    if owner and owner != "전체":
+        query = query.filter(Expense.owner == owner)
+    if category_id is not None:
+        query = query.filter(Expense.category_id == category_id)
+    if institution:
+        query = query.filter(Expense.institution == institution)
+    if is_excluded is not None:
+        query = query.filter(Expense.is_excluded == is_excluded)
+    if search:
+        search_pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                Expense.merchant.ilike(search_pattern),
+                Expense.memo.ilike(search_pattern),
+            )
+        )
+
+    expenses = query.order_by(Expense.transaction_date.desc(), Expense.id.desc()).all()
+    return [_serialize_expense(exp) for exp in expenses]
+
+
+@router.get("/stats", response_model=ExpenseStatsResponse)
+def get_expense_stats(
+    year_month: Optional[str] = Query(None, description="기준년월 (미입력 시 최신 데이터 월 또는 현재 월)"),
+    owner: Optional[str] = Query(None, description="소유주 필터 ('전체' 또는 None 지정 시 전체)"),
+    db: Session = Depends(get_db),
+):
+    """대시보드 KPI 카드, 월별 추이 바차트, 카테고리 및 결제수단 비중 집계 통계를 반환합니다.
+
+    Args:
+        year_month (Optional[str]): 기준 년월.
+        owner (Optional[str]): 소유주 필터 조건.
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        ExpenseStatsResponse: 종합 지출 통계 객체.
+    """
+    target_ym = year_month
+    if not target_ym:
+        latest_row = db.query(Expense.year_month).order_by(Expense.year_month.desc()).first()
+        target_ym = latest_row[0] if (latest_row and latest_row[0]) else datetime.now().strftime("%Y-%m")
+
+    prev_ym = _get_prev_year_month(target_ym)
+
+    base_query = db.query(Expense)
+    if owner and owner != "전체":
+        base_query = base_query.filter(Expense.owner == owner)
+
+    current_total = (
+        base_query.filter(
+            Expense.year_month == target_ym,
+            Expense.is_excluded == False,
+        )
+        .with_entities(func.coalesce(func.sum(Expense.amount), 0.0))
+        .scalar()
+    ) or 0.0
+
+    prev_total = (
+        base_query.filter(
+            Expense.year_month == prev_ym,
+            Expense.is_excluded == False,
+        )
+        .with_entities(func.coalesce(func.sum(Expense.amount), 0.0))
+        .scalar()
+    ) or 0.0
+
+    excluded_total = (
+        base_query.filter(
+            Expense.year_month == target_ym,
+            Expense.is_excluded == True,
+        )
+        .with_entities(func.coalesce(func.sum(Expense.amount), 0.0))
+        .scalar()
+    ) or 0.0
+
+    mom_change_amount = float(current_total - prev_total)
+    mom_change_rate = (
+        round((mom_change_amount / float(prev_total)) * 100, 2)
+        if prev_total > 0
+        else 0.0
+    )
+
+    # 12개월 추이 집계
+    recent_months = _get_recent_months(target_ym, 12)
+    trend_rows = (
+        base_query.filter(
+            Expense.year_month.in_(recent_months),
+            Expense.is_excluded == False,
+        )
+        .with_entities(
+            Expense.year_month,
+            func.coalesce(func.sum(Expense.amount), 0.0).label("total_amount"),
+        )
+        .group_by(Expense.year_month)
+        .all()
+    )
+    trend_map = {row[0]: float(row[1]) for row in trend_rows}
+    monthly_trends = [
+        MonthlyTrendItem(year_month=m, total_amount=trend_map.get(m, 0.0))
+        for m in recent_months
+    ]
+
+    # 카테고리별 비중 집계
+    cat_rows = (
+        base_query.filter(
+            Expense.year_month == target_ym,
+            Expense.is_excluded == False,
+        )
+        .outerjoin(ExpenseCategory, Expense.category_id == ExpenseCategory.id)
+        .with_entities(
+            Expense.category_id,
+            ExpenseCategory.name,
+            ExpenseCategory.color,
+            func.coalesce(func.sum(Expense.amount), 0.0).label("amount"),
+        )
+        .group_by(Expense.category_id, ExpenseCategory.name, ExpenseCategory.color)
+        .order_by(func.sum(Expense.amount).desc())
+        .all()
+    )
+
+    category_breakdown = []
+    for cat_id, cat_name, cat_color, amount in cat_rows:
+        amt = float(amount)
+        pct = round((amt / float(current_total)) * 100, 1) if current_total > 0 else 0.0
+        category_breakdown.append(
+            CategoryBreakdownItem(
+                category_id=cat_id,
+                category_name=cat_name or "미분류",
+                color=cat_color or "#94A3B8",
+                amount=amt,
+                percentage=pct,
+            )
+        )
+
+    # 결제수단별 비중 집계
+    pm_rows = (
+        base_query.filter(
+            Expense.year_month == target_ym,
+            Expense.is_excluded == False,
+        )
+        .outerjoin(PaymentMethod, Expense.payment_method_id == PaymentMethod.id)
+        .with_entities(
+            Expense.payment_method_id,
+            PaymentMethod.alias,
+            Expense.institution,
+            Expense.owner,
+            func.coalesce(func.sum(Expense.amount), 0.0).label("amount"),
+        )
+        .group_by(Expense.payment_method_id, PaymentMethod.alias, Expense.institution, Expense.owner)
+        .order_by(func.sum(Expense.amount).desc())
+        .all()
+    )
+
+    payment_method_breakdown = []
+    for pm_id, alias, inst, own, amount in pm_rows:
+        amt = float(amount)
+        pct = round((amt / float(current_total)) * 100, 1) if current_total > 0 else 0.0
+        payment_method_breakdown.append(
+            PaymentMethodBreakdownItem(
+                payment_method_id=pm_id,
+                alias=alias or f"{own} {inst}",
+                institution=inst,
+                owner=own,
+                amount=amt,
+                percentage=pct,
+            )
+        )
+
+    return ExpenseStatsResponse(
+        year_month=target_ym,
+        current_total=float(current_total),
+        prev_total=float(prev_total),
+        mom_change_amount=mom_change_amount,
+        mom_change_rate=mom_change_rate,
+        excluded_total=float(excluded_total),
+        monthly_trends=monthly_trends,
+        category_breakdown=category_breakdown,
+        payment_method_breakdown=payment_method_breakdown,
+    )
+
+
+@router.patch("/{expense_id}", response_model=ExpenseResponse)
+def patch_expense(
+    expense_id: int,
+    payload: ExpenseUpdate,
+    db: Session = Depends(get_db),
+):
+    """단일 지출 내역의 필드(카테고리, 통계제외 여부, 메모 등)를 인라인 수정합니다.
+
+    Args:
+        expense_id (int): 대상 지출 내역 ID.
+        payload (ExpenseUpdate): 갱신할 필드 데이터.
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: 거래를 찾을 수 없을 때 404 반환.
+
+    Returns:
+        ExpenseResponse: 갱신된 지출 내역 객체.
+    """
+    expense = (
+        db.query(Expense)
+        .options(joinedload(Expense.category), joinedload(Expense.payment_method))
+        .filter(Expense.id == expense_id)
+        .first()
+    )
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ID가 {expense_id}인 지출 내역을 찾을 수 없습니다.",
+        )
+
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(expense, key, value)
+
+    db.commit()
+    db.refresh(expense)
+    return _serialize_expense(expense)
+
+
+@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+):
+    """단일 지출 내역을 삭제합니다.
+
+    Args:
+        expense_id (int): 삭제할 지출 내역 ID.
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: 거래를 찾을 수 없을 때 404 반환.
+    """
+    expense = db.query(Expense).filter(Expense.id == expense_id).first()
+    if not expense:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ID가 {expense_id}인 지출 내역을 찾을 수 없습니다.",
+        )
+
+    db.delete(expense)
+    db.commit()
+    return None
+
 

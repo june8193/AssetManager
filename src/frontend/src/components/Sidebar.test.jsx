@@ -48,6 +48,7 @@ describe('Sidebar Component', () => {
     renderSidebar();
     const expectedMenus = [
       '대시보드',
+      '지출 관리',
       '시장분석',
       '비중 점검',
       'DB 관리',

@@ -166,3 +166,44 @@ class ExpenseCommitResponse(BaseModel):
     count: int
     year_month: str
     payment_method_id: int
+
+
+# --- 지출 대시보드 및 통계 스키마 ---
+
+class MonthlyTrendItem(BaseModel):
+    """월별 지출 추이 항목 스키마입니다."""
+    year_month: str
+    total_amount: float
+
+
+class CategoryBreakdownItem(BaseModel):
+    """카테고리별 지출 비중 항목 스키마입니다."""
+    category_id: Optional[int] = None
+    category_name: str
+    color: str
+    amount: float
+    percentage: float
+
+
+class PaymentMethodBreakdownItem(BaseModel):
+    """결제수단별 지출 요약 항목 스키마입니다."""
+    payment_method_id: Optional[int] = None
+    alias: Optional[str] = None
+    institution: str
+    owner: str
+    amount: float
+    percentage: float
+
+
+class ExpenseStatsResponse(BaseModel):
+    """지출 대시보드 종합 통계 응답 스키마입니다."""
+    year_month: str
+    current_total: float
+    prev_total: float
+    mom_change_amount: float
+    mom_change_rate: float
+    excluded_total: float
+    monthly_trends: list[MonthlyTrendItem]
+    category_breakdown: list[CategoryBreakdownItem]
+    payment_method_breakdown: list[PaymentMethodBreakdownItem]
+
