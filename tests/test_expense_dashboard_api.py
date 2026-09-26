@@ -29,7 +29,21 @@ def db_session():
     """테스트용 격리된 인메모리 DB 세션 fixture."""
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
-    seed_expense_masters(session)
+    # 테스트에 필요한 기본 카테고리 등록
+    cats = [
+        ExpenseCategory(name="식비/카페", color="#FF6B6B", is_default=True),
+        ExpenseCategory(name="쇼핑", color="#4ECDC4", is_default=True),
+        ExpenseCategory(name="주거/통신", color="#45B7D1", is_default=True),
+        ExpenseCategory(name="교통/차량", color="#FFA07A", is_default=True),
+        ExpenseCategory(name="문화/여가", color="#98D8C8", is_default=True),
+        ExpenseCategory(name="의료/건강", color="#F7DC6F", is_default=True),
+        ExpenseCategory(name="금융/보험", color="#BB8FCE", is_default=True),
+        ExpenseCategory(name="생활/기타", color="#95A5A6", is_default=True),
+        ExpenseCategory(name="구독료", color="#8B5CF6", is_default=True),
+        ExpenseCategory(name="모임회비", color="#EC4899", is_default=True),
+    ]
+    session.add_all(cats)
+    session.commit()
     try:
         yield session
     finally:

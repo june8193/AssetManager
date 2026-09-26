@@ -37,63 +37,24 @@ def test_expense_schema_tables_exist(db_session: Session):
 
 
 def test_seed_expense_masters(db_session: Session):
-    """기본 결제수단 및 카테고리 시드 데이터 적재를 검증합니다."""
+    """지출 마스터(결제수단, 카테고리) 자동 시딩 로직이 완전히 제거되었음을 검증합니다."""
     seed_expense_masters(db_session)
 
-    # 결제수단 시드 검증 (비밀번호 저장 없음 확인)
-    pms = db_session.query(PaymentMethod).all()
-    pm_map = {(pm.owner, pm.institution): pm for pm in pms}
-    assert ("장준", "카카오뱅크") in pm_map
-    assert ("장준", "현대카드") in pm_map
-
-    kb = pm_map[("장준", "카카오뱅크")]
-    assert kb.alias == "장준 카카오뱅크"
-    assert kb.account_number == "3333"
-    assert not hasattr(kb, "default_password")
-    assert kb.is_active is True
-
-    hd = pm_map[("장준", "현대카드")]
-    assert hd.alias == "장준 현대카드"
-    assert hd.account_number == "1002"
-    assert not hasattr(hd, "default_password")
-    assert hd.is_active is True
-
-    # 카테고리 시드 검증 (구독료, 모임회비 포함 10개)
-    categories = db_session.query(ExpenseCategory).all()
-    cat_names = {cat.name: cat.color for cat in categories}
-    expected_categories = {
-        "식비/카페": "#FF6B6B",
-        "쇼핑": "#4ECDC4",
-        "주거/통신": "#45B7D1",
-        "교통/차량": "#FFA07A",
-        "문화/여가": "#98D8C8",
-        "의료/건강": "#F7DC6F",
-        "금융/보험": "#BB8FCE",
-        "생활/기타": "#95A5A6",
-        "구독료": "#8B5CF6",
-        "모임회비": "#EC4899",
-    }
-    for name, color in expected_categories.items():
-        assert name in cat_names
-        assert cat_names[name] == color
-
-    # 중복 실행 시에도 중복 적재되지 않아야 함 (멱등성)
-    seed_expense_masters(db_session)
-    assert db_session.query(PaymentMethod).count() == 2
-    assert db_session.query(ExpenseCategory).count() == 10
+    # 결제수단 및 카테고리 모두 자동으로 시딩되지 않아야 함 (사용자가 직접 관리)
+    assert db_session.query(PaymentMethod).count() == 0
+    assert db_session.query(ExpenseCategory).count() == 0
 
 
 def test_payment_methods_api_crud(client: TestClient, db_session: Session):
     """결제수단 API CRUD 엔드포인트를 검증합니다."""
-    # 1. 초기 시드 데이터 적재
+    # 1. 초기 시드 데이터 적재 (결제수단은 생성되지 않음)
     seed_expense_masters(db_session)
 
-    # 2. GET /api/expenses/payment-methods 목록 조회
+    # 2. GET /api/expenses/payment-methods 목록 조회 시 빈 목록이어야 함
     res = client.get("/api/expenses/payment-methods")
     assert res.status_code == 200
     data = res.json()
-    assert len(data) == 2
-    assert any(pm["alias"] == "장준 카카오뱅크" for pm in data)
+    assert len(data) == 0
 
     # 3. POST /api/expenses/payment-methods 신규 등록 (비밀번호 필드 없음)
     new_pm = {
@@ -141,19 +102,12 @@ def test_payment_methods_api_crud(client: TestClient, db_session: Session):
 
 def test_categories_api_crud(client: TestClient, db_session: Session):
     """지출 카테고리 API CRUD 엔드포인트를 검증합니다."""
-    # 1. 초기 시드 데이터 적재
-    seed_expense_masters(db_session)
-
-    # 2. GET /api/expenses/categories 목록 조회 (기본 10개)
+    # 1. 초기 상태에서 카테고리는 비어있음
     res = client.get("/api/expenses/categories")
     assert res.status_code == 200
-    data = res.json()
-    assert len(data) == 10
-    cat_names = {c["name"] for c in data}
-    assert "구독료" in cat_names
-    assert "모임회비" in cat_names
+    assert len(res.json()) == 0
 
-    # 3. POST /api/expenses/categories 신규 생성
+    # 2. POST /api/expenses/categories 신규 생성
     new_cat = {
         "name": "여행",
         "color": "#E056FD",
@@ -161,10 +115,17 @@ def test_categories_api_crud(client: TestClient, db_session: Session):
     res = client.post("/api/expenses/categories", json=new_cat)
     assert res.status_code == 201
     created = res.json()
+    assert created["id"] is not None
     assert created["name"] == "여행"
     assert created["color"] == "#E056FD"
     assert created["is_default"] is False
     cat_id = created["id"]
+
+    # 3. GET 목록 조회 시 등록한 카테고리 1건 반환
+    res_list = client.get("/api/expenses/categories")
+    assert res_list.status_code == 200
+    assert len(res_list.json()) == 1
+    assert res_list.json()[0]["name"] == "여행"
 
     # 4. 동일 이름 카테고리 등록 시 400 에러
     res_dup = client.post("/api/expenses/categories", json=new_cat)

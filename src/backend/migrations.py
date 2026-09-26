@@ -108,93 +108,15 @@ def run_migrations(engine: Engine) -> None:
         raise RuntimeError(f"데이터베이스 마이그레이션 실패: {e}") from e
 
 
-def seed_expense_masters(db_or_conn) -> None:
-    """지출 관리의 기본 결제수단 및 카테고리 시드 데이터를 적재합니다.
+def seed_expense_masters(db_or_conn=None) -> None:
+    """지출 관리 마스터(결제수단, 카테고리) 시드 데이터를 적재하지 않습니다.
 
-    기본 카테고리에는 '구독료', '모임회비'가 정규 카테고리로 포함됩니다.
-    이미 존재하는 항목은 건너뛰며, 중복 적재되지 않습니다.
+    사용자가 화면에서 등록/수정/삭제한 상태를 그대로 보존하기 위해
+    자동 시딩 로직을 완전히 비활성화(no-op)했습니다.
 
     Args:
-        db_or_conn: SQLAlchemy Session 또는 Connection 객체
+        db_or_conn: 호환성을 위한 선택적 매개변수 (미사용)
     """
-    from sqlalchemy.orm import Session
-    from .models import PaymentMethod, ExpenseCategory
-
-    default_payment_methods = [
-        {
-            "owner": "장준",
-            "institution": "카카오뱅크",
-            "alias": "장준 카카오뱅크",
-            "account_number": "3333",
-            "is_active": True,
-        },
-        {
-            "owner": "장준",
-            "institution": "현대카드",
-            "alias": "장준 현대카드",
-            "account_number": "1002",
-            "is_active": True,
-        },
-    ]
-
-    default_categories = [
-        {"name": "식비/카페", "color": "#FF6B6B", "is_default": True},
-        {"name": "쇼핑", "color": "#4ECDC4", "is_default": True},
-        {"name": "주거/통신", "color": "#45B7D1", "is_default": True},
-        {"name": "교통/차량", "color": "#FFA07A", "is_default": True},
-        {"name": "문화/여가", "color": "#98D8C8", "is_default": True},
-        {"name": "의료/건강", "color": "#F7DC6F", "is_default": True},
-        {"name": "금융/보험", "color": "#BB8FCE", "is_default": True},
-        {"name": "생활/기타", "color": "#95A5A6", "is_default": True},
-        {"name": "구독료", "color": "#8B5CF6", "is_default": True},
-        {"name": "모임회비", "color": "#EC4899", "is_default": True},
-    ]
-
-    if isinstance(db_or_conn, Session):
-        session = db_or_conn
-        # 결제수단 시드 적재
-        for pm_data in default_payment_methods:
-            exists = session.query(PaymentMethod).filter_by(
-                owner=pm_data["owner"],
-                institution=pm_data["institution"],
-                account_number=pm_data["account_number"],
-            ).first()
-            if not exists:
-                session.add(PaymentMethod(**pm_data))
-
-        # 카테고리 시드 적재
-        for cat_data in default_categories:
-            exists = session.query(ExpenseCategory).filter_by(name=cat_data["name"]).first()
-            if not exists:
-                session.add(ExpenseCategory(**cat_data))
-
-        session.commit()
-    else:
-        # Connection 객체인 경우 (text 쿼리 실행)
-        for pm_data in default_payment_methods:
-            row = db_or_conn.execute(
-                text("SELECT id FROM payment_methods WHERE owner = :owner AND institution = :institution AND account_number = :account_number"),
-                {"owner": pm_data["owner"], "institution": pm_data["institution"], "account_number": pm_data["account_number"]},
-            ).fetchone()
-            if not row:
-                db_or_conn.execute(
-                    text("INSERT INTO payment_methods (owner, institution, alias, account_number, is_active, created_at) "
-                         "VALUES (:owner, :institution, :alias, :account_number, :is_active, datetime('now', 'localtime'))"),
-                    pm_data,
-                )
-
-        for cat_data in default_categories:
-            row = db_or_conn.execute(
-                text("SELECT id FROM expense_categories WHERE name = :name"),
-                {"name": cat_data["name"]},
-            ).fetchone()
-            if not row:
-                db_or_conn.execute(
-                    text("INSERT INTO expense_categories (name, color, is_default, created_at) "
-                         "VALUES (:name, :color, :is_default, datetime('now', 'localtime'))"),
-                    cat_data,
-                )
-
-        db_or_conn.commit()
+    pass
 
 
