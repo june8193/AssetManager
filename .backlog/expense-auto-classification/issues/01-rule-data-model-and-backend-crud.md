@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** completed
+**Status:** resolved
 
 - [x] `ExpenseRule` DB 모델 및 스키마(`expense_rules` 테이블) 구현 (`keyword`, `category_id`, `is_excluded`, `created_at`)
 - [x] `ExpenseCategory` 삭제 시 연관된 규칙이 안전하게 연쇄 삭제(Cascade)되도록 외래키 관계 설정
