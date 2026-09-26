@@ -3,7 +3,7 @@
 
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
 
 # --- 결제수단 (Payment Method) 스키마 ---
@@ -65,6 +65,81 @@ class ExpenseCategoryResponse(ExpenseCategoryBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    created_at: Optional[datetime] = None
+
+
+# --- 지출 자동분류 규칙 (Expense Rule) 스키마 ---
+
+class ExpenseRuleBase(BaseModel):
+    """지출 자동분류 규칙 공통 속성 스키마입니다."""
+    keyword: str
+    category_id: Optional[int] = None
+    is_excluded: bool = False
+
+    @field_validator("keyword")
+    @classmethod
+    def validate_keyword(cls, v: str) -> str:
+        """키워드 앞뒤 공백을 제거하고 빈 문자열 여부를 검증합니다."""
+        if not isinstance(v, str):
+            raise ValueError("키워드는 문자열이어야 합니다.")
+        trimmed = v.strip()
+        if not trimmed:
+            raise ValueError("키워드는 공백만으로 구성될 수 없습니다.")
+        return trimmed
+
+    @model_validator(mode="after")
+    def validate_category_and_exclusion(self):
+        """통계 제외 및 카테고리 ID 간 정합성을 검증합니다."""
+        if self.is_excluded:
+            self.category_id = None
+        else:
+            if self.category_id is None:
+                raise ValueError("카테고리 자동분류 규칙은 category_id가 필수입니다.")
+        return self
+
+
+class ExpenseRuleCreate(ExpenseRuleBase):
+    """지출 자동분류 규칙 생성 요청 스키마입니다."""
+    pass
+
+
+class ExpenseRuleUpdate(BaseModel):
+    """지출 자동분류 규칙 수정 요청 스키마입니다."""
+    keyword: Optional[str] = None
+    category_id: Optional[int] = None
+    is_excluded: Optional[bool] = None
+
+    @field_validator("keyword")
+    @classmethod
+    def validate_keyword(cls, v: Optional[str]) -> Optional[str]:
+        """키워드 수정 시 앞뒤 공백을 제거하고 빈 문자열 여부를 검증합니다."""
+        if v is not None:
+            if not isinstance(v, str):
+                raise ValueError("키워드는 문자열이어야 합니다.")
+            trimmed = v.strip()
+            if not trimmed:
+                raise ValueError("키워드는 공백만으로 구성될 수 없습니다.")
+            return trimmed
+        return v
+
+    @model_validator(mode="after")
+    def validate_category_and_exclusion(self):
+        """수정 요청의 통계 제외 및 카테고리 ID 간 정합성을 검증합니다."""
+        if self.is_excluded is True:
+            self.category_id = None
+        elif self.is_excluded is False:
+            if self.category_id is None:
+                raise ValueError("카테고리 자동분류 규칙은 category_id가 필수입니다.")
+        return self
+
+
+class ExpenseRuleResponse(ExpenseRuleBase):
+    """지출 자동분류 규칙 응답 스키마입니다."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    category_name: Optional[str] = None
+    category_color: Optional[str] = None
     created_at: Optional[datetime] = None
 
 
