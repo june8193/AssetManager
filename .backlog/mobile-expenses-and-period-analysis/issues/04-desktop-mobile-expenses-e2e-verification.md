@@ -5,17 +5,17 @@
 
 **Blocked by:** 01 — 다기간 지출 통계 API 확장 및 데스크탑 기간 분석 연동, 02 — 모바일 6대 탭 바 확장 및 지출 라우트(/m/expenses) 기반 구축, 03 — 모바일 전용 지출 관리 화면(MobileExpensesPage) 및 기간 직접 지정 패널 구현
 
-**Status:** ready-for-agent
+**Status:** closed
 
-- [ ] `uv run scripts/dev.py`로 개발 서버(`src/dev_assets.db` 격리) 백그라운드 구동
-- [ ] 데스크탑 환경(`http://localhost:5173/expenses`) E2E 검증:
+- [x] `uv run scripts/dev.py`로 개발 서버(`src/dev_assets.db` 격리) 백그라운드 구동
+- [x] 데스크탑 환경(`http://localhost:5173/expenses`) E2E 검증:
   - 프리셋(3개월, 6개월, 1년) 및 시작월~종료월 직접 지정에 따른 총 지출액 및 월평균 지출액 계산 정합성 확인
   - 월별 지출 추이 바차트 및 카테고리 비중 차트 렌더링 확인
   - 거래 원장 테이블 100건 페이징 및 '내역 더보기' 버튼 동작 확인
-- [ ] 모바일 환경(390×844 뷰포트, `http://localhost:5173/m/expenses`) E2E 검증:
+- [x] 모바일 환경(390×844 뷰포트, `http://localhost:5173/m/expenses`) E2E 검증:
   - 하단 탭 바에서 '지출' 탭 클릭 시 `/m/expenses` 정상 전환 및 6개 탭 레이아웃 깨짐 없음 확인
   - 가로 스크롤 기간 칩 및 '직접 지정 🗓' 패널 조작을 통한 기간 변경 확인
   - 모바일 요약 카드(총 지출, 월평균 지출) 및 카드형 거래 목록 렌더링 확인
   - 모바일 거래 목록 '내역 더보기' 동작 확인
-- [ ] 검증 스크린샷을 `screenshots/YYYYMMDD_HHMMSS_mobile_expenses_and_period_analysis/`에 저장
-- [ ] 개발 서버 백그라운드 태스크 종료(kill) 및 테스트 결과 정리
+- [x] 검증 스크린샷을 `screenshots/20260926_231056_mobile_expenses_and_period_analysis/`에 저장
+- [x] 개발 서버 백그라운드 태스크 종료(kill) 및 테스트 결과 정리

@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Calendar, ArrowRight } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 
 /**
  * 년월(YYYY-MM)과 오프셋(과거 개월 수)을 받아 과거 년월 문자열을 반환하는 헬퍼 함수
