@@ -8,7 +8,7 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import PaymentMethod, ExpenseCategory, ExpenseSubCategory, Expense
+from ..models import PaymentMethod, ExpenseCategory, Expense
 from ..services.expense_parser_service import ExpenseParserService
 from ..parsers.exceptions import (
     ExpenseParserError,
@@ -22,9 +22,6 @@ from ..schemas.expense import (
     ExpenseCategoryCreate,
     ExpenseCategoryUpdate,
     ExpenseCategoryResponse,
-    ExpenseSubCategoryCreate,
-    ExpenseSubCategoryUpdate,
-    ExpenseSubCategoryResponse,
     ExpenseUploadPreviewResponse,
     ExpenseUploadPreviewTransaction,
     ExpenseCommitRequest,
@@ -275,135 +272,7 @@ def delete_expense_category(
     return None
 
 
-# ==========================================
-# 지출 2차 카테고리 (Expense Sub-Categories) 엔드포인트
-# ==========================================
 
-@router.get("/sub-categories", response_model=List[ExpenseSubCategoryResponse])
-def get_expense_sub_categories(db: Session = Depends(get_db)):
-    """등록된 지출 2차 카테고리(지출 특성/태그) 목록을 조회합니다.
-
-    Args:
-        db (Session): 데이터베이스 세션.
-
-    Returns:
-        List[ExpenseSubCategoryResponse]: 2차 카테고리 목록.
-    """
-    return db.query(ExpenseSubCategory).order_by(
-        ExpenseSubCategory.is_default.desc(),
-        ExpenseSubCategory.id.asc(),
-    ).all()
-
-
-@router.post("/sub-categories", response_model=ExpenseSubCategoryResponse, status_code=status.HTTP_201_CREATED)
-def create_expense_sub_category(
-    payload: ExpenseSubCategoryCreate,
-    db: Session = Depends(get_db),
-):
-    """새로운 지출 2차 카테고리(특성/태그)를 등록합니다.
-
-    Args:
-        payload (ExpenseSubCategoryCreate): 등록할 2차 카테고리 정보.
-        db (Session): 데이터베이스 세션.
-
-    Raises:
-        HTTPException: 동일한 이름의 2차 카테고리가 이미 존재하는 경우 400 반환.
-
-    Returns:
-        ExpenseSubCategoryResponse: 생성된 2차 카테고리 객체.
-    """
-    existing = db.query(ExpenseSubCategory).filter(ExpenseSubCategory.name == payload.name).first()
-    if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"2차 카테고리 '{payload.name}'(이)가 이미 존재합니다.",
-        )
-
-    new_sub = ExpenseSubCategory(**payload.model_dump())
-    db.add(new_sub)
-    db.commit()
-    db.refresh(new_sub)
-    return new_sub
-
-
-@router.put("/sub-categories/{sub_category_id}", response_model=ExpenseSubCategoryResponse)
-def update_expense_sub_category(
-    sub_category_id: int,
-    payload: ExpenseSubCategoryUpdate,
-    db: Session = Depends(get_db),
-):
-    """기존 지출 2차 카테고리 정보를 수정합니다.
-
-    Args:
-        sub_category_id (int): 수정할 2차 카테고리 ID.
-        payload (ExpenseSubCategoryUpdate): 갱신할 필드 정보.
-        db (Session): 데이터베이스 세션.
-
-    Raises:
-        HTTPException: 2차 카테고리를 찾을 수 없을 때 404, 중복 이름 발생 시 400 반환.
-
-    Returns:
-        ExpenseSubCategoryResponse: 수정된 2차 카테고리 객체.
-    """
-    sub_cat = db.query(ExpenseSubCategory).filter(ExpenseSubCategory.id == sub_category_id).first()
-    if not sub_cat:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ID가 {sub_category_id}인 2차 카테고리를 찾을 수 없습니다.",
-        )
-
-    update_data = payload.model_dump(exclude_unset=True)
-    if "name" in update_data and update_data["name"] != sub_cat.name:
-        dup = db.query(ExpenseSubCategory).filter(
-            ExpenseSubCategory.name == update_data["name"],
-            ExpenseSubCategory.id != sub_category_id,
-        ).first()
-        if dup:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"2차 카테고리 '{update_data['name']}'(이)가 이미 존재합니다.",
-            )
-
-    for key, value in update_data.items():
-        setattr(sub_cat, key, value)
-
-    db.commit()
-    db.refresh(sub_cat)
-    return sub_cat
-
-
-@router.delete("/sub-categories/{sub_category_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_expense_sub_category(
-    sub_category_id: int,
-    db: Session = Depends(get_db),
-):
-    """지출 2차 카테고리를 삭제합니다.
-
-    기본 제공 항목(is_default=True)은 삭제할 수 없습니다.
-
-    Args:
-        sub_category_id (int): 삭제할 2차 카테고리 ID.
-        db (Session): 데이터베이스 세션.
-
-    Raises:
-        HTTPException: 카테고리를 찾을 수 없을 때 404, 기본 항목 삭제 시도시 400 반환.
-    """
-    sub_cat = db.query(ExpenseSubCategory).filter(ExpenseSubCategory.id == sub_category_id).first()
-    if not sub_cat:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"ID가 {sub_category_id}인 2차 카테고리를 찾을 수 없습니다.",
-        )
-
-    if sub_cat.is_default:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="기본 2차 카테고리는 삭제할 수 없습니다.",
-        )
-
-    db.delete(sub_cat)
-    db.commit()
-    return None
 
 
 # ==========================================
@@ -659,7 +528,6 @@ def commit_expenses(
                     owner=pm.owner,
                     institution=pm.institution,
                     category_id=it.category_id,
-                    sub_category_id=it.sub_category_id,
                     is_excluded=it.is_excluded,
                     memo=it.memo,
                     source_file=payload.source_file,
@@ -704,13 +572,6 @@ def _serialize_expense(exp: Expense) -> ExpenseResponse:
         if exp.payment_method and exp.payment_method.alias
         else (exp.payment_method.institution if exp.payment_method else exp.institution)
     )
-    sub_category_obj = (
-        ExpenseSubCategoryResponse.model_validate(exp.sub_category)
-        if exp.sub_category
-        else None
-    )
-    sub_category_name = exp.sub_category.name if exp.sub_category else None
-    sub_category_color = exp.sub_category.color if exp.sub_category else None
 
     return ExpenseResponse(
         id=exp.id,
@@ -722,16 +583,16 @@ def _serialize_expense(exp: Expense) -> ExpenseResponse:
         owner=exp.owner,
         institution=exp.institution,
         category_id=exp.category_id,
-        sub_category_id=exp.sub_category_id,
+        sub_category_id=None,
         is_excluded=exp.is_excluded,
         memo=exp.memo,
         source_file=exp.source_file,
         created_at=exp.created_at,
         category_name=category_name,
         payment_method_alias=payment_method_alias,
-        sub_category=sub_category_obj,
-        sub_category_name=sub_category_name,
-        sub_category_color=sub_category_color,
+        sub_category=None,
+        sub_category_name=None,
+        sub_category_color=None,
     )
 
 
@@ -784,19 +645,17 @@ def get_expenses(
     year_month: Optional[str] = Query(None, description="정산년월 필터 (예: '2026-08')"),
     owner: Optional[str] = Query(None, description="소유주 필터 (예: '장준', '성은')"),
     category_id: Optional[int] = Query(None, description="카테고리 ID 필터"),
-    sub_category_id: Optional[int] = Query(None, description="2차 카테고리 ID 필터"),
     institution: Optional[str] = Query(None, description="금융기관 필터 (예: '현대카드')"),
     is_excluded: Optional[bool] = Query(None, description="통계 제외 여부 필터"),
     search: Optional[str] = Query(None, description="검색어 (가맹점명 또는 메모)"),
     db: Session = Depends(get_db),
 ):
-    """다양한 조건(년월, 소유주, 카테고리, 2차 카테고리, 기관, 통계제외 여부, 검색)으로 지출 거래 내역 목록을 조회합니다.
+    """다양한 조건(년월, 소유주, 카테고리, 기관, 통계제외 여부, 검색)으로 지출 거래 내역 목록을 조회합니다.
 
     Args:
         year_month (Optional[str]): 정산년월 조건.
         owner (Optional[str]): 소유주 조건 ('전체' 지정 시 전체).
         category_id (Optional[int]): 카테고리 ID 조건.
-        sub_category_id (Optional[int]): 2차 카테고리 ID 조건.
         institution (Optional[str]): 금융기관 조건.
         is_excluded (Optional[bool]): 통계 제외 여부 조건.
         search (Optional[str]): 가맹점명 또는 메모 검색어.
@@ -807,7 +666,6 @@ def get_expenses(
     """
     query = db.query(Expense).options(
         joinedload(Expense.category),
-        joinedload(Expense.sub_category),
         joinedload(Expense.payment_method),
     )
 
@@ -817,8 +675,6 @@ def get_expenses(
         query = query.filter(Expense.owner == owner)
     if category_id is not None:
         query = query.filter(Expense.category_id == category_id)
-    if sub_category_id is not None:
-        query = query.filter(Expense.sub_category_id == sub_category_id)
     if institution:
         query = query.filter(Expense.institution == institution)
     if is_excluded is not None:
@@ -950,44 +806,8 @@ def get_expense_stats(
             )
         )
 
-    # 2차 카테고리(지출 특성/태그)별 집계
-    sub_cat_rows = (
-        base_query.filter(
-            Expense.year_month == target_ym,
-            Expense.is_excluded == False,
-            Expense.sub_category_id.isnot(None),
-        )
-        .join(ExpenseSubCategory, Expense.sub_category_id == ExpenseSubCategory.id)
-        .with_entities(
-            Expense.sub_category_id,
-            ExpenseSubCategory.name,
-            ExpenseSubCategory.color,
-            func.coalesce(func.sum(Expense.amount), 0.0).label("amount"),
-            func.count(Expense.id).label("count"),
-        )
-        .group_by(Expense.sub_category_id, ExpenseSubCategory.name, ExpenseSubCategory.color)
-        .order_by(func.sum(Expense.amount).desc())
-        .all()
-    )
-
+    # 2차 카테고리는 폐지되었으므로 빈 목록 반환 (호환성 유지)
     sub_category_breakdown = []
-    for s_id, s_name, s_color, s_amount, s_count in sub_cat_rows:
-        amt = float(s_amount)
-        cnt = int(s_count)
-        pct = round((amt / float(current_total)) * 100, 1) if current_total > 0 else 0.0
-        sub_category_breakdown.append(
-            SubCategoryBreakdownItem(
-                id=s_id,
-                sub_category_id=s_id,
-                name=s_name,
-                sub_category_name=s_name,
-                color=s_color or "#8B5CF6",
-                total_amount=amt,
-                amount=amt,
-                count=cnt,
-                percentage=pct,
-            )
-        )
 
     # 결제수단별 비중 집계
     pm_rows = (
@@ -1037,14 +857,14 @@ def get_expense_stats(
     )
 
 
-@router.put("/{expense_id}", response_model=ExpenseResponse)
-@router.patch("/{expense_id}", response_model=ExpenseResponse)
+@router.put("/{expense_id:int}", response_model=ExpenseResponse)
+@router.patch("/{expense_id:int}", response_model=ExpenseResponse)
 def update_expense(
     expense_id: int,
     payload: ExpenseUpdate,
     db: Session = Depends(get_db),
 ):
-    """단일 지출 내역의 필드(카테고리, 2차 카테고리, 통계제외 여부, 메모 등)를 인라인 수정합니다.
+    """단일 지출 내역의 필드(카테고리, 통계제외 여부, 메모 등)를 인라인 수정합니다.
 
     Args:
         expense_id (int): 대상 지출 내역 ID.
@@ -1061,7 +881,6 @@ def update_expense(
         db.query(Expense)
         .options(
             joinedload(Expense.category),
-            joinedload(Expense.sub_category),
             joinedload(Expense.payment_method),
         )
         .filter(Expense.id == expense_id)
@@ -1082,7 +901,7 @@ def update_expense(
     return _serialize_expense(expense)
 
 
-@router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{expense_id:int}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_expense(
     expense_id: int,
     db: Session = Depends(get_db),

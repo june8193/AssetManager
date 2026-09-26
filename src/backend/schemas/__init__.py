@@ -24,7 +24,6 @@ from .snapshot import (
     SnapshotBatchDeleteResponse,
 )
 from .expense import (
-
     PaymentMethodBase,
     PaymentMethodCreate,
     PaymentMethodUpdate,
@@ -33,10 +32,6 @@ from .expense import (
     ExpenseCategoryCreate,
     ExpenseCategoryUpdate,
     ExpenseCategoryResponse,
-    ExpenseSubCategoryBase,
-    ExpenseSubCategoryCreate,
-    ExpenseSubCategoryUpdate,
-    ExpenseSubCategoryResponse,
     ExpenseBase,
     ExpenseCreate,
     ExpenseUpdate,
@@ -79,10 +74,6 @@ __all__ = [
     "ExpenseCategoryCreate",
     "ExpenseCategoryUpdate",
     "ExpenseCategoryResponse",
-    "ExpenseSubCategoryBase",
-    "ExpenseSubCategoryCreate",
-    "ExpenseSubCategoryUpdate",
-    "ExpenseSubCategoryResponse",
     "ExpenseBase",
     "ExpenseCreate",
     "ExpenseUpdate",

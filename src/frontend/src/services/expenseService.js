@@ -78,39 +78,12 @@ export const expenseService = {
   },
 
   /**
-   * 지출 2차 카테고리(특성/태그) 목록을 조회합니다.
-   * @returns {Promise<Array>} 2차 카테고리 배열
+   * 2차 카테고리(특성/태그) 목록을 조회합니다. (2차 카테고리 폐지에 따른 호환용)
+   * @deprecated 단일 카테고리 마스터로 통합됨
+   * @returns {Promise<Array>} 빈 배열
    */
   async getSubCategories() {
-    return apiClient.get('/api/expenses/sub-categories');
-  },
-
-  /**
-   * 신규 지출 2차 카테고리를 등록합니다.
-   * @param {Object} data - 등록할 2차 카테고리 정보 ({ name: string, color: string })
-   * @returns {Promise<Object>} 생성된 2차 카테고리 객체
-   */
-  async createSubCategory(data) {
-    return apiClient.post('/api/expenses/sub-categories', data);
-  },
-
-  /**
-   * 기존 지출 2차 카테고리를 수정합니다.
-   * @param {number} id - 2차 카테고리 ID
-   * @param {Object} data - 수정할 2차 카테고리 정보
-   * @returns {Promise<Object>} 수정된 2차 카테고리 객체
-   */
-  async updateSubCategory(id, data) {
-    return apiClient.put(`/api/expenses/sub-categories/${id}`, data);
-  },
-
-  /**
-   * 지출 2차 카테고리를 삭제합니다.
-   * @param {number} id - 2차 카테고리 ID
-   * @returns {Promise<null>}
-   */
-  async deleteSubCategory(id) {
-    return apiClient.delete(`/api/expenses/sub-categories/${id}`);
+    return [];
   },
 
   /**
