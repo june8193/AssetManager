@@ -116,7 +116,7 @@ export const expenseService = {
 
   /**
    * 지출 거래 목록을 조회합니다.
-   * @param {Object} [params] - 필터 파라미터 ({ year_month, owner, category_id, institution, is_excluded, search })
+   * @param {Object} [params] - 필터 파라미터 ({ start_month, end_month, year_month, owner, category_id, institution, is_excluded, search, limit, offset })
    * @returns {Promise<Array>} 지출 내역 목록
    */
   async getExpenses(params) {
@@ -124,8 +124,8 @@ export const expenseService = {
   },
 
   /**
-   * 지출 대시보드 통계(당월 총액, MoM, 추이, 카테고리/결제수단 비중)를 조회합니다.
-   * @param {Object} [params] - 필터 파라미터 ({ year_month, owner })
+   * 지출 대시보드 통계(총액, 월평균, 전기간 대비 증감률, 추이, 카테고리/결제수단 비중)를 조회합니다.
+   * @param {Object} [params] - 필터 파라미터 ({ start_month, end_month, year_month, owner })
    * @returns {Promise<Object>} 지출 통계 객체
    */
   async getStats(params) {

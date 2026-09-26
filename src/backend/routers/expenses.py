@@ -556,6 +556,65 @@ def _get_prev_year_month(ym: str) -> str:
         return ym
 
 
+def _get_month_range(start_ym: str, end_ym: str) -> list[str]:
+    """시작년월부터 종료년월까지의 모든 년월 리스트를 오름차순으로 반환합니다.
+
+    Args:
+        start_ym (str): 시작년월 ('YYYY-MM').
+        end_ym (str): 종료년월 ('YYYY-MM').
+
+    Returns:
+        list[str]: 'YYYY-MM' 형식의 리스트 (오름차순).
+    """
+    try:
+        start_dt = datetime.strptime(start_ym, "%Y-%m")
+        end_dt = datetime.strptime(end_ym, "%Y-%m")
+    except Exception:
+        return [start_ym]
+
+    if start_dt > end_dt:
+        start_dt, end_dt = end_dt, start_dt
+
+    months = []
+    y, m = start_dt.year, start_dt.month
+    while (y, m) <= (end_dt.year, end_dt.month):
+        months.append(f"{y:04d}-{m:02d}")
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+    return months
+
+
+def _get_prev_period_months(start_ym: str, count: int) -> tuple[str, str, list[str]]:
+    """시작년월 기준 직전 동기간(count 개월)의 년월 목록을 반환합니다.
+
+    Args:
+        start_ym (str): 기준 시작년월 ('YYYY-MM').
+        count (int): 개월 수.
+
+    Returns:
+        tuple[str, str, list[str]]: (직전시작월, 직전종료월, 직전월목록 오름차순).
+    """
+    try:
+        dt = datetime.strptime(start_ym, "%Y-%m")
+    except Exception:
+        dt = datetime.now()
+
+    months = []
+    y, m = dt.year, dt.month
+    for _ in range(count):
+        m -= 1
+        if m == 0:
+            m = 12
+            y -= 1
+        months.append(f"{y:04d}-{m:02d}")
+    months.reverse()
+    prev_start = months[0] if months else start_ym
+    prev_end = months[-1] if months else start_ym
+    return prev_start, prev_end, months
+
+
 def _get_recent_months(ym: str, count: int = 12) -> list[str]:
     """기준 년월을 포함하여 직전 N개월의 년월 문자열 리스트를 과거순으로 반환합니다.
 
@@ -584,23 +643,31 @@ def _get_recent_months(ym: str, count: int = 12) -> list[str]:
 
 @router.get("", response_model=List[ExpenseResponse])
 def get_expenses(
-    year_month: Optional[str] = Query(None, description="정산년월 필터 (예: '2026-08')"),
+    start_month: Optional[str] = Query(None, description="조회 시작년월 (YYYY-MM)"),
+    end_month: Optional[str] = Query(None, description="조회 종료년월 (YYYY-MM)"),
+    year_month: Optional[str] = Query(None, description="단일 정산년월 필터 (예: '2026-08')"),
     owner: Optional[str] = Query(None, description="소유주 필터 (예: '장준', '성은')"),
     category_id: Optional[int] = Query(None, description="카테고리 ID 필터"),
     institution: Optional[str] = Query(None, description="금융기관 필터 (예: '현대카드')"),
     is_excluded: Optional[bool] = Query(None, description="통계 제외 여부 필터"),
     search: Optional[str] = Query(None, description="검색어 (가맹점명 또는 메모)"),
+    limit: int = Query(100, ge=1, le=200, description="조회 건수 (기본 100, 최대 200)"),
+    offset: int = Query(0, ge=0, description="페이징 오프셋 (기본 0)"),
     db: Session = Depends(get_db),
 ):
-    """다양한 조건(년월, 소유주, 카테고리, 기관, 통계제외 여부, 검색)으로 지출 거래 내역 목록을 조회합니다.
+    """다양한 조건(기간, 소유주, 카테고리, 기관, 통계제외 여부, 검색)으로 지출 거래 내역 목록을 페이징 조회합니다.
 
     Args:
+        start_month (Optional[str]): 조회 시작년월.
+        end_month (Optional[str]): 조회 종료년월.
         year_month (Optional[str]): 정산년월 조건.
         owner (Optional[str]): 소유주 조건 ('전체' 지정 시 전체).
         category_id (Optional[int]): 카테고리 ID 조건.
         institution (Optional[str]): 금융기관 조건.
         is_excluded (Optional[bool]): 통계 제외 여부 조건.
         search (Optional[str]): 가맹점명 또는 메모 검색어.
+        limit (int): 페이징 건수 (기본 100).
+        offset (int): 페이징 시작 인덱스 (기본 0).
         db (Session): 데이터베이스 세션.
 
     Returns:
@@ -611,8 +678,13 @@ def get_expenses(
         joinedload(Expense.payment_method),
     )
 
-    if year_month:
+    if start_month:
+        query = query.filter(Expense.year_month >= start_month)
+    if end_month:
+        query = query.filter(Expense.year_month <= end_month)
+    if year_month and not start_month and not end_month:
         query = query.filter(Expense.year_month == year_month)
+
     if owner and owner != "전체":
         query = query.filter(Expense.owner == owner)
     if category_id is not None:
@@ -630,50 +702,71 @@ def get_expenses(
             )
         )
 
-    expenses = query.order_by(Expense.transaction_date.desc(), Expense.id.desc()).all()
+    expenses = (
+        query.order_by(Expense.transaction_date.desc(), Expense.id.desc())
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
     return [_serialize_expense(exp) for exp in expenses]
 
 
 @router.get("/stats", response_model=ExpenseStatsResponse)
 @router.get("/summary", response_model=ExpenseStatsResponse)
 def get_expense_stats(
-    year_month: Optional[str] = Query(None, description="기준년월 (미입력 시 최신 데이터 월 또는 현재 월)"),
+    start_month: Optional[str] = Query(None, description="조회 시작년월 (YYYY-MM)"),
+    end_month: Optional[str] = Query(None, description="조회 종료년월 (YYYY-MM)"),
+    year_month: Optional[str] = Query(None, description="기준년월 (단일월 호환용)"),
     owner: Optional[str] = Query(None, description="소유주 필터 ('전체' 또는 None 지정 시 전체)"),
     db: Session = Depends(get_db),
 ):
-    """대시보드 KPI 카드, 월별 추이 바차트, 카테고리, 2차 카테고리 및 결제수단 비중 집계 통계를 반환합니다.
+    """대시보드 KPI 카드, 월별 추이 바차트, 카테고리 및 결제수단 비중 집계 통계를 반환합니다.
 
     Args:
-        year_month (Optional[str]): 기준 년월.
+        start_month (Optional[str]): 조회 시작년월.
+        end_month (Optional[str]): 조회 종료년월.
+        year_month (Optional[str]): 기준 년월 (하위 호환용).
         owner (Optional[str]): 소유주 필터 조건.
         db (Session): 데이터베이스 세션.
 
     Returns:
         ExpenseStatsResponse: 종합 지출 통계 객체.
     """
-    target_ym = year_month
-    if not target_ym:
+    is_explicit_period = bool(start_month or end_month)
+
+    if start_month and end_month:
+        if start_month > end_month:
+            start_month, end_month = end_month, start_month
+        resolved_start = start_month
+        resolved_end = end_month
+    elif start_month and not end_month:
+        resolved_start = start_month
+        resolved_end = start_month
+    elif end_month and not start_month:
+        resolved_start = end_month
+        resolved_end = end_month
+    elif year_month:
+        resolved_start = year_month
+        resolved_end = year_month
+    else:
         latest_row = db.query(Expense.year_month).order_by(Expense.year_month.desc()).first()
         target_ym = latest_row[0] if (latest_row and latest_row[0]) else datetime.now().strftime("%Y-%m")
+        resolved_start = target_ym
+        resolved_end = target_ym
 
-    prev_ym = _get_prev_year_month(target_ym)
+    period_months_list = _get_month_range(resolved_start, resolved_end)
+    period_months = len(period_months_list)
+    prev_start, prev_end, prev_months_list = _get_prev_period_months(resolved_start, period_months)
 
     base_query = db.query(Expense)
     if owner and owner != "전체":
         base_query = base_query.filter(Expense.owner == owner)
 
-    current_total = (
+    # 1. 대상 기간 합계
+    period_total = (
         base_query.filter(
-            Expense.year_month == target_ym,
-            Expense.is_excluded == False,
-        )
-        .with_entities(func.coalesce(func.sum(Expense.amount), 0.0))
-        .scalar()
-    ) or 0.0
-
-    prev_total = (
-        base_query.filter(
-            Expense.year_month == prev_ym,
+            Expense.year_month >= resolved_start,
+            Expense.year_month <= resolved_end,
             Expense.is_excluded == False,
         )
         .with_entities(func.coalesce(func.sum(Expense.amount), 0.0))
@@ -682,25 +775,42 @@ def get_expense_stats(
 
     excluded_total = (
         base_query.filter(
-            Expense.year_month == target_ym,
+            Expense.year_month >= resolved_start,
+            Expense.year_month <= resolved_end,
             Expense.is_excluded == True,
         )
         .with_entities(func.coalesce(func.sum(Expense.amount), 0.0))
         .scalar()
     ) or 0.0
 
-    mom_change_amount = float(current_total - prev_total)
-    mom_change_rate = (
-        round((mom_change_amount / float(prev_total)) * 100, 2)
-        if prev_total > 0
+    # 2. 직전 동기간 합계
+    prev_period_total = (
+        base_query.filter(
+            Expense.year_month >= prev_start,
+            Expense.year_month <= prev_end,
+            Expense.is_excluded == False,
+        )
+        .with_entities(func.coalesce(func.sum(Expense.amount), 0.0))
+        .scalar()
+    ) or 0.0
+
+    monthly_average = round(float(period_total) / period_months, 2) if period_months > 0 else 0.0
+    prev_change_amount = float(period_total - prev_period_total)
+    prev_change_rate = (
+        round((prev_change_amount / float(prev_period_total)) * 100, 2)
+        if prev_period_total > 0
         else 0.0
     )
 
-    # 12개월 추이 집계
-    recent_months = _get_recent_months(target_ym, 12)
+    # 3. 월별 추이 집계
+    if is_explicit_period:
+        trend_months = period_months_list
+    else:
+        trend_months = _get_recent_months(resolved_end, 12)
+
     trend_rows = (
         base_query.filter(
-            Expense.year_month.in_(recent_months),
+            Expense.year_month.in_(trend_months),
             Expense.is_excluded == False,
         )
         .with_entities(
@@ -713,13 +823,14 @@ def get_expense_stats(
     trend_map = {row[0]: float(row[1]) for row in trend_rows}
     monthly_trends = [
         MonthlyTrendItem(year_month=m, total_amount=trend_map.get(m, 0.0))
-        for m in recent_months
+        for m in trend_months
     ]
 
-    # 카테고리별 비중 집계
+    # 4. 카테고리별 비중 집계 (대상 기간 전체)
     cat_rows = (
         base_query.filter(
-            Expense.year_month == target_ym,
+            Expense.year_month >= resolved_start,
+            Expense.year_month <= resolved_end,
             Expense.is_excluded == False,
         )
         .outerjoin(ExpenseCategory, Expense.category_id == ExpenseCategory.id)
@@ -737,7 +848,7 @@ def get_expense_stats(
     category_breakdown = []
     for cat_id, cat_name, cat_color, amount in cat_rows:
         amt = float(amount)
-        pct = round((amt / float(current_total)) * 100, 1) if current_total > 0 else 0.0
+        pct = round((amt / float(period_total)) * 100, 1) if period_total > 0 else 0.0
         category_breakdown.append(
             CategoryBreakdownItem(
                 category_id=cat_id,
@@ -748,10 +859,11 @@ def get_expense_stats(
             )
         )
 
-    # 결제수단별 비중 집계
+    # 5. 결제수단별 비중 집계 (대상 기간 전체)
     pm_rows = (
         base_query.filter(
-            Expense.year_month == target_ym,
+            Expense.year_month >= resolved_start,
+            Expense.year_month <= resolved_end,
             Expense.is_excluded == False,
         )
         .outerjoin(PaymentMethod, Expense.payment_method_id == PaymentMethod.id)
@@ -770,7 +882,7 @@ def get_expense_stats(
     payment_method_breakdown = []
     for pm_id, alias, inst, own, amount in pm_rows:
         amt = float(amount)
-        pct = round((amt / float(current_total)) * 100, 1) if current_total > 0 else 0.0
+        pct = round((amt / float(period_total)) * 100, 1) if period_total > 0 else 0.0
         payment_method_breakdown.append(
             PaymentMethodBreakdownItem(
                 payment_method_id=pm_id,
@@ -783,11 +895,19 @@ def get_expense_stats(
         )
 
     return ExpenseStatsResponse(
-        year_month=target_ym,
-        current_total=float(current_total),
-        prev_total=float(prev_total),
-        mom_change_amount=mom_change_amount,
-        mom_change_rate=mom_change_rate,
+        year_month=resolved_end,
+        start_month=resolved_start,
+        end_month=resolved_end,
+        period_months=period_months,
+        period_total=float(period_total),
+        monthly_average=float(monthly_average),
+        prev_period_total=float(prev_period_total),
+        prev_period_change_amount=float(prev_change_amount),
+        prev_period_change_rate=float(prev_change_rate),
+        current_total=float(period_total),
+        prev_total=float(prev_period_total),
+        mom_change_amount=float(prev_change_amount),
+        mom_change_rate=float(prev_change_rate),
         excluded_total=float(excluded_total),
         monthly_trends=monthly_trends,
         category_breakdown=category_breakdown,

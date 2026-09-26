@@ -204,6 +204,14 @@ class PaymentMethodBreakdownItem(BaseModel):
 class ExpenseStatsResponse(BaseModel):
     """지출 대시보드 종합 통계 응답 스키마입니다."""
     year_month: str
+    start_month: str
+    end_month: str
+    period_months: int
+    period_total: float
+    monthly_average: float
+    prev_period_total: float
+    prev_period_change_amount: float
+    prev_period_change_rate: float
     current_total: float
     prev_total: float
     mom_change_amount: float

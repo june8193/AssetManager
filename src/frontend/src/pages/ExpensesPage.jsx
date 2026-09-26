@@ -28,14 +28,17 @@ import {
   Pie,
   Cell,
   Legend,
+  ReferenceLine,
 } from 'recharts';
 import { expenseService } from '../services/expenseService';
 import useFormatters from '../hooks/useFormatters';
+import ExpensePeriodSelector from '../components/ExpensePeriodSelector';
 import ExpenseUploadModal from '../components/ExpenseUploadModal';
 import PaymentMethodsModal from '../components/PaymentMethodsModal';
 import ExpenseCategoriesModal from '../components/ExpenseCategoriesModal';
 
 const OWNER_OPTIONS = ['전체', '장준', '성은'];
+const PAGE_SIZE = 100;
 
 /**
  * 지출 모니터링 대시보드 및 상세 거래 원장 관리 메인 페이지입니다.
@@ -51,11 +54,16 @@ export default function ExpensesPage() {
 
   // 필터 상태
   const [selectedOwner, setSelectedOwner] = useState('전체');
-  const [selectedMonth, setSelectedMonth] = useState('');
+  const [startMonth, setStartMonth] = useState('');
+  const [endMonth, setEndMonth] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedInstitution, setSelectedInstitution] = useState('');
   const [selectedExcludedFilter, setSelectedExcludedFilter] = useState('all'); // 'all' | 'included' | 'excluded'
+
+  // 페이징 상태
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   // 로딩 및 에러 상태
   const [loading, setLoading] = useState(true);
@@ -98,27 +106,36 @@ export default function ExpensesPage() {
     }
   }, []);
 
-  // 통계 및 거래 목록 조회
+  // 통계 및 거래 목록 첫 페이지 조회
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const statsParams = {};
-      if (selectedMonth) statsParams.year_month = selectedMonth;
+      if (startMonth) statsParams.start_month = startMonth;
+      if (endMonth) statsParams.end_month = endMonth;
       if (selectedOwner && selectedOwner !== '전체') statsParams.owner = selectedOwner;
 
       const statsData = await expenseService.getStats(statsParams);
       setStats(statsData);
 
-      // 기준년월이 아직 선택되지 않았다면 stats에서 반환된 기준년월로 초기화
-      if (!selectedMonth && statsData?.year_month) {
-        setSelectedMonth(statsData.year_month);
+      // 기간 상태가 비어 있다면 stats에서 반환된 시작/종료월로 동기화
+      if (!startMonth && statsData?.start_month) {
+        setStartMonth(statsData.start_month);
+      }
+      if (!endMonth && statsData?.end_month) {
+        setEndMonth(statsData.end_month);
       }
 
-      // 거래 목록 필터 파라미터 구성
-      const expenseParams = {};
-      const activeMonth = selectedMonth || statsData?.year_month;
-      if (activeMonth) expenseParams.year_month = activeMonth;
+      // 거래 목록 필터 파라미터 구성 (첫 100건)
+      const expenseParams = {
+        limit: PAGE_SIZE,
+        offset: 0,
+      };
+      const activeStart = startMonth || statsData?.start_month;
+      const activeEnd = endMonth || statsData?.end_month;
+      if (activeStart) expenseParams.start_month = activeStart;
+      if (activeEnd) expenseParams.end_month = activeEnd;
       if (selectedOwner && selectedOwner !== '전체') expenseParams.owner = selectedOwner;
       if (selectedCategory) expenseParams.category_id = selectedCategory;
       if (selectedInstitution) expenseParams.institution = selectedInstitution;
@@ -127,20 +144,56 @@ export default function ExpensesPage() {
       if (searchKeyword.trim()) expenseParams.search = searchKeyword.trim();
 
       const expenseList = await expenseService.getExpenses(expenseParams);
-      setExpenses(expenseList || []);
+      const items = expenseList || [];
+      setExpenses(items);
+      setHasMore(items.length >= PAGE_SIZE);
     } catch (err) {
       setError(err.message || '지출 데이터를 불러오는 중 오류가 발생했습니다.');
     } finally {
       setLoading(false);
     }
   }, [
-    selectedMonth,
+    startMonth,
+    endMonth,
     selectedOwner,
     selectedCategory,
     selectedInstitution,
     selectedExcludedFilter,
     searchKeyword,
   ]);
+
+  // 거래 내역 더보기 (100건 단위 페이징)
+  const handleLoadMore = async () => {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const expenseParams = {
+        limit: PAGE_SIZE,
+        offset: expenses.length,
+      };
+      if (startMonth) expenseParams.start_month = startMonth;
+      if (endMonth) expenseParams.end_month = endMonth;
+      if (selectedOwner && selectedOwner !== '전체') expenseParams.owner = selectedOwner;
+      if (selectedCategory) expenseParams.category_id = selectedCategory;
+      if (selectedInstitution) expenseParams.institution = selectedInstitution;
+      if (selectedExcludedFilter === 'included') expenseParams.is_excluded = false;
+      if (selectedExcludedFilter === 'excluded') expenseParams.is_excluded = true;
+      if (searchKeyword.trim()) expenseParams.search = searchKeyword.trim();
+
+      const nextList = await expenseService.getExpenses(expenseParams);
+      const nextItems = nextList || [];
+      if (nextItems.length > 0) {
+        setExpenses((prev) => [...prev, ...nextItems]);
+        setHasMore(nextItems.length >= PAGE_SIZE);
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      alert(`거래 추가 로드 실패: ${err.message}`);
+    } finally {
+      setLoadingMore(false);
+    }
+  };
 
   // 최초 로드 시 마스터 및 데이터 조회
   useEffect(() => {
@@ -169,7 +222,8 @@ export default function ExpensesPage() {
 
       // 대시보드 통계 새로고침
       const statsParams = {};
-      if (selectedMonth) statsParams.year_month = selectedMonth;
+      if (startMonth) statsParams.start_month = startMonth;
+      if (endMonth) statsParams.end_month = endMonth;
       if (selectedOwner && selectedOwner !== '전체') statsParams.owner = selectedOwner;
       const newStats = await expenseService.getStats(statsParams);
       setStats(newStats);
@@ -192,7 +246,8 @@ export default function ExpensesPage() {
 
       // 대시보드 통계 새로고침
       const statsParams = {};
-      if (selectedMonth) statsParams.year_month = selectedMonth;
+      if (startMonth) statsParams.start_month = startMonth;
+      if (endMonth) statsParams.end_month = endMonth;
       if (selectedOwner && selectedOwner !== '전체') statsParams.owner = selectedOwner;
       const newStats = await expenseService.getStats(statsParams);
       setStats(newStats);
@@ -211,7 +266,8 @@ export default function ExpensesPage() {
 
       // 통계 새로고침
       const statsParams = {};
-      if (selectedMonth) statsParams.year_month = selectedMonth;
+      if (startMonth) statsParams.start_month = startMonth;
+      if (endMonth) statsParams.end_month = endMonth;
       if (selectedOwner && selectedOwner !== '전체') statsParams.owner = selectedOwner;
       const newStats = await expenseService.getStats(statsParams);
       setStats(newStats);
@@ -331,84 +387,102 @@ export default function ExpensesPage() {
         </div>
       )}
 
-      {/* 2. 기준년월 선택 및 상단 KPI 카드 섹션 */}
+      {/* 2. 공통 기간 선택기 툴바 및 상단 KPI 카드 섹션 */}
       <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar size={18} className="text-slate-400" />
-            <span className="text-sm font-medium text-slate-600">기준년월:</span>
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="text-sm font-semibold text-slate-800 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {monthOptions.map((ym) => (
-                <option key={ym} value={ym}>
-                  {ym}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <ExpensePeriodSelector
+            startMonth={startMonth}
+            endMonth={endMonth}
+            onChange={({ startMonth: s, endMonth: e }) => {
+              setStartMonth(s);
+              setEndMonth(e);
+            }}
+            monthOptions={monthOptions}
+          />
           {stats && (
-            <span className="text-xs text-slate-400">
+            <span className="text-xs text-slate-400 self-end sm:self-center">
               {selectedOwner === '전체' ? '가구 전체' : `${selectedOwner} 단독`} 집계 기준
             </span>
           )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* KPI 1: 당월 총지출 */}
+          {/* KPI 1: 당월/선택기간 총지출 */}
           <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>당월 총지출</span>
+              <span>{stats?.period_months > 1 ? '총 지출' : '당월 총지출'}</span>
               <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[11px] font-semibold">
-                {stats?.year_month || selectedMonth}
+                {stats?.start_month === stats?.end_month
+                  ? stats?.start_month || startMonth
+                  : `${stats?.start_month} ~ ${stats?.end_month}`}
               </span>
             </div>
             <div className="mt-3">
               <div className="text-2xl font-bold text-slate-900 tracking-tight">
-                {stats ? formatCurrency(stats.current_total) : '-'}
+                {stats ? formatCurrency(stats.period_total ?? stats.current_total) : '-'}
               </div>
             </div>
             <div className="mt-2 text-xs text-slate-400">
-              전월 총액: {stats ? formatCurrency(stats.prev_total) : '-'}
+              직전 동기간: {stats ? formatCurrency(stats.prev_period_total ?? stats.prev_total) : '-'}
             </div>
           </div>
 
-          {/* KPI 2: 전월 대비 증감 (MoM) */}
+          {/* KPI 2: 월평균 지출 (신규!) */}
           <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>전월 대비 (MoM)</span>
+              <span>월평균 지출</span>
+              <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-full text-[11px] font-semibold">
+                {stats ? `${stats.period_months || 1}개월 평균` : '월평균'}
+              </span>
+            </div>
+            <div className="mt-3">
+              <div className="text-2xl font-bold text-slate-900 tracking-tight">
+                {stats ? formatCurrency(stats.monthly_average) : '-'}
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-slate-400">
+              선택 기간 균등 환산 기준
+            </div>
+          </div>
+
+          {/* KPI 3: 전기간 대비 증감 (MoM) */}
+          <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
+              <span>{stats?.period_months > 1 ? '전기간 대비' : '전월 대비 (MoM)'}</span>
               {stats && (
                 <span
                   className={`inline-flex items-center gap-0.5 text-xs font-bold px-2 py-0.5 rounded-full ${
-                    stats.mom_change_rate > 0
+                    (stats.prev_period_change_rate ?? stats.mom_change_rate) > 0
                       ? 'bg-rose-50 text-rose-600'
-                      : stats.mom_change_rate < 0
+                      : (stats.prev_period_change_rate ?? stats.mom_change_rate) < 0
                       ? 'bg-emerald-50 text-emerald-600'
                       : 'bg-slate-100 text-slate-600'
                   }`}
                 >
-                  {stats.mom_change_rate > 0 ? (
+                  {(stats.prev_period_change_rate ?? stats.mom_change_rate) > 0 ? (
                     <TrendingUp size={12} />
-                  ) : stats.mom_change_rate < 0 ? (
+                  ) : (stats.prev_period_change_rate ?? stats.mom_change_rate) < 0 ? (
                     <TrendingDown size={12} />
                   ) : (
                     <Minus size={12} />
                   )}
-                  {stats.mom_change_rate > 0
-                    ? `+${Number(stats.mom_change_rate).toFixed(1)}%`
-                    : `${Number(stats.mom_change_rate).toFixed(1)}%`}
+                  {(stats.prev_period_change_rate ?? stats.mom_change_rate) > 0
+                    ? `+${Number(stats.prev_period_change_rate ?? stats.mom_change_rate).toFixed(1)}%`
+                    : `${Number(stats.prev_period_change_rate ?? stats.mom_change_rate).toFixed(1)}%`}
                 </span>
               )}
             </div>
             <div className="mt-3">
               <div className="text-2xl font-bold text-slate-900 tracking-tight">
                 {stats ? (
-                  stats.mom_change_amount > 0 ? (
-                    <span className="text-rose-600">+{formatCurrency(stats.mom_change_amount)}</span>
-                  ) : stats.mom_change_amount < 0 ? (
-                    <span className="text-emerald-600">{formatCurrency(stats.mom_change_amount)}</span>
+                  (stats.prev_period_change_amount ?? stats.mom_change_amount) > 0 ? (
+                    <span className="text-rose-600">
+                      +{formatCurrency(stats.prev_period_change_amount ?? stats.mom_change_amount)}
+                    </span>
+                  ) : (stats.prev_period_change_amount ?? stats.mom_change_amount) < 0 ? (
+                    <span className="text-emerald-600">
+                      {formatCurrency(stats.prev_period_change_amount ?? stats.mom_change_amount)}
+                    </span>
                   ) : (
                     <span>0원</span>
                   )
@@ -418,11 +492,13 @@ export default function ExpensesPage() {
               </div>
             </div>
             <div className="mt-2 text-xs text-slate-400">
-              {stats?.mom_change_amount > 0 ? '전월 대비 지출 증가' : '전월 대비 지출 절약'}
+              {(stats?.prev_period_change_amount ?? stats?.mom_change_amount) > 0
+                ? '전기간 대비 지출 증가'
+                : '전기간 대비 지출 절약'}
             </div>
           </div>
 
-          {/* KPI 3: 통계 제외 총액 */}
+          {/* KPI 4: 통계 제외 총액 */}
           <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
               <span>통계 제외 총액</span>
@@ -439,34 +515,17 @@ export default function ExpensesPage() {
               카드대금·내부이체 등 합산 제외
             </div>
           </div>
-
-          {/* KPI 4: 조회된 거래 건수 */}
-          <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center justify-between text-slate-500 text-xs font-medium">
-              <span>기록된 거래 건수</span>
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full text-[11px] font-semibold">
-                원장 기록
-              </span>
-            </div>
-            <div className="mt-3">
-              <div className="text-2xl font-bold text-slate-900 tracking-tight">
-                {expenses.length}
-                <span className="text-base font-normal text-slate-500 ml-1">건</span>
-              </div>
-            </div>
-            <div className="mt-2 text-xs text-slate-400">
-              현재 필터 기준 유효 거래
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* 3. 시각화 차트 섹션: 최근 월별 추이 바차트 & 카테고리 비중 도넛차트 */}
+      {/* 3. 시각화 차트 섹션: 월별 추이 바차트 & 카테고리 비중 도넛차트 */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* 최근 12개월 지출 추이 바차트 (2컬럼 차지) */}
+        {/* 월별 지출 추이 바차트 (2컬럼 차지) */}
         <div className="lg:col-span-2 bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-bold text-slate-800">월별 지출 추이 (최근 12개월)</h2>
+            <h2 className="text-base font-bold text-slate-800">
+              월별 지출 추이 {stats?.period_months ? `(${stats.period_months}개월)` : ''}
+            </h2>
             <span className="text-xs text-slate-400 font-mono">단위: 원</span>
           </div>
 
@@ -492,9 +551,17 @@ export default function ExpensesPage() {
                     labelFormatter={(label) => `${label} 정산`}
                     contentStyle={{ borderRadius: '8px', border: '1px solid #E2E8F0', fontSize: '12px' }}
                   />
+                  {stats.monthly_average > 0 && (
+                    <ReferenceLine
+                      y={stats.monthly_average}
+                      stroke="#EF4444"
+                      strokeDasharray="3 3"
+                      label={{ value: '월평균', fill: '#EF4444', fontSize: 10, position: 'insideTopRight' }}
+                    />
+                  )}
                   <Bar dataKey="total_amount" radius={[4, 4, 0, 0]}>
                     {stats.monthly_trends.map((entry, index) => {
-                      const isCurrent = entry.year_month === (stats.year_month || selectedMonth);
+                      const isCurrent = entry.year_month === (stats.end_month || stats.year_month || endMonth);
                       return <Cell key={`bar-${index}`} fill={isCurrent ? '#2563EB' : '#94A3B8'} />;
                     })}
                   </Bar>
@@ -507,6 +574,7 @@ export default function ExpensesPage() {
             )}
           </div>
         </div>
+
 
         {/* 당월 카테고리별 비중 도넛차트 (1컬럼 차지) */}
         <div className="bg-white p-5 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
@@ -835,6 +903,20 @@ export default function ExpensesPage() {
             </tbody>
           </table>
         </div>
+
+        {/* 100건 단위 페이징 더보기 버튼 */}
+        {hasMore && (
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={handleLoadMore}
+              disabled={loadingMore}
+              className="px-5 py-2.5 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 font-semibold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 disabled:opacity-50"
+            >
+              {loadingMore ? '불러오는 중...' : '내역 더보기 (100건 추가)'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* 6. 모달 컴포넌트 렌더링 */}

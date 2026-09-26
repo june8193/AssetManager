@@ -30,6 +30,7 @@ vi.mock('recharts', () => {
   const Pie = ({ children, data }) => <div data-testid="pie" data-chart-data={JSON.stringify(data)}>{children}</div>;
   const Cell = () => <div data-testid="cell" />;
   const Legend = () => <div data-testid="legend" />;
+  const ReferenceLine = () => <div data-testid="reference-line" />;
 
   return {
     ResponsiveContainer,
@@ -43,6 +44,7 @@ vi.mock('recharts', () => {
     Pie,
     Cell,
     Legend,
+    ReferenceLine,
   };
 });
 
@@ -61,6 +63,14 @@ const mockPaymentMethods = [
 
 const mockStats = {
   year_month: '2026-08',
+  start_month: '2026-08',
+  end_month: '2026-08',
+  period_months: 1,
+  period_total: 100000,
+  monthly_average: 100000,
+  prev_period_total: 80000,
+  prev_period_change_amount: 20000,
+  prev_period_change_rate: 25.0,
   current_total: 100000,
   prev_total: 80000,
   mom_change_amount: 20000,
@@ -383,4 +393,102 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
       expect(screen.getAllByText('식비/카페').length).toBeGreaterThanOrEqual(1);
     });
   });
+
+  it('신규 월평균 지출 KPI 카드가 정상 렌더링되어야 한다', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(screen.getByText('월평균 지출')).toBeInTheDocument();
+      expect(screen.getByText(/선택 기간 균등 환산 기준/i)).toBeInTheDocument();
+    });
+  });
+
+  it('기간 선택기(ExpensePeriodSelector)에서 3개월 프리셋 클릭 시 start_month와 end_month 파라미터로 통계와 목록을 재조회해야 한다', async () => {
+    renderComponent();
+
+    await waitFor(() => {
+      expect(expenseService.getStats).toHaveBeenCalled();
+    });
+
+    // 3개월 프리셋 버튼 클릭
+    const btn3M = screen.getByRole('button', { name: /^3개월$/ });
+    fireEvent.click(btn3M);
+
+    await waitFor(() => {
+      expect(expenseService.getStats).toHaveBeenCalledWith(
+        expect.objectContaining({
+          start_month: '2026-06',
+          end_month: '2026-08',
+        })
+      );
+      expect(expenseService.getExpenses).toHaveBeenCalledWith(
+        expect.objectContaining({
+          start_month: '2026-06',
+          end_month: '2026-08',
+          limit: 100,
+          offset: 0,
+        })
+      );
+    });
+  });
+
+  it('첫 페이지 거래가 100건 이상일 때 내역 더보기 버튼이 표시되고 클릭 시 offset 페이징으로 추가 데이터를 누적해야 한다', async () => {
+    // 100건의 mock 데이터 생성
+    const mock100Expenses = Array.from({ length: 100 }, (_, i) => ({
+      id: 200 + i,
+      transaction_date: '2026-08-01T10:00:00',
+      year_month: '2026-08',
+      merchant: `가맹점_${i + 1}`,
+      amount: 1000,
+      payment_method_id: 1,
+      payment_method_alias: '장준 현대카드',
+      owner: '장준',
+      institution: '현대카드',
+      category_id: 1,
+      category_name: '식비/카페',
+      is_excluded: false,
+    }));
+
+    const mockNextExpenses = [
+      {
+        id: 999,
+        transaction_date: '2026-07-25T10:00:00',
+        year_month: '2026-07',
+        merchant: '추가로드 가맹점',
+        amount: 5000,
+        payment_method_id: 1,
+        payment_method_alias: '장준 현대카드',
+        owner: '장준',
+        institution: '현대카드',
+        category_id: 2,
+        category_name: '쇼핑',
+        is_excluded: false,
+      },
+    ];
+
+    expenseService.getExpenses.mockResolvedValueOnce(mock100Expenses);
+    expenseService.getExpenses.mockResolvedValueOnce(mockNextExpenses);
+
+    renderComponent();
+
+    // 더보기 버튼 확인
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /내역 더보기/i })).toBeInTheDocument();
+    });
+
+    // 더보기 클릭
+    const loadMoreBtn = screen.getByRole('button', { name: /내역 더보기/i });
+    fireEvent.click(loadMoreBtn);
+
+    await waitFor(() => {
+      expect(expenseService.getExpenses).toHaveBeenCalledWith(
+        expect.objectContaining({
+          limit: 100,
+          offset: 100,
+        })
+      );
+      expect(screen.getByText('추가로드 가맹점')).toBeInTheDocument();
+    });
+  });
 });
+
