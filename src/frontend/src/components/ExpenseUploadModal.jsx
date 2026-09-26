@@ -126,6 +126,10 @@ export default function ExpenseUploadModal({
       setError('업로드할 명세서 파일을 선택해주세요.');
       return;
     }
+    if (!selectedPaymentMethodId) {
+      setError('결제수단을 선택해주세요.');
+      return;
+    }
 
     try {
       setLoading(true);
@@ -133,14 +137,13 @@ export default function ExpenseUploadModal({
       const parsed = await expenseService.uploadPreview(
         file,
         password || undefined,
-        selectedPaymentMethodId ? Number(selectedPaymentMethodId) : null
+        Number(selectedPaymentMethodId)
       );
 
       setPreviewData(parsed);
       setPreviewTransactions(parsed.transactions || []);
       setPreviewPaymentMethodId(
-        parsed.payment_method?.id ||
-        (selectedPaymentMethodId ? Number(selectedPaymentMethodId) : paymentMethods[0]?.id || null)
+        parsed.payment_method?.id || Number(selectedPaymentMethodId)
       );
       setStep('preview');
     } catch (err) {
@@ -320,18 +323,18 @@ export default function ExpenseUploadModal({
               )}
             </div>
 
-            {/* 결제수단 선택 (선택 사항) */}
+            {/* 결제수단 선택 (필수) */}
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
                 <CreditCard className="w-3.5 h-3.5 text-slate-400" />
-                결제수단 선택 (선택)
+                결제수단 선택 (필수)
               </label>
               <select
                 value={selectedPaymentMethodId}
                 onChange={(e) => setSelectedPaymentMethodId(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
               >
-                <option value="">자동 감지 (권장 - 파일 내용 기반 매칭)</option>
+                <option value="">결제수단을 선택해주세요</option>
                 {paymentMethods.map((pm) => (
                   <option key={pm.id} value={pm.id}>
                     [{pm.owner}] {pm.alias || pm.institution} ({pm.account_number || pm.institution})
@@ -379,7 +382,7 @@ export default function ExpenseUploadModal({
               <button
                 type="button"
                 onClick={handleParsePreview}
-                disabled={!file || loading}
+                disabled={!file || !selectedPaymentMethodId || loading}
                 className="px-5 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg shadow-sm flex items-center gap-2 transition-colors"
               >
                 {loading ? (

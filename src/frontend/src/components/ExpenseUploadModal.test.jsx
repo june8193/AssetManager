@@ -76,7 +76,28 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     expect(screen.getByPlaceholderText(/미입력 시 기본 비밀번호 사용/i)).toBeInTheDocument();
   });
 
-  it('파일을 선택하고 미리보기 파싱을 실행하면 프리뷰 테이블과 요약 카드가 렌더링된다', async () => {
+  it('결제수단 드롭다운에 자동 감지 옵션이 없고 결제수단을 선택해주세요 안내 문구가 기본 표시된다', () => {
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    // '자동 감지' 문구가 없어야 함
+    expect(screen.queryByText(/자동 감지/i)).not.toBeInTheDocument();
+
+    // 기본 플레이스홀더 옵션 확인
+    expect(screen.getByText('결제수단을 선택해주세요')).toBeInTheDocument();
+
+    // 등록된 결제수단 옵션들 렌더링 확인
+    expect(screen.getByText(/장준 카카오뱅크/i)).toBeInTheDocument();
+    expect(screen.getByText(/장준 현대카드/i)).toBeInTheDocument();
+  });
+
+  it('결제수단이 선택되지 않으면 파일이 선택되어도 미리보기 파싱 버튼이 비활성화된다', () => {
     render(
       <ExpenseUploadModal
         isOpen={true}
@@ -88,23 +109,43 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
 
     const file = new File(['dummy content'], 'statement.xlsx', { type: 'application/vnd.ms-excel' });
     const fileInput = document.querySelector('input[type="file"]');
-    expect(fileInput).toBeInTheDocument();
-
     fireEvent.change(fileInput, { target: { files: [file] } });
 
-    // 파일명이 화면에 표시되는지 확인
-    expect(screen.getByText('statement.xlsx')).toBeInTheDocument();
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    expect(parseBtn).toBeDisabled();
+  });
+
+  it('파일과 결제수단을 모두 선택하고 미리보기 파싱을 실행하면 정상적으로 호출되고 프리뷰가 렌더링된다', async () => {
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    const file = new File(['dummy content'], 'statement.xlsx', { type: 'application/vnd.ms-excel' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // 결제수단 선택
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
+    // 파싱 버튼 활성화 확인
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    expect(parseBtn).not.toBeDisabled();
 
     // 비밀번호 입력
     const passwordInput = screen.getByPlaceholderText(/미입력 시 기본 비밀번호 사용/i);
     fireEvent.change(passwordInput, { target: { value: '950811' } });
 
     // 미리보기 파싱 버튼 클릭
-    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
     fireEvent.click(parseBtn);
 
     await waitFor(() => {
-      expect(expenseService.uploadPreview).toHaveBeenCalledWith(file, '950811', null);
+      expect(expenseService.uploadPreview).toHaveBeenCalledWith(file, '950811', 1);
     });
 
     // 프리뷰 화면 전환 확인
@@ -119,6 +160,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     expect(screen.getAllByText(/6,000/).length).toBeGreaterThan(0);
   });
 
+
   it('프리뷰 화면에서 카테고리를 변경하고 통계 제외 체크박스를 토글할 수 있다', async () => {
     render(
       <ExpenseUploadModal
@@ -132,6 +174,10 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     const file = new File(['dummy'], 'statement.xlsx');
     const fileInput = document.querySelector('input[type="file"]');
     fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // 결제수단 선택
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
     fireEvent.click(parseBtn);
@@ -172,6 +218,10 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     const file = new File(['dummy'], 'statement.xlsx');
     const fileInput = document.querySelector('input[type="file"]');
     fireEvent.change(fileInput, { target: { files: [file] } });
+
+    // 결제수단 선택
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
     fireEvent.click(parseBtn);
@@ -214,6 +264,10 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     const fileInput = document.querySelector('input[type="file"]');
     fireEvent.change(fileInput, { target: { files: [file] } });
 
+    // 결제수단 선택
+    const selectElem = screen.getByRole('combobox');
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
     fireEvent.click(parseBtn);
 
@@ -221,4 +275,5 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
       expect(screen.getByText(/비밀번호가 일치하지 않습니다/i)).toBeInTheDocument();
     });
   });
+
 });

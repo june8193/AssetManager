@@ -276,63 +276,6 @@ def delete_expense_category(
 # 명세서 업로드 미리보기 및 커밋 엔드포인트
 # ==========================================
 
-def _match_payment_method(
-    db: Session,
-    institution: str,
-    owner: Optional[str] = None,
-    account_identifier: Optional[str] = None,
-) -> Optional[PaymentMethod]:
-    """파싱된 메타데이터를 기반으로 DB에 등록된 가장 적합한 결제수단을 검색합니다.
-
-    Args:
-        db (Session): 데이터베이스 세션.
-        institution (str): 금융기관명.
-        owner (Optional[str]): 소유주 성명.
-        account_identifier (Optional[str]): 계좌번호 또는 카드 식별자.
-
-    Returns:
-        Optional[PaymentMethod]: 매칭된 결제수단 객체 (없을 경우 None).
-    """
-    candidates = (
-        db.query(PaymentMethod)
-        .filter(PaymentMethod.institution == institution, PaymentMethod.is_active == True)
-        .all()
-    )
-    if not candidates:
-        candidates = db.query(PaymentMethod).filter(PaymentMethod.institution == institution).all()
-        if not candidates:
-            return None
-
-    norm_owner = owner.strip() if owner else None
-    norm_ident = account_identifier.strip() if account_identifier else None
-
-    # 1순위: 소유주 일치 + 식별번호 매칭
-    if norm_owner and norm_ident:
-        for pm in candidates:
-            if pm.owner == norm_owner:
-                acc_num = (pm.account_number or "").strip()
-                alias = (pm.alias or "").strip()
-                if (acc_num and (acc_num in norm_ident or norm_ident in acc_num)) or \
-                   (alias and (alias in norm_ident or norm_ident in alias)):
-                    return pm
-
-    # 2순위: 식별번호 매칭
-    if norm_ident:
-        for pm in candidates:
-            acc_num = (pm.account_number or "").strip()
-            alias = (pm.alias or "").strip()
-            if (acc_num and (acc_num in norm_ident or norm_ident in acc_num)) or \
-               (alias and (alias in norm_ident or norm_ident in alias)):
-                return pm
-
-    # 3순위: 소유주 일치
-    if norm_owner:
-        for pm in candidates:
-            if pm.owner == norm_owner:
-                return pm
-
-    # 4순위: 해당 기관 첫 번째 활성 결제수단
-    return candidates[0]
 
 
 def _assign_category_and_exclusion(
@@ -402,7 +345,7 @@ def _assign_category_and_exclusion(
 async def upload_expense_preview(
     file: UploadFile = File(..., description="업로드할 명세서 파일 (HTML 또는 XLSX)"),
     password: Optional[str] = Form(None, description="복호화 비밀번호 (미입력 시 결제수단 또는 시스템 기본 비밀번호 사용)"),
-    payment_method_id: Optional[int] = Form(None, description="결제수단 ID (미지정 시 자동 매칭)"),
+    payment_method_id: int = Form(..., description="결제수단 ID (필수)"),
     db: Session = Depends(get_db),
 ):
     """명세서 파일을 업로드받아 복호화 및 파싱한 후 DB 저장 없이 거래 미리보기 데이터를 반환합니다.
@@ -410,7 +353,7 @@ async def upload_expense_preview(
     Args:
         file (UploadFile): 업로드된 명세서 파일.
         password (Optional[str]): 복호화 비밀번호.
-        payment_method_id (Optional[int]): 선택적 결제수단 ID.
+        payment_method_id (int): 필수 결제수단 ID.
         db (Session): 데이터베이스 세션.
 
     Raises:
@@ -428,6 +371,13 @@ async def upload_expense_preview(
             detail="업로드된 파일이 비어 있습니다.",
         )
 
+    selected_pm = db.query(PaymentMethod).filter(PaymentMethod.id == payment_method_id).first()
+    if not selected_pm:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"ID가 {payment_method_id}인 결제수단을 찾을 수 없습니다.",
+        )
+
     parser_service = ExpenseParserService()
     try:
         detected_institution = parser_service.detect_institution(file_bytes, filename)
@@ -436,15 +386,6 @@ async def upload_expense_preview(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
-
-    selected_pm: Optional[PaymentMethod] = None
-    if payment_method_id is not None:
-        selected_pm = db.query(PaymentMethod).filter(PaymentMethod.id == payment_method_id).first()
-        if not selected_pm:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"ID가 {payment_method_id}인 결제수단을 찾을 수 없습니다.",
-            )
 
     # 1. 비밀번호 후보군 구성
     password_candidates: list[str] = []
@@ -455,7 +396,7 @@ async def upload_expense_preview(
         password_candidates.append(password.strip())
     else:
         # 미입력 시: 지정 결제수단 -> 금융기관 매칭 결제수단 -> settings.toml 순서로 폴백
-        if selected_pm and selected_pm.default_password and selected_pm.default_password.strip():
+        if selected_pm.default_password and selected_pm.default_password.strip():
             password_candidates.append(selected_pm.default_password.strip())
 
         # 해당 금융기관의 등록 결제수단 기본 비밀번호 추가
@@ -504,16 +445,7 @@ async def upload_expense_preview(
             detail=error_msg,
         )
 
-    # 3. 결제수단 자동 매칭 (명시되지 않았을 경우)
-    if selected_pm is None:
-        selected_pm = _match_payment_method(
-            db=db,
-            institution=parse_result.get("institution", detected_institution),
-            owner=parse_result.get("owner"),
-            account_identifier=parse_result.get("account_identifier"),
-        )
-
-    # 4. 카테고리 매칭 및 통계 제외 플래그 부여
+    # 3. 카테고리 매칭 및 통계 제외 플래그 부여
     raw_transactions = parse_result.get("transactions", [])
     processed_transactions = _assign_category_and_exclusion(db, raw_transactions)
 
@@ -532,7 +464,7 @@ async def upload_expense_preview(
     ]
 
     return ExpenseUploadPreviewResponse(
-        payment_method=PaymentMethodResponse.model_validate(selected_pm) if selected_pm else None,
+        payment_method=PaymentMethodResponse.model_validate(selected_pm),
         year_month=parse_result.get("year_month", ""),
         source_file=filename,
         transactions=preview_transactions,

@@ -59,9 +59,38 @@ def fixtures_dir() -> Path:
     return Path(__file__).parent / "fixtures" / "statements"
 
 
-def test_upload_preview_kakaobank_success(client, fixtures_dir):
+
+def test_upload_preview_missing_payment_method_id(client, fixtures_dir):
+    """결제수단 ID(payment_method_id) 누락 시 HTTP 422 Unprocessable Entity 에러를 반환하는지 검증합니다."""
+    kb_file = fixtures_dir / "카카오뱅크_거래내역_N1991286375_2026092609021842.xlsx"
+    with open(kb_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("kakaobank_statement.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+        )
+
+    assert response.status_code == 422, f"Expected 422, got {response.status_code}: {response.text}"
+
+
+def test_upload_preview_nonexistent_payment_method_id(client, fixtures_dir):
+    """존재하지 않는 payment_method_id로 요청 시 HTTP 404 Not Found 에러를 반환하는지 검증합니다."""
+    kb_file = fixtures_dir / "카카오뱅크_거래내역_N1991286375_2026092609021842.xlsx"
+    with open(kb_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("kakaobank_statement.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"payment_method_id": 99999},
+        )
+
+    assert response.status_code == 404, f"Expected 404, got {response.status_code}: {response.text}"
+
+
+def test_upload_preview_kakaobank_success(client, db_session, fixtures_dir):
     """카카오뱅크 엑셀 파일을 업로드하여 비밀번호 없이 결제수단 기본 비밀번호로 자동 복호화 및 미리보기 데이터를 성공적으로 반환받는지 검증합니다."""
     kb_file = fixtures_dir / "카카오뱅크_거래내역_N1991286375_2026092609021842.xlsx"
+    pm = db_session.query(PaymentMethod).filter_by(institution="카카오뱅크").first()
+    assert pm is not None, "카카오뱅크 결제수단이 시드 데이터에 있어야 합니다."
+
     assert kb_file.exists(), f"픽스처 파일이 없습니다: {kb_file}"
 
     with open(kb_file, "rb") as f:
@@ -69,6 +98,7 @@ def test_upload_preview_kakaobank_success(client, fixtures_dir):
         response = client.post(
             "/api/expenses/upload-preview",
             files={"file": ("kakaobank_statement.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+            data={"payment_method_id": pm.id},
         )
 
     assert response.status_code == 200, response.text
@@ -85,16 +115,19 @@ def test_upload_preview_kakaobank_success(client, fixtures_dir):
     assert len(excluded_items) > 0, "현대카드 출금 건 등은 is_excluded가 True여야 합니다."
 
 
-def test_upload_preview_hyundaicard_success(client, fixtures_dir):
+def test_upload_preview_hyundaicard_success(client, db_session, fixtures_dir):
     """현대카드 보안 HTML 파일을 업로드하여 명시적 비밀번호(950811)로 미리보기 데이터를 성공적으로 반환받는지 검증합니다."""
     hc_file = fixtures_dir / "hyundaicard_2608.html"
+    pm = db_session.query(PaymentMethod).filter_by(institution="현대카드").first()
+    assert pm is not None, "현대카드 결제수단이 시드 데이터에 있어야 합니다."
+
     assert hc_file.exists(), f"픽스처 파일이 없습니다: {hc_file}"
 
     with open(hc_file, "rb") as f:
         response = client.post(
             "/api/expenses/upload-preview",
             files={"file": ("hyundaicard_2608.html", f, "text/html")},
-            data={"password": "950811"},
+            data={"password": "950811", "payment_method_id": pm.id},
         )
 
     assert response.status_code == 200, response.text
@@ -110,14 +143,16 @@ def test_upload_preview_hyundaicard_success(client, fixtures_dir):
         assert tx.get("category_id") is not None
 
 
-def test_upload_preview_invalid_password(client, fixtures_dir):
+def test_upload_preview_invalid_password(client, db_session, fixtures_dir):
     """잘못된 비밀번호로 업로드 시 400 에러를 반환하는지 검증합니다."""
     kb_file = fixtures_dir / "카카오뱅크_거래내역_N1991286375_2026092609021842.xlsx"
+    pm = db_session.query(PaymentMethod).filter_by(institution="카카오뱅크").first()
+
     with open(kb_file, "rb") as f:
         response = client.post(
             "/api/expenses/upload-preview",
             files={"file": ("kakaobank_statement.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
-            data={"password": "wrong_password"},
+            data={"password": "wrong_password", "payment_method_id": pm.id},
         )
 
     assert response.status_code == 400
@@ -237,10 +272,14 @@ def test_upload_preview_settings_password_fallback(client, db_session, fixtures_
     get_settings(reload=True)
 
     hc_file = fixtures_dir / "hyundaicard_2608.html"
+    pm = db_session.query(PaymentMethod).filter_by(institution="현대카드").first()
+    assert pm is not None, "현대카드 결제수단이 있어야 합니다."
+
     with open(hc_file, "rb") as f:
         response = client.post(
             "/api/expenses/upload-preview",
             files={"file": ("hyundaicard_2608.html", f, "text/html")},
+            data={"payment_method_id": pm.id},
         )
 
     assert response.status_code == 200, response.text
