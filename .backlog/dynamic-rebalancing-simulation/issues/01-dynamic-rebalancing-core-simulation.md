@@ -5,10 +5,11 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] 백엔드 `SimulationService`에 일별 S&P 500 최고점(ATH) 대비 낙폭 및 VIX 종가 기반의 AND 조건 판정 및 월말 정상 복귀 동적 리밸런싱 알고리즘 구현
-- [ ] 백엔드 `POST /api/simulation/run-dynamic` REST API 엔드포인트 구현 (유효성 검사, 거치식/적립식 지원, 3개 벤치마크 데이터셋 반환)
-- [ ] 프론트엔드 `AssetAllocationSimulationPage`에 `[동적 리밸런싱 (MDD/VIX)]` 탭 추가
-- [ ] 기본 비중 슬라이더, 기간 선택기, 거치식/적립식 모드 토글, 3개 벤치마크 비교 Recharts 라인 차트 및 요약 카드 렌더링
-- [ ] 백엔드 API 유닛 테스트(`tests/test_simulation_dynamic.py`) 작성 및 통과
+- [x] 백엔드 `SimulationService`에 일별 S&P 500 최고점(ATH) 대비 낙폭 및 VIX 종가 기반의 AND 조건 판정 및 월말 정상 복귀 동적 리밸런싱 알고리즘 구현
+- [x] 백엔드 `POST /api/simulation/run-dynamic` REST API 엔드포인트 구현 (유효성 검사, 거치식/적립식 지원, 3개 벤치마크 데이터셋 반환)
+- [x] 프론트엔드 `AssetAllocationSimulationPage`에 `[동적 리밸런싱 (MDD/VIX)]` 탭 추가
+- [x] 기본 비중 슬라이더, 기간 선택기, 거치식/적립식 모드 토글, 3개 벤치마크 비교 Recharts 라인 차트 및 요약 카드 렌더링
+- [x] 백엔드 API 유닛 테스트(`tests/test_simulation_dynamic.py`) 작성 및 통과
+

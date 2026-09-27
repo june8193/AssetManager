@@ -135,4 +135,58 @@ describe('AssetAllocationSimulationPage - Unit Test', () => {
       expect(screen.queryByText('매년 추가 적립금')).toBeNull();
     });
   });
+
+  it('동적 리밸런싱 (MDD/VIX) 탭으로 전환하고 3개 벤치마크 결과를 렌더링한다', async () => {
+    const dynamicMockResponse = {
+      chart: {
+        labels: ['2026-01-01', '2026-01-02'],
+        datasets: [
+          { label: '동적 리밸런싱 전략', data: [20000000.0, 20200000.0] },
+          { label: '일반 정기 리밸런싱', data: [20000000.0, 20060000.0] },
+          { label: 'S&P 500 단순 보유', data: [20000000.0, 20100000.0] }
+        ]
+      },
+      summaries: [
+        { name: '동적 리밸런싱 전략', stock_ratio: 60.0, cagr: 14.2, mdd: -11.5, final_return: 28.5, final_valuation: 25700000.0, total_invested: 20000000.0, total_interest: 5700000.0 },
+        { name: '일반 정기 리밸런싱', stock_ratio: 60.0, cagr: 8.2, mdd: -9.1, final_return: 15.6, final_valuation: 23120000.0, total_invested: 20000000.0, total_interest: 3120000.0 },
+        { name: 'S&P 500 단순 보유', stock_ratio: 100.0, cagr: 12.5, mdd: -15.2, final_return: 25.4, final_valuation: 25400000.0, total_invested: 20000000.0, total_interest: 5400000.0 }
+      ],
+      yearly_stats: {},
+      monthly_stats: {},
+      rebalancing_events: [
+        { date: '2025-01-03', event_type: 'PANIC_BUY', tier: 1, sp500_price: 5800.0, drawdown: -12.0, vix: 26.0, old_stock_ratio: 60.0, new_stock_ratio: 75.0 }
+      ]
+    };
+
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => dynamicMockResponse
+    });
+
+    render(
+      <MaskingProvider>
+        <AssetAllocationSimulationPage />
+      </MaskingProvider>
+    );
+
+    // 1. '동적 리밸런싱 (MDD/VIX)' 탭 버튼 확인 및 클릭
+    const dynamicTab = screen.getByText('동적 리밸런싱 (MDD/VIX)');
+    expect(dynamicTab).toBeDefined();
+    fireEvent.click(dynamicTab);
+
+    // 2. 동적 리밸런싱 설정 컨트롤 렌더링 확인 (기본 비중 등)
+    await waitFor(() => {
+      expect(screen.getByText(/기본 주식 비중/i)).toBeDefined();
+    });
+
+    // 3. 3개 벤치마크 요약 카드 렌더링 확인
+    await waitFor(() => {
+      expect(screen.getAllByText('동적 리밸런싱 전략').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('일반 정기 리밸런싱').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('S&P 500 단순 보유').length).toBeGreaterThan(0);
+    });
+
+
+  });
 });
+

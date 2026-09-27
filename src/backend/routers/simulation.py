@@ -30,6 +30,22 @@ class RecurringSimulationRequest(BaseModel):
     annual_deposit: float = 20000000.0
 
 
+class DynamicTierItem(BaseModel):
+    tier: int
+    dd_threshold: float
+    vix_threshold: float
+    target_stock_ratio: float
+
+
+class DynamicSimulationRequest(BaseModel):
+    base_stock_ratio: float = 60.0
+    period: str = "5Y"
+    rebalancing: str = "monthly"
+    mode: str = "recurring"
+    annual_deposit: float = 20000000.0
+    tiers: List[DynamicTierItem] = []
+
+
 @router.post("/run")
 async def run_backtest_simulation(
     request: SimulationRequest,
@@ -100,6 +116,48 @@ async def run_recurring_backtest_simulation(
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"적립식 시뮬레이션 수행 중 오류가 발생했습니다: {str(e)}")
+
+
+@router.post("/run-dynamic")
+async def run_dynamic_backtest_simulation(
+    request: DynamicSimulationRequest,
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """S&P500 낙폭(Drawdown)과 VIX 지수를 활용한 동적 리밸런싱 시뮬레이션을 실행하여 결과를 반환합니다."""
+    # 유효성 검사
+    if request.base_stock_ratio < 0 or request.base_stock_ratio > 100:
+        raise HTTPException(status_code=400, detail="기본 주식 비중은 0%에서 100% 사이여야 합니다.")
+
+    if request.period not in ["5Y", "10Y", "20Y", "30Y", "ALL"]:
+        raise HTTPException(status_code=400, detail="유효하지 않은 기간 설정입니다.")
+
+    if request.rebalancing not in ["monthly", "yearly", "none"]:
+        raise HTTPException(status_code=400, detail="유효하지 않은 리밸런싱 주기 설정입니다.")
+
+    if request.mode not in ["recurring", "lump_sum"]:
+        raise HTTPException(status_code=400, detail="유효하지 않은 투자 모드입니다.")
+
+    if request.annual_deposit < 0:
+        raise HTTPException(status_code=400, detail="매년 추가 적립금은 0원 이상이어야 합니다.")
+
+    for t in request.tiers:
+        if t.target_stock_ratio < 0 or t.target_stock_ratio > 100:
+            raise HTTPException(status_code=400, detail=f"티어 {t.tier}의 목표 주식 비중은 0%에서 100% 사이여야 합니다.")
+
+    service = SimulationService(db)
+    try:
+        tiers_list = [t.model_dump() for t in request.tiers] if request.tiers else None
+        result = await service.run_dynamic_simulation(
+            base_stock_ratio=request.base_stock_ratio,
+            period=request.period,
+            rebalancing=request.rebalancing,
+            mode=request.mode,
+            annual_deposit=request.annual_deposit,
+            tiers=tiers_list,
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"동적 리밸런싱 시뮬레이션 수행 중 오류가 발생했습니다: {str(e)}")
 
 
 @router.get("/compound/snapshot-stats")
