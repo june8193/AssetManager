@@ -98,6 +98,46 @@ describe('expenseService 단위 테스트', () => {
     });
   });
 
+  describe('지출 자동분류 규칙 API', () => {
+    it('getRules 호출 시 올바른 엔드포인트를 호출한다', async () => {
+      const mockRules = [{ id: 1, keyword: '스타벅스', category_id: 1, is_excluded: false }];
+      apiClient.get.mockResolvedValue(mockRules);
+
+      const res = await expenseService.getRules();
+
+      expect(apiClient.get).toHaveBeenCalledWith('/api/expenses/rules');
+      expect(res).toBe(mockRules);
+    });
+
+    it('createRule 호출 시 POST 요청을 전달한다', async () => {
+      const payload = { keyword: '스타벅스', category_id: 1, is_excluded: false };
+      apiClient.post.mockResolvedValue({ id: 1, ...payload });
+
+      const res = await expenseService.createRule(payload);
+
+      expect(apiClient.post).toHaveBeenCalledWith('/api/expenses/rules', payload);
+      expect(res.id).toBe(1);
+    });
+
+    it('updateRule 호출 시 PUT 요청을 전달한다', async () => {
+      const payload = { keyword: '스타벅스코리아', category_id: 2, is_excluded: false };
+      apiClient.put.mockResolvedValue({ id: 1, ...payload });
+
+      const res = await expenseService.updateRule(1, payload);
+
+      expect(apiClient.put).toHaveBeenCalledWith('/api/expenses/rules/1', payload);
+      expect(res.keyword).toBe('스타벅스코리아');
+    });
+
+    it('deleteRule 호출 시 DELETE 요청을 전달한다', async () => {
+      apiClient.delete.mockResolvedValue(null);
+
+      await expenseService.deleteRule(1);
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/api/expenses/rules/1');
+    });
+  });
+
   describe('명세서 업로드 및 확정 적재 API', () => {
     it('uploadPreview 호출 시 FormData와 함께 POST 요청을 전송한다', async () => {
       const mockFile = new File(['dummy content'], 'statement.xlsx', { type: 'application/vnd.ms-excel' });

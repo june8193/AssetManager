@@ -8,7 +8,7 @@ from sqlalchemy import or_, func
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
-from ..models import PaymentMethod, ExpenseCategory, Expense
+from ..models import PaymentMethod, ExpenseCategory, Expense, ExpenseRule
 from ..services.expense_parser_service import ExpenseParserService
 from ..parsers.exceptions import (
     ExpenseParserError,
@@ -22,6 +22,9 @@ from ..schemas.expense import (
     ExpenseCategoryCreate,
     ExpenseCategoryUpdate,
     ExpenseCategoryResponse,
+    ExpenseRuleCreate,
+    ExpenseRuleUpdate,
+    ExpenseRuleResponse,
     ExpenseUploadPreviewResponse,
     ExpenseUploadPreviewTransaction,
     ExpenseCommitRequest,
@@ -271,7 +274,248 @@ def delete_expense_category(
     return None
 
 
+# ==========================================
+# 지출 자동분류 규칙 (Expense Rules) 엔드포인트
+# ==========================================
 
+@router.get("/rules", response_model=List[ExpenseRuleResponse])
+def get_expense_rules(
+    db: Session = Depends(get_db),
+):
+    """등록된 모든 지출 자동분류 규칙 목록을 조회합니다.
+
+    정렬 기준:
+        1. 키워드 문자열 길이 내림차순 (더 구체적인 키워드 우선)
+        2. 최신 등록 일시 내림차순
+
+    Args:
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        List[ExpenseRuleResponse]: 규칙 목록.
+    """
+    rules = (
+        db.query(ExpenseRule)
+        .options(joinedload(ExpenseRule.category))
+        .order_by(
+            func.length(ExpenseRule.keyword).desc(),
+            ExpenseRule.created_at.desc(),
+            ExpenseRule.id.desc(),
+        )
+        .all()
+    )
+    return [
+        ExpenseRuleResponse(
+            id=r.id,
+            keyword=r.keyword,
+            category_id=r.category_id,
+            category_name=r.category.name if r.category else None,
+            category_color=r.category.color if r.category else None,
+            is_excluded=r.is_excluded,
+            created_at=r.created_at,
+        )
+        for r in rules
+    ]
+
+
+@router.post("/rules", response_model=ExpenseRuleResponse, status_code=status.HTTP_201_CREATED)
+def create_expense_rule(
+    payload: ExpenseRuleCreate,
+    db: Session = Depends(get_db),
+):
+    """새로운 지출 자동분류 규칙을 등록합니다.
+
+    Args:
+        payload (ExpenseRuleCreate): 등록할 규칙 정보.
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        ExpenseRuleResponse: 생성된 규칙 객체.
+
+    Raises:
+        HTTPException: 동일한 키워드가 이미 존재하는 경우 409 반환.
+        HTTPException: 유효하지 않은 카테고리 ID인 경우 400 반환.
+    """
+    # 중복 키워드 검사 (대소문자 무관)
+    existing = (
+        db.query(ExpenseRule)
+        .filter(func.lower(ExpenseRule.keyword) == payload.keyword.lower())
+        .first()
+    )
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"이미 등록된 키워드입니다: '{payload.keyword}'",
+        )
+
+    category = None
+    if not payload.is_excluded:
+        category = db.query(ExpenseCategory).filter(ExpenseCategory.id == payload.category_id).first()
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"존재하지 않는 카테고리 ID입니다: {payload.category_id}",
+            )
+
+    new_rule = ExpenseRule(
+        keyword=payload.keyword,
+        category_id=None if payload.is_excluded else payload.category_id,
+        is_excluded=payload.is_excluded,
+    )
+    db.add(new_rule)
+    db.commit()
+    db.refresh(new_rule)
+
+    return ExpenseRuleResponse(
+        id=new_rule.id,
+        keyword=new_rule.keyword,
+        category_id=new_rule.category_id,
+        category_name=category.name if category else None,
+        category_color=category.color if category else None,
+        is_excluded=new_rule.is_excluded,
+        created_at=new_rule.created_at,
+    )
+
+
+@router.put("/rules/{rule_id}", response_model=ExpenseRuleResponse)
+def update_expense_rule(
+    rule_id: int,
+    payload: ExpenseRuleUpdate,
+    db: Session = Depends(get_db),
+):
+    """기존 지출 자동분류 규칙을 수정합니다.
+
+    Args:
+        rule_id (int): 수정할 규칙 ID.
+        payload (ExpenseRuleUpdate): 변경할 필드 정보.
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        ExpenseRuleResponse: 수정된 규칙 객체.
+
+    Raises:
+        HTTPException: 규칙을 찾을 수 없는 경우 404 반환.
+        HTTPException: 다른 규칙과 키워드가 중복되는 경우 409 반환.
+        HTTPException: 유효하지 않은 카테고리 ID인 경우 400 반환.
+    """
+    rule = db.query(ExpenseRule).filter(ExpenseRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"규칙을 찾을 수 없습니다. (ID: {rule_id})",
+        )
+
+    # 키워드 변경 및 중복 검사
+    if payload.keyword is not None and payload.keyword != rule.keyword:
+        duplicate = (
+            db.query(ExpenseRule)
+            .filter(
+                func.lower(ExpenseRule.keyword) == payload.keyword.lower(),
+                ExpenseRule.id != rule_id,
+            )
+            .first()
+        )
+        if duplicate:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"이미 등록된 키워드입니다: '{payload.keyword}'",
+            )
+        rule.keyword = payload.keyword
+
+    new_is_excluded = payload.is_excluded if payload.is_excluded is not None else rule.is_excluded
+    new_category_id = payload.category_id if payload.category_id is not None else rule.category_id
+
+    if new_is_excluded:
+        rule.is_excluded = True
+        rule.category_id = None
+    else:
+        if new_category_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="카테고리 자동분류 규칙은 category_id가 필수입니다.",
+            )
+        category = db.query(ExpenseCategory).filter(ExpenseCategory.id == new_category_id).first()
+        if not category:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"존재하지 않는 카테고리 ID입니다: {new_category_id}",
+            )
+        rule.is_excluded = False
+        rule.category_id = new_category_id
+
+    db.commit()
+    db.refresh(rule)
+
+    cat = db.query(ExpenseCategory).filter(ExpenseCategory.id == rule.category_id).first() if rule.category_id else None
+
+    return ExpenseRuleResponse(
+        id=rule.id,
+        keyword=rule.keyword,
+        category_id=rule.category_id,
+        category_name=cat.name if cat else None,
+        category_color=cat.color if cat else None,
+        is_excluded=rule.is_excluded,
+        created_at=rule.created_at,
+    )
+
+
+@router.delete("/rules/{rule_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_expense_rule(
+    rule_id: int,
+    db: Session = Depends(get_db),
+):
+    """지출 자동분류 규칙을 삭제합니다.
+
+    Args:
+        rule_id (int): 삭제할 규칙 ID.
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: 규칙을 찾을 수 없는 경우 404 반환.
+    """
+    rule = db.query(ExpenseRule).filter(ExpenseRule.id == rule_id).first()
+    if not rule:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"규칙을 찾을 수 없습니다. (ID: {rule_id})",
+        )
+    db.delete(rule)
+    db.commit()
+    return None
+
+
+def match_expense_rule(
+    merchant: Optional[str],
+    rules: List[ExpenseRule],
+) -> tuple[Optional[int], bool]:
+    """가맹점명에 등록된 자동분류 규칙들을 순차 평가하여 (category_id, is_excluded)를 반환합니다.
+
+    - 대소문자 구분 없이(Case-Insensitive) 가맹점명(merchant)에 규칙 키워드가 부분 일치(substring)하는지 검사합니다.
+    - 규칙 목록은 사전에 키워드 길이 내림차순(더 긴 키워드 우선) 및 최신순으로 정렬되어 전달되어야 합니다.
+    - 매칭된 규칙이 is_excluded == True인 경우: (None, True) 반환.
+    - 매칭된 규칙이 is_excluded == False인 경우: (rule.category_id, False) 반환.
+    - 일치하는 규칙이 없는 경우: 기본값 (None, False) 반환.
+
+    Args:
+        merchant (Optional[str]): 원시 거래의 가맹점명.
+        rules (List[ExpenseRule]): 우선순위 정렬된 활성 자동분류 규칙 목록.
+
+    Returns:
+        tuple[Optional[int], bool]: (매칭된 카테고리 ID 또는 None, 통계 제외 여부).
+    """
+    if not merchant:
+        return None, False
+
+    merchant_lower = merchant.strip().lower()
+    for rule in rules:
+        if rule.keyword:
+            keyword_lower = rule.keyword.strip().lower()
+            if keyword_lower and keyword_lower in merchant_lower:
+                if rule.is_excluded:
+                    return None, True
+                return rule.category_id, False
+
+    return None, False
 
 
 # ==========================================
@@ -298,7 +542,7 @@ async def upload_expense_preview(
         HTTPException: 파일이 비어있거나, 비밀번호 오류, 지원하지 않는 형식 등 파싱 실패 시 400/404 반환.
 
     Returns:
-        ExpenseUploadPreviewResponse: 매칭된 결제수단 및 추출된 거래 목록 (초기값 category_id=None, is_excluded=False).
+        ExpenseUploadPreviewResponse: 매칭된 결제수단 및 추출된 거래 목록 (규칙 기반 자동분류 적용).
     """
     file_bytes = await file.read()
     filename = file.filename or ""
@@ -347,22 +591,37 @@ async def upload_expense_preview(
             detail=f"명세서 파싱 실패: {exc}",
         )
 
-    # 3. 거래 목록 구성 (자동 추천/제외 없이 미분류 및 통계 반영 기본값 고정)
+    # 3. 활성 자동분류 규칙 목록 조회 (키워드 길이 내림차순, 최신순 정렬)
+    active_rules = (
+        db.query(ExpenseRule)
+        .order_by(
+            func.length(ExpenseRule.keyword).desc(),
+            ExpenseRule.created_at.desc(),
+            ExpenseRule.id.desc(),
+        )
+        .all()
+    )
+
+    # 4. 거래 목록 구성 및 자동분류 규칙 매칭
     raw_transactions = parse_result.get("transactions", [])
 
-    preview_transactions = [
-        ExpenseUploadPreviewTransaction(
-            transaction_date=tx["transaction_date"],
-            year_month=tx.get("year_month") or parse_result.get("year_month", ""),
-            merchant=tx["merchant"],
-            amount=tx["amount"],
-            original_type=tx.get("original_type"),
-            memo=tx.get("memo"),
-            category_id=None,
-            is_excluded=False,
+    preview_transactions = []
+    for tx in raw_transactions:
+        merchant_name = tx.get("merchant") or ""
+        matched_category_id, is_excluded = match_expense_rule(merchant_name, active_rules)
+
+        preview_transactions.append(
+            ExpenseUploadPreviewTransaction(
+                transaction_date=tx["transaction_date"],
+                year_month=tx.get("year_month") or parse_result.get("year_month", ""),
+                merchant=merchant_name,
+                amount=tx["amount"],
+                original_type=tx.get("original_type"),
+                memo=tx.get("memo"),
+                category_id=matched_category_id,
+                is_excluded=is_excluded,
+            )
         )
-        for tx in raw_transactions
-    ]
 
     return ExpenseUploadPreviewResponse(
         payment_method=PaymentMethodResponse.model_validate(selected_pm),

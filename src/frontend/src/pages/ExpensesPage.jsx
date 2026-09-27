@@ -11,10 +11,7 @@ import {
   Filter,
   Trash2,
   AlertCircle,
-  Calendar,
-  CheckCircle2,
   RotateCcw,
-  Building,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -36,6 +33,7 @@ import ExpensePeriodSelector from '../components/ExpensePeriodSelector';
 import ExpenseUploadModal from '../components/ExpenseUploadModal';
 import PaymentMethodsModal from '../components/PaymentMethodsModal';
 import ExpenseCategoriesModal from '../components/ExpenseCategoriesModal';
+import ExpenseRulesModal from '../components/ExpenseRulesModal';
 
 const OWNER_OPTIONS = ['전체', '장준', '성은'];
 const PAGE_SIZE = 100;
@@ -73,6 +71,7 @@ export default function ExpensesPage() {
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isPaymentMethodsOpen, setIsPaymentMethodsOpen] = useState(false);
   const [isCategoriesOpen, setIsCategoriesOpen] = useState(false);
+  const [isRulesOpen, setIsRulesOpen] = useState(false);
 
   // 최근 24개월 옵션 생성
   const monthOptions = useMemo(() => {
@@ -287,6 +286,11 @@ export default function ExpensesPage() {
     fetchData();
   };
 
+  const handleRulesSuccess = () => {
+    fetchMasters();
+    fetchData();
+  };
+
   // 고유 금융기관 목록 추출
   const institutionOptions = useMemo(() => {
     const set = new Set();
@@ -375,6 +379,14 @@ export default function ExpensesPage() {
           >
             <Tag size={16} />
             <span>카테고리 관리</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsRulesOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 rounded-lg text-sm font-medium transition-colors"
+          >
+            <Filter size={16} />
+            <span>자동분류 규칙</span>
           </button>
         </div>
       </div>
@@ -938,6 +950,13 @@ export default function ExpensesPage() {
         isOpen={isCategoriesOpen}
         onClose={() => setIsCategoriesOpen(false)}
         onSuccess={handleMasterSuccess}
+      />
+
+      <ExpenseRulesModal
+        isOpen={isRulesOpen}
+        onClose={() => setIsRulesOpen(false)}
+        onSuccess={handleRulesSuccess}
+        categories={categories}
       />
     </div>
   );

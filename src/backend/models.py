@@ -404,6 +404,7 @@ class ExpenseCategory(Base):
     created_at = Column(DateTime, default=datetime.datetime.now)
 
     expenses = relationship("Expense", back_populates="category")
+    rules = relationship("ExpenseRule", back_populates="category", cascade="all, delete-orphan")
 
 
 class Expense(Base):
@@ -442,5 +443,27 @@ class Expense(Base):
 
     payment_method = relationship("PaymentMethod", back_populates="expenses")
     category = relationship("ExpenseCategory", back_populates="expenses")
+
+
+class ExpenseRule(Base):
+    """가맹점 키워드 기반 지출 자동분류 규칙을 저장하는 모델입니다.
+
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        keyword (str): 매칭 대상 가맹점 키워드 (고유 인덱스)
+        category_id (int): 매칭 시 자동 지정할 카테고리 FK (외래키, CASCADE, Nullable)
+        is_excluded (bool): 통계 집계 제외 여부 (True인 경우 카테고리 미지정)
+        created_at (datetime): 생성 일시
+    """
+    __tablename__ = "expense_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    keyword = Column(String, unique=True, index=True, nullable=False)
+    category_id = Column(Integer, ForeignKey("expense_categories.id", ondelete="CASCADE"), nullable=True, index=True)
+    is_excluded = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+
+    category = relationship("ExpenseCategory", back_populates="rules")
+
 
 
