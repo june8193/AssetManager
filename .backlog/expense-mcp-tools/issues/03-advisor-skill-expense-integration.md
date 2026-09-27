@@ -5,7 +5,7 @@
 
 **Blocked by:** 02 — 지출 거래 내역 목록 및 검색 MCP 도구
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `.agents/skills/asset-advisor/SKILL.md`에 지출 MCP 도구 활용 안내 및 분석 관점 가이드가 추가됨
 - [x] 문서 수정 후 오탈자나 마크다운 포맷팅 오류가 없음
