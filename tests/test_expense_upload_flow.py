@@ -34,7 +34,8 @@ def db_session():
     kb = PaymentMethod(owner="장준", institution="카카오뱅크", alias="장준 카카오뱅크", account_number="3333", is_active=True)
     hd = PaymentMethod(owner="장준", institution="현대카드", alias="장준 현대카드", account_number="1002", is_active=True)
     kb_bank = PaymentMethod(owner="홍성은", institution="국민은행", alias="홍성은 국민은행", account_number="546902-01-407474", is_active=True)
-    session.add_all([kb, hd, kb_bank])
+    sh_bank = PaymentMethod(owner="홍성은", institution="신한은행", alias="홍성은 신한은행", account_number="110-***-*57500", is_active=True)
+    session.add_all([kb, hd, kb_bank, sh_bank])
 
     # 업로드 테스트용 카테고리 등록
     cats = [
@@ -547,6 +548,67 @@ def test_upload_preview_institution_mismatch(client, db_session, fixtures_dir):
             files={"file": ("KB거래내역조회_2608.pdf", f, "application/pdf")},
             data={
                 "payment_method_id": str(pm_hd.id),
+                "password": "950913",
+            },
+        )
+
+    assert response.status_code == 400
+    assert "일치하지 않습니다" in response.json()["detail"]
+
+
+def test_upload_preview_shinhanbank_pdf_success(client, db_session, fixtures_dir):
+    """신한은행 암호화 PDF 업로드 미리보기 성공 및 8월 대상 31건, other_month_count 52건 반환을 검증합니다."""
+    pm = db_session.query(PaymentMethod).filter_by(institution="신한은행").first()
+    assert pm is not None
+
+    pdf_file = fixtures_dir / "신한은행_거래내역_2608.pdf"
+    with open(pdf_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("신한은행_거래내역_2608.pdf", f, "application/pdf")},
+            data={
+                "payment_method_id": str(pm.id),
+                "password": "950913",
+                "target_year_month": "2026-08",
+            },
+        )
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data["year_month"] == "2026-08"
+    assert data["other_month_count"] == 52
+    assert len(data["transactions"]) == 31
+    assert data["payment_method"]["institution"] == "신한은행"
+
+
+def test_upload_preview_shinhanbank_pdf_invalid_password(client, db_session, fixtures_dir):
+    """신한은행 PDF 업로드 시 잘못된 비밀번호 제공 시 400 Bad Request 에러를 반환하는지 검증합니다."""
+    pm = db_session.query(PaymentMethod).filter_by(institution="신한은행").first()
+    pdf_file = fixtures_dir / "신한은행_거래내역_2608.pdf"
+    with open(pdf_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("신한은행_거래내역_2608.pdf", f, "application/pdf")},
+            data={
+                "payment_method_id": str(pm.id),
+                "password": "wrong_password",
+            },
+        )
+
+    assert response.status_code == 400
+    assert "비밀번호" in response.json()["detail"]
+
+
+def test_upload_preview_shinhanbank_institution_mismatch(client, db_session, fixtures_dir):
+    """신한은행 PDF 파일 업로드 시 국민은행 결제수단 선택하면 400 에러를 반환하는지 검증합니다."""
+    pm_kb = db_session.query(PaymentMethod).filter_by(institution="국민은행").first()
+    pdf_file = fixtures_dir / "신한은행_거래내역_2608.pdf"
+    with open(pdf_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("신한은행_거래내역_2608.pdf", f, "application/pdf")},
+            data={
+                "payment_method_id": str(pm_kb.id),
                 "password": "950913",
             },
         )

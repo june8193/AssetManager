@@ -52,6 +52,16 @@ def kbbank_file_path() -> Path:
     return matched[0]
 
 
+@pytest.fixture
+def shinhanbank_file_path() -> Path:
+    """신한은행 실제 샘플 PDF 파일 경로."""
+    matched = list(FIXTURES_DIR.glob("*신한*.pdf"))
+    if not matched:
+        matched = list(FIXTURES_DIR.glob("*shinhan*.pdf"))
+    assert matched, "신한은행 샘플 파일이 존재하지 않습니다."
+    return matched[0]
+
+
 class TestKakaoBankParser:
     """카카오뱅크 암호화 엑셀 파서 테스트."""
 
@@ -179,6 +189,27 @@ class TestExpenseParserService:
         service = ExpenseParserService()
         detected = service.detect_institution(file_bytes, filename="")
         assert detected == "국민은행"
+
+    def test_detect_and_parse_shinhanbank(self, shinhanbank_file_path: Path):
+        """파일명 및 바이트 기반 신한은행 PDF 자동 감지 및 파싱 검증."""
+        file_bytes = shinhanbank_file_path.read_bytes()
+        service = ExpenseParserService()
+        result = service.parse(
+            file_bytes,
+            filename=shinhanbank_file_path.name,
+            password="950913",
+            target_year_month="2026-08",
+        )
+
+        assert result["institution"] == "신한은행"
+        assert len(result["transactions"]) == 31
+        assert result["other_month_count"] == 52
+
+    def test_detect_shinhanbank_by_content_or_filename(self):
+        """PDF 내용 또는 파일명에 신한 키워드가 있을 때 신한은행 감지 검증."""
+        service = ExpenseParserService()
+        assert service.detect_institution(b"%PDF-1.4 dummy", filename="신한은행_202608.pdf") == "신한은행"
+        assert service.detect_institution(b"%PDF-1.4 SHINHAN dummy", filename="unknown.pdf") == "신한은행"
 
     def test_parse_with_explicit_institution(self, kakaobank_file_path: Path):
         """institution 매개변수를 직접 지정했을 때의 파싱 검증."""

@@ -10,6 +10,7 @@ from src.backend.parsers.exceptions import (
 from src.backend.parsers.hyundaicard import parse_hyundaicard_html
 from src.backend.parsers.kakaobank import parse_kakaobank_excel
 from src.backend.parsers.kbbank import parse_kbbank_pdf
+from src.backend.parsers.shinhanbank import parse_shinhanbank_pdf
 
 
 class ExpenseParserService:
@@ -35,6 +36,8 @@ class ExpenseParserService:
         # 1. 파일명 기반 우선 감지
         if "국민" in lower_name or "kb" in lower_name or "kbbank" in lower_name:
             return "국민은행"
+        if "신한" in lower_name or "shinhan" in lower_name:
+            return "신한은행"
         if "카카오" in lower_name or "kakaobank" in lower_name:
             return "카카오뱅크"
         if "현대" in lower_name or "hyundai" in lower_name:
@@ -73,6 +76,17 @@ class ExpenseParserService:
             if any(sig in file_bytes for sig in kb_signatures):
                 return "국민은행"
 
+            shinhan_signatures = [
+                b"SHINHAN",
+                b"shinhan",
+                "신한은행".encode("utf-8"),
+                "신한은행".encode("euc-kr"),
+                "신한".encode("utf-8"),
+                "신한".encode("euc-kr"),
+            ]
+            if any(sig in file_bytes for sig in shinhan_signatures):
+                return "신한은행"
+
             # 암호화되지 않은 PDF의 경우 텍스트 직접 검사 시도
             try:
                 import io
@@ -82,6 +96,8 @@ class ExpenseParserService:
                     text = reader.pages[0].extract_text() or ""
                     if any(kw in text for kw in ["KB국민은행", "KB마이핏", "국민은행", "kbstar"]):
                         return "국민은행"
+                    if any(kw in text for kw in ["신한은행", "SHINHAN BANK", "신한", "shinhan"]):
+                        return "신한은행"
             except Exception:
                 pass
 
@@ -134,6 +150,12 @@ class ExpenseParserService:
             return result
         elif institution == "국민은행":
             return parse_kbbank_pdf(
+                file_bytes,
+                password=password,
+                target_year_month=target_year_month,
+            )
+        elif institution == "신한은행":
+            return parse_shinhanbank_pdf(
                 file_bytes,
                 password=password,
                 target_year_month=target_year_month,

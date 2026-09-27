@@ -535,7 +535,7 @@ def _is_same_institution(pm_inst: str, detected_inst: str) -> bool:
         return True
     if "현대" in n1 and "현대" in n2:
         return True
-    if "신한" in n1 and "신한" in n2:
+    if ("신한" in n1 or "shinhan" in n1) and ("신한" in n2 or "shinhan" in n2):
         return True
     return n1 in n2 or n2 in n1
 
