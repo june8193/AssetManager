@@ -26,6 +26,7 @@ from src.mcp.tools.system import (
 from src.mcp.tools.expenses import (
     get_expense_categories,
     get_expense_summary,
+    get_expenses,
 )
 
 # MCP 서버 객체 선언
@@ -55,6 +56,7 @@ mcp.tool()(get_system_logs)
 # 지출(Expense) 관리를 위한 신규 MCP 도구 등록
 mcp.tool()(get_expense_categories)
 mcp.tool()(get_expense_summary)
+mcp.tool()(get_expenses)
 
 if __name__ == "__main__":
     mcp.run()
