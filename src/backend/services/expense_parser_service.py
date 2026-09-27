@@ -9,6 +9,7 @@ from src.backend.parsers.exceptions import (
 )
 from src.backend.parsers.hyundaicard import parse_hyundaicard_html
 from src.backend.parsers.kakaobank import parse_kakaobank_excel
+from src.backend.parsers.kbbank import parse_kbbank_pdf
 
 
 class ExpenseParserService:
@@ -23,7 +24,7 @@ class ExpenseParserService:
             filename: 원본 파일명 (선택).
 
         Returns:
-            감지된 금융기관 식별자 ('카카오뱅크' 또는 '현대카드').
+            감지된 금융기관 식별자 ('카카오뱅크', '현대카드' 또는 '국민은행').
 
         Raises:
             UnsupportedFileFormatError: 지원하지 않는 파일 형식인 경우.
@@ -32,6 +33,8 @@ class ExpenseParserService:
         suffix = Path(filename).suffix.lower()
 
         # 1. 파일명 기반 우선 감지
+        if "국민" in lower_name or "kb" in lower_name or "kbbank" in lower_name:
+            return "국민은행"
         if "카카오" in lower_name or "kakaobank" in lower_name:
             return "카카오뱅크"
         if "현대" in lower_name or "hyundai" in lower_name:
@@ -55,6 +58,33 @@ class ExpenseParserService:
         if b"<html" in sample or b"<!doctype html" in sample or b"vestmail" in sample:
             return "현대카드"
 
+        # PDF 검사 (%PDF- 매직바이트 또는 .pdf 확장자)
+        if file_bytes.startswith(b"%PDF-") or suffix == ".pdf":
+            kb_signatures = [
+                b"KBFG",
+                b"kbstar",
+                "KB국민은행".encode("utf-8"),
+                "KB국민은행".encode("euc-kr"),
+                "KB마이핏".encode("utf-8"),
+                "KB마이핏".encode("euc-kr"),
+                "국민은행".encode("utf-8"),
+                "국민은행".encode("euc-kr"),
+            ]
+            if any(sig in file_bytes for sig in kb_signatures):
+                return "국민은행"
+
+            # 암호화되지 않은 PDF의 경우 텍스트 직접 검사 시도
+            try:
+                import io
+                import pypdf
+                reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+                if not reader.is_encrypted and len(reader.pages) > 0:
+                    text = reader.pages[0].extract_text() or ""
+                    if any(kw in text for kw in ["KB국민은행", "KB마이핏", "국민은행", "kbstar"]):
+                        return "국민은행"
+            except Exception:
+                pass
+
         raise UnsupportedFileFormatError(
             f"지원하지 않는 명세서 형식이거나 금융기관을 감지할 수 없습니다: {filename}"
         )
@@ -65,6 +95,7 @@ class ExpenseParserService:
         filename: str = "",
         password: str = "",
         institution: Optional[str] = None,
+        target_year_month: Optional[str] = None,
     ) -> Dict[str, Any]:
         """업로드된 명세서 파일을 파싱하여 정규화된 지출 데이터로 반환합니다.
 
@@ -73,6 +104,7 @@ class ExpenseParserService:
             filename: 원본 파일명 (선택).
             password: 복호화 비밀번호 (생년월일 6자리 등).
             institution: 금융기관 직접 지정 (미지정 시 자동 감지).
+            target_year_month: 대상 연월 필터링 (선택).
 
         Returns:
             표준 지출 스키마 딕셔너리:
@@ -81,6 +113,7 @@ class ExpenseParserService:
                 - institution (str): 금융기관명
                 - account_identifier (Optional[str]): 카드명 또는 계좌 식별값
                 - transactions (List[dict]): 정규화된 거래 목록
+                - other_month_count (int): 대상 월 외 제외된 거래 건수
 
         Raises:
             InvalidPasswordError: 비밀번호가 일치하지 않는 경우.
@@ -90,9 +123,20 @@ class ExpenseParserService:
         if not institution:
             institution = self.detect_institution(file_bytes, filename)
 
+        result: Dict[str, Any]
         if institution == "카카오뱅크":
-            return parse_kakaobank_excel(file_bytes, password=password)
+            result = parse_kakaobank_excel(file_bytes, password=password)
+            result.setdefault("other_month_count", 0)
+            return result
         elif institution == "현대카드":
-            return parse_hyundaicard_html(file_bytes, password=password)
+            result = parse_hyundaicard_html(file_bytes, password=password)
+            result.setdefault("other_month_count", 0)
+            return result
+        elif institution == "국민은행":
+            return parse_kbbank_pdf(
+                file_bytes,
+                password=password,
+                target_year_month=target_year_month,
+            )
         else:
             raise UnsupportedFileFormatError(f"지원하지 않는 금융기관입니다: {institution}")

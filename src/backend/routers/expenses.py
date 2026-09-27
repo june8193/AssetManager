@@ -523,11 +523,29 @@ def match_expense_rule(
 # ==========================================
 
 
+def _is_same_institution(pm_inst: str, detected_inst: str) -> bool:
+    """결제수단에 등록된 기관명과 파서가 감지한 금융기관이 일치하는지 유연하게 검증합니다."""
+    n1 = pm_inst.replace(" ", "").lower()
+    n2 = detected_inst.replace(" ", "").lower()
+    if n1 == n2:
+        return True
+    if ("국민" in n1 or "kb" in n1) and ("국민" in n2 or "kb" in n2):
+        return True
+    if "카카오" in n1 and "카카오" in n2:
+        return True
+    if "현대" in n1 and "현대" in n2:
+        return True
+    if "신한" in n1 and "신한" in n2:
+        return True
+    return n1 in n2 or n2 in n1
+
+
 @router.post("/upload-preview", response_model=ExpenseUploadPreviewResponse)
 async def upload_expense_preview(
-    file: UploadFile = File(..., description="업로드할 명세서 파일 (HTML 또는 XLSX)"),
+    file: UploadFile = File(..., description="업로드할 명세서 파일 (HTML, XLSX 또는 PDF)"),
     password: Optional[str] = Form(None, description="일회성 복호화 비밀번호 (암호화된 명세서의 경우 필수, 미입력 시 비밀번호 없이 시도)"),
     payment_method_id: int = Form(..., description="결제수단 ID (필수)"),
+    target_year_month: Optional[str] = Form(None, description="업로드 대상 연월 (예: '2026-08', 미지정 시 파일 기준 연월)"),
     db: Session = Depends(get_db),
 ):
     """명세서 파일을 업로드받아 복호화 및 파싱한 후 DB 저장 없이 거래 미리보기 데이터를 반환합니다.
@@ -536,10 +554,11 @@ async def upload_expense_preview(
         file (UploadFile): 업로드된 명세서 파일.
         password (Optional[str]): 1회성 복호화 비밀번호 (저장되지 않음).
         payment_method_id (int): 필수 결제수단 ID.
+        target_year_month (Optional[str]): 업로드 대상 연월 (예: '2026-08').
         db (Session): 데이터베이스 세션.
 
     Raises:
-        HTTPException: 파일이 비어있거나, 비밀번호 오류, 지원하지 않는 형식 등 파싱 실패 시 400/404 반환.
+        HTTPException: 파일이 비어있거나, 비밀번호 오류, 기관 불일치, 지원하지 않는 형식 등 파싱 실패 시 400/404 반환.
 
     Returns:
         ExpenseUploadPreviewResponse: 매칭된 결제수단 및 추출된 거래 목록 (규칙 기반 자동분류 적용).
@@ -569,16 +588,28 @@ async def upload_expense_preview(
             detail=str(exc),
         )
 
-    # 1. 일회성 복호화 비밀번호 처리 (미입력 시 None)
-    clean_password = password.strip() if password and password.strip() else None
+    # 결제수단 기관과 업로드 파일 기관 일치 검증
+    if not _is_same_institution(selected_pm.institution, detected_institution):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"선택한 결제수단의 금융기관('{selected_pm.institution}')과 "
+                f"업로드된 명세서의 금융기관('{detected_institution}')이 일치하지 않습니다."
+            ),
+        )
 
-    # 2. 파싱 시도 (오직 사용자가 요청으로 전달한 비밀번호만 사용)
+    # 1. 일회성 복호화 비밀번호 및 대상 연월 처리
+    clean_password = password.strip() if password and password.strip() else None
+    clean_target_ym = target_year_month.strip() if target_year_month and target_year_month.strip() else None
+
+    # 2. 파싱 시도 (오직 사용자가 요청으로 전달한 비밀번호 및 대상 월 사용)
     try:
         parse_result = parser_service.parse(
             file_bytes=file_bytes,
             filename=filename,
             password=clean_password,
             institution=detected_institution,
+            target_year_month=clean_target_ym,
         )
     except InvalidPasswordError as exc:
         raise HTTPException(
@@ -625,9 +656,10 @@ async def upload_expense_preview(
 
     return ExpenseUploadPreviewResponse(
         payment_method=PaymentMethodResponse.model_validate(selected_pm),
-        year_month=parse_result.get("year_month", ""),
+        year_month=parse_result.get("year_month", clean_target_ym or ""),
         source_file=filename,
         transactions=preview_transactions,
+        other_month_count=parse_result.get("other_month_count", 0),
     )
 
 

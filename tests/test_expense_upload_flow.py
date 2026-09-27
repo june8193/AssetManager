@@ -33,7 +33,8 @@ def db_session():
     # 업로드 테스트용 결제수단 등록
     kb = PaymentMethod(owner="장준", institution="카카오뱅크", alias="장준 카카오뱅크", account_number="3333", is_active=True)
     hd = PaymentMethod(owner="장준", institution="현대카드", alias="장준 현대카드", account_number="1002", is_active=True)
-    session.add_all([kb, hd])
+    kb_bank = PaymentMethod(owner="홍성은", institution="국민은행", alias="홍성은 국민은행", account_number="546902-01-407474", is_active=True)
+    session.add_all([kb, hd, kb_bank])
 
     # 업로드 테스트용 카테고리 등록
     cats = [
@@ -468,6 +469,90 @@ def test_commit_expenses_allows_excluded_transaction_without_category(client, db
     excluded_item = next(r for r in saved_records if r.merchant == "카드대금 이체 (통계제외)")
     assert excluded_item.is_excluded is True
     assert excluded_item.category_id is None
+
+
+def test_upload_preview_kbbank_pdf_success(client, db_session, fixtures_dir):
+    """국민은행 암호화 PDF 업로드 미리보기 성공 및 17건 정규화 반환을 검증합니다."""
+    pm = db_session.query(PaymentMethod).filter_by(institution="국민은행").first()
+    assert pm is not None
+
+    pdf_file = fixtures_dir / "KB거래내역조회_2608.pdf"
+    with open(pdf_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("KB거래내역조회_2608.pdf", f, "application/pdf")},
+            data={
+                "payment_method_id": str(pm.id),
+                "password": "950913",
+                "target_year_month": "2026-08",
+            },
+        )
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data["year_month"] == "2026-08"
+    assert data["other_month_count"] == 0
+    assert len(data["transactions"]) == 17
+    assert data["payment_method"]["institution"] == "국민은행"
+
+
+def test_upload_preview_kbbank_pdf_other_month_filtering(client, db_session, fixtures_dir):
+    """국민은행 PDF 업로드 시 target_year_month가 달라 타 월 거래가 제외되고 other_month_count로 집계되는지 검증합니다."""
+    pm = db_session.query(PaymentMethod).filter_by(institution="국민은행").first()
+    pdf_file = fixtures_dir / "KB거래내역조회_2608.pdf"
+    with open(pdf_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("KB거래내역조회_2608.pdf", f, "application/pdf")},
+            data={
+                "payment_method_id": str(pm.id),
+                "password": "950913",
+                "target_year_month": "2026-07",
+            },
+        )
+
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
+    data = response.json()
+    assert data["year_month"] == "2026-07"
+    assert data["other_month_count"] == 17
+    assert len(data["transactions"]) == 0
+
+
+def test_upload_preview_kbbank_pdf_invalid_password(client, db_session, fixtures_dir):
+    """국민은행 PDF 업로드 시 잘못된 비밀번호 제공 시 400 Bad Request 에러를 반환하는지 검증합니다."""
+    pm = db_session.query(PaymentMethod).filter_by(institution="국민은행").first()
+    pdf_file = fixtures_dir / "KB거래내역조회_2608.pdf"
+    with open(pdf_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("KB거래내역조회_2608.pdf", f, "application/pdf")},
+            data={
+                "payment_method_id": str(pm.id),
+                "password": "000000",
+            },
+        )
+
+    assert response.status_code == 400
+    assert "비밀번호" in response.json()["detail"]
+
+
+def test_upload_preview_institution_mismatch(client, db_session, fixtures_dir):
+    """선택한 결제수단의 금융기관과 업로드 파일의 금융기관 불일치 시 400 에러를 반환하는지 검증합니다."""
+    # 현대카드 결제수단 선택 후 국민은행 PDF 업로드
+    pm_hd = db_session.query(PaymentMethod).filter_by(institution="현대카드").first()
+    pdf_file = fixtures_dir / "KB거래내역조회_2608.pdf"
+    with open(pdf_file, "rb") as f:
+        response = client.post(
+            "/api/expenses/upload-preview",
+            files={"file": ("KB거래내역조회_2608.pdf", f, "application/pdf")},
+            data={
+                "payment_method_id": str(pm_hd.id),
+                "password": "950913",
+            },
+        )
+
+    assert response.status_code == 400
+    assert "일치하지 않습니다" in response.json()["detail"]
 
 
 

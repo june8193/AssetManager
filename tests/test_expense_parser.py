@@ -42,6 +42,16 @@ def hyundaicard_file_path() -> Path:
     return matched[0]
 
 
+@pytest.fixture
+def kbbank_file_path() -> Path:
+    """국민은행 실제 샘플 PDF 파일 경로."""
+    matched = list(FIXTURES_DIR.glob("*KB*.pdf"))
+    if not matched:
+        matched = list(FIXTURES_DIR.glob("*.pdf"))
+    assert matched, "국민은행 샘플 파일이 존재하지 않습니다."
+    return matched[0]
+
+
 class TestKakaoBankParser:
     """카카오뱅크 암호화 엑셀 파서 테스트."""
 
@@ -147,6 +157,28 @@ class TestExpenseParserService:
 
         assert result["institution"] == "현대카드"
         assert len(result["transactions"]) == 10
+
+    def test_detect_and_parse_kbbank(self, kbbank_file_path: Path):
+        """파일명 및 바이트 기반 국민은행 PDF 자동 감지 및 파싱 검증."""
+        file_bytes = kbbank_file_path.read_bytes()
+        service = ExpenseParserService()
+        result = service.parse(
+            file_bytes,
+            filename=kbbank_file_path.name,
+            password="950913",
+            target_year_month="2026-08",
+        )
+
+        assert result["institution"] == "국민은행"
+        assert len(result["transactions"]) == 17
+        assert result["other_month_count"] == 0
+
+    def test_detect_kbbank_by_content_without_filename(self, kbbank_file_path: Path):
+        """파일명 없이 바이너리 내용만으로 국민은행을 자동 감지하는지 검증."""
+        file_bytes = kbbank_file_path.read_bytes()
+        service = ExpenseParserService()
+        detected = service.detect_institution(file_bytes, filename="")
+        assert detected == "국민은행"
 
     def test_parse_with_explicit_institution(self, kakaobank_file_path: Path):
         """institution 매개변수를 직접 지정했을 때의 파싱 검증."""

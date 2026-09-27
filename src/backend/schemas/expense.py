@@ -214,6 +214,7 @@ class ExpenseUploadPreviewResponse(BaseModel):
     year_month: str
     source_file: str
     transactions: list[ExpenseUploadPreviewTransaction]
+    other_month_count: int = 0
 
 
 class ExpenseCommitItem(BaseModel):

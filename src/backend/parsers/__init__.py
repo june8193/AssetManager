@@ -8,6 +8,7 @@ from src.backend.parsers.exceptions import (
 )
 from src.backend.parsers.hyundaicard import parse_hyundaicard_html
 from src.backend.parsers.kakaobank import parse_kakaobank_excel
+from src.backend.parsers.kbbank import parse_kbbank_pdf
 
 __all__ = [
     "ExpenseParserError",
@@ -16,4 +17,5 @@ __all__ = [
     "UnsupportedFileFormatError",
     "parse_kakaobank_excel",
     "parse_hyundaicard_html",
+    "parse_kbbank_pdf",
 ]
