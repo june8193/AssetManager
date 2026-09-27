@@ -5,9 +5,9 @@ AI 에이전트가 지출 분류 체계(`get_expense_categories`)와 특정 월 
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** claimed
 
-- [ ] 백엔드 API 클라이언트를 통해 지출 카테고리 목록을 조회하는 `get_expense_categories` MCP 도구가 구현됨
-- [ ] 백엔드 통계 API를 통해 기준월/기간별 지출 통계 및 비중을 조회하는 `get_expense_summary` MCP 도구가 구현됨
-- [ ] `api_client` 모킹을 통한 단위 테스트가 `tests/test_mcp_expenses.py`에 작성되어 성공적으로 통과함 (TDD)
-- [ ] MCP 서버 진입점(`src/mcp/main.py`)에 도구들이 정상 등록되고 에러 없이 기동됨
+- [x] 백엔드 API 클라이언트를 통해 지출 카테고리 목록을 조회하는 `get_expense_categories` MCP 도구가 구현됨
+- [x] 백엔드 통계 API를 통해 기준월/기간별 지출 통계 및 비중을 조회하는 `get_expense_summary` MCP 도구가 구현됨
+- [x] `api_client` 모킹을 통한 단위 테스트가 `tests/test_mcp_expenses.py`에 작성되어 성공적으로 통과함 (TDD)
+- [x] MCP 서버 진입점(`src/mcp/main.py`)에 도구들이 정상 등록되고 에러 없이 기동됨

@@ -23,6 +23,10 @@ from src.mcp.tools.system import (
     execute_db_query,
     get_system_logs,
 )
+from src.mcp.tools.expenses import (
+    get_expense_categories,
+    get_expense_summary,
+)
 
 # MCP 서버 객체 선언
 mcp = FastMCP("AssetManager")
@@ -47,6 +51,10 @@ mcp.tool()(get_db_tables)
 mcp.tool()(get_db_schema)
 mcp.tool()(execute_db_query)
 mcp.tool()(get_system_logs)
+
+# 지출(Expense) 관리를 위한 신규 MCP 도구 등록
+mcp.tool()(get_expense_categories)
+mcp.tool()(get_expense_summary)
 
 if __name__ == "__main__":
     mcp.run()
