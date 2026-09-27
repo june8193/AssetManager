@@ -8,6 +8,9 @@ import { useMasking } from '../contexts/MaskingContext';
 import { formatWithCommas } from '../utils/formatters';
 import { API_BASE_URL } from '../config';
 import DynamicSimulationDetailSection, { STRATEGY_NAMES } from '../components/simulation/DynamicSimulationDetailSection';
+import DynamicTierEditor from '../components/simulation/DynamicTierEditor';
+import DynamicPresetToolbar from '../components/simulation/DynamicPresetToolbar';
+
 
 // 차트 렌더링에 사용될 고유 테마 색상들
 const COLORS = [
@@ -73,6 +76,11 @@ const AssetAllocationSimulationPage = () => {
   const [activeTableTab, setActiveTableTab] = useState('yearly'); // 'yearly' | 'monthly'
   const [showCagrTooltip, setShowCagrTooltip] = useState(false);
 
+  // 동적 리밸런싱 프리셋 관리 상태
+  const [presets, setPresets] = useState([]);
+  const [selectedPresetId, setSelectedPresetId] = useState(null);
+  const [presetLoading, setPresetLoading] = useState(false);
+
   // 금액 포맷터 (3자리 쉼표 및 마스킹 처리)
   const formatKRW = (value) => {
     if (isMasked) {
@@ -80,6 +88,130 @@ const AssetAllocationSimulationPage = () => {
     }
     return formatWithCommas(Math.round(value)) + ' 원';
   };
+
+  // 프리셋 목록 로드
+  const fetchPresets = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/simulation/presets`);
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setPresets(data);
+          if (data.length > 0 && !selectedPresetId) {
+            const defaultPreset = data.find((p) => p.is_default) || data[0];
+            setSelectedPresetId(defaultPreset.id);
+            setDynamicBaseStockRatio(defaultPreset.base_stock_ratio);
+            setPeriod(defaultPreset.period);
+            setRebalancing(defaultPreset.rebalancing_period);
+            setDynamicMode(defaultPreset.investment_mode);
+            setDynamicAnnualDeposit(defaultPreset.annual_deposit);
+            if (defaultPreset.tiers && Array.isArray(defaultPreset.tiers)) {
+              setDynamicTiers(defaultPreset.tiers);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('프리셋 목록 로드 실패:', err);
+    }
+  };
+
+
+  useEffect(() => {
+    fetchPresets();
+  }, []);
+
+  // 프리셋 선택 시 해당 프리셋 파라미터 로드
+  const handleSelectPreset = (preset) => {
+    if (!preset) return;
+    setSelectedPresetId(preset.id);
+    setDynamicBaseStockRatio(preset.base_stock_ratio);
+    setPeriod(preset.period);
+    setRebalancing(preset.rebalancing_period);
+    setDynamicMode(preset.investment_mode);
+    setDynamicAnnualDeposit(preset.annual_deposit);
+    if (preset.tiers && Array.isArray(preset.tiers)) {
+      setDynamicTiers(preset.tiers);
+    }
+  };
+
+  // 현재 화면의 동적 리밸런싱 파라미터 기반 프리셋 페이로드 생성 헬퍼
+  const getCurrentPresetPayload = (name, description) => ({
+    name,
+    description,
+    base_stock_ratio: dynamicBaseStockRatio,
+    rebalancing_period: rebalancing,
+    investment_mode: dynamicMode,
+    annual_deposit: dynamicAnnualDeposit,
+    period,
+    tiers: dynamicTiers,
+  });
+
+  // 프리셋 신규 저장
+  const handleSaveNewPreset = async ({ name, description }) => {
+    setPresetLoading(true);
+    try {
+      const payload = getCurrentPresetPayload(name, description);
+      const response = await fetch(`${API_BASE_URL}/simulation/presets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `저장 실패 (상태: ${response.status})`);
+      }
+      const created = await response.json();
+      setPresets((prev) => [...prev, created]);
+      setSelectedPresetId(created.id);
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
+  // 프리셋 수정
+  const handleUpdatePreset = async (id, { name, description }) => {
+    setPresetLoading(true);
+    try {
+      const payload = getCurrentPresetPayload(name, description);
+      const response = await fetch(`${API_BASE_URL}/simulation/presets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `수정 실패 (상태: ${response.status})`);
+      }
+      const updated = await response.json();
+      setPresets((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
+
+  // 프리셋 삭제
+  const handleDeletePreset = async (id) => {
+    setPresetLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/simulation/presets/${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `삭제 실패 (상태: ${response.status})`);
+      }
+      const remaining = presets.filter((p) => p.id !== id);
+      setPresets(remaining);
+      if (remaining.length > 0) {
+        handleSelectPreset(remaining[0]);
+      }
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
 
   // 1. 시뮬레이션 계산 API 요청
   const runSimulation = async () => {
@@ -363,7 +495,19 @@ const AssetAllocationSimulationPage = () => {
         <div className="lg:col-span-4 flex flex-col gap-6">
           {activeTab === 'dynamic' ? (
             <>
+              {/* 전략 프리셋 관리 툴바 */}
+              <DynamicPresetToolbar
+                presets={presets}
+                selectedPresetId={selectedPresetId}
+                onSelectPreset={handleSelectPreset}
+                onSaveNewPreset={handleSaveNewPreset}
+                onUpdatePreset={handleUpdatePreset}
+                onDeletePreset={handleDeletePreset}
+                isLoading={presetLoading}
+              />
+
               {/* 기본 주식 비중 슬라이더 카드 */}
+
               <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
                 <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
                   <span className="flex items-center gap-2">
@@ -489,44 +633,12 @@ const AssetAllocationSimulationPage = () => {
                 </div>
               </div>
 
-              {/* 다단계 공포 조건 (MDD & VIX) 안내 카드 */}
-              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-3">
-                <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
-                  <span className="flex items-center gap-2">
-                    <AlertCircle size={16} className="text-rose-500" />
-                    다단계 공포 매수 조건 (AND)
-                  </span>
-                  <span className="text-[10px] font-bold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full">
-                    3단계 자동 적용
-                  </span>
-                </h2>
-                <div className="space-y-2 text-xs">
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-                    <div className="flex justify-between items-center font-bold text-slate-700">
-                      <span>1단계 공포</span>
-                      <span className="text-blue-600 font-black">주식 75% 확대</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">낙폭 ≤ -10% AND VIX ≥ 25</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-                    <div className="flex justify-between items-center font-bold text-slate-700">
-                      <span>2단계 극단 공포</span>
-                      <span className="text-blue-600 font-black">주식 90% 확대</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">낙폭 ≤ -20% AND VIX ≥ 30</p>
-                  </div>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-100 space-y-1">
-                    <div className="flex justify-between items-center font-bold text-slate-700">
-                      <span>3단계 패닉</span>
-                      <span className="text-blue-600 font-black">주식 100% 확대</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400">낙폭 ≤ -30% AND VIX ≥ 40</p>
-                  </div>
-                </div>
-                <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-2">
-                  * 조건 충족 당일 즉시 주식 비중을 확대하며, 월말 점검일에 공포가 해소되면 평상시 기본 비중으로 복귀합니다.
-                </p>
-              </div>
+              {/* 다단계 공포 조건 (MDD & VIX) 동적 편집기 */}
+              <DynamicTierEditor
+                tiers={dynamicTiers}
+                onChange={setDynamicTiers}
+              />
+
             </>
           ) : (
             <>

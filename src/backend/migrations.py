@@ -87,10 +87,11 @@ def run_migrations(engine: Engine) -> None:
                 ))
                 conn.commit()
 
-            # 지출 관리 테이블 자동 생성 (Base.metadata.create_all 사용)
-            from .models import PaymentMethod, ExpenseCategory, Expense
+            # 지출 관리 및 시뮬레이션 프리셋 테이블 자동 생성 (Base.metadata.create_all 사용)
+            from .models import PaymentMethod, ExpenseCategory, Expense, SimulationPreset
             from .database import Base
             Base.metadata.create_all(bind=engine)
+
 
             # 불필요해진 2차 카테고리 테이블 및 컬럼 정리
             conn.execute(text("DROP TABLE IF EXISTS expense_sub_categories"))

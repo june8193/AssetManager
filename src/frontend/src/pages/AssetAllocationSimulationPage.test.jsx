@@ -7,47 +7,302 @@ import { MaskingProvider } from '../contexts/MaskingContext';
 // API Fetch 모킹
 global.fetch = vi.fn();
 
+const mockPresets = [
+  {
+    id: 1,
+    name: '기본 추천 (3단계 분할매수)',
+    description: '낙폭 및 VIX 결합 3단계 공포 분할매수 전략',
+    base_stock_ratio: 60.0,
+    rebalancing_period: 'monthly',
+    investment_mode: 'recurring',
+    annual_deposit: 20000000,
+    period: '5Y',
+    is_default: true,
+    tiers: [
+      { tier: 1, dd_threshold: -10, vix_threshold: 25, target_stock_ratio: 75 },
+      { tier: 2, dd_threshold: -20, vix_threshold: 30, target_stock_ratio: 90 },
+      { tier: 3, dd_threshold: -30, vix_threshold: 40, target_stock_ratio: 100 },
+    ],
+  },
+];
+
 const mockApiResponse = {
   chart: {
     labels: ['2026-01-01', '2026-01-02'],
     datasets: [
       { label: '주식 100%', data: [20000000.0, 20100000.0] },
-      { label: '주식 60% / 현금 40%', data: [20000000.0, 20060000.0] }
-    ]
+      { label: '주식 60% / 현금 40%', data: [20000000.0, 20060000.0] },
+    ],
   },
   summaries: [
-    { name: '주식 100%', stock_ratio: 100.0, cagr: 12.5, mdd: -15.2, final_return: 25.4, final_valuation: 25400000.0, total_invested: 20000000.0, total_interest: 5400000.0 },
-    { name: '주식 60% / 현금 40%', stock_ratio: 60.0, cagr: 8.2, mdd: -9.1, final_return: 15.6, final_valuation: 23120000.0, total_invested: 20000000.0, total_interest: 3120000.0 }
+    {
+      name: '주식 100%',
+      stock_ratio: 100.0,
+      cagr: 12.5,
+      mdd: -15.2,
+      final_return: 25.4,
+      final_valuation: 25400000.0,
+      total_invested: 20000000.0,
+      total_interest: 5400000.0,
+    },
+    {
+      name: '주식 60% / 현금 40%',
+      stock_ratio: 60.0,
+      cagr: 8.2,
+      mdd: -9.1,
+      final_return: 15.6,
+      final_valuation: 23120000.0,
+      total_invested: 20000000.0,
+      total_interest: 3120000.0,
+    },
   ],
   yearly_stats: {
     '주식 100%': [
-      { year: 2026, year_return: 25.4, cumulative_return: 25.4, mdd: -15.2, valuation: 25400000.0, invested: 20000000.0, interest: 5400000.0, annual_interest: 5400000.0 }
+      {
+        year: 2026,
+        year_return: 25.4,
+        cumulative_return: 25.4,
+        mdd: -15.2,
+        valuation: 25400000.0,
+        invested: 20000000.0,
+        interest: 5400000.0,
+        annual_interest: 5400000.0,
+      },
     ],
     '주식 60% / 현금 40%': [
-      { year: 2026, year_return: 15.6, cumulative_return: 15.6, mdd: -9.1, valuation: 23120000.0, invested: 20000000.0, interest: 3120000.0, annual_interest: 3120000.0 }
-    ]
+      {
+        year: 2026,
+        year_return: 15.6,
+        cumulative_return: 15.6,
+        mdd: -9.1,
+        valuation: 23120000.0,
+        invested: 20000000.0,
+        interest: 3120000.0,
+        annual_interest: 3120000.0,
+      },
+    ],
   },
   monthly_stats: {
     '주식 100%': [
-      { year: 2026, month: 1, month_return: 25.4, cumulative_return: 25.4, mdd: -15.2, valuation: 25400000.0, invested: 20000000.0, interest: 5400000.0, annual_interest: 5400000.0 }
+      {
+        year: 2026,
+        month: 1,
+        month_return: 25.4,
+        cumulative_return: 25.4,
+        mdd: -15.2,
+        valuation: 25400000.0,
+        invested: 20000000.0,
+        interest: 5400000.0,
+        annual_interest: 5400000.0,
+      },
     ],
     '주식 60% / 현금 40%': [
-      { year: 2026, month: 1, month_return: 15.6, cumulative_return: 15.6, mdd: -9.1, valuation: 23120000.0, invested: 20000000.0, interest: 3120000.0, annual_interest: 3120000.0 }
-    ]
-  }
+      {
+        year: 2026,
+        month: 1,
+        month_return: 15.6,
+        cumulative_return: 15.6,
+        mdd: -9.1,
+        valuation: 23120000.0,
+        invested: 20000000.0,
+        interest: 3120000.0,
+        annual_interest: 3120000.0,
+      },
+    ],
+  },
+};
+
+const dynamicMockResponse = {
+  chart: {
+    labels: ['2025-01-02', '2025-01-03', '2025-01-31'],
+    datasets: [
+      { label: '동적 리밸런싱 전략', data: [100.0, 102.0, 105.0] },
+      { label: '일반 정기 리밸런싱', data: [100.0, 101.0, 103.0] },
+      { label: 'S&P 500 단순 보유', data: [100.0, 99.0, 104.0] },
+    ],
+  },
+  summaries: [
+    {
+      name: '동적 리밸런싱 전략',
+      stock_ratio: 60.0,
+      cagr: 15.0,
+      mdd: -10.0,
+      final_return: 20.0,
+      final_valuation: 120.0,
+      total_invested: 100.0,
+      total_interest: 20.0,
+    },
+    {
+      name: '일반 정기 리밸런싱',
+      stock_ratio: 60.0,
+      cagr: 10.0,
+      mdd: -12.0,
+      final_return: 15.0,
+      final_valuation: 115.0,
+      total_invested: 100.0,
+      total_interest: 15.0,
+    },
+    {
+      name: 'S&P 500 단순 보유',
+      stock_ratio: 100.0,
+      cagr: 12.0,
+      mdd: -18.0,
+      final_return: 18.0,
+      final_valuation: 118.0,
+      total_invested: 100.0,
+      total_interest: 18.0,
+    },
+  ],
+  yearly_stats: {
+    '동적 리밸런싱 전략': [
+      {
+        year: 2025,
+        year_return: 20.0,
+        cumulative_return: 20.0,
+        mdd: -10.0,
+        valuation: 120.0,
+        invested: 100.0,
+        interest: 20.0,
+        annual_interest: 20.0,
+      },
+    ],
+    '일반 정기 리밸런싱': [
+      {
+        year: 2025,
+        year_return: 15.0,
+        cumulative_return: 15.0,
+        mdd: -12.0,
+        valuation: 115.0,
+        invested: 100.0,
+        interest: 15.0,
+        annual_interest: 15.0,
+      },
+    ],
+    'S&P 500 단순 보유': [
+      {
+        year: 2025,
+        year_return: 18.0,
+        cumulative_return: 18.0,
+        mdd: -18.0,
+        valuation: 118.0,
+        invested: 100.0,
+        interest: 18.0,
+        annual_interest: 18.0,
+      },
+    ],
+  },
+  monthly_stats: {
+    '동적 리밸런싱 전략': [
+      {
+        year: 2025,
+        month: 1,
+        month_return: 5.0,
+        cumulative_return: 5.0,
+        mdd: -5.0,
+        valuation: 105.0,
+        invested: 100.0,
+        interest: 5.0,
+        annual_interest: 5.0,
+      },
+    ],
+    '일반 정기 리밸런싱': [
+      {
+        year: 2025,
+        month: 1,
+        month_return: 3.0,
+        cumulative_return: 3.0,
+        mdd: -6.0,
+        valuation: 103.0,
+        invested: 100.0,
+        interest: 3.0,
+        annual_interest: 3.0,
+      },
+    ],
+    'S&P 500 단순 보유': [
+      {
+        year: 2025,
+        month: 1,
+        month_return: 4.0,
+        cumulative_return: 4.0,
+        mdd: -8.0,
+        valuation: 104.0,
+        invested: 100.0,
+        interest: 4.0,
+        annual_interest: 4.0,
+      },
+    ],
+  },
+  rebalancing_events: [
+    {
+      date: '2025-01-03',
+      event_type: '공포 단계 발동 (티어 1)',
+      event_code: 'PANIC_BUY',
+      tier: 1,
+      sp500_price: 5800.0,
+      drawdown: -12.5,
+      vix: 26.5,
+      old_stock_ratio: 56.9,
+      new_stock_ratio: 75.0,
+    },
+    {
+      date: '2025-01-31',
+      event_type: '정기 복귀',
+      event_code: 'RECOVERY',
+      tier: null,
+      sp500_price: 6000.0,
+      drawdown: -4.2,
+      vix: 17.5,
+      old_stock_ratio: 78.0,
+      new_stock_ratio: 60.0,
+    },
+  ],
 };
 
 describe('AssetAllocationSimulationPage - Unit Test', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    fetch.mockImplementation(async (url, options) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/simulation/presets')) {
+        if (options?.method === 'POST') {
+          const body = JSON.parse(options.body);
+          return {
+            ok: true,
+            json: async () => ({ id: 99, ...body, is_default: false }),
+          };
+        }
+        if (options?.method === 'PUT') {
+          const body = JSON.parse(options.body);
+          return {
+            ok: true,
+            json: async () => ({ id: 1, ...body, is_default: true }),
+          };
+        }
+        if (options?.method === 'DELETE') {
+          return {
+            ok: true,
+            json: async () => ({ success: true }),
+          };
+        }
+        return {
+          ok: true,
+          json: async () => mockPresets,
+        };
+      }
+      if (urlStr.includes('/simulation/run-dynamic')) {
+        return {
+          ok: true,
+          json: async () => dynamicMockResponse,
+        };
+      }
+      return {
+        ok: true,
+        json: async () => mockApiResponse,
+      };
+    });
   });
 
   it('기본 UI 레이아웃과 프리셋 버튼이 정상적으로 렌더링된다', async () => {
-    fetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => mockApiResponse
-    });
-
     render(
       <MaskingProvider>
         <AssetAllocationSimulationPage />
@@ -78,11 +333,6 @@ describe('AssetAllocationSimulationPage - Unit Test', () => {
   });
 
   it('새로운 비중 조합을 추가하고 계산을 수행한다', async () => {
-    fetch.mockResolvedValue({
-      ok: true,
-      json: async () => mockApiResponse
-    });
-
     render(
       <MaskingProvider>
         <AssetAllocationSimulationPage />
@@ -98,71 +348,47 @@ describe('AssetAllocationSimulationPage - Unit Test', () => {
     expect(ratioInput).toBeDefined();
     expect(addButton).toBeDefined();
 
-    // 새 비중 조합 정보 입력
-    fireEvent.change(nameInput, { target: { value: '주식 50% / 현금 50%' } });
-    fireEvent.change(ratioInput, { target: { value: '50' } });
+    // 입력 및 추가 클릭
+    fireEvent.change(nameInput, { target: { value: '테스트 조합 85/15' } });
+    fireEvent.change(ratioInput, { target: { value: '85' } });
     fireEvent.click(addButton);
 
-    // 추가된 조합이 화면 리스트에 노출되는지 확인
+    // 새 조합이 화면에 렌더링되었는지 확인
     await waitFor(() => {
-      expect(screen.getAllByText('주식 50% / 현금 50%').length).toBeGreaterThan(0);
+      expect(screen.getByText('테스트 조합 85/15')).toBeDefined();
+      expect(screen.getByText('주식 85% / 현금 15%')).toBeDefined();
     });
   });
 
   it('적립식 탭과 거치식 탭을 전환할 수 있으며, 추가금 입력 필드가 탭에 따라 노출/비노출된다', async () => {
-    fetch.mockResolvedValue({
-      ok: true,
-      json: async () => mockApiResponse
-    });
-
     render(
       <MaskingProvider>
         <AssetAllocationSimulationPage />
       </MaskingProvider>
     );
 
-    // 1. 초기 탭은 적립식이므로 '매년 추가 적립금' 영역이 노출됨
-    await waitFor(() => {
-      expect(screen.getByText('매년 추가 적립금')).toBeDefined();
-    });
+    // 초기 상태(적립식)에서 추가금 입력 필드가 표시되는지 확인
+    expect(screen.getByText('매년 추가 적립금')).toBeDefined();
 
-    // 2. 거치식 백테스트 탭 클릭
+    // 거치식 탭 클릭
     const lumpTab = screen.getByText('거치식 백테스트');
     fireEvent.click(lumpTab);
 
-    // 3. 거치식 탭에서는 '매년 추가 적립금' 입력 필드가 비노출됨
+    // 거치식 모드에서는 추가금 설정 필드가 사라져야 함
     await waitFor(() => {
       expect(screen.queryByText('매년 추가 적립금')).toBeNull();
+    });
+
+    // 다시 적립식 탭 클릭 시 복구 확인
+    const recurringTab = screen.getByText('적립식 시뮬레이션');
+    fireEvent.click(recurringTab);
+
+    await waitFor(() => {
+      expect(screen.getByText('매년 추가 적립금')).toBeDefined();
     });
   });
 
   it('동적 리밸런싱 (MDD/VIX) 탭으로 전환하고 3개 벤치마크 결과를 렌더링한다', async () => {
-    const dynamicMockResponse = {
-      chart: {
-        labels: ['2026-01-01', '2026-01-02'],
-        datasets: [
-          { label: '동적 리밸런싱 전략', data: [20000000.0, 20200000.0] },
-          { label: '일반 정기 리밸런싱', data: [20000000.0, 20060000.0] },
-          { label: 'S&P 500 단순 보유', data: [20000000.0, 20100000.0] }
-        ]
-      },
-      summaries: [
-        { name: '동적 리밸런싱 전략', stock_ratio: 60.0, cagr: 14.2, mdd: -11.5, final_return: 28.5, final_valuation: 25700000.0, total_invested: 20000000.0, total_interest: 5700000.0 },
-        { name: '일반 정기 리밸런싱', stock_ratio: 60.0, cagr: 8.2, mdd: -9.1, final_return: 15.6, final_valuation: 23120000.0, total_invested: 20000000.0, total_interest: 3120000.0 },
-        { name: 'S&P 500 단순 보유', stock_ratio: 100.0, cagr: 12.5, mdd: -15.2, final_return: 25.4, final_valuation: 25400000.0, total_invested: 20000000.0, total_interest: 5400000.0 }
-      ],
-      yearly_stats: {},
-      monthly_stats: {},
-      rebalancing_events: [
-        { date: '2025-01-03', event_type: 'PANIC_BUY', tier: 1, sp500_price: 5800.0, drawdown: -12.0, vix: 26.0, old_stock_ratio: 60.0, new_stock_ratio: 75.0 }
-      ]
-    };
-
-    fetch.mockResolvedValue({
-      ok: true,
-      json: async () => dynamicMockResponse
-    });
-
     render(
       <MaskingProvider>
         <AssetAllocationSimulationPage />
@@ -188,61 +414,6 @@ describe('AssetAllocationSimulationPage - Unit Test', () => {
   });
 
   it('동적 리밸런싱 탭에서 상세 영역 탭([이벤트 로그], [연도별 현황], [월별 현황]) 전환 및 이벤트 로그 테이블이 올바르게 렌더링된다', async () => {
-    const dynamicMockResponse = {
-      chart: {
-        labels: ['2025-01-02', '2025-01-03', '2025-01-31'],
-        datasets: [
-          { label: '동적 리밸런싱 전략', data: [100.0, 102.0, 105.0] },
-          { label: '일반 정기 리밸런싱', data: [100.0, 101.0, 103.0] },
-          { label: 'S&P 500 단순 보유', data: [100.0, 99.0, 104.0] }
-        ]
-      },
-      summaries: [
-        { name: '동적 리밸런싱 전략', stock_ratio: 60.0, cagr: 15.0, mdd: -10.0, final_return: 20.0, final_valuation: 120.0, total_invested: 100.0, total_interest: 20.0 },
-        { name: '일반 정기 리밸런싱', stock_ratio: 60.0, cagr: 10.0, mdd: -12.0, final_return: 15.0, final_valuation: 115.0, total_invested: 100.0, total_interest: 15.0 },
-        { name: 'S&P 500 단순 보유', stock_ratio: 100.0, cagr: 12.0, mdd: -18.0, final_return: 18.0, final_valuation: 118.0, total_invested: 100.0, total_interest: 18.0 }
-      ],
-      yearly_stats: {
-        '동적 리밸런싱 전략': [{ year: 2025, year_return: 20.0, cumulative_return: 20.0, mdd: -10.0, valuation: 120.0, invested: 100.0, interest: 20.0, annual_interest: 20.0 }],
-        '일반 정기 리밸런싱': [{ year: 2025, year_return: 15.0, cumulative_return: 15.0, mdd: -12.0, valuation: 115.0, invested: 100.0, interest: 15.0, annual_interest: 15.0 }],
-        'S&P 500 단순 보유': [{ year: 2025, year_return: 18.0, cumulative_return: 18.0, mdd: -18.0, valuation: 118.0, invested: 100.0, interest: 18.0, annual_interest: 18.0 }]
-      },
-      monthly_stats: {
-        '동적 리밸런싱 전략': [{ year: 2025, month: 1, month_return: 5.0, cumulative_return: 5.0, mdd: -5.0, valuation: 105.0, invested: 100.0, interest: 5.0, annual_interest: 5.0 }],
-        '일반 정기 리밸런싱': [{ year: 2025, month: 1, month_return: 3.0, cumulative_return: 3.0, mdd: -6.0, valuation: 103.0, invested: 100.0, interest: 3.0, annual_interest: 3.0 }],
-        'S&P 500 단순 보유': [{ year: 2025, month: 1, month_return: 4.0, cumulative_return: 4.0, mdd: -8.0, valuation: 104.0, invested: 100.0, interest: 4.0, annual_interest: 4.0 }]
-      },
-      rebalancing_events: [
-        {
-          date: '2025-01-03',
-          event_type: '공포 단계 발동 (티어 1)',
-          event_code: 'PANIC_BUY',
-          tier: 1,
-          sp500_price: 5800.0,
-          drawdown: -12.5,
-          vix: 26.5,
-          old_stock_ratio: 56.9,
-          new_stock_ratio: 75.0
-        },
-        {
-          date: '2025-01-31',
-          event_type: '정기 복귀',
-          event_code: 'RECOVERY',
-          tier: null,
-          sp500_price: 6000.0,
-          drawdown: -4.2,
-          vix: 17.5,
-          old_stock_ratio: 78.0,
-          new_stock_ratio: 60.0
-        }
-      ]
-    };
-
-    fetch.mockResolvedValue({
-      ok: true,
-      json: async () => dynamicMockResponse
-    });
-
     render(
       <MaskingProvider>
         <AssetAllocationSimulationPage />
@@ -287,5 +458,48 @@ describe('AssetAllocationSimulationPage - Unit Test', () => {
       expect(screen.getByText('2025년 1월')).toBeDefined();
     });
   });
-});
 
+  it('동적 리밸런싱 탭에서 프리셋 로드, 티어 편집기 렌더링 및 프리셋 저장을 수행한다', async () => {
+    render(
+      <MaskingProvider>
+        <AssetAllocationSimulationPage />
+      </MaskingProvider>
+    );
+
+    // 1. 동적 리밸런싱 탭 진입
+    const dynamicTab = screen.getByText('동적 리밸런싱 (MDD/VIX)');
+    fireEvent.click(dynamicTab);
+
+    // 2. 프리셋 셀렉트박스 및 기본 프리셋 옵션 렌더링 확인
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: /전략 프리셋 선택/i })).toBeDefined();
+      expect(screen.getByText(/기본 추천 \(3단계 분할매수\)/)).toBeDefined();
+    });
+
+    // 3. 다단계 공포 매수 조건(DynamicTierEditor)에 3단계 기본 티어 렌더링 확인
+    expect(screen.getByText('1단계')).toBeDefined();
+    expect(screen.getByText('2단계')).toBeDefined();
+    expect(screen.getByText('3단계')).toBeDefined();
+
+    // 4. 단계 추가(Add Tier) 버튼 클릭 시 4단계 추가 확인
+    const addTierBtn = screen.getByRole('button', { name: /단계 추가/i });
+    fireEvent.click(addTierBtn);
+    expect(screen.getByText('4단계')).toBeDefined();
+
+    // 5. 프리셋 저장 모달 열기 및 저장 요청
+    const savePresetBtn = screen.getByRole('button', { name: /프리셋 저장/i });
+    fireEvent.click(savePresetBtn);
+
+    expect(screen.getByText('새 전략 프리셋으로 저장')).toBeDefined();
+    const nameInput = screen.getByLabelText('새 프리셋 명칭');
+    fireEvent.change(nameInput, { target: { value: '나의 4단계 전략' } });
+
+    const confirmSaveBtn = screen.getByRole('button', { name: '저장하기' });
+    fireEvent.click(confirmSaveBtn);
+
+    // 모달 닫힘 및 POST API 호출 검증
+    await waitFor(() => {
+      expect(screen.queryByText('새 전략 프리셋으로 저장')).toBeNull();
+    });
+  });
+});

@@ -5,10 +5,11 @@
 
 **Blocked by:** 01 — 동적 리밸런싱 핵심 시뮬레이션 엔진 및 UI 탭 구현
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 백엔드 DB에 `simulation_presets` 모델 및 테이블 스키마 생성 (안전한 마이그레이션)
-- [ ] 프리셋 CRUD REST API 엔드포인트 구현 (`GET`, `POST`, `PUT`, `DELETE /api/simulation/presets`)
-- [ ] 프론트엔드 다단계 트리거 편집기 컴포넌트 구현 (조건 행 추가/삭제, 입력 필드 변경 시 시뮬레이션 자동 재계산)
-- [ ] 상단 프리셋 선택 셀렉트박스 및 [저장] / [수정] / [삭제] 대화상자(Modal) UI 구현
-- [ ] 프리셋 DB CRUD 및 유효성 검사 단위 테스트 작성 및 통과
+- [x] 백엔드 DB에 `simulation_presets` 모델 및 테이블 스키마 생성 (안전한 마이그레이션)
+- [x] 프리셋 CRUD REST API 엔드포인트 구현 (`GET`, `POST`, `PUT`, `DELETE /api/simulation/presets`)
+- [x] 프론트엔드 다단계 트리거 편집기 컴포넌트 구현 (조건 행 추가/삭제, 입력 필드 변경 시 시뮬레이션 자동 재계산)
+- [x] 상단 프리셋 선택 셀렉트박스 및 [저장] / [수정] / [삭제] 대화상자(Modal) UI 구현
+- [x] 프리셋 DB CRUD 및 유효성 검사 단위 테스트 작성 및 통과
+
