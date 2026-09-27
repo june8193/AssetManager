@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 백엔드 `SimulationService`에 일별 S&P 500 최고점(ATH) 대비 낙폭 및 VIX 종가 기반의 AND 조건 판정 및 월말 정상 복귀 동적 리밸런싱 알고리즘 구현
 - [x] 백엔드 `POST /api/simulation/run-dynamic` REST API 엔드포인트 구현 (유효성 검사, 거치식/적립식 지원, 3개 벤치마크 데이터셋 반환)
