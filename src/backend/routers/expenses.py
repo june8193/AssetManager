@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
 from ..models import PaymentMethod, ExpenseCategory, Expense, ExpenseRule
-from ..services.expense_parser_service import ExpenseParserService
+from ..services.expense_parser_service import ExpenseParserService, is_same_institution
 from ..parsers.exceptions import (
     ExpenseParserError,
     InvalidPasswordError,
@@ -523,23 +523,6 @@ def match_expense_rule(
 # ==========================================
 
 
-def _is_same_institution(pm_inst: str, detected_inst: str) -> bool:
-    """결제수단에 등록된 기관명과 파서가 감지한 금융기관이 일치하는지 유연하게 검증합니다."""
-    n1 = pm_inst.replace(" ", "").lower()
-    n2 = detected_inst.replace(" ", "").lower()
-    if n1 == n2:
-        return True
-    if ("국민" in n1 or "kb" in n1) and ("국민" in n2 or "kb" in n2):
-        return True
-    if "카카오" in n1 and "카카오" in n2:
-        return True
-    if "현대" in n1 and "현대" in n2:
-        return True
-    if ("신한" in n1 or "shinhan" in n1) and ("신한" in n2 or "shinhan" in n2):
-        return True
-    return n1 in n2 or n2 in n1
-
-
 @router.post("/upload-preview", response_model=ExpenseUploadPreviewResponse)
 async def upload_expense_preview(
     file: UploadFile = File(..., description="업로드할 명세서 파일 (HTML, XLSX 또는 PDF)"),
@@ -589,13 +572,10 @@ async def upload_expense_preview(
         )
 
     # 결제수단 기관과 업로드 파일 기관 일치 검증
-    if not _is_same_institution(selected_pm.institution, detected_institution):
+    if not is_same_institution(selected_pm.institution, detected_institution):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"선택한 결제수단의 금융기관('{selected_pm.institution}')과 "
-                f"업로드된 명세서의 금융기관('{detected_institution}')이 일치하지 않습니다."
-            ),
+            detail=f"선택한 결제수단({selected_pm.institution})과 업로드된 명세서({detected_institution})가 일치하지 않습니다.",
         )
 
     # 1. 일회성 복호화 비밀번호 및 대상 연월 처리

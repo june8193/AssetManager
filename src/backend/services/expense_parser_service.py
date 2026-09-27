@@ -13,6 +13,81 @@ from src.backend.parsers.kbbank import parse_kbbank_pdf
 from src.backend.parsers.shinhanbank import parse_shinhanbank_pdf
 
 
+def normalize_institution(name: Optional[str]) -> str:
+    """금융기관명을 대표 표준 기관명으로 정규화합니다.
+
+    카드와 은행, 뱅크와 페이 등 서로 다른 금융상품/기관은 엄격히 구분하여 정규화합니다.
+
+    Args:
+        name (Optional[str]): 원본 금융기관명 (예: 'KB국민은행', '신한', 'kakaobank', '현대').
+
+    Returns:
+        str: 정규화된 대표 기관명 또는 소문자 정리 문자열.
+    """
+    if not name or not isinstance(name, str):
+        return ""
+    clean = name.strip().replace(" ", "").lower()
+    if not clean:
+        return ""
+
+    # 1. 국민 계열 (국민은행 vs 국민카드)
+    if "카드" in clean and ("국민" in clean or "kb" in clean):
+        return "국민카드"
+    if any(k in clean for k in ["국민은행", "kb국민", "kb은행", "kbbank"]) or clean in ["국민", "kb"]:
+        return "국민은행"
+    if ("국민" in clean or "kb" in clean) and "은행" in clean:
+        return "국민은행"
+
+    # 2. 신한 계열 (신한은행 vs 신한카드)
+    if "카드" in clean and ("신한" in clean or "shinhan" in clean):
+        return "신한카드"
+    if any(k in clean for k in ["신한은행", "shinhanbank"]) or clean in ["신한", "shinhan"]:
+        return "신한은행"
+    if ("신한" in clean or "shinhan" in clean) and "은행" in clean:
+        return "신한은행"
+
+    # 3. 카카오 계열 (카카오뱅크 vs 카카오페이 vs 카카오카드)
+    if "페이" in clean and "카카오" in clean:
+        return "카카오페이"
+    if "카드" in clean and "카카오" in clean:
+        return "카카오카드"
+    if any(k in clean for k in ["카카오뱅크", "kakaobank"]) or clean in ["카카오", "kakao"]:
+        return "카카오뱅크"
+    if ("카카오" in clean or "kakao" in clean) and "뱅크" in clean:
+        return "카카오뱅크"
+
+    # 4. 현대 계열 (현대카드 vs 타 금융)
+    if any(k in clean for k in ["현대카드", "hyundaicard"]) or clean in ["현대", "hyundai"]:
+        return "현대카드"
+    if ("현대" in clean or "hyundai" in clean) and "카드" in clean:
+        return "현대카드"
+
+    return clean
+
+
+def is_same_institution(pm_inst: Optional[str], detected_inst: Optional[str]) -> bool:
+    """결제수단에 등록된 기관명과 파서가 감지한 금융기관이 일치하거나 호환되는지 엄격히 검증합니다.
+
+    Args:
+        pm_inst (Optional[str]): 결제수단 기관명 (예: 'KB국민은행', '신한', '현대카드').
+        detected_inst (Optional[str]): 파서가 감지한 금융기관명 (예: '국민은행', '신한은행', '현대카드', '카카오뱅크').
+
+    Returns:
+        bool: 두 기관명이 동일하거나 상호 호환되면 True, 불일치하거나 비어있으면 False.
+    """
+    if not pm_inst or not detected_inst:
+        return False
+
+    norm_pm = normalize_institution(pm_inst)
+    norm_detected = normalize_institution(detected_inst)
+
+    if not norm_pm or not norm_detected:
+        return False
+
+    return norm_pm == norm_detected
+
+
+
 class ExpenseParserService:
     """금융기관별 명세서를 자동 판별하고 복호화 및 거래 내역을 정규화 추출하는 통합 서비스."""
 
