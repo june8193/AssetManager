@@ -1,6 +1,6 @@
 # Feature Spec: 지출 관리 MCP 도구 추가 (get_expense_summary, get_expenses, get_expense_categories)
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
