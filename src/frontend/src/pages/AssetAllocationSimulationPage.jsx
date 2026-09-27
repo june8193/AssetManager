@@ -7,6 +7,10 @@ import {
 import { useMasking } from '../contexts/MaskingContext';
 import { formatWithCommas } from '../utils/formatters';
 import { API_BASE_URL } from '../config';
+import DynamicSimulationDetailSection, { STRATEGY_NAMES } from '../components/simulation/DynamicSimulationDetailSection';
+import DynamicTierEditor from '../components/simulation/DynamicTierEditor';
+import DynamicPresetToolbar from '../components/simulation/DynamicPresetToolbar';
+
 
 // 차트 렌더링에 사용될 고유 테마 색상들
 const COLORS = [
@@ -19,6 +23,14 @@ const COLORS = [
   '#6366f1', // Indigo
   '#14b8a6', // Teal
 ];
+
+// 동적 리밸런싱 3개 벤치마크 고정 색상
+const DYNAMIC_BENCHMARK_COLORS = {
+  [STRATEGY_NAMES.DYNAMIC]: '#3b82f6', // Blue
+  [STRATEGY_NAMES.REGULAR]: '#10b981', // Emerald
+  [STRATEGY_NAMES.BUY_AND_HOLD]: '#f59e0b', // Amber
+};
+
 
 // 초기 기본 제공 조합 목록
 const INITIAL_ALLOCATIONS = [
@@ -34,11 +46,21 @@ const AssetAllocationSimulationPage = () => {
   const { maskValue, isMasked } = useMasking();
 
   // 상태 관리 정의
-  const [activeTab, setActiveTab] = useState('recurring'); // 기본값: 적립식 시뮬레이션
+  const [activeTab, setActiveTab] = useState('recurring'); // 'recurring' | 'lump' | 'dynamic'
   const [allocations, setAllocations] = useState(INITIAL_ALLOCATIONS);
   const [period, setPeriod] = useState('5Y'); // 기본값: 최근 5년
   const [rebalancing, setRebalancing] = useState('monthly'); // 기본값: 매월 리밸런싱
   const [annualDeposit, setAnnualDeposit] = useState(20000000); // 기본값: 매년 2,000만 원 추가금
+
+  // 동적 리밸런싱 전용 상태
+  const [dynamicBaseStockRatio, setDynamicBaseStockRatio] = useState(60.0);
+  const [dynamicMode, setDynamicMode] = useState('recurring'); // 'recurring' | 'lump_sum'
+  const [dynamicAnnualDeposit, setDynamicAnnualDeposit] = useState(20000000);
+  const [dynamicTiers, setDynamicTiers] = useState([
+    { tier: 1, dd_threshold: -10.0, vix_threshold: 25.0, target_stock_ratio: 75.0 },
+    { tier: 2, dd_threshold: -20.0, vix_threshold: 30.0, target_stock_ratio: 90.0 },
+    { tier: 3, dd_threshold: -30.0, vix_threshold: 40.0, target_stock_ratio: 100.0 },
+  ]);
   
   // 커스텀 조합 입력 상태
   const [customName, setCustomName] = useState('');
@@ -54,6 +76,11 @@ const AssetAllocationSimulationPage = () => {
   const [activeTableTab, setActiveTableTab] = useState('yearly'); // 'yearly' | 'monthly'
   const [showCagrTooltip, setShowCagrTooltip] = useState(false);
 
+  // 동적 리밸런싱 프리셋 관리 상태
+  const [presets, setPresets] = useState([]);
+  const [selectedPresetId, setSelectedPresetId] = useState(null);
+  const [presetLoading, setPresetLoading] = useState(false);
+
   // 금액 포맷터 (3자리 쉼표 및 마스킹 처리)
   const formatKRW = (value) => {
     if (isMasked) {
@@ -62,27 +89,166 @@ const AssetAllocationSimulationPage = () => {
     return formatWithCommas(Math.round(value)) + ' 원';
   };
 
+  // 프리셋 목록 로드
+  const fetchPresets = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/simulation/presets`);
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data)) {
+          setPresets(data);
+          if (data.length > 0 && !selectedPresetId) {
+            const defaultPreset = data.find((p) => p.is_default) || data[0];
+            setSelectedPresetId(defaultPreset.id);
+            setDynamicBaseStockRatio(defaultPreset.base_stock_ratio);
+            setPeriod(defaultPreset.period);
+            setRebalancing(defaultPreset.rebalancing_period);
+            setDynamicMode(defaultPreset.investment_mode);
+            setDynamicAnnualDeposit(defaultPreset.annual_deposit);
+            if (defaultPreset.tiers && Array.isArray(defaultPreset.tiers)) {
+              setDynamicTiers(defaultPreset.tiers);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('프리셋 목록 로드 실패:', err);
+    }
+  };
+
+
+  useEffect(() => {
+    fetchPresets();
+  }, []);
+
+  // 프리셋 선택 시 해당 프리셋 파라미터 로드
+  const handleSelectPreset = (preset) => {
+    if (!preset) return;
+    setSelectedPresetId(preset.id);
+    setDynamicBaseStockRatio(preset.base_stock_ratio);
+    setPeriod(preset.period);
+    setRebalancing(preset.rebalancing_period);
+    setDynamicMode(preset.investment_mode);
+    setDynamicAnnualDeposit(preset.annual_deposit);
+    if (preset.tiers && Array.isArray(preset.tiers)) {
+      setDynamicTiers(preset.tiers);
+    }
+  };
+
+  // 현재 화면의 동적 리밸런싱 파라미터 기반 프리셋 페이로드 생성 헬퍼
+  const getCurrentPresetPayload = (name, description) => ({
+    name,
+    description,
+    base_stock_ratio: dynamicBaseStockRatio,
+    rebalancing_period: rebalancing,
+    investment_mode: dynamicMode,
+    annual_deposit: dynamicAnnualDeposit,
+    period,
+    tiers: dynamicTiers,
+  });
+
+  // 프리셋 신규 저장
+  const handleSaveNewPreset = async ({ name, description }) => {
+    setPresetLoading(true);
+    try {
+      const payload = getCurrentPresetPayload(name, description);
+      const response = await fetch(`${API_BASE_URL}/simulation/presets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `저장 실패 (상태: ${response.status})`);
+      }
+      const created = await response.json();
+      setPresets((prev) => [...prev, created]);
+      setSelectedPresetId(created.id);
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
+  // 프리셋 수정
+  const handleUpdatePreset = async (id, { name, description }) => {
+    setPresetLoading(true);
+    try {
+      const payload = getCurrentPresetPayload(name, description);
+      const response = await fetch(`${API_BASE_URL}/simulation/presets/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `수정 실패 (상태: ${response.status})`);
+      }
+      const updated = await response.json();
+      setPresets((prev) => prev.map((p) => (p.id === id ? updated : p)));
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
+
+  // 프리셋 삭제
+  const handleDeletePreset = async (id) => {
+    setPresetLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/simulation/presets/${id}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `삭제 실패 (상태: ${response.status})`);
+      }
+      const remaining = presets.filter((p) => p.id !== id);
+      setPresets(remaining);
+      if (remaining.length > 0) {
+        handleSelectPreset(remaining[0]);
+      }
+    } finally {
+      setPresetLoading(false);
+    }
+  };
+
+
   // 1. 시뮬레이션 계산 API 요청
   const runSimulation = async () => {
-    // 최소 하나 이상의 보이는 조합이 있는지 확인
-    const activeAllocations = allocations.filter(a => a.isVisible);
-    if (activeAllocations.length === 0) {
-      setApiData(null);
-      return;
-    }
-
     setLoading(true);
     setError(null);
     try {
-      const endpoint = activeTab === 'recurring' ? 'run-recurring' : 'run';
-      const bodyPayload = {
-        allocations: activeAllocations.map(a => ({ name: a.name, stock_ratio: a.stock_ratio })),
-        period,
-        rebalancing
-      };
-      
-      if (activeTab === 'recurring') {
-        bodyPayload.annual_deposit = annualDeposit;
+      let endpoint = 'run';
+      let bodyPayload = {};
+
+      if (activeTab === 'dynamic') {
+        endpoint = 'run-dynamic';
+        bodyPayload = {
+          base_stock_ratio: dynamicBaseStockRatio,
+          period,
+          rebalancing,
+          mode: dynamicMode,
+          annual_deposit: dynamicAnnualDeposit,
+          tiers: dynamicTiers,
+        };
+      } else {
+        const activeAllocations = allocations.filter(a => a.isVisible);
+        if (activeAllocations.length === 0) {
+          setApiData(null);
+          setLoading(false);
+          return;
+        }
+
+        endpoint = activeTab === 'recurring' ? 'run-recurring' : 'run';
+        bodyPayload = {
+          allocations: activeAllocations.map(a => ({ name: a.name, stock_ratio: a.stock_ratio })),
+          period,
+          rebalancing,
+        };
+        
+        if (activeTab === 'recurring') {
+          bodyPayload.annual_deposit = annualDeposit;
+        }
       }
 
       const response = await fetch(`${API_BASE_URL}/simulation/${endpoint}`, {
@@ -100,10 +266,13 @@ const AssetAllocationSimulationPage = () => {
       const data = await response.json();
       setApiData(data);
 
-      // 현재 선택된 상세 테이블용 조합이 활성 상태가 아니면 첫 번째 활성 조합으로 자동 선택 변경
-      const activeNames = activeAllocations.map(a => a.name);
-      if (!activeNames.includes(selectedAllocForTable) && activeNames.length > 0) {
-        setSelectedAllocForTable(activeNames[0]);
+      if (activeTab === 'dynamic') {
+        setSelectedAllocForTable(STRATEGY_NAMES.DYNAMIC);
+      } else {
+        const activeNames = allocations.filter(a => a.isVisible).map(a => a.name);
+        if (!activeNames.includes(selectedAllocForTable) && activeNames.length > 0) {
+          setSelectedAllocForTable(activeNames[0]);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -116,7 +285,17 @@ const AssetAllocationSimulationPage = () => {
   // 설정값 변경 시 자동으로 백테스트 실행
   useEffect(() => {
     runSimulation();
-  }, [allocations, period, rebalancing, activeTab, annualDeposit]);
+  }, [
+    allocations,
+    period,
+    rebalancing,
+    activeTab,
+    annualDeposit,
+    dynamicBaseStockRatio,
+    dynamicMode,
+    dynamicAnnualDeposit,
+    dynamicTiers,
+  ]);
 
   // 2. Recharts 데이터 가공
   const chartData = useMemo(() => {
@@ -136,9 +315,11 @@ const AssetAllocationSimulationPage = () => {
     if (!apiData?.chart?.datasets) return [];
     return apiData.chart.datasets.map((ds, idx) => ({
       label: ds.label,
-      color: COLORS[idx % COLORS.length]
+      color: activeTab === 'dynamic'
+        ? (DYNAMIC_BENCHMARK_COLORS[ds.label] || COLORS[idx % COLORS.length])
+        : COLORS[idx % COLORS.length]
     }));
-  }, [apiData]);
+  }, [apiData, activeTab]);
 
   // 3. 커스텀 조합 추가 및 삭제 핸들러
   const handleAddCustom = (e) => {
@@ -192,15 +373,17 @@ const AssetAllocationSimulationPage = () => {
     }
   }, [apiData, selectedAllocForTable, activeTableTab]);
 
-  // S&P 500 (주식 100%) 데이터 추출
+  // S&P 500 벤치마크 데이터 추출
   const benchmarkTableData = useMemo(() => {
     if (!apiData) return [];
+    const benchmarkKey = activeTab === 'dynamic' ? STRATEGY_NAMES.BUY_AND_HOLD : '주식 100%';
     if (activeTableTab === 'yearly') {
-      return apiData.yearly_stats['주식 100%'] || [];
+      return apiData.yearly_stats[benchmarkKey] || [];
     } else {
-      return apiData.monthly_stats['주식 100%'] || [];
+      return apiData.monthly_stats[benchmarkKey] || [];
     }
-  }, [apiData, activeTableTab]);
+  }, [apiData, activeTableTab, activeTab]);
+
 
   // 선택한 조합과 S&P 500 데이터를 결합
   const combinedTableData = useMemo(() => {
@@ -269,7 +452,18 @@ const AssetAllocationSimulationPage = () => {
           >
             거치식 백테스트
           </button>
+          <button
+            onClick={() => setActiveTab('dynamic')}
+            className={`px-4 py-2 rounded-lg text-xs font-semibold transition-all duration-200 ${
+              activeTab === 'dynamic'
+                ? 'bg-white text-blue-700 shadow-sm'
+                : 'text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            동적 리밸런싱 (MDD/VIX)
+          </button>
         </div>
+
 
         {/* 기간 설정 버튼 프리셋 */}
         <div className="flex flex-wrap items-center gap-2 bg-slate-100/80 p-1.5 rounded-2xl border border-slate-200/50">
@@ -299,162 +493,317 @@ const AssetAllocationSimulationPage = () => {
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* 좌측 패널: 비중 조합 리스트 & 설정 (Lg 4/12) */}
         <div className="lg:col-span-4 flex flex-col gap-6">
-          
-          {/* 리밸런싱 설정 카드 */}
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-            <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
-              <Calendar size={16} className="text-blue-600" />
-              리밸런싱 주기 설정
-            </h2>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { key: 'monthly', label: '매월' },
-                { key: 'yearly', label: '매년' },
-                { key: 'none', label: '안함' }
-              ].map(opt => (
-                <label
-                  key={opt.key}
-                  className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border cursor-pointer transition-all ${
-                    rebalancing === opt.key
-                      ? 'border-blue-500 bg-blue-50/40 text-blue-700 font-bold shadow-sm'
-                      : 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-600'
-                  }`}
-                >
+          {activeTab === 'dynamic' ? (
+            <>
+              {/* 전략 프리셋 관리 툴바 */}
+              <DynamicPresetToolbar
+                presets={presets}
+                selectedPresetId={selectedPresetId}
+                onSelectPreset={handleSelectPreset}
+                onSaveNewPreset={handleSaveNewPreset}
+                onUpdatePreset={handleUpdatePreset}
+                onDeletePreset={handleDeletePreset}
+                isLoading={presetLoading}
+              />
+
+              {/* 기본 주식 비중 슬라이더 카드 */}
+
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Calculator size={16} className="text-blue-600" />
+                    기본 주식 비중
+                  </span>
+                  <span className="font-bold text-blue-600 text-xs">
+                    주식 {dynamicBaseStockRatio}% / 현금 {100 - dynamicBaseStockRatio}%
+                  </span>
+                </h2>
+                <div className="space-y-3">
                   <input
-                    type="radio"
-                    name="rebalancing"
-                    value={opt.key}
-                    checked={rebalancing === opt.key}
-                    onChange={(e) => setRebalancing(e.target.value)}
-                    className="sr-only"
-                    id={`rebal-${opt.key}`}
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={dynamicBaseStockRatio}
+                    onChange={(e) => setDynamicBaseStockRatio(Number(e.target.value))}
+                    className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
                   />
-                  <span className="text-xs font-black">{opt.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* 매년 추가 적립금 설정 카드 (적립식 시뮬레이션 탭일 때만 노출) */}
-          {activeTab === 'recurring' && (
-            <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
-              <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
-                <span className="flex items-center gap-2">
-                  <Calculator size={16} className="text-emerald-600" />
-                  매년 추가 적립금
-                </span>
-                <span className="font-bold text-emerald-600 text-xs">{formatKRW(annualDeposit)}</span>
-              </h2>
-              <div className="space-y-3">
-                <input 
-                  type="range"
-                  min="0"
-                  max="100000000" // 1억 원
-                  step="500000" // 50만 원 단위
-                  value={annualDeposit}
-                  onChange={(e) => setAnnualDeposit(Number(e.target.value))}
-                  className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
-                />
-                <input
-                  type="number"
-                  value={annualDeposit}
-                  onChange={(e) => setAnnualDeposit(Math.max(0, Number(e.target.value)))}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-right font-mono"
-                />
+                  <div className="flex justify-between text-[10px] font-bold text-slate-400">
+                    <span>안전 (주식 0%)</span>
+                    <span>중립 (60%)</span>
+                    <span>공격 (100%)</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
 
-          {/* 비중 조합 추가 및 리스트 관리 카드 */}
-          <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-between min-h-[400px]">
-            <div className="space-y-4">
-              <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
-                <span>비중 조합 비교 리스트</span>
-                <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full">
-                  총 {allocations.length}개
-                </span>
-              </h2>
+              {/* 운용 모드 선택 카드 (적립식 vs 거치식) */}
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
+                  <RefreshCw size={16} className="text-indigo-600" />
+                  투자 운용 방식
+                </h2>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDynamicMode('recurring')}
+                    className={`py-3 rounded-2xl border text-xs font-black transition-all ${
+                      dynamicMode === 'recurring'
+                        ? 'border-indigo-500 bg-indigo-50/50 text-indigo-700 shadow-sm'
+                        : 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    적립식 모드
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDynamicMode('lump_sum')}
+                    className={`py-3 rounded-2xl border text-xs font-black transition-all ${
+                      dynamicMode === 'lump_sum'
+                        ? 'border-indigo-500 bg-indigo-50/50 text-indigo-700 shadow-sm'
+                        : 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-600'
+                    }`}
+                  >
+                    거치식 모드
+                  </button>
+                </div>
+              </div>
 
-              {/* 조합 리스트 스크롤 영역 */}
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                {allocations.map((alloc) => {
-                  const matchingColor = activeLines.find(l => l.label === alloc.name)?.color || '#94a3b8';
-                  return (
-                    <div 
-                      key={alloc.name} 
-                      className={`flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50/50 transition-colors ${
-                        !alloc.isVisible && 'opacity-50'
+              {/* 매년 추가 적립금 설정 카드 (적립식 모드일 때만) */}
+              {dynamicMode === 'recurring' && (
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                  <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Calculator size={16} className="text-emerald-600" />
+                      매년 추가 적립금
+                    </span>
+                    <span className="font-bold text-emerald-600 text-xs">{formatKRW(dynamicAnnualDeposit)}</span>
+                  </h2>
+                  <div className="space-y-3">
+                    <input 
+                      type="range"
+                      min="0"
+                      max="100000000"
+                      step="500000"
+                      value={dynamicAnnualDeposit}
+                      onChange={(e) => setDynamicAnnualDeposit(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                    />
+                    <input
+                      type="number"
+                      value={dynamicAnnualDeposit}
+                      onChange={(e) => setDynamicAnnualDeposit(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-right font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 리밸런싱 주기 설정 카드 */}
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
+                  <Calendar size={16} className="text-blue-600" />
+                  정기 점검 주기 (기본 비중 복귀)
+                </h2>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: 'monthly', label: '매월' },
+                    { key: 'yearly', label: '매년' },
+                    { key: 'none', label: '안함' }
+                  ].map(opt => (
+                    <label
+                      key={opt.key}
+                      className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                        rebalancing === opt.key
+                          ? 'border-blue-500 bg-blue-50/40 text-blue-700 font-bold shadow-sm'
+                          : 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-600'
                       }`}
                     >
-                      <div className="flex items-center gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={alloc.isVisible}
-                          onChange={() => handleToggleVisibility(alloc.name)}
-                          className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
-                        />
-                        {alloc.isVisible && (
-                          <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: matchingColor }} />
-                        )}
-                        <span className="text-xs font-bold text-slate-700">{alloc.name}</span>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
-                          주식 {alloc.stock_ratio}% / 현금 {100 - alloc.stock_ratio}%
-                        </span>
-                        {!alloc.isDefault && (
-                          <button
-                            onClick={() => handleRemoveCustom(alloc.name)}
-                            className="text-slate-400 hover:text-rose-600 transition-colors p-1"
-                            title="조합 삭제"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                      <input
+                        type="radio"
+                        name="rebalancing"
+                        value={opt.key}
+                        checked={rebalancing === opt.key}
+                        onChange={(e) => setRebalancing(e.target.value)}
+                        className="sr-only"
+                        id={`rebal-${opt.key}`}
+                      />
+                      <span className="text-xs font-black">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            {/* 커스텀 조합 추가 폼 */}
-            <form onSubmit={handleAddCustom} className="mt-4 border-t border-slate-100 pt-4 space-y-3">
-              <p className="text-[11px] font-bold text-slate-400">새로운 비중 조합 추가</p>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="text"
-                  placeholder="예: 70/30 포트폴리오"
-                  value={customName}
-                  onChange={(e) => setCustomName(e.target.value)}
-                  className="px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                />
-                <input
-                  type="number"
-                  placeholder="주식 비중 (0-100)"
-                  value={customStockRatio}
-                  onChange={(e) => setCustomStockRatio(e.target.value)}
-                  className="px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 outline-none"
-                  min="0"
-                  max="100"
-                />
+              {/* 다단계 공포 조건 (MDD & VIX) 동적 편집기 */}
+              <DynamicTierEditor
+                tiers={dynamicTiers}
+                onChange={setDynamicTiers}
+              />
+
+            </>
+          ) : (
+            <>
+              {/* 리밸런싱 설정 카드 */}
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
+                  <Calendar size={16} className="text-blue-600" />
+                  리밸런싱 주기 설정
+                </h2>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: 'monthly', label: '매월' },
+                    { key: 'yearly', label: '매년' },
+                    { key: 'none', label: '안함' }
+                  ].map(opt => (
+                    <label
+                      key={opt.key}
+                      className={`flex flex-col items-center justify-center p-3.5 rounded-2xl border cursor-pointer transition-all ${
+                        rebalancing === opt.key
+                          ? 'border-blue-500 bg-blue-50/40 text-blue-700 font-bold shadow-sm'
+                          : 'border-slate-100 bg-slate-50/50 hover:bg-slate-50 text-slate-600'
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="rebalancing"
+                        value={opt.key}
+                        checked={rebalancing === opt.key}
+                        onChange={(e) => setRebalancing(e.target.value)}
+                        className="sr-only"
+                        id={`rebal-${opt.key}`}
+                      />
+                      <span className="text-xs font-black">{opt.label}</span>
+                    </label>
+                  ))}
+                </div>
               </div>
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors shadow-sm"
-              >
-                <Plus size={14} />
-                조합 추가
-              </button>
-            </form>
-          </div>
+
+              {/* 매년 추가 적립금 설정 카드 (적립식 시뮬레이션 탭일 때만 노출) */}
+              {activeTab === 'recurring' && (
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4">
+                  <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      <Calculator size={16} className="text-emerald-600" />
+                      매년 추가 적립금
+                    </span>
+                    <span className="font-bold text-emerald-600 text-xs">{formatKRW(annualDeposit)}</span>
+                  </h2>
+                  <div className="space-y-3">
+                    <input 
+                      type="range"
+                      min="0"
+                      max="100000000" // 1억 원
+                      step="500000" // 50만 원 단위
+                      value={annualDeposit}
+                      onChange={(e) => setAnnualDeposit(Number(e.target.value))}
+                      className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-emerald-600"
+                    />
+                    <input
+                      type="number"
+                      value={annualDeposit}
+                      onChange={(e) => setAnnualDeposit(Math.max(0, Number(e.target.value)))}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-emerald-500 text-right font-mono"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* 비중 조합 추가 및 리스트 관리 카드 */}
+              <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-between min-h-[400px]">
+                <div className="space-y-4">
+                  <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center justify-between">
+                    <span>비중 조합 비교 리스트</span>
+                    <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full">
+                      총 {allocations.length}개
+                    </span>
+                  </h2>
+
+                  {/* 조합 리스트 스크롤 영역 */}
+                  <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                    {allocations.map((alloc) => {
+                      const matchingColor = activeLines.find(l => l.label === alloc.name)?.color || '#94a3b8';
+                      return (
+                        <div 
+                          key={alloc.name} 
+                          className={`flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:bg-slate-50/50 transition-colors ${
+                            !alloc.isVisible && 'opacity-50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <input
+                              type="checkbox"
+                              checked={alloc.isVisible}
+                              onChange={() => handleToggleVisibility(alloc.name)}
+                              className="w-4 h-4 rounded text-blue-600 border-slate-300 focus:ring-blue-500 cursor-pointer"
+                            />
+                            {alloc.isVisible && (
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: matchingColor }} />
+                            )}
+                            <span className="text-xs font-bold text-slate-700">{alloc.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-2 py-0.5 rounded">
+                              주식 {alloc.stock_ratio}% / 현금 {100 - alloc.stock_ratio}%
+                            </span>
+                            {!alloc.isDefault && (
+                              <button
+                                onClick={() => handleRemoveCustom(alloc.name)}
+                                className="text-slate-400 hover:text-rose-600 transition-colors p-1"
+                                title="조합 삭제"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 커스텀 조합 추가 폼 */}
+                <form onSubmit={handleAddCustom} className="mt-4 border-t border-slate-100 pt-4 space-y-3">
+                  <p className="text-[11px] font-bold text-slate-400">새로운 비중 조합 추가</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      placeholder="예: 70/30 포트폴리오"
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                    />
+                    <input
+                      type="number"
+                      placeholder="주식 비중 (0-100)"
+                      value={customStockRatio}
+                      onChange={(e) => setCustomStockRatio(e.target.value)}
+                      className="px-3 py-2 border border-slate-200 rounded-xl text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                      min="0"
+                      max="100"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center gap-1 transition-colors shadow-sm"
+                  >
+                    <Plus size={14} />
+                    조합 추가
+                  </button>
+                </form>
+              </div>
+            </>
+          )}
         </div>
+
 
         {/* 우측 패널: 시뮬레이션 차트 시계열 (Lg 8/12) */}
         <div className="lg:col-span-8 bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col justify-between min-h-[500px]">
           <h2 className="text-sm font-black text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
             <TrendingUp size={16} className="text-blue-600" />
-            {activeTab === 'recurring' 
+            {activeTab === 'dynamic'
+              ? (dynamicMode === 'recurring'
+                ? '동적 리밸런싱 3대 벤치마크 적립식 자산 성장 추이 (금액)'
+                : '동적 리밸런싱 3대 벤치마크 정규화 누적 수익률 비교 추이 (%)')
+              : activeTab === 'recurring' 
               ? '자산 조합별 적립식 자산 성장 추이 (금액)' 
               : '자산 조합별 정규화 누적 수익률 비교 추이 (%)'}
           </h2>
@@ -472,7 +821,11 @@ const AssetAllocationSimulationPage = () => {
           ) : chartData.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-4 min-h-[300px] text-slate-400 text-center">
               <Info size={32} />
-              <p className="text-xs font-bold">비교 리스트에서 최소 하나 이상의 비중 조합을 체크해 주세요.</p>
+              <p className="text-xs font-bold">
+                {activeTab === 'dynamic'
+                  ? '동적 리밸런싱 시뮬레이션 데이터가 없습니다.'
+                  : '비교 리스트에서 최소 하나 이상의 비중 조합을 체크해 주세요.'}
+              </p>
             </div>
           ) : (
             <div className="w-full h-[400px] mt-4">
@@ -495,7 +848,8 @@ const AssetAllocationSimulationPage = () => {
                     tick={{ fontSize: 9, fill: '#64748b' }} 
                     stroke="#cbd5e1"
                     tickFormatter={(val) => {
-                      if (activeTab === 'recurring') {
+                      const isAmountMode = activeTab === 'recurring' || (activeTab === 'dynamic' && dynamicMode === 'recurring');
+                      if (isAmountMode) {
                         const valMan = Math.round(val / 10000);
                         if (isMasked) return maskValue(valMan) + '만';
                         return formatWithCommas(valMan) + '만';
@@ -513,7 +867,8 @@ const AssetAllocationSimulationPage = () => {
                     }}
                     labelFormatter={(label) => `날짜: ${label}`}
                     formatter={(value, name) => {
-                      if (activeTab === 'recurring') {
+                      const isAmountMode = activeTab === 'recurring' || (activeTab === 'dynamic' && dynamicMode === 'recurring');
+                      if (isAmountMode) {
                         return [formatKRW(value), name];
                       }
                       return [`${value}%`, name];
@@ -550,7 +905,7 @@ const AssetAllocationSimulationPage = () => {
         <div className="space-y-4">
           <div className="flex items-center gap-2 px-2">
             <h2 className="text-md font-black text-slate-800 flex items-center gap-1.5">
-              조합별 성과 지표 요약
+              {activeTab === 'dynamic' ? '3대 벤치마크 성과 지표 요약' : '조합별 성과 지표 요약'}
             </h2>
             <div className="relative flex items-center">
               <button
@@ -567,7 +922,7 @@ const AssetAllocationSimulationPage = () => {
                   <p>포트폴리오의 과거 연평균 복리 성장 속도입니다.</p>
                   <p className="font-black text-[10px] text-amber-400 mt-2">최대 낙폭 (MDD)</p>
                   <p>분석 기간 고점 대비 가장 큰 자산의 손실(낙폭) 폭이며, 리스크 척도입니다.</p>
-                  {activeTab === 'recurring' && (
+                  {(activeTab === 'recurring' || (activeTab === 'dynamic' && dynamicMode === 'recurring')) && (
                     <>
                       <p className="font-black text-[10px] text-emerald-400 mt-2">복리 이자 수익 / 누적 수익률</p>
                       <p>적립 원금 대비 불어난 순수 이자 금액 및 수익률 비율입니다.</p>
@@ -578,9 +933,10 @@ const AssetAllocationSimulationPage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <div className={activeTab === 'dynamic' ? 'grid grid-cols-1 md:grid-cols-3 gap-4' : 'grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4'}>
             {apiData.summaries.map((item) => {
               const matchedColor = activeLines.find(l => l.label === item.name)?.color || '#94a3b8';
+              const isAmountCard = activeTab === 'recurring' || (activeTab === 'dynamic' && dynamicMode === 'recurring');
               return (
                 <div 
                   key={item.name} 
@@ -593,28 +949,32 @@ const AssetAllocationSimulationPage = () => {
                       {item.name}
                     </p>
                     <p className="text-[10px] font-bold text-slate-400 pl-1 mt-0.5">
-                      주식 비중 {item.stock_ratio}%
+                      {item.name === '동적 리밸런싱 전략'
+                        ? `기본 ${item.stock_ratio}% / 공포 시 최대 100%`
+                        : item.name === '일반 정기 리밸런싱'
+                        ? `주식 비중 ${item.stock_ratio}% 고정`
+                        : `주식 비중 ${item.stock_ratio}%`}
                     </p>
                   </div>
                   
                   <div className="space-y-1.5 pl-1">
-                    {activeTab === 'recurring' ? (
+                    {isAmountCard ? (
                       <>
                         <div className="flex items-center justify-between text-[10px] border-b border-slate-50 pb-0.5">
                           <span className="text-slate-400 font-bold">최종 예상 자산</span>
-                          <span className="font-black text-blue-600 truncate max-w-[80px]" title={formatKRW(item.final_valuation)}>
+                          <span className="font-black text-blue-600 truncate max-w-[120px]" title={formatKRW(item.final_valuation)}>
                             {formatKRW(item.final_valuation)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-[10px]">
                           <span className="text-slate-400 font-bold">누적 투자 원금</span>
-                          <span className="font-bold text-slate-700 truncate max-w-[80px]" title={formatKRW(item.total_invested)}>
+                          <span className="font-bold text-slate-700 truncate max-w-[120px]" title={formatKRW(item.total_invested)}>
                             {formatKRW(item.total_invested)}
                           </span>
                         </div>
                         <div className="flex items-center justify-between text-[10px]">
                           <span className="text-slate-400 font-bold">복리 이자 수익</span>
-                          <span className="font-black text-emerald-600 truncate max-w-[80px]" title={formatKRW(item.total_interest)}>
+                          <span className="font-black text-emerald-600 truncate max-w-[120px]" title={formatKRW(item.total_interest)}>
                             {formatKRW(item.total_interest)}
                           </span>
                         </div>
@@ -661,24 +1021,36 @@ const AssetAllocationSimulationPage = () => {
         </div>
       )}
 
-      {/* 4. 상세 시뮬레이션 현황 테이블 (연도별/월별 현황) */}
-      {apiData && allocations.filter(a => a.isVisible).length > 0 && (
+      {/* 4. 동적 리밸런싱 전용 상세 분석 컨테이너 ([이벤트 로그] / [연도별 현황] / [월별 현황]) */}
+      {apiData && activeTab === 'dynamic' && (
+        <DynamicSimulationDetailSection
+          apiData={apiData}
+          dynamicMode={dynamicMode}
+          formatKRW={formatKRW}
+        />
+      )}
+
+      {/* 5. 기존 일반 시뮬레이션(적립식 / 거치식) 상세 현황 테이블 */}
+      {apiData && activeTab !== 'dynamic' && allocations.filter(a => a.isVisible).length > 0 && (
         <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-50 pb-4">
             <div className="flex items-center gap-4">
               <span className="text-slate-700 text-xs font-black">비중 조합 상세 조회</span>
               <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl">
-                {allocations.filter(a => a.isVisible).map(a => (
+                {(activeTab === 'dynamic'
+                  ? (apiData?.summaries?.map(s => s.name) || ['동적 리밸런싱 전략', '일반 정기 리밸런싱', 'S&P 500 단순 보유'])
+                  : allocations.filter(a => a.isVisible).map(a => a.name)
+                ).map(allocName => (
                   <button
-                    key={a.name}
-                    onClick={() => setSelectedAllocForTable(a.name)}
+                    key={allocName}
+                    onClick={() => setSelectedAllocForTable(allocName)}
                     className={`px-3 py-1.5 rounded-lg text-[10px] font-black transition-all ${
-                      selectedAllocForTable === a.name
+                      selectedAllocForTable === allocName
                         ? 'bg-white text-blue-600 shadow-sm'
                         : 'text-slate-500 hover:text-slate-900'
                     }`}
                   >
-                    {a.name}
+                    {allocName}
                   </button>
                 ))}
               </div>
@@ -711,9 +1083,10 @@ const AssetAllocationSimulationPage = () => {
 
           {/* 테이블 리스트 */}
           <div className="overflow-x-auto">
-            {activeTab === 'recurring' ? (
+            {(activeTab === 'recurring' || (activeTab === 'dynamic' && dynamicMode === 'recurring')) ? (
               // 1) 적립식 전용 상세 테이블
               <table className="w-full text-left border-collapse">
+
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-100 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                     <th className="px-4 py-4 text-center border-r border-slate-100">

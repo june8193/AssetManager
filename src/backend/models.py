@@ -466,4 +466,36 @@ class ExpenseRule(Base):
     category = relationship("ExpenseCategory", back_populates="rules")
 
 
+class SimulationPreset(Base):
+    """동적 리밸런싱 시뮬레이션 전략 프리셋을 저장하는 모델입니다.
+
+    Attributes:
+        id (int): 고유 식별자 (PK)
+        name (str): 전략 프리셋 고유 명칭 (Unique)
+        description (str): 전략 설명 (선택)
+        base_stock_ratio (float): 평상시 기본 주식 비중 (%)
+        rebalancing_period (str): 리밸런싱 점검 주기 ('monthly', 'yearly', 'none')
+        investment_mode (str): 투자 운용 방식 ('recurring' | 'lump_sum')
+        annual_deposit (float): 연간 추가 적립금 (원)
+        period (str): 백테스트 기간 ('5Y', '10Y', '20Y', '30Y', 'ALL')
+        tiers_json (str): 다단계 공포 매수 조건 JSON 문자열
+        created_at (datetime): 생성 일시
+        updated_at (datetime): 수정 일시
+    """
+    __tablename__ = "simulation_presets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), unique=True, index=True, nullable=False)
+    description = Column(String, nullable=True)
+    base_stock_ratio = Column(Float, default=60.0, nullable=False)
+    rebalancing_period = Column(String(20), default="monthly", nullable=False)
+    investment_mode = Column(String(20), default="recurring", nullable=False)
+    annual_deposit = Column(Float, default=20000000.0, nullable=False)
+    period = Column(String(10), default="5Y", nullable=False)
+    tiers_json = Column(String, nullable=False)
+    created_at = Column(DateTime, default=datetime.datetime.now)
+    updated_at = Column(DateTime, default=datetime.datetime.now, onupdate=datetime.datetime.now)
+
+
+
 
