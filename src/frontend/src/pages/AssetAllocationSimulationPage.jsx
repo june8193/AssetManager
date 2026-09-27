@@ -7,6 +7,7 @@ import {
 import { useMasking } from '../contexts/MaskingContext';
 import { formatWithCommas } from '../utils/formatters';
 import { API_BASE_URL } from '../config';
+import DynamicSimulationDetailSection, { STRATEGY_NAMES } from '../components/simulation/DynamicSimulationDetailSection';
 
 // 차트 렌더링에 사용될 고유 테마 색상들
 const COLORS = [
@@ -22,9 +23,9 @@ const COLORS = [
 
 // 동적 리밸런싱 3개 벤치마크 고정 색상
 const DYNAMIC_BENCHMARK_COLORS = {
-  '동적 리밸런싱 전략': '#3b82f6', // Blue
-  '일반 정기 리밸런싱': '#10b981', // Emerald
-  'S&P 500 단순 보유': '#f59e0b', // Amber
+  [STRATEGY_NAMES.DYNAMIC]: '#3b82f6', // Blue
+  [STRATEGY_NAMES.REGULAR]: '#10b981', // Emerald
+  [STRATEGY_NAMES.BUY_AND_HOLD]: '#f59e0b', // Amber
 };
 
 
@@ -134,7 +135,7 @@ const AssetAllocationSimulationPage = () => {
       setApiData(data);
 
       if (activeTab === 'dynamic') {
-        setSelectedAllocForTable('동적 리밸런싱 전략');
+        setSelectedAllocForTable(STRATEGY_NAMES.DYNAMIC);
       } else {
         const activeNames = allocations.filter(a => a.isVisible).map(a => a.name);
         if (!activeNames.includes(selectedAllocForTable) && activeNames.length > 0) {
@@ -243,7 +244,7 @@ const AssetAllocationSimulationPage = () => {
   // S&P 500 벤치마크 데이터 추출
   const benchmarkTableData = useMemo(() => {
     if (!apiData) return [];
-    const benchmarkKey = activeTab === 'dynamic' ? 'S&P 500 단순 보유' : '주식 100%';
+    const benchmarkKey = activeTab === 'dynamic' ? STRATEGY_NAMES.BUY_AND_HOLD : '주식 100%';
     if (activeTableTab === 'yearly') {
       return apiData.yearly_stats[benchmarkKey] || [];
     } else {
@@ -908,8 +909,17 @@ const AssetAllocationSimulationPage = () => {
         </div>
       )}
 
-      {/* 4. 상세 시뮬레이션 현황 테이블 (연도별/월별 현황) */}
-      {apiData && (activeTab === 'dynamic' || allocations.filter(a => a.isVisible).length > 0) && (
+      {/* 4. 동적 리밸런싱 전용 상세 분석 컨테이너 ([이벤트 로그] / [연도별 현황] / [월별 현황]) */}
+      {apiData && activeTab === 'dynamic' && (
+        <DynamicSimulationDetailSection
+          apiData={apiData}
+          dynamicMode={dynamicMode}
+          formatKRW={formatKRW}
+        />
+      )}
+
+      {/* 5. 기존 일반 시뮬레이션(적립식 / 거치식) 상세 현황 테이블 */}
+      {apiData && activeTab !== 'dynamic' && allocations.filter(a => a.isVisible).length > 0 && (
         <div className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-sm space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-50 pb-4">
             <div className="flex items-center gap-4">

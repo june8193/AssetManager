@@ -72,18 +72,49 @@ def test_dynamic_simulation_service_and_tier_trigger(db_session: Session):
     events = result["rebalancing_events"]
     assert len(events) >= 2  # Tier 1, Tier 2 확대 및 월말 복귀 이벤트
     
+    # 필수 메타데이터 키 검증
+    for ev in events:
+        for required_key in ["date", "event_type", "sp500_price", "drawdown", "vix", "old_stock_ratio", "new_stock_ratio"]:
+            assert required_key in ev, f"이벤트에 {required_key} 키가 누락되었습니다: {ev}"
+
     # 이벤트 상세 확인
     tier1_event = next((e for e in events if e.get("new_stock_ratio") == 75.0), None)
     assert tier1_event is not None
     assert tier1_event["date"] == "2025-01-03"
+    assert tier1_event["event_type"] == "공포 단계 발동 (티어 1)"
+    assert tier1_event["sp500_price"] == 88.0
+    assert tier1_event["drawdown"] == -12.0
+    assert tier1_event["vix"] == 26.0
+    assert tier1_event["old_stock_ratio"] == 56.9
 
     tier2_event = next((e for e in events if e.get("new_stock_ratio") == 90.0), None)
     assert tier2_event is not None
     assert tier2_event["date"] == "2025-01-06"
+    assert tier2_event["event_type"] == "공포 단계 발동 (티어 2)"
+    assert tier2_event["drawdown"] == -22.0
+    assert tier2_event["vix"] == 32.0
 
-    recovery_event = next((e for e in events if e.get("event_type") == "MONTHLY_RECOVERY" or e.get("new_stock_ratio") == 60.0), None)
+    recovery_event = next((e for e in events if e.get("event_type") == "정기 복귀" or e.get("new_stock_ratio") == 60.0), None)
     assert recovery_event is not None
     assert recovery_event["date"] == "2025-01-31"
+    assert recovery_event["event_type"] == "정기 복귀"
+    assert recovery_event["new_stock_ratio"] == 60.0
+
+    # 3개 벤치마크 연도별 및 월별 상세 통계 검증
+    yearly_stats = result["yearly_stats"]
+    monthly_stats = result["monthly_stats"]
+    for benchmark_name in ["동적 리밸런싱 전략", "일반 정기 리밸런싱", "S&P 500 단순 보유"]:
+        assert benchmark_name in yearly_stats
+        assert benchmark_name in monthly_stats
+        assert len(yearly_stats[benchmark_name]) > 0
+        assert "year" in yearly_stats[benchmark_name][0]
+        assert "year_return" in yearly_stats[benchmark_name][0]
+        assert "mdd" in yearly_stats[benchmark_name][0]
+        assert len(monthly_stats[benchmark_name]) > 0
+        assert "month" in monthly_stats[benchmark_name][0]
+        assert "month_return" in monthly_stats[benchmark_name][0]
+        assert "mdd" in monthly_stats[benchmark_name][0]
+
 
 
 def test_dynamic_simulation_api_endpoints(db_session: Session):
@@ -114,6 +145,11 @@ def test_dynamic_simulation_api_endpoints(db_session: Session):
     data_lump = res_lump.json()
     assert len(data_lump["summaries"]) == 3
     assert "rebalancing_events" in data_lump
+    assert "yearly_stats" in data_lump
+    assert "monthly_stats" in data_lump
+    for b_name in ["동적 리밸런싱 전략", "일반 정기 리밸런싱", "S&P 500 단순 보유"]:
+        assert b_name in data_lump["yearly_stats"]
+        assert b_name in data_lump["monthly_stats"]
 
     # 2. 적립식 (recurring)
     payload_rec = {
@@ -128,6 +164,12 @@ def test_dynamic_simulation_api_endpoints(db_session: Session):
     assert res_rec.status_code == 200, f"Recurring failed: {res_rec.text}"
     data_rec = res_rec.json()
     assert len(data_rec["summaries"]) == 3
+    assert "rebalancing_events" in data_rec
+    assert "yearly_stats" in data_rec
+    assert "monthly_stats" in data_rec
+    for b_name in ["동적 리밸런싱 전략", "일반 정기 리밸런싱", "S&P 500 단순 보유"]:
+        assert b_name in data_rec["yearly_stats"]
+        assert b_name in data_rec["monthly_stats"]
 
 
 def test_dynamic_simulation_api_validation(db_session: Session):

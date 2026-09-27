@@ -1041,10 +1041,12 @@ class SimulationService:
                             cash = p_val - stock_val
                             qty = stock_val / curr_p.close_price
 
+                            tier_num = matching_tier.get("tier", 1)
                             rebalancing_events.append({
                                 "date": curr_p.price_date.isoformat(),
-                                "event_type": "PANIC_BUY",
-                                "tier": matching_tier.get("tier"),
+                                "event_type": f"공포 단계 발동 (티어 {tier_num})",
+                                "event_code": "PANIC_BUY",
+                                "tier": tier_num,
                                 "sp500_price": round(curr_p.close_price, 2),
                                 "drawdown": round(curr_dd, 2),
                                 "vix": round(curr_vix, 2),
@@ -1068,7 +1070,8 @@ class SimulationService:
                             if had_expanded:
                                 rebalancing_events.append({
                                     "date": curr_p.price_date.isoformat(),
-                                    "event_type": "MONTHLY_RECOVERY",
+                                    "event_type": "정기 복귀",
+                                    "event_code": "RECOVERY",
                                     "tier": None,
                                     "sp500_price": round(curr_p.close_price, 2),
                                     "drawdown": round(curr_dd, 2),

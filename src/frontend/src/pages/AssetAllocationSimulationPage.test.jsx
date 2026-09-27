@@ -185,8 +185,107 @@ describe('AssetAllocationSimulationPage - Unit Test', () => {
       expect(screen.getAllByText('일반 정기 리밸런싱').length).toBeGreaterThan(0);
       expect(screen.getAllByText('S&P 500 단순 보유').length).toBeGreaterThan(0);
     });
+  });
 
+  it('동적 리밸런싱 탭에서 상세 영역 탭([이벤트 로그], [연도별 현황], [월별 현황]) 전환 및 이벤트 로그 테이블이 올바르게 렌더링된다', async () => {
+    const dynamicMockResponse = {
+      chart: {
+        labels: ['2025-01-02', '2025-01-03', '2025-01-31'],
+        datasets: [
+          { label: '동적 리밸런싱 전략', data: [100.0, 102.0, 105.0] },
+          { label: '일반 정기 리밸런싱', data: [100.0, 101.0, 103.0] },
+          { label: 'S&P 500 단순 보유', data: [100.0, 99.0, 104.0] }
+        ]
+      },
+      summaries: [
+        { name: '동적 리밸런싱 전략', stock_ratio: 60.0, cagr: 15.0, mdd: -10.0, final_return: 20.0, final_valuation: 120.0, total_invested: 100.0, total_interest: 20.0 },
+        { name: '일반 정기 리밸런싱', stock_ratio: 60.0, cagr: 10.0, mdd: -12.0, final_return: 15.0, final_valuation: 115.0, total_invested: 100.0, total_interest: 15.0 },
+        { name: 'S&P 500 단순 보유', stock_ratio: 100.0, cagr: 12.0, mdd: -18.0, final_return: 18.0, final_valuation: 118.0, total_invested: 100.0, total_interest: 18.0 }
+      ],
+      yearly_stats: {
+        '동적 리밸런싱 전략': [{ year: 2025, year_return: 20.0, cumulative_return: 20.0, mdd: -10.0, valuation: 120.0, invested: 100.0, interest: 20.0, annual_interest: 20.0 }],
+        '일반 정기 리밸런싱': [{ year: 2025, year_return: 15.0, cumulative_return: 15.0, mdd: -12.0, valuation: 115.0, invested: 100.0, interest: 15.0, annual_interest: 15.0 }],
+        'S&P 500 단순 보유': [{ year: 2025, year_return: 18.0, cumulative_return: 18.0, mdd: -18.0, valuation: 118.0, invested: 100.0, interest: 18.0, annual_interest: 18.0 }]
+      },
+      monthly_stats: {
+        '동적 리밸런싱 전략': [{ year: 2025, month: 1, month_return: 5.0, cumulative_return: 5.0, mdd: -5.0, valuation: 105.0, invested: 100.0, interest: 5.0, annual_interest: 5.0 }],
+        '일반 정기 리밸런싱': [{ year: 2025, month: 1, month_return: 3.0, cumulative_return: 3.0, mdd: -6.0, valuation: 103.0, invested: 100.0, interest: 3.0, annual_interest: 3.0 }],
+        'S&P 500 단순 보유': [{ year: 2025, month: 1, month_return: 4.0, cumulative_return: 4.0, mdd: -8.0, valuation: 104.0, invested: 100.0, interest: 4.0, annual_interest: 4.0 }]
+      },
+      rebalancing_events: [
+        {
+          date: '2025-01-03',
+          event_type: '공포 단계 발동 (티어 1)',
+          event_code: 'PANIC_BUY',
+          tier: 1,
+          sp500_price: 5800.0,
+          drawdown: -12.5,
+          vix: 26.5,
+          old_stock_ratio: 56.9,
+          new_stock_ratio: 75.0
+        },
+        {
+          date: '2025-01-31',
+          event_type: '정기 복귀',
+          event_code: 'RECOVERY',
+          tier: null,
+          sp500_price: 6000.0,
+          drawdown: -4.2,
+          vix: 17.5,
+          old_stock_ratio: 78.0,
+          new_stock_ratio: 60.0
+        }
+      ]
+    };
 
+    fetch.mockResolvedValue({
+      ok: true,
+      json: async () => dynamicMockResponse
+    });
+
+    render(
+      <MaskingProvider>
+        <AssetAllocationSimulationPage />
+      </MaskingProvider>
+    );
+
+    // 1. '동적 리밸런싱 (MDD/VIX)' 탭 클릭
+    const dynamicTab = screen.getByText('동적 리밸런싱 (MDD/VIX)');
+    fireEvent.click(dynamicTab);
+
+    // 2. 탭형 상세 컨테이너 버튼 렌더링 확인 ([이벤트 로그], [연도별 현황], [월별 현황])
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '이벤트 로그' })).toBeDefined();
+      expect(screen.getByRole('button', { name: '연도별 현황' })).toBeDefined();
+      expect(screen.getByRole('button', { name: '월별 현황' })).toBeDefined();
+    });
+
+    // 3. [이벤트 로그] 테이블 항목 확인 (날짜, 이벤트명 배지, 가격, 낙폭, VIX, 비중)
+    expect(screen.getByText('2025-01-03')).toBeDefined();
+    expect(screen.getByText('공포 단계 발동 (티어 1)')).toBeDefined();
+    expect(screen.getByText('-12.5%')).toBeDefined();
+    expect(screen.getByText('26.5')).toBeDefined();
+    expect(screen.getByText('56.9%')).toBeDefined();
+    expect(screen.getByText('75%')).toBeDefined();
+
+    expect(screen.getByText('2025-01-31')).toBeDefined();
+    expect(screen.getByText('정기 복귀')).toBeDefined();
+    expect(screen.getByText('78%')).toBeDefined();
+    expect(screen.getByText('60%')).toBeDefined();
+
+    // 4. [연도별 현황] 탭 클릭 시 3개 벤치마크 연도별 통계 테이블 노출 확인
+    const yearlyTabBtn = screen.getByRole('button', { name: '연도별 현황' });
+    fireEvent.click(yearlyTabBtn);
+    await waitFor(() => {
+      expect(screen.getByText('2025년')).toBeDefined();
+    });
+
+    // 5. [월별 현황] 탭 클릭 시 3개 벤치마크 월별 통계 테이블 노출 확인
+    const monthlyTabBtn = screen.getByRole('button', { name: '월별 현황' });
+    fireEvent.click(monthlyTabBtn);
+    await waitFor(() => {
+      expect(screen.getByText('2025년 1월')).toBeDefined();
+    });
   });
 });
 
