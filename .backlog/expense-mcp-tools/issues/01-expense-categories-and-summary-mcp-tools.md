@@ -5,7 +5,7 @@ AI 에이전트가 지출 분류 체계(`get_expense_categories`)와 특정 월 
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 백엔드 API 클라이언트를 통해 지출 카테고리 목록을 조회하는 `get_expense_categories` MCP 도구가 구현됨
 - [x] 백엔드 통계 API를 통해 기준월/기간별 지출 통계 및 비중을 조회하는 `get_expense_summary` MCP 도구가 구현됨
