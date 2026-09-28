@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 ## Acceptance Criteria
 
