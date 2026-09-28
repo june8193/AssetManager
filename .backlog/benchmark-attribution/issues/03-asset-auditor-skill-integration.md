@@ -10,15 +10,15 @@
 
 **Blocked by:** 02 — 벤치마크 기여도 MCP 도구 구현 및 등록
 
-**Status:** ready-for-agent
+**Status:** resolved
 
 ## Acceptance Criteria
 
-- [ ] `.agents/skills/asset-auditor/SKILL.md`의 [1단계 정보 수집]에 `get_benchmark_attribution` MCP 도구 호출 지침이 명시되어 있다.
-- [ ] 1단계에 `보유 종목별 다기간 성과 및 기여도(Top/Bottom 3) 분석` 섹션이 복원되어 있으며, 예비 진단 브리핑 시 [보유 종목 다기간 성과 및 기여도 (Top Contributors & Detractors)] 표 렌더링 지침이 포함되어 있다.
-- [ ] 4단계 마스터 저널 템플릿에 `[보유 종목 다기간 성과 및 기여도 요약]` 표 구조가 복원되어 있다.
-- [ ] **Checkable Completion Criteria**: 각 단계(1단계 브리핑 -> 2단계 Grill-Me 심문 -> 3단계 원칙 검증 -> 4단계 저널 기록)에 에이전트의 성급한 완료(Premature completion)를 방지하는 명확하고 검증 가능한 완료 조건이 정의되어 있다.
-- [ ] **SSOT 준수**: 스킬 내에 특정 드라이브나 디렉토리 경로가 하드코딩되어 있지 않으며, `scripts/get_storage_dir.py`를 호출하여 경로를 획득하도록 규정되어 있다.
-- [ ] **Positive Guardrails**: 로컬 DB/스크립트 금지 조항이 원격 MCP 호출이라는 대체 행동과 명확히 페어링되어 있다.
-- [ ] **Pruning & No-op 점검**: 스킬 본문에서 모델의 기본 동작(No-op)이나 중복 문장이 제거되어 간결하고 예측 가능하게 작성되어 있다.
-- [ ] `/code-review`를 실행하여 스킬 변경 사항이 `writing-great-skills` 원칙(Predictability, SSOT, Information hierarchy, Positive guardrails, Pruning)을 만족함을 검증한다.
+- [x] `.agents/skills/asset-auditor/SKILL.md`의 [1단계 정보 수집]에 `get_benchmark_attribution` MCP 도구 호출 지침이 명시되어 있다.
+- [x] 1단계에 `보유 종목별 다기간 성과 및 기여도(Top/Bottom 3) 분석` 섹션이 복원되어 있으며, 예비 진단 브리핑 시 [보유 종목 다기간 성과 및 기여도 (Top Contributors & Detractors)] 표 렌더링 지침이 포함되어 있다.
+- [x] 4단계 마스터 저널 템플릿에 `[보유 종목 다기간 성과 및 기여도 요약]` 표 구조가 복원되어 있다.
+- [x] **Checkable Completion Criteria**: 각 단계(1단계 브리핑 -> 2단계 Grill-Me 심문 -> 3단계 원칙 검증 -> 4단계 저널 기록)에 에이전트의 성급한 완료(Premature completion)를 방지하는 명확하고 검증 가능한 완료 조건이 정의되어 있다.
+- [x] **SSOT 준수**: 스킬 내에 특정 드라이브나 디렉토리 경로가 하드코딩되어 있지 않으며, `scripts/get_storage_dir.py`를 호출하여 경로를 획득하도록 규정되어 있다.
+- [x] **Positive Guardrails**: 로컬 DB/스크립트 금지 조항이 원격 MCP 호출이라는 대체 행동과 명확히 페어링되어 있다.
+- [x] **Pruning & No-op 점검**: 스킬 본문에서 모델의 기본 동작(No-op)이나 중복 문장이 제거되어 간결하고 예측 가능하게 작성되어 있다.
+- [x] `/code-review`를 실행하여 스킬 변경 사항이 `writing-great-skills` 원칙(Predictability, SSOT, Information hierarchy, Positive guardrails, Pruning)을 만족함을 검증한다.
