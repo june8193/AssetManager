@@ -28,6 +28,7 @@ from src.mcp.tools.expenses import (
     get_expense_summary,
     get_expenses,
 )
+from src.mcp.tools.benchmark import get_benchmark_attribution
 
 # MCP 서버 객체 선언
 mcp = FastMCP("AssetManager")
@@ -57,6 +58,9 @@ mcp.tool()(get_system_logs)
 mcp.tool()(get_expense_categories)
 mcp.tool()(get_expense_summary)
 mcp.tool()(get_expenses)
+
+# 벤치마크 다기간 성과 및 종목별 기여도 조회를 위한 신규 MCP 도구 등록
+mcp.tool()(get_benchmark_attribution)
 
 if __name__ == "__main__":
     mcp.run()
