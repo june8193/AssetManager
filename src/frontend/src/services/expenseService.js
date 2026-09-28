@@ -127,9 +127,10 @@ export const expenseService = {
    * @param {File} file - 업로드할 명세서 파일
    * @param {string} [password] - 복호화 비밀번호
    * @param {number} [paymentMethodId] - 결제수단 ID
+   * @param {string} [targetYearMonth] - 업로드 대상 연월 (예: '2026-08')
    * @returns {Promise<Object>} 파싱된 거래 및 결제수단 미리보기 정보
    */
-  async uploadPreview(file, password, paymentMethodId) {
+  async uploadPreview(file, password, paymentMethodId, targetYearMonth) {
     const formData = new FormData();
     formData.append('file', file);
     if (password) {
@@ -137,6 +138,9 @@ export const expenseService = {
     }
     if (paymentMethodId !== undefined && paymentMethodId !== null) {
       formData.append('payment_method_id', String(paymentMethodId));
+    }
+    if (targetYearMonth) {
+      formData.append('target_year_month', targetYearMonth);
     }
     return apiClient.post('/api/expenses/upload-preview', formData);
   },

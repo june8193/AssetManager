@@ -134,7 +134,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // 결제수단 선택
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     // 파싱 버튼 활성화 확인
@@ -149,7 +149,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.click(parseBtn);
 
     await waitFor(() => {
-      expect(expenseService.uploadPreview).toHaveBeenCalledWith(file, '950811', 1);
+      expect(expenseService.uploadPreview).toHaveBeenCalledWith(file, '950811', 1, expect.any(String));
     });
 
     // 프리뷰 화면 전환 확인
@@ -180,7 +180,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // 결제수단 선택
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
@@ -224,7 +224,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // 결제수단 선택
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
@@ -269,7 +269,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // 결제수단 선택
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
@@ -295,7 +295,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // 결제수단 선택
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
@@ -324,7 +324,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.change(fileInput, { target: { files: [file] } });
 
     // 결제수단 선택
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
@@ -400,7 +400,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     const fileInput = document.querySelector('input[type="file"]');
     fireEvent.change(fileInput, { target: { files: [file] } });
 
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
@@ -463,7 +463,7 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     const fileInput = document.querySelector('input[type="file"]');
     fireEvent.change(fileInput, { target: { files: [file] } });
 
-    const selectElem = screen.getByRole('combobox');
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
     fireEvent.change(selectElem, { target: { value: '1' } });
 
     const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
@@ -490,6 +490,142 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
     fireEvent.click(commitBtn);
     await waitFor(() => {
       expect(expenseService.commitExpenses).toHaveBeenCalled();
+    });
+  });
+
+  it('업로드 대상 월 드롭다운이 렌더링되고 최근 24개월 옵션을 제공하며 targetMonth prop이 기본값으로 자동 바인딩된다', () => {
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+        targetMonth="2026-07"
+      />
+    );
+
+    const monthSelect = screen.getByLabelText(/업로드 대상 월/i);
+    expect(monthSelect).toBeInTheDocument();
+    expect(monthSelect.value).toBe('2026-07');
+
+    // 최근 24개월 옵션이 포함되어 있는지 확인
+    const options = monthSelect.querySelectorAll('option');
+    expect(options.length).toBeGreaterThanOrEqual(24);
+  });
+
+  it('파일 업로드 영역 안내 문구에 국민은행/신한은행 거래내역 (.pdf)이 포함되고 파일 입력창에 .pdf 확장자가 허용된다', () => {
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    expect(
+      screen.getByText(/국민은행\/신한은행 거래내역 \(\.pdf\)/i)
+    ).toBeInTheDocument();
+
+    const fileInput = document.querySelector('input[type="file"]');
+    expect(fileInput).toBeInTheDocument();
+    expect(fileInput.getAttribute('accept')).toContain('.pdf');
+  });
+
+  it('업로드 대상 월을 선택하여 파싱할 때 target_year_month가 uploadPreview로 전달된다', async () => {
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+        targetMonth="2026-08"
+      />
+    );
+
+    const file = new File(['dummy pdf'], 'KB거래내역조회_2608.pdf', { type: 'application/pdf' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const pmSelect = screen.getByLabelText(/결제수단 선택/i);
+    fireEvent.change(pmSelect, { target: { value: '1' } });
+
+    const monthSelect = screen.getByLabelText(/업로드 대상 월/i);
+    fireEvent.change(monthSelect, { target: { value: '2026-08' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(expenseService.uploadPreview).toHaveBeenCalledWith(file, undefined, 1, '2026-08');
+    });
+  });
+
+  it('프리뷰 응답에 other_month_count > 0인 경우 업로드 대상 월 외 거래 제외 경고 배너가 주황색 스타일로 명확히 표시된다', async () => {
+    const previewWithOtherMonth = {
+      ...mockPreviewResponse,
+      year_month: '2026-08',
+      other_month_count: 5,
+    };
+    expenseService.uploadPreview.mockResolvedValueOnce(previewWithOtherMonth);
+
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+        targetMonth="2026-08"
+      />
+    );
+
+    const file = new File(['dummy pdf'], '2608.pdf', { type: 'application/pdf' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const pmSelect = screen.getByLabelText(/결제수단 선택/i);
+    fireEvent.change(pmSelect, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+    });
+
+    // 경고 배너 확인
+    const warningBanner = screen.getByText(/업로드 대상 월\(2026-08\) 이외의 5건의 거래는 자동으로 제외되었습니다\./i);
+    expect(warningBanner).toBeInTheDocument();
+  });
+
+  it('결제수단과 파일의 금융기관이 불일치할 경우 모달 상단에 서버에서 반환한 직관적인 에러 메시지가 표출된다', async () => {
+    expenseService.uploadPreview.mockRejectedValueOnce(
+      new Error('선택한 결제수단(국민은행)과 업로드된 명세서(신한은행)가 일치하지 않습니다.')
+    );
+
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    const file = new File(['dummy pdf'], '2608.pdf', { type: 'application/pdf' });
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const pmSelect = screen.getByLabelText(/결제수단 선택/i);
+    fireEvent.change(pmSelect, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(
+        screen.getByText('선택한 결제수단(국민은행)과 업로드된 명세서(신한은행)가 일치하지 않습니다.')
+      ).toBeInTheDocument();
     });
   });
 });

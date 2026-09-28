@@ -562,9 +562,15 @@ async def upload_expense_preview(
             detail=f"ID가 {payment_method_id}인 결제수단을 찾을 수 없습니다.",
         )
 
+    # 1. 일회성 복호화 비밀번호 및 대상 연월 처리
+    clean_password = password.strip() if password and password.strip() else None
+    clean_target_ym = target_year_month.strip() if target_year_month and target_year_month.strip() else None
+
     parser_service = ExpenseParserService()
     try:
-        detected_institution = parser_service.detect_institution(file_bytes, filename)
+        detected_institution = parser_service.detect_institution(
+            file_bytes, filename, password=clean_password
+        )
     except UnsupportedFileFormatError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -577,10 +583,6 @@ async def upload_expense_preview(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"선택한 결제수단({selected_pm.institution})과 업로드된 명세서({detected_institution})가 일치하지 않습니다.",
         )
-
-    # 1. 일회성 복호화 비밀번호 및 대상 연월 처리
-    clean_password = password.strip() if password and password.strip() else None
-    clean_target_ym = target_year_month.strip() if target_year_month and target_year_month.strip() else None
 
     # 2. 파싱 시도 (오직 사용자가 요청으로 전달한 비밀번호 및 대상 월 사용)
     try:

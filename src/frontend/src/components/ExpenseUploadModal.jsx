@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   X,
   UploadCloud,
@@ -27,6 +27,7 @@ import { expenseService } from '../services/expenseService';
  * @param {Function} [props.onSuccess] - 등록 완료 콜백
  * @param {Array} [props.paymentMethods] - 결제수단 목록 (선택)
  * @param {Array} [props.categories] - 카테고리 목록 (선택)
+ * @param {string} [props.targetMonth] - 업로드 대상 기준 월 (예: '2026-08')
  */
 export default function ExpenseUploadModal({
   isOpen,
@@ -34,13 +35,42 @@ export default function ExpenseUploadModal({
   onSuccess,
   paymentMethods: propPaymentMethods,
   categories: propCategories,
+  targetMonth = '',
 }) {
+  // 최근 24개월 옵션 생성
+  const monthOptions = useMemo(() => {
+    const list = [];
+    const now = new Date();
+    let y = now.getFullYear();
+    let m = now.getMonth() + 1;
+    for (let i = 0; i < 24; i++) {
+      const ym = `${y}-${String(m).padStart(2, '0')}`;
+      list.push(ym);
+      m -= 1;
+      if (m === 0) {
+        m = 12;
+        y -= 1;
+      }
+    }
+    return list;
+  }, []);
+
+  const availableMonths = useMemo(() => {
+    if (targetMonth && !monthOptions.includes(targetMonth)) {
+      return [targetMonth, ...monthOptions];
+    }
+    return monthOptions;
+  }, [targetMonth, monthOptions]);
+
   const [step, setStep] = useState('upload'); // 'upload' | 'preview'
   const [file, setFile] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedPaymentMethodId, setSelectedPaymentMethodId] = useState('');
+  const [selectedTargetMonth, setSelectedTargetMonth] = useState(
+    targetMonth || monthOptions[0] || ''
+  );
   const [loading, setLoading] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState(null);
@@ -78,7 +108,9 @@ export default function ExpenseUploadModal({
   }, [propCategories, isOpen]);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (isOpen) {
+      setSelectedTargetMonth(targetMonth || monthOptions[0] || '');
+    } else {
       // 모달 닫힐 때 상태 리셋
       setStep('upload');
       setFile(null);
@@ -89,7 +121,7 @@ export default function ExpenseUploadModal({
       setPreviewTransactions([]);
       setPreviewPaymentMethodId(null);
     }
-  }, [isOpen]);
+  }, [isOpen, targetMonth, monthOptions]);
 
   if (!isOpen) return null;
 
@@ -137,7 +169,8 @@ export default function ExpenseUploadModal({
       const parsed = await expenseService.uploadPreview(
         file,
         password || undefined,
-        Number(selectedPaymentMethodId)
+        Number(selectedPaymentMethodId),
+        selectedTargetMonth || undefined
       );
 
       setPreviewData(parsed);
@@ -147,7 +180,7 @@ export default function ExpenseUploadModal({
       );
       setStep('preview');
     } catch (err) {
-      setError(err.message || '명세서 복호화 및 파싱에 실패했습니다.');
+      setError(err.message || err.detail || '명세서 복호화 및 파싱에 실패했습니다.');
     } finally {
       setLoading(false);
     }
@@ -292,7 +325,7 @@ export default function ExpenseUploadModal({
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".xlsx,.xls,.html,.htm"
+                accept=".xlsx,.xls,.html,.htm,.pdf"
                 onChange={handleFileChange}
                 className="hidden"
               />
@@ -300,7 +333,7 @@ export default function ExpenseUploadModal({
               {file ? (
                 <div className="flex flex-col items-center text-center">
                   <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-full mb-3">
-                    {file.name.endsWith('.html') || file.name.endsWith('.htm') ? (
+                    {file.name.endsWith('.html') || file.name.endsWith('.htm') || file.name.endsWith('.pdf') ? (
                       <FileText className="w-8 h-8" />
                     ) : (
                       <FileSpreadsheet className="w-8 h-8" />
@@ -320,19 +353,49 @@ export default function ExpenseUploadModal({
                     파일을 드래그하여 놓거나 클릭하여 선택하세요
                   </p>
                   <p className="text-xs text-slate-400 mt-1">
-                    현대카드 보안 HTML (.html) 또는 카카오뱅크 통장내역 (.xlsx)
+                    현대카드 보안 HTML (.html), 카카오뱅크 통장내역 (.xlsx), 국민은행/신한은행 거래내역 (.pdf)
                   </p>
                 </div>
               )}
             </div>
 
+            {/* 업로드 대상 월 선택 (최근 24개월) */}
+            <div>
+              <label
+                htmlFor="target-month-select"
+                className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5"
+              >
+                <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                업로드 대상 월
+              </label>
+              <select
+                id="target-month-select"
+                value={selectedTargetMonth}
+                onChange={(e) => setSelectedTargetMonth(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
+              >
+                {availableMonths.map((ym) => (
+                  <option key={ym} value={ym}>
+                    {ym}
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-500 mt-1">
+                선택한 월에 해당하는 거래만 가져오며, 그 외 월의 거래는 자동으로 제외됩니다.
+              </p>
+            </div>
+
             {/* 결제수단 선택 (필수) */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+              <label
+                htmlFor="payment-method-select"
+                className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5"
+              >
                 <CreditCard className="w-3.5 h-3.5 text-slate-400" />
                 결제수단 선택 (필수)
               </label>
               <select
+                id="payment-method-select"
                 value={selectedPaymentMethodId}
                 onChange={(e) => setSelectedPaymentMethodId(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500"
@@ -348,12 +411,16 @@ export default function ExpenseUploadModal({
 
             {/* 비밀번호 입력 (선택 사항) */}
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+              <label
+                htmlFor="statement-password-input"
+                className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5"
+              >
                 <Lock className="w-3.5 h-3.5 text-slate-400" />
                 복호화 비밀번호 (선택)
               </label>
               <div className="relative">
                 <input
+                  id="statement-password-input"
                   type={showPassword ? 'text' : 'password'}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
@@ -457,6 +524,16 @@ export default function ExpenseUploadModal({
                 )}
               </div>
             </div>
+
+            {/* 업로드 대상 월 외 거래 자동 제외 알림 */}
+            {previewData.other_month_count > 0 && (
+              <div className="px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/30 flex items-center gap-2 text-xs text-amber-300 font-medium">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+                <span>
+                  업로드 대상 월({previewData.year_month}) 이외의 {previewData.other_month_count}건의 거래는 자동으로 제외되었습니다.
+                </span>
+              </div>
+            )}
 
             {/* 덮어쓰기 안내 알림 */}
             <div className="px-6 py-2 bg-amber-500/10 border-b border-amber-500/20 flex items-center gap-2 text-xs text-amber-300">

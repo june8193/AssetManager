@@ -938,6 +938,7 @@ export default function ExpensesPage() {
         onSuccess={handleUploadSuccess}
         paymentMethods={paymentMethods}
         categories={categories}
+        targetMonth={startMonth || stats?.start_month || ''}
       />
 
       <PaymentMethodsModal

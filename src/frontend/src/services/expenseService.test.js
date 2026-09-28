@@ -157,6 +157,29 @@ describe('expenseService 단위 테스트', () => {
       expect(formData.get('file')).toBe(mockFile);
       expect(formData.get('password')).toBe('950811');
       expect(formData.get('payment_method_id')).toBe('1');
+      expect(formData.get('target_year_month')).toBeNull();
+      expect(res).toBe(mockResponse);
+    });
+
+    it('uploadPreview 호출 시 targetYearMonth가 제공되면 FormData에 target_year_month가 포함된다', async () => {
+      const mockFile = new File(['dummy content'], 'KB거래내역조회_2608.pdf', { type: 'application/pdf' });
+      const mockResponse = {
+        payment_method: { id: 1, institution: '국민은행' },
+        year_month: '2026-08',
+        transactions: [],
+        other_month_count: 5,
+      };
+      apiClient.post.mockResolvedValue(mockResponse);
+
+      const res = await expenseService.uploadPreview(mockFile, '950913', 1, '2026-08');
+
+      expect(apiClient.post).toHaveBeenCalledTimes(1);
+      const [path, formData] = apiClient.post.mock.calls[0];
+      expect(path).toBe('/api/expenses/upload-preview');
+      expect(formData.get('file')).toBe(mockFile);
+      expect(formData.get('password')).toBe('950913');
+      expect(formData.get('payment_method_id')).toBe('1');
+      expect(formData.get('target_year_month')).toBe('2026-08');
       expect(res).toBe(mockResponse);
     });
 

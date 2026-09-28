@@ -92,15 +92,18 @@ class ExpenseParserService:
     """금융기관별 명세서를 자동 판별하고 복호화 및 거래 내역을 정규화 추출하는 통합 서비스."""
 
     @staticmethod
-    def detect_institution(file_bytes: bytes, filename: str = "") -> str:
+    def detect_institution(
+        file_bytes: bytes, filename: str = "", password: Optional[str] = None
+    ) -> str:
         """파일 내용과 파일명을 기반으로 금융기관 및 포맷을 감지합니다.
 
         Args:
             file_bytes: 파일의 바이너리 내용.
             filename: 원본 파일명 (선택).
+            password: 암호화된 명세서 복호화 비밀번호 (선택).
 
         Returns:
-            감지된 금융기관 식별자 ('카카오뱅크', '현대카드' 또는 '국민은행').
+            감지된 금융기관 식별자 ('카카오뱅크', '현대카드', '국민은행' 또는 '신한은행').
 
         Raises:
             UnsupportedFileFormatError: 지원하지 않는 파일 형식인 경우.
@@ -162,12 +165,17 @@ class ExpenseParserService:
             if any(sig in file_bytes for sig in shinhan_signatures):
                 return "신한은행"
 
-            # 암호화되지 않은 PDF의 경우 텍스트 직접 검사 시도
+            # PDF 텍스트 직접 검사 (비암호화 또는 전달된 비밀번호로 복호화)
             try:
                 import io
                 import pypdf
                 reader = pypdf.PdfReader(io.BytesIO(file_bytes))
-                if not reader.is_encrypted and len(reader.pages) > 0:
+                if reader.is_encrypted and password:
+                    try:
+                        reader.decrypt(password)
+                    except Exception:
+                        pass
+                if len(reader.pages) > 0:
                     text = reader.pages[0].extract_text() or ""
                     if any(kw in text for kw in ["KB국민은행", "KB마이핏", "국민은행", "kbstar"]):
                         return "국민은행"
