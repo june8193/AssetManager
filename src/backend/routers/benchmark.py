@@ -2,7 +2,7 @@ import datetime
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from ..database import get_db
 from ..models import Watchlist, AccountSnapshot
@@ -169,3 +169,32 @@ async def get_watchlist_historical(
             status_code=400,
             detail=f"관심 종목의 과거 데이터를 가져오는 데 실패했습니다: {e}"
         )
+
+
+@router.get("/attribution")
+async def get_benchmark_attribution(
+    as_of_date: Optional[str] = Query(
+        None,
+        description="조회 기준일 (YYYY-MM-DD)",
+        pattern=r"^\d{4}-\d{2}-\d{2}$"
+    ),
+    db: Session = Depends(get_db)
+) -> Dict[str, Any]:
+    """포트폴리오의 4개 기간 벤치마크 성과, Alpha 및 종목별 손익 기여도(Attribution) 요약을 반환합니다.
+
+    Args:
+        as_of_date (Optional[str]): 조회 기준일 (생략 시 오늘)
+        db (Session): 데이터베이스 세션
+
+    Returns:
+        Dict[str, Any]: 벤치마크 및 종목별 기여도 데이터
+    """
+    benchmark_svc = BenchmarkService(db)
+    try:
+        return await benchmark_svc.get_attribution_summary(as_of_date=as_of_date)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"벤치마크 기여도 요약 데이터를 가져오는 데 실패했습니다: {e}"
+        )
+

@@ -5,11 +5,11 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** claimed
 
 ## Acceptance Criteria
 
-- [ ] `tests/test_benchmark_attribution.py` 단위 테스트가 작성되어 있으며, 4개 기간 벤치마크 수익률, Alpha, 종목별 가중 손익 기여도, Top/Bottom 3 랭킹 계산의 정합성을 검증한다.
-- [ ] `BenchmarkService`에 `get_attribution_summary(as_of_date)` 메서드가 구현되어, 기존 캐시된 시세와 스냅샷을 활용해 0.5초 이내에 정확한 결과를 산출한다.
-- [ ] `src/backend/routers/benchmark.py`에 `GET /api/benchmark/attribution` 엔드포인트가 등록되어 있으며, `as_of_date` 쿼리 파라미터를 지원한다.
-- [ ] 모든 백엔드 단위 테스트가 통과한다 (`uv run pytest tests/test_benchmark_attribution.py`).
+- [x] `tests/test_benchmark_attribution.py` 단위 테스트가 작성되어 있으며, 4개 기간 벤치마크 수익률, Alpha, 종목별 가중 손익 기여도, Top/Bottom 3 랭킹 계산의 정합성을 검증한다.
+- [x] `BenchmarkService`에 `get_attribution_summary(as_of_date)` 메서드가 구현되어, 기존 캐시된 시세와 스냅샷을 활용해 0.5초 이내에 정확한 결과를 산출한다.
+- [x] `src/backend/routers/benchmark.py`에 `GET /api/benchmark/attribution` 엔드포인트가 등록되어 있으며, `as_of_date` 쿼리 파라미터를 지원한다.
+- [x] 모든 백엔드 단위 테스트가 통과한다 (`uv run pytest tests/test_benchmark_attribution.py`).

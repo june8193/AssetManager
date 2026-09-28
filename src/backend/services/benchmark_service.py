@@ -7,11 +7,12 @@
 import datetime
 import asyncio
 import bisect
-from typing import List, Dict, Any, Optional, TypedDict
+from typing import List, Dict, Any, Optional, TypedDict, Union
 from sqlalchemy.orm import Session
 
-from src.backend.models import HistoricalPrice, AccountSnapshot
+from src.backend.models import HistoricalPrice, AccountSnapshot, Asset, ExchangeRate
 from src.backend.market import MarketDataProvider
+from src.backend.services.ledger_engine import LedgerEngine
 
 
 class MappedSnapshot(TypedDict):
@@ -32,6 +33,7 @@ class BenchmarkService:
         "^GSPC": "sp500",
         "^IXIC": "nasdaq"
     }
+    DEFAULT_USD_KRW_RATE: float = 1350.0
 
     def __init__(self, db: Session, provider: Optional[MarketDataProvider] = None) -> None:
         """BenchmarkService를 초기화합니다.
@@ -689,3 +691,265 @@ class BenchmarkService:
             "monthly": monthly_comparison,
             "daily": daily_comparison
         }
+
+    @staticmethod
+    def _extract_attribution_ranking(
+        items: List[Dict[str, Any]],
+        period_key: str,
+        reverse: bool = True,
+        limit: int = 3
+    ) -> List[Dict[str, Any]]:
+        """기간별 기여도 기준으로 정렬하여 상위 또는 하위 랭킹 목록을 추출합니다.
+
+        Args:
+            items (List[Dict[str, Any]]): 보유 종목별 기여도 데이터 목록
+            period_key (str): 기간 키 ('YTD', '1M', '3M', '1Y')
+            reverse (bool): True이면 내림차순(Top Contributors), False이면 오름차순(Top Detractors)
+            limit (int): 추출할 종목 수 (기본값: 3)
+
+        Returns:
+            List[Dict[str, Any]]: 랭킹 종목 목록
+        """
+        sorted_items = sorted(
+            items,
+            key=lambda x: (x["contributions"].get(period_key, 0.0), x["ticker"]),
+            reverse=reverse
+        )
+        return [
+            {
+                "ticker": h["ticker"],
+                "name": h["name"],
+                "weight": h["weight"],
+                "return": h["returns"].get(period_key, 0.0),
+                "contribution": h["contributions"].get(period_key, 0.0),
+            }
+            for h in sorted_items[:limit]
+        ]
+
+    async def get_attribution_summary(
+        self,
+        as_of_date: Optional[Union[str, datetime.date]] = None
+    ) -> Dict[str, Any]:
+        """기준일 기준 4개 기간 벤치마크 성과, Alpha 및 종목별 손익 기여도(Attribution) 요약을 일괄 산출합니다.
+
+        기존 캐시된 시세와 계좌 스냅샷, 트랜잭션 원장을 활용하여 외부 API 지연 없이 고속으로 계산합니다.
+
+        Args:
+            as_of_date (Optional[Union[str, datetime.date]]): 분석 기준일자. 기본값은 오늘.
+
+        Returns:
+            Dict[str, Any]: 벤치마크 성과 및 종목별 손익 기여도 요약 딕셔너리
+                - as_of_date (str): 기준일 (YYYY-MM-DD)
+                - benchmarks (Dict[str, Dict]): 기간별(1M, 3M, 1Y, YTD) 포트폴리오 및 지수 수익률, Alpha
+                - top_contributors_ytd (List[Dict]): YTD 상위 기여 종목 (최대 3개)
+                - top_detractors_ytd (List[Dict]): YTD 부진 종목 (최대 3개)
+                - top_contributors_1m (List[Dict]): 1M 상위 기여 종목 (최대 3개)
+                - top_detractors_1m (List[Dict]): 1M 부진 종목 (최대 3개)
+                - holdings_attribution (List[Dict]): 전체 보유 종목별 성과 및 기여도 내역
+        """
+        # 1. 기준일자 확정
+        if as_of_date is None:
+            as_of = datetime.date.today()
+        elif isinstance(as_of_date, str):
+            as_of = datetime.date.fromisoformat(as_of_date)
+        elif isinstance(as_of_date, datetime.datetime):
+            as_of = as_of_date.date()
+        else:
+            as_of = as_of_date
+
+        # 2. 4대 기간 시작일 정의
+        period_ranges: Dict[str, datetime.date] = {
+            "1M": as_of - datetime.timedelta(days=30),
+            "3M": as_of - datetime.timedelta(days=90),
+            "1Y": as_of - datetime.timedelta(days=365),
+            "YTD": datetime.date(as_of.year, 1, 1),
+        }
+
+        # 3. 4대 기간 벤치마크 누적 수익률 비동기 병렬 계산
+        benchmark_tickers = ["^GSPC", "^IXIC", "^KS11"]
+        benchmark_tasks = [
+            self.calculate_cumulative_returns(start_d, as_of, benchmark_tickers)
+            for start_d in period_ranges.values()
+        ]
+        benchmark_results = await asyncio.gather(*benchmark_tasks)
+
+        benchmarks: Dict[str, Dict[str, float]] = {}
+        for period_key, chart_data in zip(period_ranges.keys(), benchmark_results):
+            portfolio_ret = 0.0
+            if chart_data.get("datasets") and len(chart_data["datasets"]) > 0:
+                p_returns = chart_data["datasets"][0].get("data", [])
+                for val in reversed(p_returns):
+                    if val is not None:
+                        portfolio_ret = val
+                        break
+
+            index_returns = {"sp500": 0.0, "nasdaq": 0.0, "kospi": 0.0}
+            for item in chart_data.get("alpha_summaries", []):
+                t = item.get("ticker")
+                name_key = self.TICKER_NAMES.get(t)
+                if name_key and name_key in index_returns:
+                    index_returns[name_key] = item.get("benchmark_return", 0.0)
+
+            alpha_vs_sp500 = round(portfolio_ret - index_returns["sp500"], 2)
+            benchmarks[period_key] = {
+                "portfolio": portfolio_ret,
+                "sp500": index_returns["sp500"],
+                "nasdaq": index_returns["nasdaq"],
+                "kospi": index_returns["kospi"],
+                "alpha_vs_sp500": alpha_vs_sp500,
+            }
+
+        # 4. 기준일 기준 보유 종목 및 비중 산출
+        state = LedgerEngine.get_positions(self.db, as_of=as_of)
+        active_holdings = state.holdings
+        cash_balances = state.cash_balances
+
+        # 환율 조회
+        rate_record = (
+            self.db.query(ExchangeRate)
+            .filter(ExchangeRate.date <= as_of)
+            .order_by(ExchangeRate.date.desc(), ExchangeRate.id.desc())
+            .first()
+        )
+        exchange_rate = rate_record.rate if rate_record else self.DEFAULT_USD_KRW_RATE
+
+        if not active_holdings:
+            return {
+                "as_of_date": as_of.isoformat(),
+                "benchmarks": benchmarks,
+                "top_contributors_ytd": [],
+                "top_detractors_ytd": [],
+                "top_contributors_1m": [],
+                "top_detractors_1m": [],
+                "holdings_attribution": [],
+            }
+
+        # 종목 마스터 정보 일괄 조회
+        holding_tickers = list(active_holdings.keys())
+        assets = (
+            self.db.query(Asset)
+            .filter(Asset.ticker.in_(holding_tickers))
+            .all()
+        )
+        asset_map = {a.ticker: a for a in assets}
+
+        # 시세 데이터 일괄 조회 (1Y 이전 여유분 포함, N+1 쿼리 방지)
+        earliest_date = period_ranges["1Y"] - datetime.timedelta(days=10)
+        price_records = (
+            self.db.query(HistoricalPrice)
+            .filter(
+                HistoricalPrice.ticker.in_(holding_tickers),
+                HistoricalPrice.price_date <= as_of,
+                HistoricalPrice.price_date >= earliest_date,
+                HistoricalPrice.close_price > 0.0
+            )
+            .order_by(HistoricalPrice.ticker, HistoricalPrice.price_date.asc())
+            .all()
+        )
+
+        prices_by_ticker: Dict[str, List[HistoricalPrice]] = {}
+        for p in price_records:
+            prices_by_ticker.setdefault(p.ticker, []).append(p)
+
+        def get_price_record_at_or_before(p_list: List[HistoricalPrice], target_date: datetime.date) -> Optional[HistoricalPrice]:
+            if not p_list:
+                return None
+            dates = [item.price_date for item in p_list]
+            idx = bisect.bisect_right(dates, target_date)
+            if idx > 0:
+                return p_list[idx - 1]
+            return p_list[0]
+
+        # 5. 종목별 현재가 및 평가액 계산
+        evaluated_holdings = []
+        for ticker, qty in active_holdings.items():
+            asset = asset_map.get(ticker)
+            if not asset:
+                continue
+
+            price_history = prices_by_ticker.get(ticker, [])
+            p_curr_rec = get_price_record_at_or_before(price_history, as_of)
+            current_price = p_curr_rec.close_price if p_curr_rec else 0.0
+
+            valuation = qty * current_price
+            valuation_krw = valuation * exchange_rate if asset.country == "US" else valuation
+
+            evaluated_holdings.append({
+                "ticker": ticker,
+                "name": asset.name,
+                "country": asset.country,
+                "quantity": qty,
+                "current_price": current_price,
+                "valuation": valuation,
+                "valuation_krw": valuation_krw,
+                "price_history": price_history,
+            })
+
+        # 총 평가액 및 종목별 비중 계산
+        total_valuation_krw = (
+            cash_balances.get("KRW", 0.0)
+            + (cash_balances.get("USD", 0.0) * exchange_rate)
+            + sum(item["valuation_krw"] for item in evaluated_holdings)
+        )
+
+        # 6. 각 종목의 기간별 수익률 및 가중 손익 기여도(Attribution) 산출
+        holdings_attribution = []
+        for item in evaluated_holdings:
+            ticker = item["ticker"]
+            val_krw = item["valuation_krw"]
+            weight = round((val_krw / total_valuation_krw) * 100.0, 2) if total_valuation_krw > 0 else 0.0
+
+            price_history = item["price_history"]
+            p_end_rec = get_price_record_at_or_before(price_history, as_of)
+            end_price = p_end_rec.close_price if p_end_rec else 0.0
+            end_date = p_end_rec.price_date if p_end_rec else None
+
+            returns_by_period: Dict[str, float] = {}
+            contributions_by_period: Dict[str, float] = {}
+
+            for p_key, start_d in period_ranges.items():
+                p_start_rec = get_price_record_at_or_before(price_history, start_d)
+                if (
+                    p_start_rec
+                    and end_date
+                    and p_start_rec.price_date < end_date
+                    and p_start_rec.close_price > 0.0
+                    and end_price > 0.0
+                ):
+                    ret = round(((end_price - p_start_rec.close_price) / p_start_rec.close_price) * 100.0, 2)
+                else:
+                    ret = 0.0
+
+                contrib = round(weight * ret / 100.0, 2)
+                returns_by_period[p_key] = ret
+                contributions_by_period[p_key] = contrib
+
+            holdings_attribution.append({
+                "ticker": ticker,
+                "name": item["name"],
+                "weight": weight,
+                "valuation_krw": round(val_krw),
+                "returns": returns_by_period,
+                "contributions": contributions_by_period,
+            })
+
+        # 비중(weight) 내림차순 정렬
+        holdings_attribution.sort(key=lambda x: (x["weight"], x["ticker"]), reverse=True)
+
+        # 7. YTD 및 1M 기준 Top 3 기여 종목 / Bottom 3 부진 종목 랭킹 추출
+        top_contributors_ytd = self._extract_attribution_ranking(holdings_attribution, "YTD", reverse=True, limit=3)
+        top_detractors_ytd = self._extract_attribution_ranking(holdings_attribution, "YTD", reverse=False, limit=3)
+        top_contributors_1m = self._extract_attribution_ranking(holdings_attribution, "1M", reverse=True, limit=3)
+        top_detractors_1m = self._extract_attribution_ranking(holdings_attribution, "1M", reverse=False, limit=3)
+
+        return {
+            "as_of_date": as_of.isoformat(),
+            "benchmarks": benchmarks,
+            "top_contributors_ytd": top_contributors_ytd,
+            "top_detractors_ytd": top_detractors_ytd,
+            "top_contributors_1m": top_contributors_1m,
+            "top_detractors_1m": top_detractors_1m,
+            "holdings_attribution": holdings_attribution,
+        }
+
+
