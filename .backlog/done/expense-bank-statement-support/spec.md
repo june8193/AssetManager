@@ -1,6 +1,6 @@
 # 국민은행 및 신한은행 거래내역 명세서 지원 사양서 (Bank Statement PDF Support Spec)
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement
 
