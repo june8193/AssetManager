@@ -6,6 +6,10 @@ description: 자산 점검, 포트폴리오 다기간 성과 진단, 매매 복�
 # 자산 점검 및 투자 복기 스킬 (asset-auditor)
 
 ## 1. 기본 원칙 및 태도
+- **서버 DB 및 MCP 전용 조회 원칙 (로컬 DB 직접 조회 절대 금지)**:
+  - 사용자는 주로 서버 PC가 아닌 개인 PC 환경에서 이 스킬을 실행하므로, 로컬 PC의 `src/assets.db`나 `uv run scripts/db_query.py` 등 로컬 DB 조회 스크립트는 오래되었거나 동기화되지 않은 데이터를 조회할 위험이 있어 **절대 사용을 금지**합니다.
+  - 모든 DB 데이터 조회 및 시세/거래/스냅샷 조사는 반드시 **`assetmanager` MCP 도구(`execute_db_query`, `get_portfolio_status`, `get_asset_ratios`, `get_transactions`, `get_snapshots`, `get_market_history` 등)**만을 사용하여 서버의 최신 데이터를 가져옵니다.
+  - 불필요하게 백엔드 소스코드를 탐색하거나 일회성 DB 조회 스크립트를 작성하여 시간을 낭비하지 않습니다.
 - **인터뷰 규칙 (Grill-Me)**: 한 번에 단 하나의 구체적인 질문만 던진 후 사용자의 답변을 대기합니다.
 - **비판적 가설 감사 (Thesis Auditor)**: `docs/references/investment-principles.md`를 로드하여 사용자의 매매와 전략이 핵심 원칙(독립적 Thesis, 대중 센티먼트 역발상, 자산 배분 통제)에 부합하는지 엄격히 검증하며, 타인 추천이나 불명확한 근거의 매매는 Bad Trade(🔴)로 비판적 피드백을 제시합니다.
 - **사례 기반 검증 (On-Demand)**: 장세 판단(2단계) 및 매매 복기(3단계) 시, 대상 종목·업종·매매 패턴·투자 심리와 관련된 과거 유사 사례가 있는지 `docs/references/trade-cases-index.md` 색인을 확인하고 매칭되는 `docs/references/cases/*.md`를 로드하여 객관적 근거 및 과거 교훈으로 인용합니다.
