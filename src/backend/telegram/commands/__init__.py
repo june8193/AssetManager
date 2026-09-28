@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
 """텔레그램 커맨드 처리 및 라우팅 패키지입니다."""
 
+import inspect
 import logging
-from typing import TYPE_CHECKING, Callable, Awaitable
+from typing import TYPE_CHECKING, Any, Awaitable, Callable
 
 from .asset import handle_asset
 from .daily import handle_daily
@@ -38,7 +39,7 @@ class CLICommandHandler:
         self.config = config
 
         # 커맨드 매핑 테이블
-        self.handlers: dict[str, Callable[["TelegramClient", int, str], Awaitable[None]]] = {
+        self.handlers: dict[str, Callable[..., Awaitable[None]]] = {
             "/help": handle_help,
             "/asset": handle_asset,
             "/ratio": handle_ratio,
@@ -51,17 +52,29 @@ class CLICommandHandler:
         }
 
     async def _handle_restart(
-        self, client: "TelegramClient", chat_id: int, text: str
+        self,
+        client: "TelegramClient",
+        chat_id: int,
+        text: str,
+        update_id: int | None = None,
     ) -> None:
         """/restart 명령어를 위임 처리합니다."""
-        await handle_restart(client, chat_id, text, config=self.config)
+        await handle_restart(
+            client, chat_id, text, update_id=update_id, config=self.config
+        )
 
-    async def process_cli_command(self, chat_id: int, text: str) -> None:
+    async def process_cli_command(
+        self,
+        chat_id: int,
+        text: str,
+        update_id: int | None = None,
+    ) -> None:
         """수신된 텍스트에서 명령어를 추출하여 등록된 핸들러로 전달합니다.
 
         Args:
             chat_id: 텔레그램 사용자 또는 대화방 ID
             text: 명령어 텍스트
+            update_id: 수신된 텔레그램 업데이트 ID (생략 가능)
         """
         tokens = text.strip().split()
         if not tokens:
@@ -73,14 +86,31 @@ class CLICommandHandler:
             cmd = cmd.split("@")[0]
 
         handler = self.handlers.get(cmd)
-        if handler:
-            await handler(self.client, chat_id, text)
-        else:
+        if not handler:
             warning_msg = (
                 f"⚠️ 알 수 없는 명령어입니다: {cmd}\n"
                 "사용 가능한 명령어 확인을 위해 `/help`를 입력해 보세요."
             )
             await self.client.send_message(chat_id, warning_msg)
+            return
+
+        try:
+            sig = inspect.signature(handler)
+            params = sig.parameters
+            supports_update_id = "update_id" in params or any(
+                p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+            )
+        except (ValueError, TypeError):
+            supports_update_id = False
+
+        kwargs: dict[str, Any] = {}
+        if supports_update_id and update_id is not None:
+            kwargs["update_id"] = update_id
+
+        await handler(self.client, chat_id, text, **kwargs)
+
+
+
 
 
 __all__ = [

@@ -61,6 +61,36 @@ class TelegramBot:
                     user_id, "🔄 AssetManager 서버 재시작이 완료되었습니다."
                 )
 
+    async def flush_pending_updates(self) -> int | None:
+        """텔레그램 대기 큐에 남아 있는 과거 미확인 업데이트를 일괄 확인(ACK)하고 최신 offset을 반환합니다.
+
+        서버 비정상 종료 후 재부팅 시 과거에 대기 중이던 /restart 명령 등이 재실행되어
+        무한 재시작 루프에 빠지는 현상을 원천 방지합니다.
+
+        Returns:
+            다음 폴링에서 사용할 최신 offset 값 (큐가 비어있으면 None)
+        """
+        try:
+            updates = await self.client.get_updates(offset=-1, timeout=0)
+            if not updates:
+                return None
+
+            latest_update = updates[-1]
+            latest_update_id = latest_update.get("update_id")
+            if latest_update_id is None:
+                return None
+
+            next_offset = latest_update_id + 1
+            # 텔레그램 서버에 최신 offset을 전달하여 이전 큐의 모든 메시지를 소비(ACK) 처리
+            await self.client.get_updates(offset=next_offset, timeout=0)
+            logger.info(
+                f"텔레그램 과거 대기 큐 일괄 플러시 완료 (최신 update_id: {latest_update_id}, next_offset: {next_offset})"
+            )
+            return next_offset
+        except Exception as exc:
+            logger.warning(f"텔레그램 대기 큐 플러시 중 오류 발생 (무시하고 계속): {exc}")
+            return None
+
     async def poll_once(self, offset: int | None = None) -> int | None:
         """Telegram 서버로부터 새 업데이트를 1회 롱폴링 수신하여 처리합니다.
 
@@ -110,7 +140,9 @@ class TelegramBot:
                 logger.info(f"텔레그램 메시지 수신 (User ID: {user_id}): {text}")
 
                 if text.startswith("/"):
-                    await self.command_handler.process_cli_command(chat_id, text)
+                    await self.command_handler.process_cli_command(
+                        chat_id, text, update_id=update_id
+                    )
                 else:
                     notice_msg = (
                         "💡 자연어 대화 기능은 지원하지 않습니다.\n"
@@ -157,8 +189,7 @@ class TelegramBot:
         logger.info("텔레그램 봇 롱폴링 루프를 시작합니다.")
         await self.check_restart_flag()
         await self.register_bot_commands()
-
-        offset: int | None = None
+        offset: int | None = await self.flush_pending_updates()
         try:
             while stop_event is None or not stop_event.is_set():
                 try:

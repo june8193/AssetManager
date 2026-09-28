@@ -30,6 +30,7 @@ async def handle_restart(
     client: "TelegramClient",
     chat_id: int,
     text: str = "",
+    update_id: int | None = None,
     config: TelegramConfig | None = None,
     exit_func: Callable[[], None] | None = None,
 ) -> None:
@@ -37,11 +38,13 @@ async def handle_restart(
 
     스토리지 디렉터리에 재시작 플래그 파일을 생성하고,
     사용자에게 안내 메시지를 전송한 후 시스템 종료 함수를 호출합니다.
+    무한 재시작 방지를 위해 종료 전 수신된 update_id에 대해 명시적 ACK를 전송합니다.
 
     Args:
         client: 텔레그램 API 클라이언트 인스턴스
         chat_id: 대상 사용자 또는 대화방 ID
         text: 사용자가 입력한 명령어 텍스트
+        update_id: 현재 처리 중인 텔레그램 업데이트 식별자 (생략 가능)
         config: 텔레그램 설정 객체 (생략 시 get_settings().telegram 사용)
         exit_func: 프로세스 종료 콜백 함수 (생략 시 default_exit_system 사용)
     """
@@ -51,6 +54,16 @@ async def handle_restart(
     target_exit = exit_func if exit_func is not None else default_exit_system
 
     flag_file = os.path.join(config.storage_dir, RESTART_FLAG_FILENAME)
+
+    # 1. 중복 재시작 요청 방지
+    if os.path.exists(flag_file):
+        logger.warning("이미 재시작 대기 플래그가 존재하여 중복 재시작 요청을 차단합니다.")
+        await client.send_message(
+            chat_id, "⚠️ 이미 서버 재시작이 진행 중입니다. 잠시만 기다려 주세요."
+        )
+        return
+
+    # 2. 플래그 파일 생성
     try:
         os.makedirs(config.storage_dir, exist_ok=True)
         with open(flag_file, "w", encoding="utf-8") as f:
@@ -59,11 +72,22 @@ async def handle_restart(
     except Exception as exc:
         logger.error(f"재시작 플래그 파일 생성 실패: {exc}")
 
+    # 3. 진행 안내 메시지 전송
     await client.send_message(
         chat_id, "🔄 서버를 재시작합니다. 약 5~8초 정도 소요됩니다..."
     )
 
+    # 4. 종료 전 텔레그램 서버에 명시적 수신 확인(ACK) 전송
+    if update_id is not None:
+        try:
+            logger.info(f"텔레그램 업데이트 수신 확인(ACK) 전송 (offset: {update_id + 1})")
+            await client.get_updates(offset=update_id + 1, timeout=0)
+        except Exception as exc:
+            logger.warning(f"재시작 전 텔레그램 ACK 전송 실패 (무시하고 계속 진행): {exc}")
+
+    # 5. 시스템 종료
     try:
         target_exit()
     except Exception as exc:
         logger.error(f"시스템 종료 함수 실행 중 오류 발생: {exc}")
+

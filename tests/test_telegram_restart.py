@@ -188,5 +188,139 @@ async def test_start_polling_invokes_check_restart_flag(
 
     with patch.object(bot, "check_restart_flag", new_callable=AsyncMock) as mock_check:
         with patch.object(bot, "register_bot_commands", new_callable=AsyncMock):
-            await bot.start_polling(stop_event=stop_event)
-            mock_check.assert_awaited_once()
+            with patch.object(bot, "flush_pending_updates", new_callable=AsyncMock):
+                await bot.start_polling(stop_event=stop_event)
+                mock_check.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_restart_acknowledges_update_before_exit(
+    mock_client: AsyncMock,
+    telegram_config: TelegramConfig,
+    temp_storage: str,
+) -> None:
+    """update_id가 전달된 경우 종료 전에 get_updates(offset=update_id+1, timeout=0)를 호출해 메시지를 확인(소비)해야 합니다."""
+    call_order = []
+    mock_client.get_updates = AsyncMock(side_effect=lambda **kw: call_order.append(("get_updates", kw)))
+    mock_exit = MagicMock(side_effect=lambda: call_order.append(("exit", None)))
+
+    await handle_restart(
+        client=mock_client,
+        chat_id=111,
+        text="/restart",
+        update_id=1050,
+        config=telegram_config,
+        exit_func=mock_exit,
+    )
+
+    # get_updates가 exit_func보다 먼저 호출되었는지 확인
+    assert len(call_order) == 2
+    assert call_order[0][0] == "get_updates"
+    assert call_order[0][1]["offset"] == 1051
+    assert call_order[0][1]["timeout"] == 0
+    assert call_order[1][0] == "exit"
+
+
+@pytest.mark.asyncio
+async def test_handle_restart_duplicate_call_prevented(
+    mock_client: AsyncMock,
+    telegram_config: TelegramConfig,
+    temp_storage: str,
+) -> None:
+    """이미 재시작 플래그가 존재하는 경우 중복 종료하지 않고 안내 메시지만 전송해야 합니다."""
+    flag_path = os.path.join(temp_storage, RESTART_FLAG_FILENAME)
+    with open(flag_path, "w", encoding="utf-8") as f:
+        f.write("restart_pending")
+
+    mock_exit = MagicMock()
+
+    await handle_restart(
+        client=mock_client,
+        chat_id=111,
+        text="/restart",
+        config=telegram_config,
+        exit_func=mock_exit,
+    )
+
+    # 1. 종료 함수가 호출되지 않아야 함
+    mock_exit.assert_not_called()
+
+    # 2. 진행 중 안내 메시지가 발송되어야 함
+    mock_client.send_message.assert_awaited_once()
+    sent_text = mock_client.send_message.await_args[0][1]
+    assert "이미 서버 재시작이 진행 중입니다" in sent_text
+
+
+@pytest.mark.asyncio
+async def test_cli_command_handler_passes_update_id(
+    mock_client: AsyncMock,
+    telegram_config: TelegramConfig,
+) -> None:
+    """CLICommandHandler.process_cli_command 호출 시 update_id가 handle_restart로 전달되어야 합니다."""
+    handler = CLICommandHandler(client=mock_client, config=telegram_config)
+
+    with patch(
+        "src.backend.telegram.commands.handle_restart",
+        new_callable=AsyncMock,
+    ) as mock_restart:
+        await handler.process_cli_command(111, "/restart", update_id=2048)
+        mock_restart.assert_awaited_once()
+        assert mock_restart.await_args.kwargs.get("update_id") == 2048
+
+
+@pytest.mark.asyncio
+async def test_bot_flush_pending_updates(
+    mock_client: AsyncMock,
+    telegram_config: TelegramConfig,
+) -> None:
+    """flush_pending_updates가 큐의 마지막 업데이트를 조회하고 최신 offset으로 ACK하는지 검증합니다."""
+    # 1. 큐에 업데이트가 있는 경우
+    mock_client.get_updates = AsyncMock(
+        side_effect=[
+            [{"update_id": 999, "message": {"text": "/restart"}}],  # offset=-1 결과
+            [],  # offset=1000 ACK 결과
+        ]
+    )
+    bot = TelegramBot(config=telegram_config, client=mock_client)
+    res_offset = await bot.flush_pending_updates()
+
+    assert res_offset == 1000
+    assert mock_client.get_updates.await_count == 2
+    first_call_kwargs = mock_client.get_updates.await_args_list[0].kwargs
+    second_call_kwargs = mock_client.get_updates.await_args_list[1].kwargs
+    assert first_call_kwargs == {"offset": -1, "timeout": 0}
+    assert second_call_kwargs == {"offset": 1000, "timeout": 0}
+
+
+@pytest.mark.asyncio
+async def test_bot_flush_pending_updates_empty(
+    mock_client: AsyncMock,
+    telegram_config: TelegramConfig,
+) -> None:
+    """flush_pending_updates 시 큐가 비어있으면 None을 반환하고 ACK 요청을 생략하는지 검증합니다."""
+    mock_client.get_updates = AsyncMock(return_value=[])
+    bot = TelegramBot(config=telegram_config, client=mock_client)
+    res_offset = await bot.flush_pending_updates()
+
+    assert res_offset is None
+    mock_client.get_updates.assert_awaited_once_with(offset=-1, timeout=0)
+
+
+@pytest.mark.asyncio
+async def test_start_polling_invokes_flush_pending_updates(
+    mock_client: AsyncMock,
+    telegram_config: TelegramConfig,
+) -> None:
+    """start_polling 시작 시 flush_pending_updates가 호출되어 초기 offset이 설정되는지 검증합니다."""
+    import asyncio
+
+    bot = TelegramBot(config=telegram_config, client=mock_client)
+    stop_event = asyncio.Event()
+    stop_event.set()
+
+    with patch.object(bot, "check_restart_flag", new_callable=AsyncMock):
+        with patch.object(bot, "register_bot_commands", new_callable=AsyncMock):
+            with patch.object(bot, "flush_pending_updates", new_callable=AsyncMock, return_value=1234) as mock_flush:
+                await bot.start_polling(stop_event=stop_event)
+                mock_flush.assert_awaited_once()
+
