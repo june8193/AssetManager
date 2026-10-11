@@ -50,7 +50,7 @@ class TestKBBankParser:
         assert first["transaction_date"] == "2026-08-31 10:57:42"
         assert first["year_month"] == "2026-08"
         assert first["merchant"] == "삼성카드"
-        assert first["amount"] == 7000.0
+        assert first["amount"] == -7000.0
         assert first["original_type"] == "입금"
         assert "전자금융" in first["memo"]
 
@@ -75,7 +75,7 @@ class TestKBBankParser:
         # 6. 이자 입금 거래 검증
         # 2026.08.15 01:45:02 결산이자 이자세금:20원 0 132 541,980 - 왕십리
         interest_tx = next(tx for tx in transactions if "결산이자" in tx["memo"])
-        assert interest_tx["amount"] == 132.0
+        assert interest_tx["amount"] == -132.0
         assert interest_tx["original_type"] == "입금"
         assert interest_tx["merchant"] == "이자세금:20원"
 

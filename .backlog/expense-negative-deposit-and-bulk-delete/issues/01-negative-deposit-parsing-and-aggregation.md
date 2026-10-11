@@ -5,12 +5,12 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** ready-for-review
 
-- [ ] 카카오뱅크 엑셀 파서에서 '구분' 또는 '거래구분'이 '입금'인 거래는 `amount`를 음수 값으로 추출한다.
-- [ ] 국민은행 PDF 파서에서 '입금' 거래 행은 `amount`를 음수 값으로 추출한다.
-- [ ] 신한은행 PDF 파서에서 '입금' 거래 행은 `amount`를 음수 값으로 추출한다.
-- [ ] 출금 거래는 기존과 동일하게 양수(`amount > 0`)로 유지된다.
-- [ ] 통계 반영 대상인 음수 지출 거래라도 카테고리 지정 필수 검증(`category_id > 0`)을 정상 적용한다.
-- [ ] 음수 지출 거래가 DB에 적재되었을 때 월별 통계(`period_total`) 및 카테고리별 합계에서 해당 금액만큼 정상 차감 집계된다.
-- [ ] 백엔드 파서 및 업로드 플로우 테스트(`tests/test_expense_parser.py`, `tests/test_expense_upload_flow.py`)가 통과한다.
+- [x] 카카오뱅크 엑셀 파서에서 '구분' 또는 '거래구분'이 '입금'인 거래는 `amount`를 음수 값으로 추출한다.
+- [x] 국민은행 PDF 파서에서 '입금' 거래 행은 `amount`를 음수 값으로 추출한다.
+- [x] 신한은행 PDF 파서에서 '입금' 거래 행은 `amount`를 음수 값으로 추출한다.
+- [x] 출금 거래는 기존과 동일하게 양수(`amount > 0`)로 유지된다.
+- [x] 통계 반영 대상인 음수 지출 거래라도 카테고리 지정 필수 검증(`category_id > 0`)을 정상 적용한다.
+- [x] 음수 지출 거래가 DB에 적재되었을 때 월별 통계(`period_total`) 및 카테고리별 합계에서 해당 금액만큼 정상 차감 집계된다.
+- [x] 백엔드 파서 및 업로드 플로우 테스트(`tests/test_expense_parser.py`, `tests/test_expense_upload_flow.py`)가 통과한다.

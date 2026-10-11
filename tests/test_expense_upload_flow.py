@@ -617,4 +617,93 @@ def test_upload_preview_shinhanbank_institution_mismatch(client, db_session, fix
     assert "일치하지 않습니다" in response.json()["detail"]
 
 
+def test_commit_negative_deposit_expenses_and_stats_deduction(client, db_session):
+    """음수(-) 지출(입금 거래) 커밋 시 정상 적재 및 통계(period_total, 카테고리별 합계)에서 정확히 차감(상계)되는지 검증합니다."""
+    pm = db_session.query(PaymentMethod).filter_by(institution="카카오뱅크").first()
+    food_cat = db_session.query(ExpenseCategory).filter_by(name="식비/카페").first()
+    year_month = "2026-08"
+
+    # 1. 일반 지출 50,000원 + 친구 더치페이 입금(-20,000원) 커밋
+    payload = {
+        "payment_method_id": pm.id,
+        "year_month": year_month,
+        "source_file": "kakaobank_august.xlsx",
+        "items": [
+            {
+                "transaction_date": "2026-08-10 19:30:00",
+                "year_month": year_month,
+                "merchant": "모임 식당 결제",
+                "amount": 50000.0,
+                "original_type": "출금",
+                "category_id": food_cat.id,
+                "is_excluded": False,
+                "memo": "모임 1차 결제",
+            },
+            {
+                "transaction_date": "2026-08-10 21:00:00",
+                "year_month": year_month,
+                "merchant": "친구 송금 (더치페이)",
+                "amount": -20000.0,
+                "original_type": "입금",
+                "category_id": food_cat.id,
+                "is_excluded": False,
+                "memo": "식비 정산 입금",
+            },
+        ],
+    }
+
+    commit_res = client.post("/api/expenses/commit", json=payload)
+    assert commit_res.status_code == 200, commit_res.text
+    assert commit_res.json()["count"] == 2
+
+    # DB 적재 무결성 확인
+    records = db_session.query(Expense).filter_by(payment_method_id=pm.id, year_month=year_month).all()
+    assert len(records) == 2
+    deposit_rec = next(r for r in records if r.amount < 0)
+    assert deposit_rec.amount == -20000.0
+    assert deposit_rec.merchant == "친구 송금 (더치페이)"
+    assert deposit_rec.category_id == food_cat.id
+
+    # 2. 통계 API(/api/expenses/stats) 호출하여 상계 집계 검증 (50,000 - 20,000 = 30,000)
+    stats_res = client.get(f"/api/expenses/stats?start_month={year_month}&end_month={year_month}")
+    assert stats_res.status_code == 200, stats_res.text
+    stats_data = stats_res.json()
+
+    # period_total 검증: 30,000원
+    assert stats_data["period_total"] == 30000.0
+    assert stats_data["current_total"] == 30000.0
+
+    # 식비/카페 카테고리 합계 검증: 30,000원
+    food_breakdown = next(c for c in stats_data["category_breakdown"] if c["category_id"] == food_cat.id)
+    assert food_breakdown["amount"] == 30000.0
+
+
+def test_commit_negative_deposit_rejects_without_category(client, db_session):
+    """음수(-) 지출(입금 거래)이라도 통계 반영 대상인 경우 category_id가 없으면 HTTP 400으로 거부되는지 검증합니다."""
+    pm = db_session.query(PaymentMethod).filter_by(institution="카카오뱅크").first()
+    year_month = "2026-08"
+
+    payload = {
+        "payment_method_id": pm.id,
+        "year_month": year_month,
+        "source_file": "kakaobank_august.xlsx",
+        "items": [
+            {
+                "transaction_date": "2026-08-10 21:00:00",
+                "year_month": year_month,
+                "merchant": "친구 송금 (미분류 입금)",
+                "amount": -20000.0,
+                "original_type": "입금",
+                "category_id": None,  # 미분류 누락
+                "is_excluded": False,
+            },
+        ],
+    }
+
+    commit_res = client.post("/api/expenses/commit", json=payload)
+    assert commit_res.status_code == 400
+    assert "카테고리" in commit_res.json()["detail"] or "미분류" in commit_res.json()["detail"]
+
+
+
 

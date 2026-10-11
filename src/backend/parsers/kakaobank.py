@@ -176,6 +176,8 @@ def parse_kakaobank_excel(
 
         # 원본 거래구분 결정: '구분'(출금/입금) 우선, 필요시 거래구분(계좌간자동이체 등)
         original_type = raw_type if raw_type else tx_type
+        # 입금 거래는 음수(-) 지출로 변환하여 지출 상계 반영 (출금은 양수 유지)
+        final_amount = -amount_val if original_type == "입금" else amount_val
         # 메모가 비어있고 거래구분이 있으면 거래구분을 보존
         final_memo = raw_memo if raw_memo else (tx_type if tx_type != original_type else "")
 
@@ -184,7 +186,7 @@ def parse_kakaobank_excel(
                 "transaction_date": norm_date,
                 "year_month": tx_ym,
                 "merchant": raw_merchant,
-                "amount": amount_val,
+                "amount": final_amount,
                 "original_type": original_type,
                 "memo": final_memo,
             }

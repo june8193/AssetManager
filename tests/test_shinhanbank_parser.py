@@ -50,7 +50,7 @@ class TestShinhanBankParser:
         assert first["transaction_date"] == "2026-09-19 04:11:31"
         assert first["year_month"] == "2026-09"
         assert first["merchant"] == "06.20~09.18"
-        assert first["amount"] == 53.0
+        assert first["amount"] == -53.0
         assert first["original_type"] == "입금"
         assert first["memo"] == "이자"
 
@@ -69,7 +69,7 @@ class TestShinhanBankParser:
         third = transactions[2]
         assert third["transaction_date"] == "2026-09-18 11:47:34"
         assert third["merchant"] == "홍성은"
-        assert third["amount"] == 30000.0
+        assert third["amount"] == -30000.0
         assert third["original_type"] == "입금"
         assert third["memo"] == "타행모바일뱅킹"
 
@@ -78,7 +78,7 @@ class TestShinhanBankParser:
         fourth = transactions[3]
         assert fourth["transaction_date"] == "2026-09-18 11:46:22"
         assert fourth["merchant"] == "홍성은"
-        assert fourth["amount"] == 4976.0
+        assert fourth["amount"] == -4976.0
         assert fourth["original_type"] == "입금"
         assert fourth["memo"] == "펌뱅킹 이체"
 

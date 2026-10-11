@@ -244,7 +244,7 @@ def _parse_transaction_block(block: List[str]) -> Optional[Dict[str, Any]]:
         amount = w_val
         orig_type = "출금"
     elif d_val > 0:
-        amount = d_val
+        amount = -d_val
         orig_type = "입금"
     else:
         amount = 0.0

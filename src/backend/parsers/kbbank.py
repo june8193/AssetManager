@@ -222,7 +222,7 @@ def _extract_transactions_by_coordinates(page: pypdf.PageObject) -> List[Dict[st
             amount = withdraw_amt
             original_type = "출금"
         elif deposit_amt > 0:
-            amount = deposit_amt
+            amount = -deposit_amt
             original_type = "입금"
         else:
             amount = 0.0
@@ -302,7 +302,7 @@ def _extract_transactions_by_regex(text: str) -> List[Dict[str, Any]]:
             amount = withdraw_amt
             original_type = "출금"
         elif deposit_amt > 0:
-            amount = deposit_amt
+            amount = -deposit_amt
             original_type = "입금"
         else:
             amount = 0.0

@@ -86,9 +86,9 @@ class TestKakaoBankParser:
         assert first["amount"] == 10000.0  # 출금 음수(-10,000)가 양수 지출(10000.0)로 정규화
         assert first["original_type"] == "출금"
 
-        # 입금 거래 검증
+        # 입금 거래 검증 (입금은 음수 지출로 추출)
         deposit_tx = next(tx for tx in transactions if tx["original_type"] == "입금")
-        assert deposit_tx["amount"] == 1.0
+        assert deposit_tx["amount"] == -1.0
         assert deposit_tx["merchant"] == "키움928"
 
     def test_parse_kakaobank_invalid_password(self, kakaobank_file_path: Path):
@@ -147,6 +147,16 @@ class TestHyundaiCardParser:
             parse_hyundaicard_html(normal_html, VALID_PASSWORD)
 
 
+def _assert_transactions_signed(transactions: list[dict], institution_name: str) -> None:
+    """은행 거래 목록의 입금(음수) 및 출금(양수) 부호 일관성을 검증하는 헬퍼 함수입니다."""
+    deposits = [tx for tx in transactions if tx.get("original_type") == "입금"]
+    withdrawals = [tx for tx in transactions if tx.get("original_type") == "출금"]
+    assert len(deposits) > 0, f"{institution_name} 샘플에 입금 내역이 존재해야 합니다."
+    assert len(withdrawals) > 0, f"{institution_name} 샘플에 출금 내역이 존재해야 합니다."
+    assert all(tx["amount"] < 0 for tx in deposits), f"{institution_name} 모든 입금 거래는 음수여야 합니다: {deposits}"
+    assert all(tx["amount"] > 0 for tx in withdrawals), f"{institution_name} 모든 출금 거래는 양수여야 합니다: {withdrawals}"
+
+
 class TestExpenseParserService:
     """통합 지출 파서 서비스 테스트."""
 
@@ -158,6 +168,7 @@ class TestExpenseParserService:
 
         assert result["institution"] == "카카오뱅크"
         assert len(result["transactions"]) == 10
+        _assert_transactions_signed(result["transactions"], "카카오뱅크")
 
     def test_detect_and_parse_hyundaicard(self, hyundaicard_file_path: Path):
         """파일명 및 바이트 기반 현대카드 자동 감지 및 파싱 검증."""
@@ -182,6 +193,7 @@ class TestExpenseParserService:
         assert result["institution"] == "국민은행"
         assert len(result["transactions"]) == 17
         assert result["other_month_count"] == 0
+        _assert_transactions_signed(result["transactions"], "국민은행")
 
     def test_detect_kbbank_by_content_without_filename(self, kbbank_file_path: Path):
         """파일명 없이 바이너리 내용만으로 국민은행을 자동 감지하는지 검증."""
@@ -204,6 +216,7 @@ class TestExpenseParserService:
         assert result["institution"] == "신한은행"
         assert len(result["transactions"]) == 31
         assert result["other_month_count"] == 52
+        _assert_transactions_signed(result["transactions"], "신한은행")
 
     def test_detect_shinhanbank_by_content_or_filename(self):
         """PDF 내용 또는 파일명에 신한 키워드가 있을 때 신한은행 감지 검증."""
