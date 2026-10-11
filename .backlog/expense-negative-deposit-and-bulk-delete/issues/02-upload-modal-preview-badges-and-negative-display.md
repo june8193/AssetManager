@@ -5,7 +5,7 @@
 
 **Blocked by:** 01 — 계좌 입금 거래 음수(-) 지출 변환 및 통계 상계 집계
 
-**Status:** closed
+**Status:** resolved
 
 - [x] 거래 테이블의 '구분' 뱃지가 '입금'일 때 에메랄드/녹색 계열(`bg-emerald-500/20 text-emerald-300 border border-emerald-500/30`)로 표시된다.
 - [x] 거래 테이블의 '구분' 뱃지가 '출금', '일시불', '할부' 등 지출일 때 블루/슬레이트 계열(`bg-blue-500/10 text-blue-300 border border-blue-500/20`)로 표시된다.

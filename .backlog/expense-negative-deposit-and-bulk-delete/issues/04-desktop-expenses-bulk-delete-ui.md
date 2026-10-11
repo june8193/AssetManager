@@ -5,7 +5,7 @@
 
 **Blocked by:** 03 — 지출 거래 내역 일괄 삭제 API 구축 (선택 ID 및 조건별 전체 삭제)
 
-**Status:** done
+**Status:** resolved
 
 - [x] `expenseService.js`에 `bulkDeleteExpenses(ids)` 및 `clearExpenses(params)` API 연동 함수가 구현된다.
 - [x] 테이블 헤더에 전체 선택/해제 체크박스가 추가되고, 각 행 첫 번째 열에 개별 선택 체크박스가 제공된다 (기존 '통계 제외' 체크박스와 완전히 분리).

@@ -5,7 +5,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-review
+**Status:** resolved
 
 - [x] 카카오뱅크 엑셀 파서에서 '구분' 또는 '거래구분'이 '입금'인 거래는 `amount`를 음수 값으로 추출한다.
 - [x] 국민은행 PDF 파서에서 '입금' 거래 행은 `amount`를 음수 값으로 추출한다.
