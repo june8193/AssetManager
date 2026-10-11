@@ -190,5 +190,23 @@ export const expenseService = {
   async deleteExpense(id) {
     return apiClient.delete(`/api/expenses/${id}`);
   },
+
+  /**
+   * 여러 건의 지출 내역을 일괄 삭제합니다.
+   * @param {number[]} ids - 지출 거래 ID 배열
+   * @returns {Promise<Object>} 일괄 삭제 결과 ({ status: string, deleted_count: number })
+   */
+  async bulkDeleteExpenses(ids) {
+    return apiClient.post('/api/expenses/bulk-delete', { ids });
+  },
+
+  /**
+   * 특정 조건(연월, 결제수단 등)의 지출 내역 전체를 일괄 삭제합니다.
+   * @param {Object} params - 삭제 조건 파라미터 ({ year_month: string, payment_method_id?: number, institution?: string, owner?: string })
+   * @returns {Promise<Object>} 일괄 삭제 결과 ({ status: string, deleted_count: number })
+   */
+  async clearExpenses(params) {
+    return apiClient.delete('/api/expenses/clear', { params });
+  },
 };
 

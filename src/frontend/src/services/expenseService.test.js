@@ -249,6 +249,28 @@ describe('expenseService 단위 테스트', () => {
 
       expect(apiClient.delete).toHaveBeenCalledWith('/api/expenses/10');
     });
+
+    it('bulkDeleteExpenses 호출 시 POST 요청으로 ids 페이로드를 전달한다', async () => {
+      const mockResult = { status: 'success', deleted_count: 3 };
+      apiClient.post.mockResolvedValue(mockResult);
+
+      const ids = [101, 102, 103];
+      const res = await expenseService.bulkDeleteExpenses(ids);
+
+      expect(apiClient.post).toHaveBeenCalledWith('/api/expenses/bulk-delete', { ids });
+      expect(res).toBe(mockResult);
+    });
+
+    it('clearExpenses 호출 시 DELETE 요청으로 쿼리 파라미터를 전달한다', async () => {
+      const mockResult = { status: 'success', deleted_count: 5 };
+      apiClient.delete.mockResolvedValue(mockResult);
+
+      const params = { year_month: '2026-09', institution: '카카오뱅크' };
+      const res = await expenseService.clearExpenses(params);
+
+      expect(apiClient.delete).toHaveBeenCalledWith('/api/expenses/clear', { params });
+      expect(res).toBe(mockResult);
+    });
   });
 });
 

@@ -18,6 +18,8 @@ vi.mock('../services/expenseService', () => ({
     deleteRule: vi.fn(),
     updateExpense: vi.fn(),
     deleteExpense: vi.fn(),
+    bulkDeleteExpenses: vi.fn(),
+    clearExpenses: vi.fn(),
   },
 }));
 
@@ -272,12 +274,12 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
       expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
     });
 
-    // 첫 번째 거래 체크박스 토글
-    const checkboxes = screen.getAllByRole('checkbox');
-    const firstCheckbox = checkboxes[0];
-    expect(firstCheckbox.checked).toBe(false);
+    // 첫 번째 거래의 통계 제외 체크박스 토글
+    const excludeCheckboxes = screen.getAllByTitle('통계에서 제외');
+    const firstExcludeCheckbox = excludeCheckboxes[0];
+    expect(firstExcludeCheckbox.checked).toBe(false);
 
-    fireEvent.click(firstCheckbox);
+    fireEvent.click(firstExcludeCheckbox);
 
     await waitFor(() => {
       expect(expenseService.updateExpense).toHaveBeenCalledWith(101, { is_excluded: true });
@@ -510,5 +512,92 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
       expect(screen.getByText('자동분류 규칙 관리')).toBeInTheDocument();
     });
   });
+
+  describe('지출 내역 일괄 삭제 (Bulk Delete & Clear) 기능', () => {
+    it('개별 행 선택 체크박스를 클릭하면 액션바가 나타나고 일괄 삭제 시 bulkDeleteExpenses가 호출되어야 한다', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      expenseService.bulkDeleteExpenses.mockResolvedValue({ status: 'success', deleted_count: 2 });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 액션바가 처음에는 보이지 않아야 함
+      expect(screen.queryByText(/개 선택됨/)).toBeNull();
+
+      // 첫 번째 및 두 번째 항목 선택 체크박스 클릭
+      const itemCheckbox1 = screen.getByTestId('select-row-101');
+      const itemCheckbox2 = screen.getByTestId('select-row-102');
+
+      fireEvent.click(itemCheckbox1);
+      expect(screen.queryByText('2개 선택됨')).toBeNull();
+      expect(screen.getByText('1개 선택됨')).toBeInTheDocument();
+
+      fireEvent.click(itemCheckbox2);
+      expect(screen.getByText('2개 선택됨')).toBeInTheDocument();
+
+      // 선택 항목 일괄 삭제 버튼 클릭
+      const bulkDeleteBtn = screen.getByRole('button', { name: /선택 항목 일괄 삭제/i });
+      fireEvent.click(bulkDeleteBtn);
+
+      await waitFor(() => {
+        expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining('2건'));
+        expect(expenseService.bulkDeleteExpenses).toHaveBeenCalledWith([101, 102]);
+        // 삭제 완료 후 통계 및 목록 재조회
+        expect(expenseService.getStats).toHaveBeenCalledTimes(2);
+        expect(expenseService.getExpenses).toHaveBeenCalledTimes(2);
+      });
+    });
+
+    it('헤더의 전체 선택 체크박스를 클릭하면 모든 행이 선택/해제되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      const selectAllCheckbox = screen.getByTestId('select-all-header');
+      expect(selectAllCheckbox.checked).toBe(false);
+
+      // 전체 선택 클릭
+      fireEvent.click(selectAllCheckbox);
+      expect(selectAllCheckbox.checked).toBe(true);
+      expect(screen.getByText('3개 선택됨')).toBeInTheDocument();
+
+      // 전체 해제 클릭
+      fireEvent.click(selectAllCheckbox);
+      expect(selectAllCheckbox.checked).toBe(false);
+      expect(screen.queryByText(/개 선택됨/)).toBeNull();
+    });
+
+    it('현재 조건 전체 삭제 버튼 클릭 및 확인 시 clearExpenses가 호출되어야 한다', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      expenseService.clearExpenses.mockResolvedValue({ status: 'success', deleted_count: 3 });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      const clearBtn = screen.getByRole('button', { name: /현재 조건 전체 삭제/i });
+      fireEvent.click(clearBtn);
+
+      await waitFor(() => {
+        expect(window.confirm).toHaveBeenCalledWith(expect.stringMatching(/해당 조건 거래 전체를 삭제하시겠습니까/));
+        expect(expenseService.clearExpenses).toHaveBeenCalledWith(
+          expect.objectContaining({
+            year_month: '2026-08',
+          })
+        );
+        // 삭제 완료 후 통계 및 목록 재조회
+        expect(expenseService.getStats).toHaveBeenCalledTimes(2);
+        expect(expenseService.getExpenses).toHaveBeenCalledTimes(2);
+      });
+    });
+  });
 });
+
 

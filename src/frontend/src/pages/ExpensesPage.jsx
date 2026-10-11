@@ -12,6 +12,7 @@ import {
   Trash2,
   AlertCircle,
   RotateCcw,
+  CheckSquare,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -109,6 +110,7 @@ export default function ExpensesPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setSelectedIds([]);
     try {
       const statsParams = {};
       if (startMonth) statsParams.start_month = startMonth;
@@ -255,6 +257,9 @@ export default function ExpensesPage() {
     }
   };
 
+  // 다중 선택 상태 (거래 ID Set 또는 Array)
+  const [selectedIds, setSelectedIds] = useState([]);
+
   // 단일 거래 삭제 핸들러
   const handleDeleteExpense = async (expenseId) => {
     if (!window.confirm('해당 지출 내역을 삭제하시겠습니까?')) return;
@@ -262,6 +267,7 @@ export default function ExpensesPage() {
     try {
       await expenseService.deleteExpense(expenseId);
       setExpenses((prev) => prev.filter((item) => item.id !== expenseId));
+      setSelectedIds((prev) => prev.filter((id) => id !== expenseId));
 
       // 통계 새로고침
       const statsParams = {};
@@ -272,6 +278,73 @@ export default function ExpensesPage() {
       setStats(newStats);
     } catch (err) {
       alert(`거래 삭제 실패: ${err.message}`);
+    }
+  };
+
+  // 개별 행 선택 토글
+  const handleToggleSelectRow = (expenseId) => {
+    setSelectedIds((prev) =>
+      prev.includes(expenseId) ? prev.filter((id) => id !== expenseId) : [...prev, expenseId]
+    );
+  };
+
+  // 현재 표시 목록 전체 선택/해제 토글
+  const handleToggleSelectAll = () => {
+    if (expenses.length === 0) return;
+    const allIds = expenses.map((item) => item.id);
+    const isAllSelected = allIds.every((id) => selectedIds.includes(id));
+    if (isAllSelected) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(allIds);
+    }
+  };
+
+  // 선택 항목 일괄 삭제 핸들러
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`선택한 ${selectedIds.length}건의 지출 내역을 일괄 삭제하시겠습니까?`)) {
+      return;
+    }
+
+    try {
+      await expenseService.bulkDeleteExpenses(selectedIds);
+      setSelectedIds([]);
+      // 목록 및 통계 새로고침
+      await fetchData();
+    } catch (err) {
+      alert(`일괄 삭제 실패: ${err.message}`);
+    }
+  };
+
+  // 현재 조건 전체 삭제 핸들러 (연월, 소유자, 금융기관 필터 조건 기준)
+  const handleClearFiltered = async () => {
+    const ym = startMonth || stats?.start_month || stats?.year_month;
+    const conditionDesc = [
+      ym ? `${ym}월` : '',
+      selectedOwner && selectedOwner !== '전체' ? selectedOwner : '',
+      selectedInstitution ? selectedInstitution : '',
+    ]
+      .filter(Boolean)
+      .join(' / ');
+
+    const confirmMsg = `${conditionDesc ? `[${conditionDesc}] ` : ''}해당 조건 거래 전체를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`;
+    if (!window.confirm(confirmMsg)) {
+      return;
+    }
+
+    try {
+      const clearParams = {};
+      if (ym) clearParams.year_month = ym;
+      if (selectedOwner && selectedOwner !== '전체') clearParams.owner = selectedOwner;
+      if (selectedInstitution) clearParams.institution = selectedInstitution;
+
+      await expenseService.clearExpenses(clearParams);
+      setSelectedIds([]);
+      // 목록 및 통계 새로고침
+      await fetchData();
+    } catch (err) {
+      alert(`조건부 전체 삭제 실패: ${err.message}`);
     }
   };
 
@@ -780,6 +853,17 @@ export default function ExpensesPage() {
               <option value="excluded">통계 제외건만</option>
             </select>
 
+            {/* 조건부 전체 삭제 버튼 */}
+            <button
+              type="button"
+              onClick={handleClearFiltered}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200 rounded-lg text-xs font-medium transition-colors"
+              title="현재 조회 조건의 거래 전체 삭제"
+            >
+              <Trash2 size={14} />
+              <span>현재 조건 전체 삭제</span>
+            </button>
+
             {/* 필터 초기화 버튼 */}
             {(searchKeyword || selectedCategory || selectedInstitution || selectedExcludedFilter !== 'all') && (
               <button
@@ -799,11 +883,58 @@ export default function ExpensesPage() {
           </div>
         </div>
 
+        {/* 선택 항목 일괄 작업 액션바 (선택 항목 1개 이상일 때 노출) */}
+        {selectedIds.length > 0 && (
+          <div className="flex items-center justify-between p-3 bg-blue-50/80 border border-blue-200/80 rounded-xl text-sm animate-fade-in">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-blue-600" />
+              <span className="font-semibold text-blue-900">
+                {selectedIds.length}개 선택됨
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setSelectedIds([])}
+                className="px-3 py-1.5 text-xs text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg font-medium transition-colors"
+              >
+                선택 해제
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkDelete}
+                className="flex items-center gap-1.5 px-3.5 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xs font-semibold shadow-xs transition-colors"
+              >
+                <Trash2 size={14} />
+                <span>선택 항목 일괄 삭제</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* 테이블 영역 */}
         <div className="overflow-x-auto border border-slate-200 rounded-xl">
           <table className="w-full text-left border-collapse text-sm">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500">
+                <th className="py-3 px-3 text-center w-10">
+                  <input
+                    type="checkbox"
+                    data-testid="select-all-header"
+                    checked={
+                      expenses.length > 0 &&
+                      expenses.every((item) => selectedIds.includes(item.id))
+                    }
+                    onChange={handleToggleSelectAll}
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                    title={
+                      expenses.length > 0 &&
+                      expenses.every((item) => selectedIds.includes(item.id))
+                        ? '전체 선택 해제'
+                        : '전체 선택'
+                    }
+                  />
+                </th>
                 <th className="py-3 px-4">거래일시</th>
                 <th className="py-3 px-4">가맹점 / 내용</th>
                 <th className="py-3 px-4">결제수단</th>
@@ -817,7 +948,7 @@ export default function ExpensesPage() {
             <tbody className="divide-y divide-slate-100">
               {expenses.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                  <td colSpan={9} className="py-12 text-center text-slate-400">
                     <Receipt size={36} className="mx-auto text-slate-300 mb-2" />
                     <p className="text-sm">해당 조건에 일치하는 지출 내역이 없습니다.</p>
                   </td>
@@ -827,9 +958,23 @@ export default function ExpensesPage() {
                   <tr
                     key={tx.id}
                     className={`hover:bg-slate-50/80 transition-colors ${
+                      selectedIds.includes(tx.id) ? 'bg-blue-50/40' : ''
+                    } ${
                       tx.is_excluded ? 'bg-slate-50/50 text-slate-400' : 'text-slate-700'
                     }`}
                   >
+                    {/* 개별 행 다중 선택 체크박스 */}
+                    <td className="py-3 px-3 text-center whitespace-nowrap">
+                      <input
+                        type="checkbox"
+                        data-testid={`select-row-${tx.id}`}
+                        checked={selectedIds.includes(tx.id)}
+                        onChange={() => handleToggleSelectRow(tx.id)}
+                        className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                        title="항목 선택"
+                      />
+                    </td>
+
                     {/* 거래일시 */}
                     <td className="py-3 px-4 text-xs font-mono whitespace-nowrap">
                       {formatDateTime(tx.transaction_date)}
