@@ -628,6 +628,158 @@ describe('ExpenseUploadModal 컴포넌트 테스트', () => {
       ).toBeInTheDocument();
     });
   });
+
+  it('거래 테이블의 구분 뱃지가 입금일 때 에메랄드 계열 클래스를 적용하고, 출금/일시불/할부 등 지출일 때 블루 계열 클래스를 적용한다', async () => {
+    const depositAndWithdrawPreviewResponse = {
+      payment_method: mockPaymentMethods[0],
+      year_month: '2026-08',
+      source_file: '카카오뱅크_명세서.xlsx',
+      transactions: [
+        {
+          transaction_date: '2026-08-01 12:00:00',
+          year_month: '2026-08',
+          merchant: '친구 더치페이 입금',
+          amount: -20000,
+          original_type: '입금',
+          memo: '점심 정산',
+          category_id: 1,
+          is_excluded: false,
+        },
+        {
+          transaction_date: '2026-08-01 13:00:00',
+          year_month: '2026-08',
+          merchant: '식당 결제',
+          amount: 50000,
+          original_type: '출금',
+          memo: '점심 결제',
+          category_id: 1,
+          is_excluded: false,
+        },
+        {
+          transaction_date: '2026-08-02 10:00:00',
+          year_month: '2026-08',
+          merchant: '온라인 쇼핑',
+          amount: 30000,
+          original_type: '일시불',
+          memo: '옷 구매',
+          category_id: 2,
+          is_excluded: false,
+        },
+      ],
+    };
+    expenseService.uploadPreview.mockResolvedValueOnce(depositAndWithdrawPreviewResponse);
+
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    const file = new File(['dummy'], 'statement.xlsx');
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('친구 더치페이 입금')).toBeInTheDocument();
+    });
+
+    const depositBadge = screen.getByText('입금');
+    expect(depositBadge).toHaveClass('bg-emerald-500/20');
+    expect(depositBadge).toHaveClass('text-emerald-300');
+    expect(depositBadge).toHaveClass('border');
+    expect(depositBadge).toHaveClass('border-emerald-500/30');
+
+    const withdrawBadge = screen.getByText('출금');
+    expect(withdrawBadge).toHaveClass('bg-blue-500/10');
+    expect(withdrawBadge).toHaveClass('text-blue-300');
+    expect(withdrawBadge).toHaveClass('border');
+    expect(withdrawBadge).toHaveClass('border-blue-500/20');
+
+    const singlePayBadge = screen.getByText('일시불');
+    expect(singlePayBadge).toHaveClass('bg-blue-500/10');
+    expect(singlePayBadge).toHaveClass('text-blue-300');
+    expect(singlePayBadge).toHaveClass('border');
+    expect(singlePayBadge).toHaveClass('border-blue-500/20');
+  });
+
+  it('거래 금액이 음수인 경우 마이너스 부호 및 녹색 강조 스타일(text-emerald-400 font-bold)로 표시되고 상단 통계 반영 금액에 차감 합산된다', async () => {
+    const netSpendPreviewResponse = {
+      payment_method: mockPaymentMethods[0],
+      year_month: '2026-08',
+      source_file: '카카오뱅크_명세서.xlsx',
+      transactions: [
+        {
+          transaction_date: '2026-08-01 12:00:00',
+          year_month: '2026-08',
+          merchant: '단체 회식',
+          amount: 60000,
+          original_type: '출금',
+          memo: '결제',
+          category_id: 1,
+          is_excluded: false,
+        },
+        {
+          transaction_date: '2026-08-01 13:00:00',
+          year_month: '2026-08',
+          merchant: '더치페이 송금',
+          amount: -15000,
+          original_type: '입금',
+          memo: '친구 입금',
+          category_id: 1,
+          is_excluded: false,
+        },
+      ],
+    };
+    expenseService.uploadPreview.mockResolvedValueOnce(netSpendPreviewResponse);
+
+    render(
+      <ExpenseUploadModal
+        isOpen={true}
+        onClose={vi.fn()}
+        paymentMethods={mockPaymentMethods}
+        categories={mockCategories}
+      />
+    );
+
+    const file = new File(['dummy'], 'statement.xlsx');
+    const fileInput = document.querySelector('input[type="file"]');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    const selectElem = screen.getByLabelText(/결제수단 선택/i);
+    fireEvent.change(selectElem, { target: { value: '1' } });
+
+    const parseBtn = screen.getByRole('button', { name: /미리보기 파싱/i });
+    fireEvent.click(parseBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('더치페이 송금')).toBeInTheDocument();
+    });
+
+    // 음수 금액 셀 확인: -15,000원 및 녹색 강조 클래스
+    const negativeAmountCell = screen.getByText('-15,000원');
+    expect(negativeAmountCell).toBeInTheDocument();
+    expect(negativeAmountCell).toHaveClass('text-emerald-400');
+    expect(negativeAmountCell).toHaveClass('font-bold');
+
+    // 양수 금액 셀 확인: 60,000원
+    const positiveAmountCell = screen.getByText('60,000원');
+    expect(positiveAmountCell).toBeInTheDocument();
+    expect(positiveAmountCell).toHaveClass('text-slate-100');
+
+    // 상단 '통계 반영' 금액 요약 뱃지: 60,000 + (-15,000) = 45,000원
+    const includedBadge = screen.getByText('통계 반영:').closest('div');
+    expect(includedBadge).toHaveTextContent('45,000원');
+    expect(includedBadge.querySelector('.text-blue-400')).toHaveTextContent('45,000원');
+  });
 });
 
 

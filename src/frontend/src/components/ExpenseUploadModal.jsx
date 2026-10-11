@@ -600,14 +600,26 @@ export default function ExpenseUploadModal({
                       </td>
 
                       {/* 원본구분 */}
-                      <td className="py-2.5 px-3 text-slate-400">
-                        <span className="px-1.5 py-0.5 rounded text-[11px] bg-slate-700/50">
+                      <td className="py-2.5 px-3">
+                        <span
+                          className={`px-1.5 py-0.5 rounded text-[11px] ${
+                            tx.original_type === '입금'
+                              ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                              : 'bg-blue-500/10 text-blue-300 border border-blue-500/20'
+                          }`}
+                        >
                           {tx.original_type || '-'}
                         </span>
                       </td>
 
                       {/* 금액 */}
-                      <td className="py-2.5 px-3 font-mono font-semibold text-right text-slate-100">
+                      <td
+                        className={`py-2.5 px-3 font-mono text-right ${
+                          Number(tx.amount) < 0
+                            ? 'text-emerald-400 font-bold'
+                            : 'font-semibold text-slate-100'
+                        }`}
+                      >
                         {Number(tx.amount).toLocaleString()}원
                       </td>
 
