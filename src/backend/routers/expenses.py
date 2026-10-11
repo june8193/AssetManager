@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """지출 모니터링 결제수단 및 카테고리 마스터 관리 API 라우터 모듈입니다."""
 
+import re
 from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
@@ -35,6 +36,9 @@ from ..schemas.expense import (
     MonthlyTrendItem,
     CategoryBreakdownItem,
     PaymentMethodBreakdownItem,
+    ExpenseBulkDeleteRequest,
+    ExpenseBulkDeleteResponse,
+    ExpenseClearResponse,
 )
 
 router = APIRouter(
@@ -1186,6 +1190,101 @@ def get_expense_stats(
         category_breakdown=category_breakdown,
         payment_method_breakdown=payment_method_breakdown,
     )
+
+
+# ==========================================
+# 지출 거래 내역 일괄 삭제 (Bulk Delete & Clear)
+# ==========================================
+
+@router.post("/bulk-delete", response_model=ExpenseBulkDeleteResponse)
+def bulk_delete_expenses(
+    payload: ExpenseBulkDeleteRequest,
+    db: Session = Depends(get_db),
+):
+    """다중 선택된 지출 내역 ID 목록을 전달받아 원자적으로 일괄 삭제합니다.
+
+    Args:
+        payload (ExpenseBulkDeleteRequest): 삭제 대상 지출 ID 목록 (`{ "ids": [1, 2, ...] }`).
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: ID 목록이 비어 있는 경우 400 Bad Request 반환.
+
+    Returns:
+        ExpenseBulkDeleteResponse: 성공 여부 및 삭제된 건수.
+    """
+    if not payload.ids:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="삭제할 지출 ID 목록(ids)이 비어있습니다.",
+        )
+
+    deleted_count = (
+        db.query(Expense)
+        .filter(Expense.id.in_(payload.ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+
+    return ExpenseBulkDeleteResponse(status="success", deleted_count=deleted_count)
+
+
+@router.delete("/clear", response_model=ExpenseClearResponse)
+def clear_expenses(
+    year_month: Optional[str] = Query(None, description="기준 정산년월 (YYYY-MM, 필수)"),
+    payment_method_id: Optional[int] = Query(None, description="결제수단 ID 필터"),
+    institution: Optional[str] = Query(None, description="금융기관명 필터"),
+    owner: Optional[str] = Query(None, description="소유주 필터"),
+    db: Session = Depends(get_db),
+):
+    """지정된 정산년월 및 필터 조건에 부합하는 지출 거래들을 일괄 삭제합니다.
+
+    Args:
+        year_month (Optional[str]): 기준 년월 (YYYY-MM 형식, 필수).
+        payment_method_id (Optional[int]): 결제수단 ID 조건.
+        institution (Optional[str]): 금융기관 조건.
+        owner (Optional[str]): 소유주 조건.
+        db (Session): 데이터베이스 세션.
+
+    Raises:
+        HTTPException: 기준 년월이 누락되었거나 'YYYY-MM' 형식이 아닌 경우 400 Bad Request 반환.
+
+    Returns:
+        ExpenseClearResponse: 성공 여부 및 삭제된 건수.
+    """
+    if not year_month or not year_month.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="기준 년월(year_month)은 필수 입력 항목입니다.",
+        )
+
+    trimmed_ym = year_month.strip()
+    if not re.match(r"^\d{4}-\d{2}$", trimmed_ym):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="기준 년월(year_month)은 'YYYY-MM' 형식이어야 합니다.",
+        )
+
+    try:
+        datetime.strptime(trimmed_ym, "%Y-%m")
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="유효하지 않은 년월(year_month) 값입니다.",
+        )
+
+    query = db.query(Expense).filter(Expense.year_month == trimmed_ym)
+    if payment_method_id is not None:
+        query = query.filter(Expense.payment_method_id == payment_method_id)
+    if institution:
+        query = query.filter(Expense.institution == institution)
+    if owner and owner != "전체":
+        query = query.filter(Expense.owner == owner)
+
+    deleted_count = query.delete(synchronize_session=False)
+    db.commit()
+
+    return ExpenseClearResponse(status="success", deleted_count=deleted_count)
 
 
 @router.put("/{expense_id:int}", response_model=ExpenseResponse)

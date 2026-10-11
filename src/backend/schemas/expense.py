@@ -297,3 +297,23 @@ class ExpenseStatsResponse(BaseModel):
     category_breakdown: list[CategoryBreakdownItem]
     payment_method_breakdown: list[PaymentMethodBreakdownItem]
 
+
+# --- 지출 일괄 삭제 (Bulk Delete & Clear) 스키마 ---
+
+class ExpenseBulkDeleteRequest(BaseModel):
+    """지출 내역 다중 선택 일괄 삭제 요청 스키마입니다."""
+    ids: list[int]
+
+
+class ExpenseBulkDeleteResponse(BaseModel):
+    """지출 내역 일괄 삭제 결과 응답 스키마입니다."""
+    status: str = "success"
+    deleted_count: int
+
+
+class ExpenseClearResponse(BaseModel):
+    """조건별 지출 내역 전체 삭제 결과 응답 스키마입니다."""
+    status: str = "success"
+    deleted_count: int
+
+
