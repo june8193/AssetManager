@@ -16,7 +16,8 @@ def test_get_categories():
     assert "원화예수금" in data["현금"]
     assert "코어(지수)" in data["주식"]
     assert "알파(성장)" in data["주식"]
-    assert "배당주" in data["주식"]
+    assert "배당주" not in data["주식"]
+    assert data["주식"] == ["코어(지수)", "알파(성장)"]
     assert data == VALID_CATEGORIES
 
 @patch("src.backend.services.asset_service.price_service.get_stock_name", new_callable=AsyncMock)

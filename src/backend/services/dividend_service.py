@@ -106,11 +106,11 @@ class DividendService:
                 "cumulative": round(cum_val, 2)
             })
 
-        # 평균 연간 배당률 계산 (배당 목적 자산군: 중분류 '배당주' + 대분류 '채권'의 총 평가액 대비 TTM 배당금 가중평균)
+        # 평균 연간 배당률 계산 (배당 목적 자산군: 대분류 '주식' + 대분류 '채권'의 총 평가액 대비 TTM 배당금 가중평균)
         stock_analysis = self.get_stock_dividend_analysis()
         target_stocks = [
             s for s in stock_analysis
-            if s.get("sub_category") == "배당주" or s.get("major_category") == "채권"
+            if s.get("major_category") in ("주식", "채권")
         ]
         total_target_val_krw = 0.0
         total_target_div_krw = 0.0

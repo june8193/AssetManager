@@ -31,9 +31,9 @@ def db_session():
     session.add(rate)
 
     # 3. 자산 마스터 (삼성전자우, SCHD, 신규배당주)
-    samsung = Asset(name="삼성전자우", ticker="005935", major_category="주식", sub_category="배당주", country="KR")
-    schd = Asset(name="SCHD", ticker="SCHD", major_category="주식", sub_category="배당주", country="US")
-    new_stock = Asset(name="신규배당주", ticker="999999", major_category="주식", sub_category="배당주", country="KR")
+    samsung = Asset(name="삼성전자우", ticker="005935", major_category="주식", sub_category="알파(성장)", country="KR")
+    schd = Asset(name="SCHD", ticker="SCHD", major_category="주식", sub_category="코어(지수)", country="US")
+    new_stock = Asset(name="신규배당주", ticker="999999", major_category="주식", sub_category="알파(성장)", country="KR")
     session.add_all([samsung, schd, new_stock])
     session.commit()
 
@@ -251,9 +251,9 @@ def test_mixed_currency_dividend_and_tax_detailed(db_session):
     current_year = datetime.date.today().year
 
     # 1. 미국 배당주 O (Realty Income)
-    realty = Asset(name="Realty Income", ticker="O", major_category="주식", sub_category="배당주", country="US")
+    realty = Asset(name="Realty Income", ticker="O", major_category="주식", sub_category="알파(성장)", country="US")
     # 2. 한국 배당주 배당맥스
-    kr_div = Asset(name="맥쿼리인프라", ticker="088980", major_category="주식", sub_category="배당주", country="KR")
+    kr_div = Asset(name="맥쿼리인프라", ticker="088980", major_category="주식", sub_category="알파(성장)", country="KR")
     db_session.add_all([realty, kr_div])
     db_session.commit()
 
