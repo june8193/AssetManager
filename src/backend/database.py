@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, MetaData
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.pool import StaticPool
 import os
@@ -58,7 +58,17 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 # 모델 정의를 위한 Base 클래스
-Base = declarative_base()
+# SQLite 배치 모드 및 제약조건 명시를 위한 네이밍 컨벤션
+naming_convention = {
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_`%(constraint_name)s`",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+metadata = MetaData(naming_convention=naming_convention)
+
+Base = declarative_base(metadata=metadata)
 
 def get_db():
     """요청 당 독립적인 DB 세션을 생성하고 닫는 제너레이터 함수입니다."""

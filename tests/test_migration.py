@@ -116,3 +116,33 @@ def test_migration_failure_raises_runtime_error():
 
     assert "데이터베이스 마이그레이션 실패" in str(exc_info.value)
 
+
+def test_alembic_schema_matches_models_metadata(tmp_path):
+    """임시 SQLite DB에서 Alembic upgrade head를 실행한 후 Base.metadata와 비교 시 스키마 차이가 없음을 검증합니다."""
+    from alembic.config import Config
+    from alembic import command
+    from alembic.migration import MigrationContext
+    from alembic.autogenerate import compare_metadata
+    from src.backend.models import Base
+
+    db_file = tmp_path / "test_migration.db"
+    db_url = f"sqlite:///{db_file}"
+
+    cfg = Config("alembic.ini")
+    cfg.set_main_option("sqlalchemy.url", db_url)
+
+    # upgrade head 실행
+    command.upgrade(cfg, "head")
+
+    # compare_metadata로 검증
+    engine = create_engine(db_url)
+    with engine.connect() as conn:
+        opts = {
+            "compare_type": True,
+            "render_as_batch": True,
+        }
+        mc = MigrationContext.configure(conn, opts=opts)
+        diff = compare_metadata(mc, Base.metadata)
+        assert diff == [], f"스키마 드리프트 발생: {diff}"
+
+

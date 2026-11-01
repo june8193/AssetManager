@@ -6,10 +6,10 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** ready-for-agent
+**Status:** done
 
-- [ ] `pyproject.toml` 및 가상환경에 `alembic` 의존성이 추가되고 `uv run alembic --version` 명령이 정상 동작한다.
-- [ ] `alembic.ini`에 날짜 기반 파일 템플릿(`YYYYMMDD_HHMM_<rev>_<slug>.py`)이 설정되고, `alembic/env.py`에서 `src.backend.database.load_database_url()` 연동 및 `target_metadata=Base.metadata`, `render_as_batch=True`, `compare_type=True`가 설정된다.
-- [ ] `src/backend/models.py`의 `AccountSnapshot` 모델에 `(account_id, snapshot_date)` 복합 유니크 제약조건(`idx_account_snapshot_unique`)이 반영된다.
-- [ ] `alembic/versions/` 하위에 현재 `models.py`의 전체 19개 테이블을 생성하는 초기 Baseline 마이그레이션 스크립트가 생성된다.
-- [ ] 격리된 테스트 DB에서 Alembic `upgrade head`를 실행한 후 `alembic.autogenerate.compare_metadata`로 검사했을 때 `Base.metadata`와의 스키마 차이(diff)가 0건임을 검증하는 테스트가 통과한다.
+- [x] `pyproject.toml` 및 가상환경에 `alembic` 의존성이 추가되고 `uv run alembic --version` 명령이 정상 동작한다.
+- [x] `alembic.ini`에 날짜 기반 파일 템플릿(`YYYYMMDD_HHMM_<rev>_<slug>.py`)이 설정되고, `alembic/env.py`에서 `src.backend.database.load_database_url()` 연동 및 `target_metadata=Base.metadata`, `render_as_batch=True`, `compare_type=True`가 설정된다.
+- [x] `src/backend/models.py`의 `AccountSnapshot` 모델에 `(account_id, snapshot_date)` 복합 유니크 제약조건(`idx_account_snapshot_unique`)이 반영된다.
+- [x] `alembic/versions/` 하위에 현재 `models.py`의 전체 19개 테이블을 생성하는 초기 Baseline 마이그레이션 스크립트가 생성된다.
+- [x] 격리된 테스트 DB에서 Alembic `upgrade head`를 실행한 후 `alembic.autogenerate.compare_metadata`로 검사했을 때 `Base.metadata`와의 스키마 차이(diff)가 0건임을 검증하는 테스트가 통과한다.
