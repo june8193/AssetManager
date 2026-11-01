@@ -9,7 +9,7 @@ describe('AssetsTab', () => {
   ];
 
   const mockCategories = {
-    "주식": ["코어(지수)", "알파(성장)", "배당주"],
+    "주식": ["코어(지수)", "알파(성장)"],
     "채권": ["미국장기채"],
     "현금": ["원화예수금", "달러예수금"]
   };
@@ -104,5 +104,22 @@ describe('AssetsTab', () => {
       expect(payload.sub_category).toBe('알파(성장)');
       expect(payload.country).toBe('US');
     });
+  });
+
+  it('자산 추가 시 주식의 중분류 선택지에 배당주가 포함되지 않아야 한다', async () => {
+    render(<AssetsTab />);
+    
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: /대분류/i })).toBeInTheDocument();
+    });
+
+    const majorSelect = screen.getByRole('combobox', { name: /대분류/i });
+    fireEvent.change(majorSelect, { target: { value: '주식' } });
+
+    const subSelect = screen.getByRole('combobox', { name: /중분류/i });
+    const options = Array.from(subSelect.querySelectorAll('option')).map(o => o.value);
+    expect(options).not.toContain('배당주');
+    expect(options).toContain('코어(지수)');
+    expect(options).toContain('알파(성장)');
   });
 });

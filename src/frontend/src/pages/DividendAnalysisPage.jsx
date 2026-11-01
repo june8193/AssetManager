@@ -18,7 +18,7 @@ const DividendAnalysisPage = () => {
   const [error, setError] = useState(null);
   const [customPrices, setCustomPrices] = useState({});
 
-  const [activeTab, setActiveTab] = useState('배당주');
+  const [activeTab, setActiveTab] = useState('주식');
 
   const fetchData = async () => {
     setLoading(true);
@@ -59,9 +59,6 @@ const DividendAnalysisPage = () => {
 
   const filteredStocks = stocks.filter((stock) => {
     if (activeTab === '전체 자산') return true;
-    if (activeTab === '배당주') {
-      return stock.sub_category === '배당주' || stock.major_category === '배당주';
-    }
     return stock.major_category === activeTab;
   });
 
@@ -114,7 +111,7 @@ const DividendAnalysisPage = () => {
         </button>
       </div>
 
-      {/* 1. 요약 카드 */}
+      {/* 1. 상단 핵심 지표 카드 4종 */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
           <div className="p-3 bg-blue-50 text-blue-600 rounded-lg">
@@ -144,7 +141,7 @@ const DividendAnalysisPage = () => {
             <div className="flex items-center gap-1.5 flex-wrap">
               <p className="text-xs text-slate-500 font-medium">최근 1년 배당률</p>
               <span className="text-[10px] text-violet-700 bg-violet-50 font-semibold px-1.5 py-0.5 rounded border border-violet-100">
-                배당주+채권 기준
+                주식+채권 기준
               </span>
             </div>
             <p className="text-xl font-bold text-violet-600 mt-0.5">{avg_yield.toFixed(2)}%</p>
@@ -206,10 +203,10 @@ const DividendAnalysisPage = () => {
             <p className="text-xs text-slate-500">가상 주가를 수정하면 즉시 가상 배당률(%)이 실시간으로 재계산됩니다.</p>
           </div>
 
-          {/* 카테고리 탭 (배당주 / 채권 / 전체 자산) */}
+          {/* 카테고리 탭 (주식 / 채권 / 전체 자산) */}
           <div className="flex bg-slate-100 p-1 rounded-lg border border-slate-200">
             {[
-              { id: '배당주', label: '배당주' },
+              { id: '주식', label: '주식' },
               { id: '채권', label: '채권' },
               { id: '전체 자산', label: '전체 자산' },
             ].map((tab) => (

@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `src/backend/models.py`의 `VALID_CATEGORIES["주식"]`에 `["코어(지수)", "알파(성장)"]`만 유지
 - [x] `tests/test_assets_verify.py`에서 `assert "배당주" not in data["주식"]` 통과
