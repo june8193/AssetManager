@@ -92,3 +92,40 @@ def test_rotate_backups_keeps_limit(backup_service, temp_backup_dir):
     # 여전히 3개여야 함
     backups = sorted(list(temp_backup_dir.glob("assets_*.db")))
     assert len(backups) == 3
+
+
+def test_backup_service_default_db_path():
+    """BackupService의 기본 DB 경로가 src/assets.db를 가리키는지 확인합니다."""
+    service = BackupService()
+    db_path = Path(service.db_path)
+    assert db_path.name == "assets.db"
+    assert db_path.parent.name == "src"
+
+
+def test_backup_database_file_creates_backup(tmp_path):
+    """backup_database_file 함수가 지정된 DB 파일을 백업 디렉토리에 복사하는지 확인합니다."""
+    from src.backend.services.backup_service import backup_database_file
+
+    db_file = tmp_path / "custom.db"
+    db_file.write_text("custom db data")
+
+    backup_dir = tmp_path / "backups"
+    settings_file = tmp_path / "settings.toml"
+    settings_file.write_text(f'[backup]\npath = "{backup_dir.as_posix()}"\n')
+
+    backup_path = backup_database_file(db_file, settings_path=settings_file)
+
+    assert backup_path.exists()
+    assert backup_path.parent == backup_dir
+    assert backup_path.name.startswith("assets_")
+    assert backup_path.name.endswith(".db")
+    assert backup_path.read_text() == "custom db data"
+
+
+def test_backup_database_file_raises_if_file_not_found(tmp_path):
+    """존재하지 않는 DB 파일을 백업하려고 하면 FileNotFoundError가 발생하는지 확인합니다."""
+    from src.backend.services.backup_service import backup_database_file
+
+    non_existent = tmp_path / "not_found.db"
+    with pytest.raises(FileNotFoundError):
+        backup_database_file(non_existent)

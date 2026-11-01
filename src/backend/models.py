@@ -258,6 +258,9 @@ class AccountSnapshot(Base):
         total_profit (float): 총 수익
     """
     __tablename__ = "account_snapshots"
+    __table_args__ = (
+        UniqueConstraint("account_id", "snapshot_date", name="idx_account_snapshot_unique"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
