@@ -15,6 +15,15 @@ from sqlalchemy.orm import Session
 
 from ..database import get_db
 from ..tasks import task_manager_instance
+from ..schemas.settings import (
+    SystemSettingsResponse,
+    SystemSettingsUpdateRequest,
+)
+from ..services.settings_service import (
+    read_system_settings,
+    update_system_settings,
+    restore_system_settings,
+)
 
 router = APIRouter(prefix="/api/v1/system", tags=["System"])
 
@@ -439,3 +448,38 @@ def get_log_content(
         lines=tail_lines,
     )
 
+
+# --- System Settings CRUD & Backup/Restore Endpoints ---
+
+
+@router.get(
+    "/settings",
+    response_model=SystemSettingsResponse,
+    summary="시스템 설정 조회",
+    description="settings.toml 파일의 구조화된 데이터 및 원문, 백업 여부를 평문으로 조회합니다.",
+)
+def get_system_settings() -> SystemSettingsResponse:
+    """settings.toml 파일의 구조화된 설정과 Raw 텍스트를 마스킹 없이 반환합니다."""
+    return read_system_settings()
+
+
+@router.put(
+    "/settings",
+    response_model=SystemSettingsResponse,
+    summary="시스템 설정 수정 및 저장",
+    description="form 또는 raw 모드로 settings.toml을 수정하고 이전 설정을 백업합니다.",
+)
+def put_system_settings(request: SystemSettingsUpdateRequest) -> SystemSettingsResponse:
+    """설정을 수정하고 주석을 보존한 채 파일로 저장하며 직전 설정을 자동 백업합니다."""
+    return update_system_settings(request)
+
+
+@router.post(
+    "/settings/restore",
+    response_model=SystemSettingsResponse,
+    summary="직전 백업 설정 복원",
+    description="settings.toml.bak 백업본으로 settings.toml을 복원합니다.",
+)
+def restore_settings_from_backup() -> SystemSettingsResponse:
+    """settings.toml.bak 파일로부터 이전 정상 설정을 복원합니다."""
+    return restore_system_settings()
