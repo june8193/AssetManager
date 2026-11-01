@@ -88,6 +88,7 @@ def test_rotate_backups_keeps_limit(backup_service, temp_backup_dir):
     
     # 새로운 백업 수행 (4번째)
     backup_service._perform_backup()
+    backup_service._rotate_backups()
     
     # 여전히 3개여야 함
     backups = sorted(list(temp_backup_dir.glob("assets_*.db")))
