@@ -43,6 +43,7 @@ const MENU_ITEMS = [
     label: '서버 점검', 
     icon: Server,
     subItems: [
+      { path: '/system/settings', label: '환경 설정 및 서버 관리' },
       { path: '/system/db-explorer', label: 'DB 탐색기' },
       { path: '/system/logs', label: '시스템 로그 보기' },
       { path: '/connection', label: 'API 연결 관리' }

@@ -59,4 +59,37 @@ export const systemService = {
       ...options,
     });
   },
+
+  /**
+   * 시스템 환경 설정(settings.toml)과 원문 및 백업 여부를 조회합니다.
+   * @returns {Promise<{ settings: any, raw_toml: string, has_backup: boolean, backup_modified_at?: string }>}
+   */
+  getSettings() {
+    return apiClient.get('/api/v1/system/settings');
+  },
+
+  /**
+   * 시스템 설정을 저장합니다.
+   * @param {{ mode: 'form' | 'raw', settings?: any, raw_toml?: string }} payload - 저장할 설정 데이터
+   * @returns {Promise<{ settings: any, raw_toml: string, has_backup: boolean, backup_modified_at?: string }>}
+   */
+  updateSettings(payload) {
+    return apiClient.put('/api/v1/system/settings', payload);
+  },
+
+  /**
+   * 직전 백업 설정(settings.toml.bak)으로 복원합니다.
+   * @returns {Promise<{ settings: any, raw_toml: string, has_backup: boolean, backup_modified_at?: string }>}
+   */
+  restoreSettings() {
+    return apiClient.post('/api/v1/system/settings/restore');
+  },
+
+  /**
+   * 백엔드 서버 재시작을 요청합니다.
+   * @returns {Promise<{ status: string, message: string }>}
+   */
+  restartServer() {
+    return apiClient.post('/api/v1/system/restart');
+  },
 };

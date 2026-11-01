@@ -26,6 +26,7 @@ import DividendAnalysisPage from './pages/DividendAnalysisPage';
 import PerformanceAnalysisPage from './pages/PerformanceAnalysisPage';
 import DbExplorerPage from './pages/DbExplorerPage';
 import SystemLogPage from './pages/SystemLogPage';
+import SystemSettingsPage from './pages/SystemSettingsPage';
 import ExpensesPage from './pages/ExpensesPage';
 import TitleManager from './components/TitleManager';
 
@@ -80,6 +81,7 @@ function DesktopAppRoutes() {
           <Route path="/db/watchlist-sector" element={<WatchlistSectorPage />} />
           <Route path="/system/db-explorer" element={<DbExplorerPage />} />
           <Route path="/system/logs" element={<SystemLogPage />} />
+          <Route path="/system/settings" element={<SystemSettingsPage />} />
         </Routes>
       </div>
     </div>
