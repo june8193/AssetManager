@@ -3,31 +3,31 @@ import { Calendar, DollarSign } from 'lucide-react';
 import { getAccountDisplayName } from '../../../utils/snapshotCalculator';
 
 /**
- * 1단계: 기본 정보(기준 일자, 환율) 및 증권 계좌 선택 화면
+ * 1단계: 기본 정보(기준 일자, 환율) 및 은행 계좌 선택 화면
  */
 export const Step1BasicInfo = ({
   inputDate,
   setInputDate,
   exchangeRate,
-  brokerageAccounts = [],
+  bankAccounts = [],
   selectedAccountIds = [],
   loadingAccounts = false,
   toggleAccountSelection,
-  selectAllBrokerage,
+  selectAllBank,
 }) => {
-  const isAllBrokerageSelected =
-    brokerageAccounts.length > 0 &&
-    brokerageAccounts.every((a) => selectedAccountIds.includes(a.id));
+  const isAllSelected =
+    bankAccounts.length > 0 &&
+    bankAccounts.every((a) => selectedAccountIds.includes(a.id));
 
-  const selectedBrokerageCount = selectedAccountIds.filter((id) =>
-    brokerageAccounts.some((acc) => acc.id === id)
+  const selectedCount = selectedAccountIds.filter((id) =>
+    bankAccounts.some((acc) => acc.id === id)
   ).length;
 
   return (
     <div className="py-2 space-y-8 animate-in fade-in duration-500" data-testid="step-1-basic-info">
       <div>
-        <h2 className="text-xl font-semibold mb-2">기본 정보 및 증권 계좌 선택</h2>
-        <p className="text-slate-500 mb-6">스냅샷 기준 일자와 대상 증권 계좌를 선택해주세요.</p>
+        <h2 className="text-xl font-semibold mb-2">기본 정보 및 은행 계좌 선택</h2>
+        <p className="text-slate-500 mb-6">스냅샷 기준 일자와 대상 은행 계좌를 선택해주세요.</p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50 rounded-xl border border-slate-100">
@@ -60,8 +60,8 @@ export const Step1BasicInfo = ({
 
       <div className="space-y-3">
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-sm font-bold text-slate-700">증권 계좌 목록 ({brokerageAccounts.length})</h3>
-          <span className="text-xs text-slate-400 font-medium">선택됨: {selectedBrokerageCount}개</span>
+          <h3 className="text-sm font-bold text-slate-700">은행 계좌 목록 ({bankAccounts.length})</h3>
+          <span className="text-xs text-slate-400 font-medium">선택됨: {selectedCount}개</span>
         </div>
 
         <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
@@ -71,10 +71,10 @@ export const Step1BasicInfo = ({
                 <th className="px-4 py-3 w-12">
                   <input
                     type="checkbox"
-                    aria-label="증권 계좌 전체 선택"
+                    aria-label="은행 계좌 전체 선택"
                     className="rounded text-blue-600 focus:ring-blue-500"
-                    checked={isAllBrokerageSelected}
-                    onChange={(e) => selectAllBrokerage?.(e.target.checked)}
+                    checked={isAllSelected}
+                    onChange={(e) => selectAllBank?.(e.target.checked)}
                   />
                 </th>
                 <th className="px-4 py-3 font-semibold text-slate-600">소유자</th>
@@ -90,14 +90,14 @@ export const Step1BasicInfo = ({
                     계좌 목록을 불러오는 중...
                   </td>
                 </tr>
-              ) : brokerageAccounts.length === 0 ? (
+              ) : bankAccounts.length === 0 ? (
                 <tr>
                   <td colSpan="5" className="px-4 py-10 text-center text-slate-400">
-                    활성화된 증권 계좌가 없습니다.
+                    활성화된 은행 계좌가 없습니다.
                   </td>
                 </tr>
               ) : (
-                brokerageAccounts.map((acc) => (
+                bankAccounts.map((acc) => (
                   <tr
                     key={acc.id}
                     className={`hover:bg-slate-50 transition-colors cursor-pointer ${

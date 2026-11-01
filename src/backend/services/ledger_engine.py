@@ -63,11 +63,11 @@ class LedgerEngine:
                 continue
 
             t_type = getattr(tx, "type", None)
-            if t_type not in ["DEPOSIT", "WITHDRAW"]:
+            if t_type not in ["DEPOSIT", "WITHDRAW", "TRANSFER"]:
                 continue
 
             amount = float(getattr(tx, "total_amount", 0.0) or 0.0)
-            if t_type == "WITHDRAW":
+            if t_type in ["WITHDRAW", "TRANSFER"]:
                 amount = -amount
 
             if getattr(tx, "currency", None) == "USD":
@@ -225,9 +225,9 @@ class LedgerEngine:
                     if is_cash_asset:
                         apply_cash(curr, amount)
 
-                elif t_type in ["WITHDRAW", "TAX"]:
+                elif t_type in ["WITHDRAW", "TAX", "TRANSFER"]:
                     apply_cash(curr, -amount)
-                    if t_type == "WITHDRAW":
+                    if t_type in ["WITHDRAW", "TRANSFER"]:
                         if curr == "KRW":
                             accum_wdr_krw += amount
                         elif curr == "USD":

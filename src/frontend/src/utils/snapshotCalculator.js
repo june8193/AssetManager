@@ -8,6 +8,35 @@ import { formatWithCommas, parseCommas } from './formatters';
 export { formatWithCommas, parseCommas };
 
 /**
+ * 거래 내역 유형 상수 객체
+ */
+export const TRANSACTION_TYPES = Object.freeze({
+  DEPOSIT: 'DEPOSIT',
+  WITHDRAW: 'WITHDRAW',
+  TRANSFER: 'TRANSFER',
+  INTEREST: 'INTEREST',
+  FEE: 'FEE',
+  TAX: 'TAX',
+  DIVIDEND: 'DIVIDEND',
+  CASH_ADJUSTMENT: 'CASH_ADJUSTMENT',
+});
+
+/**
+ * 신규 거래 내역 중 이체(TRANSFER)의 도착 계좌 선택 여부를 검증합니다.
+ * @param {Array<object>} newTransactions
+ * @returns {{ isValid: boolean, message?: string }}
+ */
+export const validateAccountTransferTargets = (newTransactions = []) => {
+  const unassigned = (newTransactions || []).find(
+    (tx) => tx.type === TRANSACTION_TYPES.TRANSFER && !tx.target_account_id
+  );
+  if (unassigned) {
+    return { isValid: false, message: '이체(TRANSFER) 거래의 도착 계좌를 선택해주세요.' };
+  }
+  return { isValid: true };
+};
+
+/**
  * 계좌의 표시용 이름을 반환합니다. 별칭이 있는 경우 '계좌명 (별칭)' 형식으로 반환합니다.
  * @param {{ name: string, alias?: string }} acc
  * @returns {string}
@@ -65,6 +94,7 @@ export const calculateCashDifference = (previousCash = 0, transactions = [], cur
       case 'CASH_ADJUSTMENT':
         return sum + amt;
       case 'WITHDRAW':
+      case 'TRANSFER':
       case 'TAX':
       case 'FEE':
         return sum - amt;
@@ -83,7 +113,54 @@ export const calculateCashDifference = (previousCash = 0, transactions = [], cur
 };
 
 /**
+ * 타 계좌에서 현재 계좌(targetAccId)로 전송된 이체(TRANSFER) 거래들을 추출하여
+ * 도착 계좌에 표시/정산할 DEPOSIT 트랜잭션 목록으로 변환합니다.
+ * @param {number|string} targetAccId - 대상 계좌 ID
+ * @param {object} accountsFormData - 계좌별 폼 데이터 맵
+ * @param {Array<object>} accounts - 전체 계좌 목록
+ * @returns {Array<object>}
+ */
+export const getIncomingTransferDeposits = (targetAccId, accountsFormData = {}, accounts = []) => {
+  if (!targetAccId || !accountsFormData) return [];
+
+  const targetIdStr = String(targetAccId);
+  const incoming = [];
+
+  Object.entries(accountsFormData).forEach(([srcAccId, formData]) => {
+    // 본인 계좌에서 입력한 거래는 제외
+    if (String(srcAccId) === targetIdStr) return;
+
+    const newTxs = formData?.newTransactions || [];
+    newTxs.forEach((tx) => {
+      if (tx.type === 'TRANSFER' && tx.target_account_id && String(tx.target_account_id) === targetIdStr) {
+        const sourceAcc = (accounts || []).find((a) => String(a.id) === String(srcAccId));
+        const sourceName = getAccountDisplayName(sourceAcc) || (sourceAcc ? sourceAcc.name : '타 계좌');
+        const transferMemo = tx.memo ? `이체 연동: ${sourceName} (${tx.memo})` : `이체 연동: ${sourceName}`;
+
+        incoming.push({
+          source_account_id: Number(srcAccId),
+          source_account_name: sourceName,
+          transaction_date: tx.date || '',
+          date: tx.date || '',
+          type: 'DEPOSIT',
+          amount: tx.amount,
+          total_amount: parseCommas(tx.amount),
+          currency: 'KRW',
+          quantity: parseCommas(tx.amount),
+          price: 1.0,
+          memo: transferMemo,
+          is_incoming_transfer: true,
+        });
+      }
+    });
+  });
+
+  return incoming;
+};
+
+/**
  * 증권 계좌 정산 계산용 API 요청 페이로드를 생성합니다.
+ * 타 계좌발 연동 이체 입금(incomingTransfers)이 있는 경우 new_transactions에 합산합니다.
  * @param {object} params
  * @returns {object}
  */
@@ -91,21 +168,24 @@ export const buildBrokerageCalculatePayload = ({
   accountId,
   snapshotDate,
   newTransactions = [],
+  incomingTransfers = [],
   currentKrw = 0,
   currentUsd = 0,
   exchangeRate = 1.0,
 }) => {
+  const combinedTxs = [...(newTransactions || []), ...(incomingTransfers || [])];
+
   return {
     account_id: accountId,
     snapshot_date: snapshotDate,
-    new_transactions: (newTransactions || []).map((tx) => ({
+    new_transactions: combinedTxs.map((tx) => ({
       account_id: accountId,
       asset_id: tx.asset_id || 0,
-      transaction_date: tx.date || snapshotDate,
+      transaction_date: tx.date || tx.transaction_date || snapshotDate,
       type: tx.type,
-      total_amount: parseCommas(tx.amount),
+      total_amount: parseCommas(tx.amount ?? tx.total_amount),
       currency: tx.currency || 'KRW',
-      quantity: parseCommas(tx.amount),
+      quantity: parseCommas(tx.amount ?? tx.quantity),
       price: 1.0,
       memo: tx.memo || '',
     })),
@@ -117,6 +197,7 @@ export const buildBrokerageCalculatePayload = ({
 
 /**
  * 은행 계좌 잔액 계산용 API 요청 페이로드를 생성합니다.
+ * 타 계좌발 연동 이체 입금(incomingTransfers)이 있는 경우 new_transactions에 합산합니다.
  * @param {object} params
  * @returns {object}
  */
@@ -124,18 +205,21 @@ export const buildBankCalculatePayload = ({
   accountId,
   snapshotDate,
   newTransactions = [],
+  incomingTransfers = [],
 }) => {
+  const combinedTxs = [...(newTransactions || []), ...(incomingTransfers || [])];
+
   return {
     account_id: accountId,
     snapshot_date: snapshotDate,
-    new_transactions: (newTransactions || []).map((tx) => ({
+    new_transactions: combinedTxs.map((tx) => ({
       account_id: accountId,
       asset_id: tx.asset_id || 0,
-      transaction_date: tx.date || snapshotDate,
+      transaction_date: tx.date || tx.transaction_date || snapshotDate,
       type: tx.type,
-      total_amount: parseCommas(tx.amount),
+      total_amount: parseCommas(tx.amount ?? tx.total_amount),
       currency: 'KRW',
-      quantity: parseCommas(tx.amount),
+      quantity: parseCommas(tx.amount ?? tx.quantity),
       price: 1.0,
       memo: tx.memo || '',
     })),
@@ -144,6 +228,8 @@ export const buildBankCalculatePayload = ({
 
 /**
  * 최종 스냅샷 통합 저장 API 요청 DTO 페이로드를 조립합니다.
+ * TRANSFER 거래의 경우 target_account_id를 포함합니다.
+ * 읽기 전용 연동 이체 입금 행은 백엔드에서 쌍으로 생성하므로 포함하지 않습니다.
  * @param {object} params
  * @returns {object}
  */
@@ -154,6 +240,24 @@ export const buildSnapshotPayload = ({
   bankAccountIds = [],
   accountsFormData = {},
 }) => {
+  const mapNewTx = (accId, tx) => {
+    const mapped = {
+      account_id: accId,
+      asset_id: tx.asset_id || 0,
+      transaction_date: tx.date || snapshotDate,
+      type: tx.type,
+      total_amount: parseCommas(tx.amount),
+      currency: tx.currency || 'KRW',
+      quantity: parseCommas(tx.amount),
+      price: 1.0,
+      memo: tx.memo || '',
+    };
+    if (tx.type === 'TRANSFER' && tx.target_account_id) {
+      mapped.target_account_id = Number(tx.target_account_id);
+    }
+    return mapped;
+  };
+
   return {
     snapshot_date: snapshotDate,
     exchange_rate: parseFloat(exchangeRate),
@@ -161,17 +265,7 @@ export const buildSnapshotPayload = ({
       const data = accountsFormData[accId] || { newTransactions: [] };
       return {
         account_id: accId,
-        new_transactions: (data.newTransactions || []).map((tx) => ({
-          account_id: accId,
-          asset_id: tx.asset_id || 0,
-          transaction_date: tx.date || snapshotDate,
-          type: tx.type,
-          total_amount: parseCommas(tx.amount),
-          currency: tx.currency || 'KRW',
-          quantity: parseCommas(tx.amount),
-          price: 1.0,
-          memo: tx.memo || '',
-        })),
+        new_transactions: (data.newTransactions || []).map((tx) => mapNewTx(accId, tx)),
         diff_krw: parseFloat(data.calcResult?.diff_krw || 0),
         diff_usd: parseFloat(data.calcResult?.diff_usd || 0),
       };
@@ -180,17 +274,7 @@ export const buildSnapshotPayload = ({
       const data = accountsFormData[accId] || { newTransactions: [] };
       return {
         account_id: accId,
-        new_transactions: (data.newTransactions || []).map((tx) => ({
-          account_id: accId,
-          asset_id: tx.asset_id || 0,
-          transaction_date: tx.date || snapshotDate,
-          type: tx.type,
-          total_amount: parseCommas(tx.amount),
-          currency: 'KRW',
-          quantity: parseCommas(tx.amount),
-          price: 1.0,
-          memo: tx.memo || '',
-        })),
+        new_transactions: (data.newTransactions || []).map((tx) => mapNewTx(accId, tx)),
         total_valuation: data.totalValuation
           ? parseCommas(data.totalValuation)
           : (data.calcResult?.theoretical_krw ?? null),
@@ -215,20 +299,43 @@ export const validateStep1 = ({ inputDate, exchangeRate }) => {
 };
 
 /**
- * Step 2 증권사 계좌 정산 확정 유효성 검사
- * @param {{ currentAccIdx: number, selectedBrokerageIds: number[], accountsFormData: object }} params
+ * 개별 계좌 상세 정산 확정 상태 공통 검증 헬퍼
+ * @private
+ * @param {{ currentAccIdx: number, accountIds: number[], accountsFormData: object, accountTypeLabel: string }} params
  * @returns {{ isValid: boolean, message?: string }}
  */
-export const validateStep2 = ({ currentAccIdx, selectedBrokerageIds = [], accountsFormData = {} }) => {
-  const currentAccountId = selectedBrokerageIds[currentAccIdx];
+const validateAccountConfirmed = ({ currentAccIdx, accountIds = [], accountsFormData = {}, accountTypeLabel = '계좌' }) => {
+  const currentAccountId = accountIds[currentAccIdx];
   if (!currentAccountId) {
-    return { isValid: false, message: '선택된 증권 계좌가 없습니다.' };
+    return { isValid: false, message: `선택된 ${accountTypeLabel}가 없습니다.` };
   }
   const currentData = accountsFormData[currentAccountId];
+
+  // 이체(TRANSFER) 거래 중 도착 계좌 미선택 여부 확인
+  const transferValidation = validateAccountTransferTargets(currentData?.newTransactions);
+  if (!transferValidation.isValid) {
+    return transferValidation;
+  }
+
   if (!currentData?.isConfirmed) {
     return { isValid: false, message: '현재 계좌의 정산 결과를 확인하고 확정 버튼을 눌러주세요.' };
   }
   return { isValid: true };
+};
+
+/**
+ * Step 2 은행 계좌 정산 확정 유효성 검사
+ * @param {{ currentAccIdx: number, selectedBankIds?: number[], selectedBrokerageIds?: number[], selectedAccountIds?: number[], accountsFormData: object }} params
+ * @returns {{ isValid: boolean, message?: string }}
+ */
+export const validateStep2 = ({ currentAccIdx, selectedBankIds = [], selectedBrokerageIds = [], selectedAccountIds, accountsFormData = {} }) => {
+  const accountIds = selectedAccountIds || (selectedBankIds.length > 0 ? selectedBankIds : selectedBrokerageIds);
+  return validateAccountConfirmed({
+    currentAccIdx,
+    accountIds,
+    accountsFormData,
+    accountTypeLabel: '은행 계좌',
+  });
 };
 
 /**
@@ -244,20 +351,18 @@ export const validateStep3 = ({ selectedBrokerageIds = [], selectedBankIds = [] 
 };
 
 /**
- * Step 4 은행 계좌 정산 확정 유효성 검사
- * @param {{ currentAccIdx: number, selectedBankIds: number[], accountsFormData: object }} params
+ * Step 4 증권 계좌 정산 확정 유효성 검사
+ * @param {{ currentAccIdx: number, selectedBrokerageIds?: number[], selectedBankIds?: number[], selectedAccountIds?: number[], accountsFormData: object }} params
  * @returns {{ isValid: boolean, message?: string }}
  */
-export const validateStep4 = ({ currentAccIdx, selectedBankIds = [], accountsFormData = {} }) => {
-  const currentAccountId = selectedBankIds[currentAccIdx];
-  if (!currentAccountId) {
-    return { isValid: false, message: '선택된 은행 계좌가 없습니다.' };
-  }
-  const currentData = accountsFormData[currentAccountId];
-  if (!currentData?.isConfirmed) {
-    return { isValid: false, message: '현재 계좌의 정산 결과를 확인하고 확정 버튼을 눌러주세요.' };
-  }
-  return { isValid: true };
+export const validateStep4 = ({ currentAccIdx, selectedBrokerageIds = [], selectedBankIds = [], selectedAccountIds, accountsFormData = {} }) => {
+  const accountIds = selectedAccountIds || (selectedBrokerageIds.length > 0 ? selectedBrokerageIds : selectedBankIds);
+  return validateAccountConfirmed({
+    currentAccIdx,
+    accountIds,
+    accountsFormData,
+    accountTypeLabel: '증권 계좌',
+  });
 };
 
 /**

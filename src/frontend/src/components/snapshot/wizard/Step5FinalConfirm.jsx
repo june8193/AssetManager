@@ -5,6 +5,7 @@ import { WizardIntegrityWarningCard } from './WizardIntegrityWarningCard';
 
 /**
  * 5단계: 전체 계좌 정산 요약 검토 및 최종 확인 화면
+ * 은행 계좌를 먼저 표시하고, 증권 계좌를 나중에 표시합니다.
  */
 export const Step5FinalConfirm = ({
   accounts = [],
@@ -13,7 +14,14 @@ export const Step5FinalConfirm = ({
   warningConfirmed = false,
   onWarningConfirmChange,
 }) => {
-  const selectedAccounts = accounts.filter((acc) => selectedAccountIds.includes(acc.id));
+  // 은행 계좌(BANK) 우선, 증권 계좌(BROKERAGE) 나중 정렬
+  const selectedAccounts = accounts
+    .filter((acc) => selectedAccountIds.includes(acc.id))
+    .sort((a, b) => {
+      if (a.account_type === 'BANK' && b.account_type !== 'BANK') return -1;
+      if (a.account_type !== 'BANK' && b.account_type === 'BANK') return 1;
+      return 0;
+    });
 
   // 정합성 경고 목록 수집
   const allWarnings = [];
@@ -66,8 +74,6 @@ export const Step5FinalConfirm = ({
           </p>
         </div>
       </div>
-
-
 
       <div className="border border-slate-200 rounded-xl overflow-hidden shadow-sm bg-white">
         <table className="w-full text-left text-sm border-collapse">
@@ -160,7 +166,6 @@ export const Step5FinalConfirm = ({
                   const pTax = Math.round(data.calcResult.total_tax || 0);
                   const pAdjustment = Math.round(data.calcResult.total_adjustment || 0);
                   const pProfit = pInterest - pTax + pAdjustment;
-
 
                   periodElement = (
                     <div className="flex flex-col items-end">

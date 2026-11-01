@@ -5,15 +5,16 @@ import { useSnapshotWizardEngine } from '../hooks/useSnapshotWizardEngine';
 import {
   WizardProgressBar,
   Step1BasicInfo,
-  Step2BrokerageDetail,
-  Step3BankSelect,
-  Step4BankDetail,
+  Step2BankDetail,
+  Step3BrokerageSelect,
+  Step4BrokerageDetail,
   Step5FinalConfirm,
 } from '../components/snapshot/wizard';
 
 /**
  * 신규 스냅샷 생성을 위한 통합 위저드 페이지 컴포넌트입니다.
- * 5단계의 과정을 통해 증권사와 은행의 자산 상태를 한 번에 기록합니다.
+ * 5단계의 과정을 통해 은행(현금)과 증권(주식)의 자산 상태를 한 번에 기록합니다.
+ * 순서: 1단계(기본정보/은행선택) -> 2단계(은행상세) -> 3단계(증권선택) -> 4단계(증권상세) -> 5단계(최종확인)
  */
 const SnapshotWizardPage = () => {
   const navigate = useNavigate();
@@ -32,7 +33,7 @@ const SnapshotWizardPage = () => {
       alert('스냅샷이 성공적으로 저장되었습니다.');
       navigate('/db');
     } catch (err) {
-      // Error alert handled in engine / or re-alert if necessary
+      // 에러 알림은 엔진 내부에서 처리됨
     }
   };
 
@@ -59,7 +60,6 @@ const SnapshotWizardPage = () => {
     engine.selectedAccountIds.length === 0 ||
     !engine.selectedAccountIds.every((id) => engine.accountsFormData[id]?.isConfirmed) ||
     (hasStep5Warnings && !step5WarningConfirmed);
-
 
   return (
     <div className="max-w-4xl mx-auto px-4 py-8" data-testid="snapshot-wizard-page">
@@ -100,6 +100,33 @@ const SnapshotWizardPage = () => {
             inputDate={engine.inputDate}
             setInputDate={engine.setInputDate}
             exchangeRate={engine.exchangeRate}
+            bankAccounts={engine.bankAccounts}
+            selectedAccountIds={engine.selectedAccountIds}
+            loadingAccounts={engine.loadingAccounts}
+            toggleAccountSelection={engine.toggleAccountSelection}
+            selectAllBank={engine.selectAllBank}
+          />
+        )}
+        {engine.step === 2 && (
+          <Step2BankDetail
+            currentAccIdx={engine.currentAccIdx}
+            selectedBankIds={engine.selectedBankIds}
+            accounts={engine.accounts}
+            accountsFormData={engine.accountsFormData}
+            inputDate={engine.inputDate}
+            processing={engine.processing}
+            existingTxs={engine.existingTxs}
+            loadingExistingTxs={engine.loadingExistingTxs}
+            updateAccData={engine.updateAccData}
+            addTx={engine.addTx}
+            removeTx={engine.removeTx}
+            updateTx={engine.updateTx}
+            calculateBankDiff={engine.calculateBankDiff}
+            handleConfirmAccount={engine.handleConfirmAccount}
+          />
+        )}
+        {engine.step === 3 && (
+          <Step3BrokerageSelect
             brokerageAccounts={engine.brokerageAccounts}
             selectedAccountIds={engine.selectedAccountIds}
             loadingAccounts={engine.loadingAccounts}
@@ -107,8 +134,8 @@ const SnapshotWizardPage = () => {
             selectAllBrokerage={engine.selectAllBrokerage}
           />
         )}
-        {engine.step === 2 && (
-          <Step2BrokerageDetail
+        {engine.step === 4 && (
+          <Step4BrokerageDetail
             currentAccIdx={engine.currentAccIdx}
             selectedBrokerageIds={engine.selectedBrokerageIds}
             accounts={engine.accounts}
@@ -126,33 +153,6 @@ const SnapshotWizardPage = () => {
             handleConfirmAccount={engine.handleConfirmAccount}
           />
         )}
-        {engine.step === 3 && (
-          <Step3BankSelect
-            bankAccounts={engine.bankAccounts}
-            selectedAccountIds={engine.selectedAccountIds}
-            loadingAccounts={engine.loadingAccounts}
-            toggleAccountSelection={engine.toggleAccountSelection}
-            selectAllBank={engine.selectAllBank}
-          />
-        )}
-        {engine.step === 4 && (
-          <Step4BankDetail
-            currentAccIdx={engine.currentAccIdx}
-            selectedBankIds={engine.selectedBankIds}
-            accounts={engine.accounts}
-            accountsFormData={engine.accountsFormData}
-            inputDate={engine.inputDate}
-            processing={engine.processing}
-            existingTxs={engine.existingTxs}
-            loadingExistingTxs={engine.loadingExistingTxs}
-            updateAccData={engine.updateAccData}
-            addTx={engine.addTx}
-            removeTx={engine.removeTx}
-            updateTx={engine.updateTx}
-            calculateBankDiff={engine.calculateBankDiff}
-            handleConfirmAccount={engine.handleConfirmAccount}
-          />
-        )}
         {engine.step === 5 && (
           <Step5FinalConfirm
             accounts={engine.accounts}
@@ -162,7 +162,6 @@ const SnapshotWizardPage = () => {
             onWarningConfirmChange={setStep5WarningConfirmed}
           />
         )}
-
       </div>
 
       {/* 네비게이션 버튼 */}
@@ -177,31 +176,40 @@ const SnapshotWizardPage = () => {
               : 'bg-white border border-slate-200 text-slate-700 hover:bg-slate-50'
           }`}
         >
-          <ChevronLeft size={18} />
-          이전
+          <ChevronLeft size={18} /> 이전
         </button>
-        <button
-          type="button"
-          onClick={engine.step === engine.totalSteps ? handleSave : engine.goToNext}
-          disabled={(engine.step === engine.totalSteps && isSaveDisabled) || engine.processing}
-          className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-colors ${
-            (engine.step === engine.totalSteps && isSaveDisabled) || engine.processing
-              ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-        >
-          {engine.step === engine.totalSteps ? (
-            <>
-              {engine.processing ? <RefreshCw className="animate-spin" size={18} /> : <Save size={18} />}
-              저장하기
-            </>
-          ) : (
-            <>
-              다음
-              <ChevronRight size={18} />
-            </>
-          )}
-        </button>
+
+        {engine.step < 5 ? (
+          <button
+            type="button"
+            onClick={engine.goToNext}
+            disabled={engine.processing}
+            className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50"
+          >
+            다음 <ChevronRight size={18} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isSaveDisabled}
+            className={`flex items-center gap-2 px-6 py-2 rounded-lg font-medium transition-colors shadow-sm ${
+              isSaveDisabled
+                ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                : 'bg-emerald-600 text-white hover:bg-emerald-700'
+            }`}
+          >
+            {engine.processing ? (
+              <>
+                <RefreshCw size={18} className="animate-spin" /> 저장 중...
+              </>
+            ) : (
+              <>
+                <Save size={18} /> 저장하기
+              </>
+            )}
+          </button>
+        )}
       </div>
     </div>
   );

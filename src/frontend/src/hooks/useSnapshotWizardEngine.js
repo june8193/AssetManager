@@ -1,6 +1,7 @@
 /**
  * 5단계 스냅샷 생성 위저드를 위한 딥 상태 머신 엔진 훅
  * useReducer를 기반으로 단계 전이, 계좌 선택, 거래 내역 편집, 정산 계산 및 제출을 캡슐화합니다.
+ * 순서: 1단계(기본/은행선택) -> 2단계(은행상세) -> 3단계(증권선택) -> 4단계(증권상세) -> 5단계(최종확인)
  */
 import { useReducer, useEffect, useCallback, useMemo } from 'react';
 import { snapshotService } from '../services/snapshotService';
@@ -8,6 +9,8 @@ import {
   buildBrokerageCalculatePayload,
   buildBankCalculatePayload,
   buildSnapshotPayload,
+  getIncomingTransferDeposits,
+  validateAccountTransferTargets,
   validateStep1,
   validateStep2,
   validateStep3,
@@ -320,13 +323,13 @@ export function useSnapshotWizardEngine() {
     };
   }, []);
 
-  // 2단계 / 4단계 계좌 전환 시 기존 트랜잭션 로드
+  // 2단계(은행 상세) / 4단계(증권 상세) 계좌 전환 시 기존 트랜잭션 로드
   useEffect(() => {
-    const isBrokerage = state.step === 2;
-    const isBank = state.step === 4;
-    if (!isBrokerage && !isBank) return;
+    const isBank = state.step === 2;
+    const isBrokerage = state.step === 4;
+    if (!isBank && !isBrokerage) return;
 
-    const targetSelectedIds = isBrokerage ? selectedBrokerageIds : selectedBankIds;
+    const targetSelectedIds = isBank ? selectedBankIds : selectedBrokerageIds;
     const accId = targetSelectedIds[state.currentAccIdx];
     if (!accId) return;
 
@@ -406,12 +409,20 @@ export function useSnapshotWizardEngine() {
   // 정산 계산 API 호출
   const calculateAccountDiff = useCallback(async (accId) => {
     const data = state.accountsFormData[accId] || {};
+    const validation = validateAccountTransferTargets(data.newTransactions);
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
     try {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: true });
+      const incomingTransfers = getIncomingTransferDeposits(accId, state.accountsFormData, state.accounts);
       const payload = buildBrokerageCalculatePayload({
         accountId: accId,
         snapshotDate: state.inputDate,
         newTransactions: data.newTransactions,
+        incomingTransfers,
         currentKrw: data.currentKrw,
         currentUsd: data.currentUsd,
         exchangeRate: state.exchangeRate,
@@ -433,16 +444,24 @@ export function useSnapshotWizardEngine() {
     } finally {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: false });
     }
-  }, [state.accountsFormData, state.inputDate, state.exchangeRate]);
+  }, [state.accountsFormData, state.accounts, state.inputDate, state.exchangeRate]);
 
   const calculateBankDiff = useCallback(async (accId) => {
     const data = state.accountsFormData[accId] || {};
+    const validation = validateAccountTransferTargets(data.newTransactions);
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
     try {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: true });
+      const incomingTransfers = getIncomingTransferDeposits(accId, state.accountsFormData, state.accounts);
       const payload = buildBankCalculatePayload({
         accountId: accId,
         snapshotDate: state.inputDate,
         newTransactions: data.newTransactions,
+        incomingTransfers,
       });
       const result = await snapshotService.calculateBank(payload);
       dispatch({
@@ -461,79 +480,51 @@ export function useSnapshotWizardEngine() {
     } finally {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: false });
     }
-  }, [state.accountsFormData, state.inputDate]);
+  }, [state.accountsFormData, state.accounts, state.inputDate]);
 
   // 계좌 확정
   const handleConfirmAccount = useCallback((accId) => {
-    const isBrokerage = state.step === 2;
-    const targetIds = isBrokerage ? selectedBrokerageIds : selectedBankIds;
+    const data = state.accountsFormData[accId] || {};
+    const validation = validateAccountTransferTargets(data.newTransactions);
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
+    const isBank = state.step === 2;
+    const targetIds = isBank ? selectedBankIds : selectedBrokerageIds;
     let nextIdx = state.currentAccIdx;
     if (state.currentAccIdx < targetIds.length - 1) {
       nextIdx = state.currentAccIdx + 1;
     }
     dispatch({ type: WIZARD_ACTIONS.CONFIRM_ACCOUNT, payload: { accId, nextIdx } });
-  }, [state.step, selectedBrokerageIds, selectedBankIds, state.currentAccIdx]);
+  }, [state.step, state.accountsFormData, selectedBrokerageIds, selectedBankIds, state.currentAccIdx]);
 
   // 스텝 네비게이션
   const goToNext = useCallback(() => {
+    // 1단계: 기본 정보 + 은행 계좌 선택
     if (state.step === 1) {
       const valid = validateStep1({ inputDate: state.inputDate, exchangeRate: state.exchangeRate });
       if (!valid.isValid) {
         alert(valid.message);
         return;
       }
-      if (selectedBrokerageIds.length === 0) {
-        if (window.confirm('선택된 증권 계좌가 없습니다. 증권사 단계를 건너뛰시겠습니까?')) {
-          dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 3 });
-          return;
-        }
-        return;
-      }
-      const selectedBrokerageAccs = brokerageAccounts.filter((a) => selectedBrokerageIds.includes(a.id));
-      dispatch({ type: WIZARD_ACTIONS.INIT_STEP_FORM_DATA, payload: selectedBrokerageAccs });
-      dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 2 });
-      return;
-    }
-
-    if (state.step === 2) {
-      const valid = validateStep2({
-        currentAccIdx: state.currentAccIdx,
-        selectedBrokerageIds,
-        accountsFormData: state.accountsFormData,
-      });
-      if (!valid.isValid) {
-        alert(valid.message);
-        return;
-      }
-      if (state.currentAccIdx < selectedBrokerageIds.length - 1) {
-        dispatch({ type: WIZARD_ACTIONS.SET_CURRENT_ACC_IDX, payload: state.currentAccIdx + 1 });
-        return;
-      }
-      dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 3 });
-      return;
-    }
-
-    if (state.step === 3) {
-      const valid = validateStep3({ selectedBrokerageIds, selectedBankIds });
-      if (!valid.isValid) {
-        alert(valid.message);
-        return;
-      }
       if (selectedBankIds.length === 0) {
-        if (window.confirm('선택된 은행 계좌가 없습니다. 바로 최종 확인으로 이동하시겠습니까?')) {
-          dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 5 });
+        if (window.confirm('선택된 은행 계좌가 없습니다. 은행 단계를 건너뛰시겠습니까?')) {
+          dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 3 });
           return;
         }
         return;
       }
       const selectedBankAccs = bankAccounts.filter((a) => selectedBankIds.includes(a.id));
       dispatch({ type: WIZARD_ACTIONS.INIT_STEP_FORM_DATA, payload: selectedBankAccs });
-      dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 4 });
+      dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 2 });
       return;
     }
 
-    if (state.step === 4) {
-      const valid = validateStep4({
+    // 2단계: 은행 상세 입력
+    if (state.step === 2) {
+      const valid = validateStep2({
         currentAccIdx: state.currentAccIdx,
         selectedBankIds,
         accountsFormData: state.accountsFormData,
@@ -543,6 +534,45 @@ export function useSnapshotWizardEngine() {
         return;
       }
       if (state.currentAccIdx < selectedBankIds.length - 1) {
+        dispatch({ type: WIZARD_ACTIONS.SET_CURRENT_ACC_IDX, payload: state.currentAccIdx + 1 });
+        return;
+      }
+      dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 3 });
+      return;
+    }
+
+    // 3단계: 증권 계좌 선택
+    if (state.step === 3) {
+      const valid = validateStep3({ selectedBrokerageIds, selectedBankIds });
+      if (!valid.isValid) {
+        alert(valid.message);
+        return;
+      }
+      if (selectedBrokerageIds.length === 0) {
+        if (window.confirm('선택된 증권 계좌가 없습니다. 바로 최종 확인으로 이동하시겠습니까?')) {
+          dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 5 });
+          return;
+        }
+        return;
+      }
+      const selectedBrokerageAccs = brokerageAccounts.filter((a) => selectedBrokerageIds.includes(a.id));
+      dispatch({ type: WIZARD_ACTIONS.INIT_STEP_FORM_DATA, payload: selectedBrokerageAccs });
+      dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 4 });
+      return;
+    }
+
+    // 4단계: 증권 상세 입력
+    if (state.step === 4) {
+      const valid = validateStep4({
+        currentAccIdx: state.currentAccIdx,
+        selectedBrokerageIds,
+        accountsFormData: state.accountsFormData,
+      });
+      if (!valid.isValid) {
+        alert(valid.message);
+        return;
+      }
+      if (state.currentAccIdx < selectedBrokerageIds.length - 1) {
         dispatch({ type: WIZARD_ACTIONS.SET_CURRENT_ACC_IDX, payload: state.currentAccIdx + 1 });
         return;
       }
@@ -560,21 +590,21 @@ export function useSnapshotWizardEngine() {
     }
 
     if (state.step === 3) {
-      if (selectedBrokerageIds.length === 0) {
+      if (selectedBankIds.length === 0) {
         dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 1 });
         return;
       }
-      dispatch({ type: WIZARD_ACTIONS.SET_CURRENT_ACC_IDX, payload: selectedBrokerageIds.length - 1 });
+      dispatch({ type: WIZARD_ACTIONS.SET_CURRENT_ACC_IDX, payload: selectedBankIds.length - 1 });
       dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 2 });
       return;
     }
 
     if (state.step === 5) {
-      if (selectedBankIds.length === 0) {
+      if (selectedBrokerageIds.length === 0) {
         dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 3 });
         return;
       }
-      dispatch({ type: WIZARD_ACTIONS.SET_CURRENT_ACC_IDX, payload: selectedBankIds.length - 1 });
+      dispatch({ type: WIZARD_ACTIONS.SET_CURRENT_ACC_IDX, payload: selectedBrokerageIds.length - 1 });
       dispatch({ type: WIZARD_ACTIONS.SET_STEP, payload: 4 });
       return;
     }
