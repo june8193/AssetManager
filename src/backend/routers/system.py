@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from ..schemas.settings import SystemRestartResponse
+from ..services.restart_service import trigger_server_restart
 from ..database import get_db
 from ..tasks import task_manager_instance
 from ..schemas.settings import (
@@ -483,3 +485,15 @@ def put_system_settings(request: SystemSettingsUpdateRequest) -> SystemSettingsR
 def restore_settings_from_backup() -> SystemSettingsResponse:
     """settings.toml.bak 파일로부터 이전 정상 설정을 복원합니다."""
     return restore_system_settings()
+
+
+@router.post(
+    "/restart",
+    response_model=SystemRestartResponse,
+    summary="서버 재시작 요청",
+    description="서버 재시작 플래그를 생성하고 비동기 지연 후 백엔드 프로세스를 종료(재시작)합니다.",
+)
+async def restart_system() -> SystemRestartResponse:
+    """서버 재시작 플래그를 설정하고 클라이언트에 200 응답 반환 후 지연 종료합니다."""
+    return await trigger_server_restart()
+

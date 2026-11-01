@@ -107,3 +107,14 @@ class SystemSettingsUpdateRequest(BaseModel):
     raw_toml: Optional[str] = Field(
         None, description="raw 모드 시 전달할 TOML 원문"
     )
+
+
+class SystemRestartResponse(BaseModel):
+    """서버 재시작 요청 응답 스키마입니다."""
+
+    status: str = Field(default="restarting", description="재시작 처리 상태")
+    message: str = Field(
+        default="서버를 재시작합니다. 약 5~8초 정도 소요됩니다...",
+        description="사용자 안내 메시지",
+    )
+

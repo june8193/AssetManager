@@ -131,6 +131,15 @@ async def lifespan(app: FastAPI):
         if failure_task:
             telegram_tasks.append(failure_task)
 
+    else:
+        # 텔레그램 미사용 환경인 경우 서버 기동 시 잔여 재시작 플래그를 안전하게 정리
+        if not is_testing:
+            try:
+                from .services.restart_service import cleanup_restart_flag
+                cleanup_restart_flag()
+            except Exception:
+                pass
+
     yield
 
     # 5. Shutdown: 텔레그램 서비스 안전한 리소스 정리 (Graceful Shutdown)
