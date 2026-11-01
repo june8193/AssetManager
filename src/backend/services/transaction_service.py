@@ -5,6 +5,7 @@ from typing import List, Optional
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
 from ..models import Transaction, Asset, Account, AccountSnapshot
+from ..schemas.transaction import TransactionSchema, TransferTransactionRequest
 
 
 class TransactionService:
@@ -63,7 +64,7 @@ class TransactionService:
             query = query.filter(Transaction.transaction_date <= end_date)
         return query.order_by(Transaction.transaction_date.desc(), Transaction.id.desc()).all()
 
-    def validate_and_extract_transaction_data(self, transaction) -> dict:
+    def validate_and_extract_transaction_data(self, transaction: TransactionSchema) -> dict:
         """트랜잭션 입력값의 유효성을 검증하고 DB 모델용 딕셔너리를 반환합니다."""
         if transaction.type == "EXCHANGE":
             if not transaction.target_asset_id:
@@ -77,11 +78,9 @@ class TransactionService:
             if not target_asset or target_asset.major_category != "현금":
                 raise ValueError("환전 도착 자산(target_asset_id)은 현금 카테고리 자산이어야 합니다.")
 
-        return transaction.model_dump(
-            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning"}
-        )
+        return transaction.model_dump(exclude=TransactionSchema.NON_DB_FIELDS)
 
-    def create_transaction(self, transaction) -> Transaction:
+    def create_transaction(self, transaction: TransactionSchema) -> Transaction:
         """새로운 거래 내역을 생성합니다."""
         data = self.validate_and_extract_transaction_data(transaction)
         db_transaction = Transaction(**data)
@@ -95,8 +94,7 @@ class TransactionService:
 
         return db_transaction
 
-
-    def create_transfer_pair(self, req) -> List[Transaction]:
+    def create_transfer_pair(self, req: TransferTransactionRequest) -> List[Transaction]:
         """계좌 간 이체 트랜잭션(WITHDRAW + DEPOSIT 쌍)을 원자적으로 생성합니다."""
         if req.source_account_id == req.target_account_id:
             raise ValueError("출발 계좌와 도착 계좌가 동일할 수 없습니다.")
@@ -136,36 +134,125 @@ class TransactionService:
 
         return pair_txs
 
+    def update_transaction(self, transaction_id: int, transaction: TransactionSchema) -> Transaction:
+        """기존 거래 내역 정보를 수정하고 연동된 이체 트랜잭션도 연쇄 수정합니다.
 
-    def update_transaction(self, transaction_id: int, transaction) -> Transaction:
-        """기존 거래 내역 정보를 수정하고 연동된 이체 트랜잭션도 연쇄 수정합니다."""
+        Args:
+            transaction_id (int): 수정할 거래 식별자.
+            transaction (TransactionSchema): 수정할 거래 정보 스키마.
+
+        Returns:
+            Transaction: 수정된 DB 거래 모델 인스턴스.
+
+        Raises:
+            ValueError: 거래 내역 미존재, 필수 도착 계좌 누락, 동일 계좌 지정 등의 검증 실패 시.
+        """
         db_transaction = self.db.query(Transaction).filter(Transaction.id == transaction_id).first()
         if not db_transaction:
             raise ValueError("거래 내역을 찾을 수 없습니다.")
 
-        data = self.validate_and_extract_transaction_data(transaction)
-        for key, value in data.items():
-            setattr(db_transaction, key, value)
+        if transaction.type == "TRANSFER":
+            if not transaction.target_account_id:
+                raise ValueError("도착 계좌(target_account_id)는 필수입니다.")
+            if transaction.account_id == transaction.target_account_id:
+                raise ValueError("출발 계좌와 도착 계좌가 동일할 수 없습니다.")
 
-        if db_transaction.transfer_pair_id:
+            asset = self.db.query(Asset).filter(Asset.id == transaction.asset_id).first()
+            currency = transaction.currency or (asset.country if asset and asset.country in ["USD", "KRW"] else "KRW")
+
             pair_txs = self.db.query(Transaction).filter(
                 Transaction.transfer_pair_id == db_transaction.transfer_pair_id,
                 Transaction.id != db_transaction.id
-            ).all()
-            for p in pair_txs:
-                p.total_amount = db_transaction.total_amount
-                p.transaction_date = db_transaction.transaction_date
-                p.memo = db_transaction.memo
+            ).all() if db_transaction.transfer_pair_id else []
+
+            if not pair_txs:
+                # 단독 거래(또는 pair_id 유실)인 경우 새/기존 pair_id로 이체 쌍 생성
+                pair_id = db_transaction.transfer_pair_id or str(uuid.uuid4())
+                db_transaction.account_id = transaction.account_id
+                db_transaction.asset_id = transaction.asset_id
+                db_transaction.target_asset_id = None
+                db_transaction.transaction_date = transaction.transaction_date
+                db_transaction.type = "WITHDRAW"
+                db_transaction.quantity = transaction.total_amount
+                db_transaction.price = 1.0
+                db_transaction.total_amount = transaction.total_amount
+                db_transaction.currency = currency
+                db_transaction.exchange_rate = transaction.exchange_rate
+                db_transaction.memo = transaction.memo
+                db_transaction.source = transaction.source
+                db_transaction.transfer_pair_id = pair_id
+
+                deposit_tx = Transaction(
+                    account_id=transaction.target_account_id,
+                    asset_id=transaction.asset_id,
+                    target_asset_id=None,
+                    transaction_date=transaction.transaction_date,
+                    type="DEPOSIT",
+                    quantity=transaction.total_amount,
+                    price=1.0,
+                    total_amount=transaction.total_amount,
+                    currency=currency,
+                    exchange_rate=transaction.exchange_rate,
+                    memo=transaction.memo,
+                    source=transaction.source,
+                    transfer_pair_id=pair_id
+                )
+                self.db.add(deposit_tx)
+            else:
+                other_tx = pair_txs[0]
+                if db_transaction.type == "DEPOSIT" and other_tx.type == "WITHDRAW":
+                    withdraw_row = other_tx
+                    deposit_row = db_transaction
+                else:
+                    withdraw_row = db_transaction
+                    deposit_row = other_tx
+
+                withdraw_row.account_id = transaction.account_id
+                withdraw_row.type = "WITHDRAW"
+                deposit_row.account_id = transaction.target_account_id
+                deposit_row.type = "DEPOSIT"
+
+                for row in (withdraw_row, deposit_row):
+                    row.asset_id = transaction.asset_id
+                    row.target_asset_id = None
+                    row.transaction_date = transaction.transaction_date
+                    row.quantity = transaction.total_amount
+                    row.price = 1.0
+                    row.total_amount = transaction.total_amount
+                    row.currency = currency
+                    row.exchange_rate = transaction.exchange_rate
+                    row.memo = transaction.memo
+                    row.source = transaction.source
+
+            warning_src = self.check_past_snapshot_warning(transaction.account_id, transaction.transaction_date)
+            warning_tgt = self.check_past_snapshot_warning(transaction.target_account_id, transaction.transaction_date)
+            warning = warning_src or warning_tgt
+
+        else:
+            # 일반 거래 유형(type != "TRANSFER")으로 수정
+            if db_transaction.transfer_pair_id:
+                # 기존 이체 쌍이었던 경우 상대 거래를 삭제하고 단독 거래로 전환
+                pair_txs = self.db.query(Transaction).filter(
+                    Transaction.transfer_pair_id == db_transaction.transfer_pair_id,
+                    Transaction.id != db_transaction.id
+                ).all()
+                for p in pair_txs:
+                    self.db.delete(p)
+                db_transaction.transfer_pair_id = None
+
+            data = self.validate_and_extract_transaction_data(transaction)
+            for key, value in data.items():
+                setattr(db_transaction, key, value)
+            if not transaction.transfer_pair_id:
+                db_transaction.transfer_pair_id = None
+
+            warning = self.check_past_snapshot_warning(db_transaction.account_id, db_transaction.transaction_date)
 
         self.db.commit()
         self.db.refresh(db_transaction)
-
-        warning = self.check_past_snapshot_warning(db_transaction.account_id, db_transaction.transaction_date)
         setattr(db_transaction, "warning", warning)
 
         return db_transaction
-
-
 
     def delete_transaction(self, transaction_id: int) -> bool:
         """거래 내역을 삭제하며, 연동된 이체 트랜잭션이 있을 경우 원자적으로 함께 삭제합니다."""

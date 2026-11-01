@@ -100,9 +100,7 @@ class SnapshotEngine:
         Returns:
             Transaction: DB에 삽입할 Transaction 인스턴스.
         """
-        data = tx_schema.model_dump(
-            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning"}
-        )
+        data = tx_schema.model_dump(exclude=TransactionSchema.NON_DB_FIELDS)
 
         data['asset_id'] = asset_id
         if data['quantity'] == 0 and data['total_amount'] != 0:
