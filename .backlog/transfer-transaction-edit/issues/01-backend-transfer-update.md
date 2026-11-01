@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** closed
+**Status:** resolved
 
 - [x] `src/backend/schemas/transaction.py`의 `TransactionSchema`에 `target_account_id: Optional[int] = None` 필드를 추가하고, `TransactionService.validate_and_extract_transaction_data`의 `exclude` 집합에 `"target_account_id"`를 추가하여 SQLAlchemy `Transaction` 모델 생성/수정 시 알 수 없는 키워드 인자 에러가 발생하지 않도록 한다.
 - [x] `TransactionService.update_transaction`에서 `transaction.type == "TRANSFER"`일 때 `target_account_id`가 없거나 `transaction.account_id == transaction.target_account_id`이면 `ValueError`를 발생시킨다.
