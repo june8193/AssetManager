@@ -9,6 +9,8 @@ import {
   buildBrokerageCalculatePayload,
   buildBankCalculatePayload,
   buildSnapshotPayload,
+  getIncomingTransferDeposits,
+  validateAccountTransferTargets,
   validateStep1,
   validateStep2,
   validateStep3,
@@ -407,12 +409,20 @@ export function useSnapshotWizardEngine() {
   // 정산 계산 API 호출
   const calculateAccountDiff = useCallback(async (accId) => {
     const data = state.accountsFormData[accId] || {};
+    const validation = validateAccountTransferTargets(data.newTransactions);
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
     try {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: true });
+      const incomingTransfers = getIncomingTransferDeposits(accId, state.accountsFormData, state.accounts);
       const payload = buildBrokerageCalculatePayload({
         accountId: accId,
         snapshotDate: state.inputDate,
         newTransactions: data.newTransactions,
+        incomingTransfers,
         currentKrw: data.currentKrw,
         currentUsd: data.currentUsd,
         exchangeRate: state.exchangeRate,
@@ -434,16 +444,24 @@ export function useSnapshotWizardEngine() {
     } finally {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: false });
     }
-  }, [state.accountsFormData, state.inputDate, state.exchangeRate]);
+  }, [state.accountsFormData, state.accounts, state.inputDate, state.exchangeRate]);
 
   const calculateBankDiff = useCallback(async (accId) => {
     const data = state.accountsFormData[accId] || {};
+    const validation = validateAccountTransferTargets(data.newTransactions);
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
     try {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: true });
+      const incomingTransfers = getIncomingTransferDeposits(accId, state.accountsFormData, state.accounts);
       const payload = buildBankCalculatePayload({
         accountId: accId,
         snapshotDate: state.inputDate,
         newTransactions: data.newTransactions,
+        incomingTransfers,
       });
       const result = await snapshotService.calculateBank(payload);
       dispatch({
@@ -462,10 +480,17 @@ export function useSnapshotWizardEngine() {
     } finally {
       dispatch({ type: WIZARD_ACTIONS.SET_PROCESSING, payload: false });
     }
-  }, [state.accountsFormData, state.inputDate]);
+  }, [state.accountsFormData, state.accounts, state.inputDate]);
 
   // 계좌 확정
   const handleConfirmAccount = useCallback((accId) => {
+    const data = state.accountsFormData[accId] || {};
+    const validation = validateAccountTransferTargets(data.newTransactions);
+    if (!validation.isValid) {
+      alert(validation.message);
+      return;
+    }
+
     const isBank = state.step === 2;
     const targetIds = isBank ? selectedBankIds : selectedBrokerageIds;
     let nextIdx = state.currentAccIdx;
@@ -473,7 +498,7 @@ export function useSnapshotWizardEngine() {
       nextIdx = state.currentAccIdx + 1;
     }
     dispatch({ type: WIZARD_ACTIONS.CONFIRM_ACCOUNT, payload: { accId, nextIdx } });
-  }, [state.step, selectedBrokerageIds, selectedBankIds, state.currentAccIdx]);
+  }, [state.step, state.accountsFormData, selectedBrokerageIds, selectedBankIds, state.currentAccIdx]);
 
   // 스텝 네비게이션
   const goToNext = useCallback(() => {

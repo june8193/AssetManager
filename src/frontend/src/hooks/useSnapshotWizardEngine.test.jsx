@@ -333,4 +333,119 @@ describe('useSnapshotWizardEngine 훅 테스트 (은행 우선 순서)', () => {
     });
     expect(result.current.step).toBe(3);
   });
+
+  it('출발 계좌(은행)에서 입력한 TRANSFER 거래가 도착 계좌(증권) 계산 페이로드에 자동 합산되고 selectedAccountIds는 유지된다', async () => {
+    vi.mocked(snapshotService.calculateBank).mockResolvedValue({
+      theoretical_krw: 2000000,
+      total_deposit: 0,
+      total_withdraw: 500000,
+      existing_transactions: [],
+    });
+    vi.mocked(snapshotService.calculateBrokerage).mockResolvedValue({
+      theoretical_krw: 500000,
+      diff_krw: 0,
+      diff_usd: 0,
+      period_deposit: 500000,
+      existing_transactions: [],
+    });
+
+    const { result } = renderHook(() => useSnapshotWizardEngine());
+    await waitFor(() => expect(result.current.loadingAccounts).toBe(false));
+
+    // 1단계: 은행(2번) 선택
+    act(() => {
+      result.current.toggleAccountSelection(2);
+    });
+    expect(result.current.selectedAccountIds).toEqual([2]);
+
+    // 2단계 이동
+    act(() => {
+      result.current.goToNext();
+    });
+    expect(result.current.step).toBe(2);
+
+    // 은행 계좌에 TRANSFER 거래 추가 (target: 1번 증권 계좌)
+    act(() => {
+      result.current.addTx(2);
+    });
+    act(() => {
+      result.current.updateTx(2, 0, 'type', 'TRANSFER');
+      result.current.updateTx(2, 0, 'amount', '500,000');
+      result.current.updateTx(2, 0, 'target_account_id', 1);
+    });
+
+    // 도착 계좌의 selectedAccountIds는 여전히 변경되지 않음
+    expect(result.current.selectedAccountIds).toEqual([2]);
+
+    // 은행 계좌 확정 및 3단계 이동
+    act(() => {
+      result.current.handleConfirmAccount(2);
+    });
+    act(() => {
+      result.current.goToNext();
+    });
+    expect(result.current.step).toBe(3);
+
+    // 3단계: 증권(1번) 선택 후 4단계 이동
+    act(() => {
+      result.current.toggleAccountSelection(1);
+    });
+    expect(result.current.selectedAccountIds).toEqual([2, 1]);
+    act(() => {
+      result.current.goToNext();
+    });
+    expect(result.current.step).toBe(4);
+
+    // 증권 계좌 정산 계산 실행
+    await act(async () => {
+      await result.current.calculateAccountDiff(1);
+    });
+
+    // calculateBrokerage에 전달된 페이로드 검증: 은행에서 보낸 500,000원의 DEPOSIT이 포함되어야 함
+    expect(snapshotService.calculateBrokerage).toHaveBeenCalled();
+    const calledPayload = vi.mocked(snapshotService.calculateBrokerage).mock.calls[0][0];
+    expect(calledPayload.account_id).toBe(1);
+    expect(calledPayload.new_transactions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          type: 'DEPOSIT',
+          total_amount: 500000,
+          memo: expect.stringContaining('이체 연동'),
+        }),
+      ])
+    );
+  });
+
+  it('TRANSFER 거래에서 도착 계좌가 미선택된 경우 계산 시 경고창을 띄우고 중단한다', async () => {
+    const { result } = renderHook(() => useSnapshotWizardEngine());
+    await waitFor(() => expect(result.current.loadingAccounts).toBe(false));
+
+    act(() => {
+      result.current.toggleAccountSelection(2);
+    });
+    act(() => {
+      result.current.goToNext();
+    });
+
+    // TRANSFER 거래 추가하되 target_account_id 미선택
+    act(() => {
+      result.current.addTx(2);
+      result.current.updateTx(2, 0, 'type', 'TRANSFER');
+      result.current.updateTx(2, 0, 'amount', '300,000');
+      result.current.updateTx(2, 0, 'target_account_id', null);
+    });
+
+    await act(async () => {
+      try {
+        await result.current.calculateBankDiff(2);
+      } catch (e) {
+        // expected or caught
+      }
+    });
+
+    expect(window.alert).toHaveBeenCalledWith(
+      expect.stringContaining('도착 계좌를 선택해주세요')
+    );
+    expect(snapshotService.calculateBank).not.toHaveBeenCalled();
+  });
 });

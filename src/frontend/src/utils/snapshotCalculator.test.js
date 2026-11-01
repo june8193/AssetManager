@@ -6,6 +6,9 @@ import {
   calculateStockValuation,
   calculateAccountValuation,
   calculateCashDifference,
+  getIncomingTransferDeposits,
+  validateAccountTransferTargets,
+  TRANSACTION_TYPES,
   buildBrokerageCalculatePayload,
   buildBankCalculatePayload,
   buildSnapshotPayload,
@@ -61,20 +64,99 @@ describe('snapshotCalculator - 순수 금융 연산', () => {
     expect(total).toBe(1510000);
   });
 
-  it('예수금 및 거래 내역을 바탕으로 이론상 잔액과 차액을 계산해야 한다', () => {
+  it('예수금 및 거래 내역을 바탕으로 이론상 잔액과 차액을 계산해야 한다 (TRANSFER는 출금으로 차감)', () => {
     const previousCash = 1000000;
     const transactions = [
       { type: 'DEPOSIT', amount: 500000 },
       { type: 'WITHDRAW', amount: 200000 },
+      { type: 'TRANSFER', amount: 300000 }, // 이체 출금: 300,000원 차감
       { type: 'INTEREST', amount: 10000 },
       { type: 'TAX', amount: 1540 },
     ];
-    // theoretical = 1,000,000 + 500,000 - 200,000 + 10,000 - 1,540 = 1,308,460
-    const currentCash = 1300000;
+    // theoretical = 1,000,000 + 500,000 - 200,000 - 300,000 + 10,000 - 1,540 = 1,008,460
+    const currentCash = 1000000;
     const diffResult = calculateCashDifference(previousCash, transactions, currentCash);
 
-    expect(diffResult.theoreticalCash).toBe(1308460);
+    expect(diffResult.theoreticalCash).toBe(1008460);
     expect(diffResult.diff).toBe(-8460);
+  });
+
+  it('validateAccountTransferTargets: TRANSFER 거래의 도착 계좌 미선택 여부를 올바르게 검증한다', () => {
+    expect(validateAccountTransferTargets([
+      { type: 'TRANSFER', amount: '100,000', target_account_id: null }
+    ]).isValid).toBe(false);
+
+    expect(validateAccountTransferTargets([
+      { type: 'TRANSFER', amount: '100,000', target_account_id: 2 }
+    ]).isValid).toBe(true);
+
+    expect(validateAccountTransferTargets([
+      { type: 'DEPOSIT', amount: '100,000' }
+    ]).isValid).toBe(true);
+  });
+});
+
+describe('snapshotCalculator - getIncomingTransferDeposits 이체 입금 추출', () => {
+  const accounts = [
+    { id: 1, name: '미래에셋증권', alias: '주식계좌' },
+    { id: 2, name: 'KB국민은행', alias: '급여통장' },
+    { id: 3, name: '신한은행', alias: '적금통장' },
+  ];
+
+  it('타 계좌에서 현재 계좌로 보낸 TRANSFER 거래를 DEPOSIT 목록으로 변환해야 한다', () => {
+    const accountsFormData = {
+      2: {
+        newTransactions: [
+          { type: 'TRANSFER', amount: '500,000', target_account_id: 1, date: '2026-08-17', memo: '예수금 충전' },
+          { type: 'WITHDRAW', amount: '100,000', date: '2026-08-17' },
+        ],
+      },
+      3: {
+        newTransactions: [
+          { type: 'TRANSFER', amount: '300,000', target_account_id: 1, date: '2026-08-17', memo: '' },
+          { type: 'TRANSFER', amount: '200,000', target_account_id: 2, date: '2026-08-17' },
+        ],
+      },
+      1: {
+        newTransactions: [
+          // 자기 자신 계좌의 거래
+          { type: 'TRANSFER', amount: '50,000', target_account_id: 2, date: '2026-08-17' },
+        ],
+      },
+    };
+
+    const incomingFor1 = getIncomingTransferDeposits(1, accountsFormData, accounts);
+    expect(incomingFor1).toHaveLength(2);
+    expect(incomingFor1[0]).toMatchObject({
+      source_account_id: 2,
+      source_account_name: 'KB국민은행 (급여통장)',
+      type: 'DEPOSIT',
+      amount: '500,000',
+      currency: 'KRW',
+      is_incoming_transfer: true,
+    });
+    expect(incomingFor1[0].memo).toContain('이체 연동: KB국민은행 (급여통장)');
+    expect(incomingFor1[0].memo).toContain('예수금 충전');
+
+    expect(incomingFor1[1]).toMatchObject({
+      source_account_id: 3,
+      source_account_name: '신한은행 (적금통장)',
+      type: 'DEPOSIT',
+      amount: '300,000',
+      currency: 'KRW',
+      is_incoming_transfer: true,
+    });
+  });
+
+  it('해당 계좌로의 이체가 없으면 빈 배열을 반환해야 한다', () => {
+    const accountsFormData = {
+      2: {
+        newTransactions: [
+          { type: 'TRANSFER', amount: '500,000', target_account_id: 3, date: '2026-08-17' },
+        ],
+      },
+    };
+    expect(getIncomingTransferDeposits(1, accountsFormData, accounts)).toEqual([]);
   });
 });
 
@@ -153,7 +235,71 @@ describe('snapshotCalculator - API DTO 페이로드 생성', () => {
     });
   });
 
-  it('최종 스냅샷 통합 저장 DTO 페이로드를 올바르게 조립해야 한다', () => {
+  it('증권 정산 요청 페이로드에 이체 입금(incomingTransfers)이 DEPOSIT으로 자동 합산되어야 한다', () => {
+    const payload = buildBrokerageCalculatePayload({
+      accountId: 1,
+      snapshotDate: '2026-08-17',
+      newTransactions: [
+        { type: 'WITHDRAW', amount: '100,000', currency: 'KRW', date: '2026-08-17', memo: '출금' },
+      ],
+      incomingTransfers: [
+        {
+          source_account_id: 2,
+          source_account_name: 'KB국민은행',
+          type: 'DEPOSIT',
+          amount: '500,000',
+          currency: 'KRW',
+          date: '2026-08-17',
+          memo: '이체 연동: KB국민은행',
+        },
+      ],
+      currentKrw: '1,500,000',
+      currentUsd: '0',
+      exchangeRate: '1350.0',
+    });
+
+    expect(payload.new_transactions).toHaveLength(2);
+    expect(payload.new_transactions[0]).toMatchObject({
+      type: 'WITHDRAW',
+      total_amount: 100000,
+    });
+    expect(payload.new_transactions[1]).toMatchObject({
+      type: 'DEPOSIT',
+      total_amount: 500000,
+      currency: 'KRW',
+      memo: '이체 연동: KB국민은행',
+    });
+  });
+
+  it('은행 정산 요청 페이로드에 이체 입금(incomingTransfers)이 DEPOSIT으로 자동 합산되어야 한다', () => {
+    const payload = buildBankCalculatePayload({
+      accountId: 2,
+      snapshotDate: '2026-08-17',
+      newTransactions: [
+        { type: 'INTEREST', amount: '5,000', date: '2026-08-17', memo: '예금 이자' },
+      ],
+      incomingTransfers: [
+        {
+          source_account_id: 1,
+          source_account_name: '미래에셋증권',
+          type: 'DEPOSIT',
+          amount: '200,000',
+          currency: 'KRW',
+          date: '2026-08-17',
+          memo: '이체 연동: 미래에셋증권',
+        },
+      ],
+    });
+
+    expect(payload.new_transactions).toHaveLength(2);
+    expect(payload.new_transactions[1]).toMatchObject({
+      type: 'DEPOSIT',
+      total_amount: 200000,
+      memo: '이체 연동: 미래에셋증권',
+    });
+  });
+
+  it('최종 스냅샷 통합 저장 DTO 페이로드에 TRANSFER 타입과 target_account_id가 올바르게 포함되어야 한다', () => {
     const payload = buildSnapshotPayload({
       snapshotDate: '2026-08-17',
       exchangeRate: '1350.00',
@@ -161,27 +307,34 @@ describe('snapshotCalculator - API DTO 페이로드 생성', () => {
       bankAccountIds: [2],
       accountsFormData: {
         1: {
-          newTransactions: [{ type: 'DEPOSIT', amount: '500,000', currency: 'KRW', date: '2026-08-17', memo: '입금' }],
-          calcResult: { diff_krw: 1000, diff_usd: 0 },
-          currentKrw: '1,500,000',
-          currentUsd: '0',
+          newTransactions: [],
+          calcResult: { diff_krw: 0, diff_usd: 0 },
         },
         2: {
-          newTransactions: [],
-          calcResult: { theoretical_krw: 3000000 },
-          totalValuation: '3,000,000',
+          newTransactions: [
+            {
+              type: 'TRANSFER',
+              amount: '500,000',
+              currency: 'KRW',
+              target_account_id: 1,
+              date: '2026-08-17',
+              memo: '증권계좌로 이체',
+            },
+          ],
+          totalValuation: '2,500,000',
         },
       },
     });
 
-    expect(payload.snapshot_date).toBe('2026-08-17');
-    expect(payload.exchange_rate).toBe(1350);
-    expect(payload.brokerage_accounts).toHaveLength(1);
-    expect(payload.brokerage_accounts[0].account_id).toBe(1);
-    expect(payload.brokerage_accounts[0].diff_krw).toBe(1000);
-    expect(payload.bank_accounts).toHaveLength(1);
-    expect(payload.bank_accounts[0].account_id).toBe(2);
-    expect(payload.bank_accounts[0].total_valuation).toBe(3000000);
+    expect(payload.bank_accounts[0].new_transactions).toHaveLength(1);
+    expect(payload.bank_accounts[0].new_transactions[0]).toMatchObject({
+      type: 'TRANSFER',
+      total_amount: 500000,
+      target_account_id: 1,
+      memo: '증권계좌로 이체',
+    });
+    // 도착 계좌(1)에는 백엔드가 쌍을 생성하므로 프론트에서는 중복 tx를 넣지 않음
+    expect(payload.brokerage_accounts[0].new_transactions).toHaveLength(0);
   });
 });
 
@@ -195,8 +348,8 @@ describe('snapshotCalculator - 스텝 유효성 검사', () => {
 
   it('Step 2(은행) 및 Step 4(증권) 계좌 확정 상태 검증', () => {
     const formData = {
-      1: { isConfirmed: true },
-      2: { isConfirmed: false },
+      1: { isConfirmed: true, newTransactions: [] },
+      2: { isConfirmed: false, newTransactions: [] },
     };
     // Step 2: 은행 상세 확정 검증 (selectedBankIds)
     expect(validateStep2({ currentAccIdx: 0, selectedBankIds: [1], accountsFormData: formData }).isValid).toBe(true);
@@ -204,6 +357,39 @@ describe('snapshotCalculator - 스텝 유효성 검사', () => {
     // Step 4: 증권 상세 확정 검증 (selectedBrokerageIds)
     expect(validateStep4({ currentAccIdx: 0, selectedBrokerageIds: [1], accountsFormData: formData }).isValid).toBe(true);
     expect(validateStep4({ currentAccIdx: 0, selectedBrokerageIds: [2], accountsFormData: formData }).isValid).toBe(false);
+  });
+
+  it('Step 2 및 Step 4에서 TRANSFER 거래의 도착 계좌(target_account_id)가 누락되면 유효성 검사에 실패해야 한다', () => {
+    const invalidFormData = {
+      1: {
+        isConfirmed: true,
+        newTransactions: [
+          { type: 'TRANSFER', amount: '100,000', target_account_id: null },
+        ],
+      },
+    };
+    const validFormData = {
+      1: {
+        isConfirmed: true,
+        newTransactions: [
+          { type: 'TRANSFER', amount: '100,000', target_account_id: 2 },
+        ],
+      },
+    };
+
+    const resInvalidStep2 = validateStep2({ currentAccIdx: 0, selectedBankIds: [1], accountsFormData: invalidFormData });
+    expect(resInvalidStep2.isValid).toBe(false);
+    expect(resInvalidStep2.message).toContain('도착 계좌');
+
+    const resValidStep2 = validateStep2({ currentAccIdx: 0, selectedBankIds: [1], accountsFormData: validFormData });
+    expect(resValidStep2.isValid).toBe(true);
+
+    const resInvalidStep4 = validateStep4({ currentAccIdx: 0, selectedBrokerageIds: [1], accountsFormData: invalidFormData });
+    expect(resInvalidStep4.isValid).toBe(false);
+    expect(resInvalidStep4.message).toContain('도착 계좌');
+
+    const resValidStep4 = validateStep4({ currentAccIdx: 0, selectedBrokerageIds: [1], accountsFormData: validFormData });
+    expect(resValidStep4.isValid).toBe(true);
   });
 
   it('Step 3 최소 계좌 선택 검증', () => {

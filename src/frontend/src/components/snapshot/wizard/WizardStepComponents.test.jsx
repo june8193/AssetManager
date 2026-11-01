@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   WizardProgressBar,
   DEFAULT_STEPS,
+  TransactionTable,
   Step1BasicInfo,
   Step2BankDetail,
   Step3BrokerageSelect,
@@ -275,5 +276,70 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(confirmBtn).not.toBeDisabled();
     fireEvent.click(confirmBtn);
     expect(confirmMock).toHaveBeenCalledWith(2);
+  });
+
+  describe('TransactionTable 이체(TRANSFER) 및 이체 연동 입금 렌더링', () => {
+    const allAccounts = [mockBrokerageAccount, mockBankAccount];
+
+    it('신규 거래 유형에 TRANSFER(이체) 옵션이 있고, 선택 시 도착 계좌 셀렉트가 표시된다', () => {
+      const updateMock = vi.fn();
+      render(
+        <TransactionTable
+          accId={2}
+          isBrokerage={false}
+          accounts={allAccounts}
+          existingTxs={[]}
+          newTransactions={[
+            { type: 'TRANSFER', amount: '500,000', currency: 'KRW', target_account_id: '' },
+          ]}
+          onUpdateTx={updateMock}
+        />
+      );
+
+      // 도착 계좌 선택 셀렉트 존재 확인 (현재 계좌인 2번 KB국민은행은 제외되고 1번 미래에셋증권만 표시)
+      const targetSelect = screen.getByRole('combobox', { name: /도착 계좌/i });
+      expect(targetSelect).toBeInTheDocument();
+      expect(screen.getByText('미래에셋증권')).toBeInTheDocument();
+      expect(screen.queryByText('KB국민은행')).not.toBeInTheDocument();
+
+      // 도착 계좌 변경
+      fireEvent.change(targetSelect, { target: { value: '1' } });
+      expect(updateMock).toHaveBeenCalledWith(2, 0, 'target_account_id', 1);
+    });
+
+    it('타 계좌발 이체 연동 입금(incomingTransfers)이 읽기 전용 행으로 표시되고 삭제할 수 없다', () => {
+      const removeMock = vi.fn();
+      const incoming = [
+        {
+          source_account_id: 2,
+          source_account_name: 'KB국민은행',
+          type: 'DEPOSIT',
+          amount: '500,000',
+          currency: 'KRW',
+          memo: '이체 연동: KB국민은행 (생활비)',
+          is_incoming_transfer: true,
+        },
+      ];
+
+      render(
+        <TransactionTable
+          accId={1}
+          isBrokerage={true}
+          accounts={allAccounts}
+          incomingTransfers={incoming}
+          existingTxs={[]}
+          newTransactions={[]}
+          onRemoveTx={removeMock}
+        />
+      );
+
+      expect(screen.getByText(/DEPOSIT \(이체 연동: KB국민은행\)/)).toBeInTheDocument();
+      expect(screen.getByText('500,000원')).toBeInTheDocument();
+      expect(screen.getByText('이체 연동: KB국민은행 (생활비)')).toBeInTheDocument();
+      expect(screen.getByText('읽기 전용 (이체 연동)')).toBeInTheDocument();
+
+      // 삭제 버튼이 없어야 함
+      expect(screen.queryByRole('button', { name: /삭제/i })).not.toBeInTheDocument();
+    });
   });
 });

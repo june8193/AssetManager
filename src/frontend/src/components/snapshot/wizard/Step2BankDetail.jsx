@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Check, Landmark, RefreshCw, AlertTriangle } from 'lucide-react';
-import { formatWithCommas, getAccountDisplayName } from '../../../utils/snapshotCalculator';
+import { formatWithCommas, getAccountDisplayName, getIncomingTransferDeposits } from '../../../utils/snapshotCalculator';
 import { TransactionTable } from './TransactionTable';
 import { WizardIntegrityWarningCard } from './WizardIntegrityWarningCard';
 
@@ -31,6 +31,11 @@ export const Step2BankDetail = ({
   useEffect(() => {
     setWarningConfirmed(false);
   }, [accId]);
+
+  const incomingTransfers = useMemo(
+    () => getIncomingTransferDeposits(accId, accountsFormData, accounts),
+    [accId, accountsFormData, accounts]
+  );
 
   if (!acc) return null;
 
@@ -154,6 +159,8 @@ export const Step2BankDetail = ({
             <TransactionTable
               accId={accId}
               isBrokerage={false}
+              accounts={accounts}
+              incomingTransfers={incomingTransfers}
               existingTxs={existingTxs[accId] || []}
               newTransactions={data.newTransactions || []}
               loadingExistingTxs={loadingExistingTxs}

@@ -33,7 +33,7 @@ const SnapshotWizardPage = () => {
       alert('스냅샷이 성공적으로 저장되었습니다.');
       navigate('/db');
     } catch (err) {
-      // Error alert handled in engine / or re-alert if necessary
+      // 에러 알림은 엔진 내부에서 처리됨
     }
   };
 
