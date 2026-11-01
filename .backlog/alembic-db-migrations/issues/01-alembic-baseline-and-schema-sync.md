@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] `pyproject.toml` 및 가상환경에 `alembic` 의존성이 추가되고 `uv run alembic --version` 명령이 정상 동작한다.
 - [x] `alembic.ini`에 날짜 기반 파일 템플릿(`YYYYMMDD_HHMM_<rev>_<slug>.py`)이 설정되고, `alembic/env.py`에서 `src.backend.database.load_database_url()` 연동 및 `target_metadata=Base.metadata`, `render_as_batch=True`, `compare_type=True`가 설정된다.
