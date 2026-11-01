@@ -209,7 +209,6 @@ async def test_lifespan_cleans_residual_restart_flag_when_telegram_disabled(temp
     # is_testing=False 환경을 시뮬레이션하여 lifespan 시작 시 정리 확인
     with patch("src.backend.main.is_in_testing_environment", return_value=False), \
          patch("src.backend.main.should_start_telegram", return_value=False), \
-         patch("src.backend.main.Base.metadata.create_all"), \
          patch("src.backend.migrations.run_migrations"):
         async with lifespan(app):
             # lifespan 블록 내(서버 기동 완료 후)에서 플래그가 자동 정리되어 있어야 함

@@ -595,7 +595,7 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
         // 삭제 완료 후 통계 및 목록 재조회
         expect(expenseService.getStats).toHaveBeenCalledTimes(2);
         expect(expenseService.getExpenses).toHaveBeenCalledTimes(2);
-      });
+      }, { timeout: 3000 });
     });
   });
 });

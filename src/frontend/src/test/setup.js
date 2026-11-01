@@ -3,7 +3,22 @@ import { vi } from 'vitest';
 
 import React from 'react';
 
+// happy-dom + motion-dom 애니메이션 취소 AbortError Unhandled Rejection 방지
+if (typeof process !== 'undefined') {
+  process.on('unhandledRejection', (reason) => {
+    if (reason && (reason.name === 'AbortError' || (typeof reason.message === 'string' && reason.message.includes('The animation was canceled')))) {
+      return;
+    }
+  });
+}
+
 if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    if (event.reason && (event.reason.name === 'AbortError' || (typeof event.reason.message === 'string' && event.reason.message.includes('The animation was canceled')))) {
+      event.preventDefault();
+    }
+  });
+
   window.alert = vi.fn();
   window.confirm = vi.fn(() => true);
   window.prompt = vi.fn();
@@ -74,4 +89,3 @@ if (typeof window !== 'undefined') {
     writable: true
   });
 }
-
