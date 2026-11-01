@@ -49,12 +49,26 @@ class TelegramBot:
     async def check_restart_flag(self) -> None:
         """스토리지 내 재시작 대기 플래그가 발견되면 알림을 전송하고 삭제합니다."""
         flag_file = os.path.join(self.config.storage_dir, RESTART_FLAG_FILENAME)
-        if os.path.exists(flag_file):
+        is_pending = os.path.exists(flag_file)
+        if not is_pending:
+            try:
+                from ..services.restart_service import is_restart_pending
+                is_pending = is_restart_pending()
+            except Exception:
+                pass
+
+        if is_pending:
             logger.info("재시작 플래그 파일 감지: 완료 메시지를 발송하고 파일을 삭제합니다.")
             try:
                 os.remove(flag_file)
             except Exception as exc:
                 logger.error(f"재시작 플래그 파일 삭제 실패: {exc}")
+
+            try:
+                from ..services.restart_service import cleanup_restart_flag
+                cleanup_restart_flag()
+            except Exception as exc:
+                logger.error(f"공통 재시작 플래그 정리 실패: {exc}")
 
             for user_id in self.config.allowed_user_ids:
                 await self.client.send_message(

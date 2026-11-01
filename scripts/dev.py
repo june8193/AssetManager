@@ -3,12 +3,14 @@
 이 스크립트는 백엔드(FastAPI) 및 프론트엔드(Vite) 서버를 실행하고,
 사용 가능한 포트를 동적으로 찾아 할당하며 개발용 데이터베이스를 활용하도록 설정합니다.
 """
-import subprocess
 import os
-import sys
 import signal
-import time
 import socket
+import subprocess
+import sys
+import time
+from pathlib import Path
+
 
 def find_available_port(start_port, max_attempts=10):
     """사용 가능한 비어있는 포트를 찾습니다."""
@@ -20,6 +22,7 @@ def find_available_port(start_port, max_attempts=10):
             except socket.error:
                 continue
     raise IOError(f"Could not find an available port starting from {start_port}")
+
 
 def get_version(root_dir):
     """pyproject.toml 파일에서 버전을 추출합니다."""
@@ -33,6 +36,69 @@ def get_version(root_dir):
     except Exception as e:
         print(f"⚠️ 버전 정보 읽기 실패: {e}")
     return "0.0.0"
+
+
+def start_backend_process(root_dir: str | Path, env: dict) -> subprocess.Popen:
+    """백엔드 FastAPI 서버 프로세스를 실행합니다.
+
+    Args:
+        root_dir: 프로젝트 루트 디렉터리 경로
+        env: 프로세스에 주입할 환경 변수 딕셔너리
+
+    Returns:
+        subprocess.Popen: 실행된 백엔드 프로세스 객체
+    """
+    return subprocess.Popen(
+        ["uv", "run", "python", "-m", "src.backend.main"],
+        cwd=str(root_dir),
+        env=env,
+        text=True,
+    )
+
+
+def check_and_clear_restart_flag(root_dir: str | Path) -> bool:
+    """재시작 대기 플래그(.restart_pending) 파일이 존재하는지 감지하고 삭제합니다.
+
+    Args:
+        root_dir: 프로젝트 루트 디렉터리 경로
+
+    Returns:
+        bool: 플래그가 발견되어 삭제되었으면 True, 그렇지 않으면 False
+    """
+    flag_found = False
+
+    # 1. restart_service 사용 시도
+    try:
+        root_str = str(root_dir)
+        if root_str not in sys.path:
+            sys.path.insert(0, root_str)
+        from src.backend.services.restart_service import (
+            cleanup_restart_flag,
+            is_restart_pending,
+        )
+
+        if is_restart_pending():
+            cleanup_restart_flag()
+            return True
+    except Exception:
+        pass
+
+    # 2. 파일 시스템 직접 검사 (폴백)
+    candidates = [
+        os.path.join(root_dir, ".restart_pending"),
+        os.path.join(root_dir, "storage", ".restart_pending"),
+        os.path.join(root_dir, "data", ".restart_pending"),
+    ]
+    for flag_path in candidates:
+        if os.path.exists(flag_path):
+            try:
+                os.remove(flag_path)
+                flag_found = True
+            except Exception:
+                pass
+
+    return flag_found
+
 
 def main():
     """백엔드와 프론트엔드 서버를 동시에 실행합니다."""
@@ -67,12 +133,7 @@ def main():
 
     # 1. 백엔드 서버 실행
     print(f"\n[1/2] Starting Backend Server (FastAPI) on port {backend_port}...")
-    backend_process = subprocess.Popen(
-        ["uv", "run", "python", "-m", "src.backend.main"],
-        cwd=root_dir,
-        env=env,
-        text=True
-    )
+    backend_process = start_backend_process(root_dir, env)
 
     # 잠시 대기하여 로그가 섞이는 것을 방지
     time.sleep(2)
@@ -105,6 +166,11 @@ def main():
         while True:
             # 하나라도 종료되면 나머지도 정리
             if backend_process.poll() is not None:
+                if check_and_clear_restart_flag(root_dir):
+                    print("\n[!] 서버 재시작 플래그(.restart_pending) 감지: 백엔드 프로세스를 자동으로 재기동합니다...")
+                    backend_process = start_backend_process(root_dir, env)
+                    time.sleep(1)
+                    continue
                 print("\n[!] Backend process terminated.")
                 break
             if frontend_process.poll() is not None:

@@ -14,6 +14,11 @@ class KiwoomAuthManager:
     """
     
     _instance: Optional['KiwoomAuthManager'] = None
+
+    @classmethod
+    def reset(cls) -> None:
+        """싱글톤 인스턴스를 초기화합니다."""
+        cls._instance = None
     
     def __new__(cls):
         if cls._instance is None:
@@ -45,7 +50,8 @@ class KiwoomAuthManager:
     def _load_credentials(self):
         """settings.toml 파일로부터 모든 인증 및 설정 정보를 로드합니다."""
         project_root = Path(__file__).parent.parent.parent
-        settings_path = project_root / "settings.toml"
+        env_path = os.getenv("SETTINGS_PATH")
+        settings_path = Path(env_path) if env_path else (project_root / "settings.toml")
         
         if not settings_path.exists():
             self.logger.error(f"설정 파일({settings_path})을 찾을 수 없습니다.")
