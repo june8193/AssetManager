@@ -6,10 +6,10 @@
 
 **Blocked by:** 02-auto-migration-runner-with-backup
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] 전환 전/후로 `src/assets.db` 및 `src/dev_assets.db`의 핵심 데이터(계좌 수, 자산 수, 트랜잭션 수, 스냅샷 수 및 평가액/수익 합계)가 100% 일치함이 검증된다.
-- [ ] `src/assets.db`와 `src/dev_assets.db` 모두에서 미사용 `allocation_settings` 테이블이 제거되고, 19개 모델 테이블과 `alembic_version` 테이블(최신 `head` 리비전 기록)이 동일하게 존재한다.
-- [ ] 이미 적용 완료된 과거 일회성 마이그레이션 스크립트 7개(`scripts/migrate_bank_snapshots.py`, `scripts/migrate_bond_categories.py`, `scripts/migrate_target_asset_id.py`, `scripts/migrations/*.py`)가 삭제된다.
-- [ ] `GEMINI.md`의 데이터베이스 관리 규칙에 Alembic 마이그레이션 생성(`uv run alembic revision --autogenerate -m "..."`) 및 적용/검증 절차가 반영된다.
-- [ ] 전체 백엔드 테스트(`uv run pytest`)가 모두 통과하고, 개발 서버(`uv run scripts/dev.py`) 기동 시 오류 없이 대시보드가 정상 렌더링된다.
+- [x] 전환 전/후로 `src/assets.db` 및 `src/dev_assets.db`의 핵심 데이터(계좌 수, 자산 수, 트랜잭션 수, 스냅샷 수 및 평가액/수익 합계)가 100% 일치함이 검증된다.
+- [x] `src/assets.db`와 `src/dev_assets.db` 모두에서 미사용 `allocation_settings` 테이블이 제거되고, 19개 모델 테이블과 `alembic_version` 테이블(최신 `head` 리비전 기록)이 동일하게 존재한다.
+- [x] 이미 적용 완료된 과거 일회성 마이그레이션 스크립트 7개(`scripts/migrate_bank_snapshots.py`, `scripts/migrate_bond_categories.py`, `scripts/migrate_target_asset_id.py`, `scripts/migrations/*.py`)가 삭제된다.
+- [x] `GEMINI.md`의 데이터베이스 관리 규칙에 Alembic 마이그레이션 생성(`uv run alembic revision --autogenerate -m "..."`) 및 적용/검증 절차가 반영된다.
+- [x] 전체 백엔드 테스트(`uv run pytest`)가 모두 통과하고, 개발 서버(`uv run scripts/dev.py`) 기동 시 오류 없이 대시보드가 정상 렌더링된다.

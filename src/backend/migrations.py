@@ -10,6 +10,7 @@ from alembic.migration import MigrationContext
 from alembic.script import ScriptDirectory
 
 from .database import Base
+from . import models  # noqa: F401 - Base.metadata에 모든 ORM 모델을 등록하여 create_all 동작 보장
 from .services.backup_service import backup_database_file
 
 logger = logging.getLogger(__name__)
@@ -74,13 +75,20 @@ def _maybe_backup_database(engine: Engine, settings_path: str | Path = "settings
         return
 
     db_file_str = engine.url.database
-    if not db_file_str or db_file_str == ":memory:":
+    if not db_file_str or db_file_str == ":memory:" or "mode=memory" in str(engine.url):
         return
 
-    db_file = Path(db_file_str)
-    if db_file.exists() and db_file.is_file():
-        logger.info(f"마이그레이션 실행 전 사전 백업을 수행합니다: {db_file}")
-        backup_database_file(db_file, settings_path=settings_path)
+    # file: URI 형태의 메모리 DB 또는 특수 경로 제외
+    if db_file_str.startswith("file:") or "?" in db_file_str:
+        return
+
+    try:
+        db_file = Path(db_file_str)
+        if db_file.exists() and db_file.is_file():
+            logger.info(f"마이그레이션 실행 전 사전 백업을 수행합니다: {db_file}")
+            backup_database_file(db_file, settings_path=settings_path)
+    except Exception as e:
+        logger.warning(f"사전 백업 대상 파일 확인 중 예외 건너뜁니다: {e}")
 
 
 def _apply_legacy_schema_fixes(conn, engine: Engine) -> None:

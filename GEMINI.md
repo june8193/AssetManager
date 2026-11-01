@@ -25,10 +25,17 @@
 - **스크린샷 및 정리**: 주요 화면은 `screenshots/YYYYMMDD_HHMMSS_작업명/` 폴더에 스크린샷을 저장하고, 검증 완료 후 개발 서버 백그라운드 태스크를 반드시 종료(kill)합니다.
 
 ## 4. 데이터베이스 관리, 수정 및 검증 규칙
-- **원칙**: DB 테이블 구조/데이터 확인을 위해 일회성 스크립트를 작성하지 않으며, 데이터 조사는 **SELECT** 쿼리만 수행합니다.
+- **Alembic 기반 스키마 버전 관리 원칙**:
+  - 일회성 DB 변경 스크립트 작성을 엄격히 금지하며, 모든 DB 스키마 변경은 **Alembic 마이그레이션**으로만 관리합니다.
+  - **모델 변경 및 마이그레이션 생성 절차**:
+    1. `src/backend/models.py`에 SQLAlchemy ORM 모델 정의 수정.
+    2. `uv run alembic revision --autogenerate -m "<설명>"` 명령으로 마이그레이션 스크립트 자동 생성.
+    3. `alembic/versions/`에 생성된 스크립트에서 SQLite 제약조건 처리를 위한 배치 모드(`with op.batch_alter_table(...) as batch_op:`) 적용 여부와 DDL 내용을 반드시 검토.
+    4. 서버 기동 시(`run_migrations(engine)`) 미적용 리비전이 감지되면 자동으로 사전 백업 파일이 생성된 후 `upgrade head`가 수행됩니다.
+- **조회 원칙**: DB 테이블 구조/데이터 확인을 위해 일회성 스크립트를 작성하지 않으며, 데이터 조사는 **SELECT** 쿼리만 수행합니다.
   - **로컬 DB 조회**: `uv run scripts/db_query.py` 사용 (`--list-tables` 또는 `"SELECT ..."`).
   - **서버 DB 조회**: `assetmanager` MCP 도구(`get_db_tables`, `get_db_schema`, `execute_db_query` 등) 사용.
-- **수정 전 사전 백업**: 마이그레이션 스크립트 실행 등 DB 수정 전, 반드시 `settings.toml`의 `[backup].path`(기본 `./backups`)에 `assets_YYYYMMDD_HHMMSS.db` 백업 파일을 생성합니다.
+- **수정 전 사전 백업**: 마이그레이션 실행 등 DB 수정 전, 반드시 `settings.toml`의 `[backup].path`(기본 `./backups`)에 `assets_YYYYMMDD_HHMMSS.db` 백업 파일이 생성되었는지 확인합니다 (서버 자동 마이그레이션 러너 기동 시 자동 백업됨).
 - **수정 후 지표 검증**: 작업 전/후 대시보드 핵심 지표(총 누적수익, 연도별 수익, 자산별 잔고 및 자산내역, 최근 스냅샷 정합성)를 API/스크립트 및 웹 화면(UI)으로 교차 비교 검증합니다.
 - **불일치 시 롤백**: 지표 불일치나 데이터 왜곡 발견 시 즉시 백업본으로 원복(롤백) 후 원인을 재분석합니다.
 
