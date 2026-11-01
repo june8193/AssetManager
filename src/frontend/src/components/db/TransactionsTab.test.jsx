@@ -836,6 +836,219 @@ describe('TransactionsTab', () => {
     expect(interestBadge.className).toContain('bg-emerald-50 text-emerald-600');
     expect(taxBadge.className).toContain('bg-red-50 text-red-600');
   });
+
+  describe('이체(TRANSFER) 거래 수정 및 PUT 페이로드 연동', () => {
+    const mockAccountsList = [
+      { id: 1, name: '출발계좌', provider: 'KB', alias: 'KB계좌' },
+      { id: 2, name: '도착계좌', provider: '신한', alias: '신한계좌' },
+      { id: 3, name: '제3계좌', provider: '토스', alias: '토스계좌' }
+    ];
+    const mockAssetsList = [
+      { id: 10, ticker: 'KRW', name: '원화 현금', category: 'CASH' }
+    ];
+
+    it('이체 출금(WITHDRAW) 행 수정 클릭 시 TRANSFER 유형과 출발/도착 계좌가 자동 매핑되어야 한다', async () => {
+      const transferPairTxs = [
+        {
+          id: 101,
+          account_id: 1,
+          asset_id: 10,
+          transaction_date: '2026-05-01',
+          type: 'WITHDRAW',
+          quantity: 50000,
+          price: 1,
+          total_amount: 50000,
+          currency: 'KRW',
+          transfer_pair_id: 999
+        },
+        {
+          id: 102,
+          account_id: 2,
+          asset_id: 10,
+          transaction_date: '2026-05-01',
+          type: 'DEPOSIT',
+          quantity: 50000,
+          price: 1,
+          total_amount: 50000,
+          currency: 'KRW',
+          transfer_pair_id: 999
+        }
+      ];
+
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(transferPairTxs) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccountsList) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssetsList) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('button', { name: '수정' })).toHaveLength(2);
+      });
+
+      // 첫 번째 행 (WITHDRAW 행, id: 101) 수정 버튼 클릭
+      const editButtons = screen.getAllByRole('button', { name: '수정' });
+      fireEvent.click(editButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText('거래 내역 수정')).toBeInTheDocument();
+        expect(screen.getByText('출발 계좌')).toBeInTheDocument();
+        expect(screen.getByText('도착 계좌')).toBeInTheDocument();
+      });
+
+      const accountSelect = document.querySelector('select[name="account_id"]');
+      const targetAccountSelect = document.querySelector('select[name="target_account_id"]');
+      const typeSelect = document.querySelector('select[name="type"]');
+
+      expect(typeSelect.value).toBe('TRANSFER');
+      expect(accountSelect.value).toBe('1');
+      expect(targetAccountSelect.value).toBe('2');
+    });
+
+    it('이체 입금(DEPOSIT) 행 수정 클릭 시 WITHDRAW 쪽이 출발 계좌, DEPOSIT 쪽이 도착 계좌로 반전 매핑되어야 한다', async () => {
+      const transferPairTxs = [
+        {
+          id: 101,
+          account_id: 1,
+          asset_id: 10,
+          transaction_date: '2026-05-01',
+          type: 'WITHDRAW',
+          quantity: 50000,
+          price: 1,
+          total_amount: 50000,
+          currency: 'KRW',
+          transfer_pair_id: 999
+        },
+        {
+          id: 102,
+          account_id: 2,
+          asset_id: 10,
+          transaction_date: '2026-05-01',
+          type: 'DEPOSIT',
+          quantity: 50000,
+          price: 1,
+          total_amount: 50000,
+          currency: 'KRW',
+          transfer_pair_id: 999
+        }
+      ];
+
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(transferPairTxs) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccountsList) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssetsList) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getAllByRole('button', { name: '수정' })).toHaveLength(2);
+      });
+
+      // 두 번째 행 (DEPOSIT 행, id: 102) 수정 버튼 클릭
+      const editButtons = screen.getAllByRole('button', { name: '수정' });
+      fireEvent.click(editButtons[1]);
+
+      await waitFor(() => {
+        expect(screen.getByText('출발 계좌')).toBeInTheDocument();
+        expect(screen.getByText('도착 계좌')).toBeInTheDocument();
+      });
+
+      const accountSelect = document.querySelector('select[name="account_id"]');
+      const targetAccountSelect = document.querySelector('select[name="target_account_id"]');
+      const typeSelect = document.querySelector('select[name="type"]');
+
+      expect(typeSelect.value).toBe('TRANSFER');
+      expect(accountSelect.value).toBe('1'); // pairTx인 WITHDRAW 행 계좌
+      expect(targetAccountSelect.value).toBe('2'); // 본인 DEPOSIT 행 계좌
+    });
+
+    it('단일 TRANSFER 행 수정 후 도착 계좌를 변경하여 저장할 때 PUT 요청 payload에 target_account_id, quantity, price 등이 올바르게 전송되어야 한다', async () => {
+      const singleTransferTx = [
+        {
+          id: 201,
+          account_id: 1,
+          asset_id: 10,
+          transaction_date: '2026-05-02',
+          type: 'TRANSFER',
+          quantity: 30000,
+          price: 1,
+          total_amount: 30000,
+          currency: 'KRW',
+          memo: '생활비 이체'
+        }
+      ];
+
+      let putUrl = null;
+      let putPayload = null;
+
+      vi.stubGlobal('fetch', vi.fn((url, options) => {
+        if (url.includes('/transactions/201') && options?.method === 'PUT') {
+          putUrl = url;
+          putPayload = JSON.parse(options.body);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 201, ...putPayload }) });
+        }
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(singleTransferTx) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAccountsList) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(mockAssetsList) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: '수정' })).toBeInTheDocument();
+      });
+
+      // 단일 TRANSFER 행 수정 버튼 클릭
+      fireEvent.click(screen.getByRole('button', { name: '수정' }));
+
+      await waitFor(() => {
+        expect(screen.getByText('출발 계좌')).toBeInTheDocument();
+        expect(screen.getByText('도착 계좌')).toBeInTheDocument();
+      });
+
+      // 도착 계좌를 2에서 3으로 변경
+      const targetAccountSelect = document.querySelector('select[name="target_account_id"]');
+      expect(targetAccountSelect.value).toBe('2'); // findAlternative에 의해 2로 설정됨
+      fireEvent.change(targetAccountSelect, { target: { value: '3' } });
+
+      // 이체 금액을 35,000으로 수정
+      const totalAmountInput = document.querySelector('input[name="total_amount"]');
+      fireEvent.change(totalAmountInput, { target: { value: '35000' } });
+
+      // 수정 저장 버튼 클릭
+      const saveButton = screen.getByRole('button', { name: '저장' });
+      fireEvent.click(saveButton);
+
+      await waitFor(() => {
+        expect(putUrl).toContain('/transactions/201');
+        expect(putPayload).not.toBeNull();
+      });
+
+      expect(putPayload.account_id).toBe(1);
+      expect(putPayload.target_account_id).toBe(3);
+      expect(putPayload.quantity).toBe(35000);
+      expect(putPayload.price).toBe(1);
+      expect(putPayload.total_amount).toBe(35000);
+      expect(putPayload.type).toBe('TRANSFER');
+    });
+  });
 });
 
 

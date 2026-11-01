@@ -1,7 +1,7 @@
 """거래 내역 관련 Pydantic 스키마 정의."""
 
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, Literal
+from typing import Optional, Literal, ClassVar, Set
 from datetime import date
 
 
@@ -11,6 +11,7 @@ class TransactionSchema(BaseModel):
     Attributes:
         id (Optional[int]): 거래 식별자
         account_id (int): 계좌 식별자
+        target_account_id (Optional[int]): 이체 대상 도착 계좌 식별자
         asset_id (int): 거래 자산 식별자
         target_asset_id (Optional[int]): 환전 상대 자산 식별자
         transaction_date (date): 거래 일자
@@ -29,11 +30,24 @@ class TransactionSchema(BaseModel):
         target_asset_name (Optional[str]): 환전 상대 자산명
         target_asset_ticker (Optional[str]): 환전 상대 자산 티커
         account_display_name (Optional[str]): 계좌 표시 이름
+        warning (Optional[str]): 스냅샷 불일치 등 경고 메시지
     """
     model_config = ConfigDict(from_attributes=True)
 
+    NON_DB_FIELDS: ClassVar[Set[str]] = {
+        "id",
+        "asset_name",
+        "asset_ticker",
+        "target_asset_name",
+        "target_asset_ticker",
+        "account_display_name",
+        "warning",
+        "target_account_id",
+    }
+
     id: Optional[int] = None
     account_id: int
+    target_account_id: Optional[int] = None
     asset_id: int
     target_asset_id: Optional[int] = None
     transaction_date: date
@@ -53,7 +67,6 @@ class TransactionSchema(BaseModel):
     target_asset_ticker: Optional[str] = None
     account_display_name: Optional[str] = None
     warning: Optional[str] = None
-
 
 
 class TransferTransactionRequest(BaseModel):

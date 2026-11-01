@@ -658,8 +658,10 @@ def test_update_transfer_transaction_cascade(db_session, test_user):
     created_txs = res.json()
     src_tx = next(t for t in created_txs if t["account_id"] == acc_src.id)
 
-    # 수정 payload (출금 트랜잭션 업데이트)
+    # 수정 payload (이체 트랜잭션 업데이트: type="TRANSFER", target_account_id 명시)
     update_payload = dict(src_tx)
+    update_payload["type"] = "TRANSFER"
+    update_payload["target_account_id"] = acc_dst.id
     update_payload["total_amount"] = 25000.0
     update_payload["transaction_date"] = "2026-08-03"
     update_payload["memo"] = "변경후 이체"

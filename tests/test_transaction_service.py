@@ -159,3 +159,283 @@ def test_past_transaction_warning(db_session, tx_setup):
     created_future_tx = service.create_transaction(future_tx_schema)
     assert created_future_tx.warning is None
 
+
+
+def test_update_standalone_to_transfer(db_session, tx_setup):
+    """단독 거래를 이체(TRANSFER)로 수정 시 WITHDRAW + DEPOSIT 쌍이 생성되는지 검증합니다."""
+    acc1, acc2, asset_krw, _, _ = tx_setup
+    service = TransactionService(db_session)
+
+    # 1. 단독 WITHDRAW 거래 생성
+    init_tx = service.create_transaction(TransactionSchema(
+        account_id=acc1.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 1),
+        type="WITHDRAW",
+        quantity=50000.0,
+        price=1.0,
+        total_amount=50000.0,
+        currency="KRW",
+        memo="단독 출금"
+    ))
+    assert init_tx.transfer_pair_id is None
+
+    # 2. TRANSFER로 수정
+    update_schema = TransactionSchema(
+        account_id=acc1.id,
+        target_account_id=acc2.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 2),
+        type="TRANSFER",
+        quantity=80000.0,
+        price=1.0,
+        total_amount=80000.0,
+        currency="KRW",
+        memo="이체로 변경"
+    )
+    updated_tx = service.update_transaction(init_tx.id, update_schema)
+
+    assert updated_tx.type == "WITHDRAW"
+    assert updated_tx.account_id == acc1.id
+    assert updated_tx.total_amount == 80000.0
+    assert updated_tx.quantity == 80000.0
+    assert updated_tx.price == 1.0
+    assert updated_tx.transfer_pair_id is not None
+
+    # 상대 DEPOSIT 행 검증
+    pairs = db_session.query(Transaction).filter(
+        Transaction.transfer_pair_id == updated_tx.transfer_pair_id
+    ).all()
+    assert len(pairs) == 2
+
+    deposit_tx = next(t for t in pairs if t.id != updated_tx.id)
+    assert deposit_tx.type == "DEPOSIT"
+    assert deposit_tx.account_id == acc2.id
+    assert deposit_tx.total_amount == 80000.0
+    assert deposit_tx.quantity == 80000.0
+    assert deposit_tx.price == 1.0
+    assert deposit_tx.memo == "이체로 변경"
+    assert deposit_tx.transaction_date == date(2026, 3, 2)
+
+
+def test_update_legacy_transfer_without_pair_to_transfer(db_session, tx_setup):
+    """transfer_pair_id가 없는 기존 TRANSFER 단일 거래 수정 시 이체 쌍으로 보완 생성되는지 검증합니다."""
+    acc1, acc2, asset_krw, _, _ = tx_setup
+    service = TransactionService(db_session)
+
+    single_tx = Transaction(
+        account_id=acc1.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 5),
+        type="TRANSFER",
+        quantity=30000.0,
+        price=1.0,
+        total_amount=30000.0,
+        currency="KRW",
+        transfer_pair_id=None
+    )
+    db_session.add(single_tx)
+    db_session.commit()
+    db_session.refresh(single_tx)
+
+    update_schema = TransactionSchema(
+        account_id=acc1.id,
+        target_account_id=acc2.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 6),
+        type="TRANSFER",
+        quantity=35000.0,
+        price=1.0,
+        total_amount=35000.0,
+        currency="KRW"
+    )
+    updated_tx = service.update_transaction(single_tx.id, update_schema)
+
+    assert updated_tx.type == "WITHDRAW"
+    assert updated_tx.transfer_pair_id is not None
+
+    pairs = db_session.query(Transaction).filter(
+        Transaction.transfer_pair_id == updated_tx.transfer_pair_id
+    ).all()
+    assert len(pairs) == 2
+    deposit_tx = next(t for t in pairs if t.id != updated_tx.id)
+    assert deposit_tx.type == "DEPOSIT"
+    assert deposit_tx.account_id == acc2.id
+    assert deposit_tx.total_amount == 35000.0
+
+
+def test_update_transfer_pair_sync_accounts_and_data(db_session, tx_setup):
+    """기존 이체 쌍 수정 시 출발/도착 계좌 및 금액, 일자, 메모가 동기화되는지 검증합니다."""
+    acc1, acc2, asset_krw, _, _ = tx_setup
+    service = TransactionService(db_session)
+
+    acc3 = Account(user_id=acc1.user_id, name="제3계좌", provider="카카오뱅크", account_type="BANK", is_active=True)
+    db_session.add(acc3)
+    db_session.commit()
+
+    txs = service.create_transfer_pair(TransferTransactionRequest(
+        source_account_id=acc1.id,
+        target_account_id=acc2.id,
+        asset_id=asset_krw.id,
+        amount=100000.0,
+        transaction_date=date(2026, 3, 10),
+        memo="원래 이체"
+    ))
+    withdraw_tx = next(t for t in txs if t.type == "WITHDRAW")
+    deposit_tx = next(t for t in txs if t.type == "DEPOSIT")
+
+    update_schema = TransactionSchema(
+        account_id=acc1.id,
+        target_account_id=acc3.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 11),
+        type="TRANSFER",
+        quantity=120000.0,
+        price=1.0,
+        total_amount=120000.0,
+        currency="KRW",
+        memo="도착계좌 변경됨"
+    )
+    updated_tx = service.update_transaction(withdraw_tx.id, update_schema)
+
+    db_session.refresh(deposit_tx)
+    assert updated_tx.account_id == acc1.id
+    assert updated_tx.type == "WITHDRAW"
+    assert updated_tx.total_amount == 120000.0
+    assert updated_tx.quantity == 120000.0
+
+    assert deposit_tx.account_id == acc3.id
+    assert deposit_tx.type == "DEPOSIT"
+    assert deposit_tx.total_amount == 120000.0
+    assert deposit_tx.quantity == 120000.0
+    assert deposit_tx.transaction_date == date(2026, 3, 11)
+    assert deposit_tx.memo == "도착계좌 변경됨"
+
+
+def test_update_transfer_from_deposit_row(db_session, tx_setup):
+    """DEPOSIT 행에서 수정을 호출해도 출발/도착 계좌가 올바르게 매핑되는지 검증합니다."""
+    acc1, acc2, asset_krw, _, _ = tx_setup
+    service = TransactionService(db_session)
+
+    acc3 = Account(user_id=acc1.user_id, name="제3계좌", provider="카카오뱅크", account_type="BANK", is_active=True)
+    db_session.add(acc3)
+    db_session.commit()
+
+    txs = service.create_transfer_pair(TransferTransactionRequest(
+        source_account_id=acc1.id,
+        target_account_id=acc2.id,
+        asset_id=asset_krw.id,
+        amount=50000.0,
+        transaction_date=date(2026, 3, 10),
+        memo="원래 이체"
+    ))
+    withdraw_tx = next(t for t in txs if t.type == "WITHDRAW")
+    deposit_tx = next(t for t in txs if t.type == "DEPOSIT")
+
+    update_schema = TransactionSchema(
+        account_id=acc3.id,
+        target_account_id=acc2.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 12),
+        type="TRANSFER",
+        quantity=60000.0,
+        price=1.0,
+        total_amount=60000.0,
+        currency="KRW",
+        memo="출발계좌 변경됨"
+    )
+    service.update_transaction(deposit_tx.id, update_schema)
+
+    db_session.refresh(withdraw_tx)
+    db_session.refresh(deposit_tx)
+
+    assert withdraw_tx.account_id == acc3.id
+    assert withdraw_tx.type == "WITHDRAW"
+    assert withdraw_tx.total_amount == 60000.0
+
+    assert deposit_tx.account_id == acc2.id
+    assert deposit_tx.type == "DEPOSIT"
+    assert deposit_tx.total_amount == 60000.0
+
+
+def test_update_transfer_to_regular_transaction_deletes_pair(db_session, tx_setup):
+    """기존 이체 쌍을 일반 거래로 수정 시 상대 거래가 삭제되고 transfer_pair_id가 해제되는지 검증합니다."""
+    acc1, acc2, asset_krw, _, _ = tx_setup
+    service = TransactionService(db_session)
+
+    txs = service.create_transfer_pair(TransferTransactionRequest(
+        source_account_id=acc1.id,
+        target_account_id=acc2.id,
+        asset_id=asset_krw.id,
+        amount=70000.0,
+        transaction_date=date(2026, 3, 10)
+    ))
+    withdraw_tx = next(t for t in txs if t.type == "WITHDRAW")
+    deposit_tx = next(t for t in txs if t.type == "DEPOSIT")
+    deposit_id = deposit_tx.id
+
+    update_schema = TransactionSchema(
+        account_id=acc1.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 15),
+        type="WITHDRAW",
+        quantity=70000.0,
+        price=1.0,
+        total_amount=70000.0,
+        currency="KRW",
+        memo="일반 출금으로 전환"
+    )
+    updated_tx = service.update_transaction(withdraw_tx.id, update_schema)
+
+    assert updated_tx.transfer_pair_id is None
+    assert updated_tx.type == "WITHDRAW"
+
+    deleted_row = db_session.query(Transaction).filter(Transaction.id == deposit_id).first()
+    assert deleted_row is None
+
+
+def test_update_transfer_validation_errors(db_session, tx_setup):
+    """이체 수정 시 target_account_id 누락 및 동일 계좌 지정 시 예외가 발생하는지 검증합니다."""
+    acc1, acc2, asset_krw, _, _ = tx_setup
+    service = TransactionService(db_session)
+
+    init_tx = service.create_transaction(TransactionSchema(
+        account_id=acc1.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 1),
+        type="WITHDRAW",
+        quantity=10000.0,
+        price=1.0,
+        total_amount=10000.0,
+        currency="KRW"
+    ))
+
+    # 1. target_account_id 누락 시
+    missing_target_schema = TransactionSchema(
+        account_id=acc1.id,
+        target_account_id=None,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 1),
+        type="TRANSFER",
+        quantity=10000.0,
+        price=1.0,
+        total_amount=10000.0,
+        currency="KRW"
+    )
+    with pytest.raises(ValueError, match="도착 계좌"):
+        service.update_transaction(init_tx.id, missing_target_schema)
+
+    # 2. 출발 계좌와 도착 계좌 동일 시
+    same_account_schema = TransactionSchema(
+        account_id=acc1.id,
+        target_account_id=acc1.id,
+        asset_id=asset_krw.id,
+        transaction_date=date(2026, 3, 1),
+        type="TRANSFER",
+        quantity=10000.0,
+        price=1.0,
+        total_amount=10000.0,
+        currency="KRW"
+    )
+    with pytest.raises(ValueError, match="동일할 수 없습니다"):
+        service.update_transaction(init_tx.id, same_account_schema)

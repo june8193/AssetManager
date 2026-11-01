@@ -92,12 +92,17 @@ def update_transaction(transaction_id: int, transaction: TransactionSchema, db: 
         TransactionSchema: 수정된 거래 정보.
         
     Raises:
-        HTTPException: 미존재 시 404, 검증 실패 시 422.
+        HTTPException: 동일 계좌 이체 시 400, 계좌/자산 미존재 시 404, 기타 검증 실패 시 422.
     """
     try:
         return TransactionService(db).update_transaction(transaction_id, transaction)
     except ValueError as e:
-        raise HTTPException(status_code=404 if "찾을 수 없습니다" in str(e) else 422, detail=str(e))
+        err_msg = str(e)
+        if "동일할 수 없습니다" in err_msg:
+            raise HTTPException(status_code=400, detail=err_msg)
+        if "찾을 수 없습니다" in err_msg:
+            raise HTTPException(status_code=404, detail=err_msg)
+        raise HTTPException(status_code=422, detail=err_msg)
 
 
 @router.delete("/transactions/{transaction_id}")

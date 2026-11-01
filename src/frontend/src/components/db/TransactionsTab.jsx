@@ -424,8 +424,12 @@ const TransactionsTab = () => {
 
     const payload = {
       ...customFormData,
-      quantity: parseFormattedNumber(customFormData.quantity),
-      price: parseFormattedNumber(customFormData.price),
+      account_id: customFormData.account_id ? parseInt(customFormData.account_id) : undefined,
+      target_account_id: isTransfer
+        ? (customFormData.target_account_id ? parseInt(customFormData.target_account_id) : null)
+        : null,
+      quantity: isTransfer ? parseFormattedNumber(customFormData.total_amount) : parseFormattedNumber(customFormData.quantity),
+      price: isTransfer ? 1 : parseFormattedNumber(customFormData.price),
       total_amount: parseFormattedNumber(customFormData.total_amount),
       target_asset_id: isExchange && customFormData.target_asset_id ? parseInt(customFormData.target_asset_id) : null,
       exchange_rate: isExchange 
@@ -491,13 +495,34 @@ const TransactionsTab = () => {
    */
   const handleEdit = (tx) => {
     setEditingId(tx.id);
+
+    let editType = tx.type;
+    let editAccountId = tx.account_id;
+    let editTargetAccountId = '';
+
+    if (tx.transfer_pair_id) {
+      const pairTx = transactions.find(t => isSameId(t.transfer_pair_id, tx.transfer_pair_id) && !isSameId(t.id, tx.id));
+      if (tx.type === 'DEPOSIT' && pairTx) {
+        editAccountId = pairTx.account_id;
+        editTargetAccountId = tx.account_id;
+      } else {
+        editAccountId = tx.account_id;
+        editTargetAccountId = pairTx ? pairTx.account_id : (findAlternative(accounts, tx.account_id)?.id || '');
+      }
+      editType = 'TRANSFER';
+    } else if (tx.type === 'TRANSFER') {
+      editAccountId = tx.account_id;
+      editTargetAccountId = findAlternative(accounts, tx.account_id)?.id || '';
+      editType = 'TRANSFER';
+    }
+
     setFormData({
-      account_id: tx.account_id,
-      target_account_id: '',
+      account_id: editAccountId,
+      target_account_id: editTargetAccountId,
       asset_id: tx.asset_id,
       target_asset_id: tx.target_asset_id || '',
       transaction_date: tx.transaction_date,
-      type: tx.type,
+      type: editType,
       quantity: (tx.quantity ?? 0).toString(),
       price: (tx.price ?? 0).toString(),
       total_amount: (tx.total_amount ?? 0).toString(),
