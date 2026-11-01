@@ -1,5 +1,6 @@
 """스냅샷 산출, 증권/은행 정산 차액 계산 및 원자적 영속화를 전담하는 딥 도메인 엔진 모듈입니다."""
 
+import uuid
 from typing import List, Optional, Dict, Any, Union
 from datetime import date, timedelta
 from sqlalchemy.orm import Session, joinedload
@@ -101,7 +102,7 @@ class SnapshotEngine:
             Transaction: DB에 삽입할 Transaction 인스턴스.
         """
         data = tx_schema.model_dump(
-            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning"}
+            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning", "target_account_id"}
         )
 
         data['asset_id'] = asset_id
@@ -248,7 +249,7 @@ class SnapshotEngine:
             amount_krw = self._convert_tx_to_krw(tx, req.exchange_rate)
             if tx.type == 'DEPOSIT':
                 period_deposit += amount_krw
-            elif tx.type == 'WITHDRAW':
+            elif tx.type in ['WITHDRAW', 'TRANSFER']:
                 period_deposit -= amount_krw
 
         # 6. 비현금 자산 평가액 및 기간 수익 계산
@@ -318,7 +319,7 @@ class SnapshotEngine:
             
             if t_type in ['DEPOSIT', 'INITIAL_BALANCE']:
                 total_deposit += amount
-            elif t_type == 'WITHDRAW':
+            elif t_type in ['WITHDRAW', 'TRANSFER']:
                 total_withdraw += amount
             elif t_type == 'INTEREST':
                 total_interest += amount
@@ -369,6 +370,64 @@ class SnapshotEngine:
         else:
             self.db.add(ExchangeRate(date=target_date, currency="USD", rate=rate))
 
+    def _create_transfer_pair_transactions(
+        self,
+        tx_schema: TransactionSchema,
+        source_account_id: int,
+        asset_id: int
+    ) -> tuple[Transaction, Transaction]:
+        """이체 거래(TRANSFER) 스키마로부터 출발 계좌(WITHDRAW)와 도착 계좌(DEPOSIT) 트랜잭션 쌍을 생성합니다.
+        
+        Args:
+            tx_schema (TransactionSchema): 이체 트랜잭션 스키마.
+            source_account_id (int): 출발 계좌 식별자.
+            asset_id (int): 대상 자산 ID.
+            
+        Returns:
+            tuple[Transaction, Transaction]: (출발 계좌 출금 Transaction, 도착 계좌 입금 Transaction)
+            
+        Raises:
+            ValueError: 도착 계좌가 지정되지 않았거나 출발 계좌와 동일한 경우.
+        """
+        if not tx_schema.target_account_id:
+            raise ValueError("이체 거래(TRANSFER) 시 도착 계좌(target_account_id)는 필수입니다.")
+        if tx_schema.target_account_id == source_account_id:
+            raise ValueError("출발 계좌와 도착 계좌가 동일할 수 없습니다.")
+
+        transfer_pair_id = str(uuid.uuid4())
+        qty = tx_schema.quantity if tx_schema.quantity != 0 else tx_schema.total_amount
+        price = tx_schema.price if tx_schema.price != 0 else 1.0
+
+        tx_withdraw = Transaction(
+            account_id=source_account_id,
+            asset_id=asset_id,
+            transaction_date=tx_schema.transaction_date,
+            type="WITHDRAW",
+            quantity=qty,
+            price=price,
+            total_amount=tx_schema.total_amount,
+            currency=tx_schema.currency,
+            exchange_rate=tx_schema.exchange_rate,
+            memo=tx_schema.memo,
+            source=tx_schema.source,
+            transfer_pair_id=transfer_pair_id,
+        )
+        tx_deposit = Transaction(
+            account_id=tx_schema.target_account_id,
+            asset_id=asset_id,
+            transaction_date=tx_schema.transaction_date,
+            type="DEPOSIT",
+            quantity=qty,
+            price=price,
+            total_amount=tx_schema.total_amount,
+            currency=tx_schema.currency,
+            exchange_rate=tx_schema.exchange_rate,
+            memo=tx_schema.memo,
+            source=tx_schema.source,
+            transfer_pair_id=transfer_pair_id,
+        )
+        return tx_withdraw, tx_deposit
+
     def _process_brokerage_accounts(
         self,
         snapshot_date: date,
@@ -378,6 +437,8 @@ class SnapshotEngine:
     ):
         """증권 계좌의 신규 거래 및 잔고 보정 내역(CASH_ADJUSTMENT)을 삽입합니다.
         
+        이체(TRANSFER) 거래의 경우 출발 계좌(WITHDRAW)와 도착 계좌(DEPOSIT) 쌍을 원자적으로 생성합니다.
+        
         Args:
             snapshot_date (date): 기준 일자.
             accounts (List[BrokerageSaveAccountRequest]): 증권 계좌 저장 요청 목록.
@@ -385,7 +446,7 @@ class SnapshotEngine:
             usd_asset_id (int): 달러 자산 ID.
             
         Raises:
-            ValueError: 지원하지 않는 통화인 경우.
+            ValueError: 지원하지 않는 통화인 경우 또는 이체 검증 실패 시.
         """
         for acc_req in accounts:
             for tx_schema in acc_req.new_transactions:
@@ -396,7 +457,14 @@ class SnapshotEngine:
                 else:
                     raise ValueError(f"지원하지 않는 통화입니다: {tx_schema.currency}")
                 
-                self.db.add(self._create_transaction_from_schema(tx_schema, asset_id))
+                if tx_schema.type == "TRANSFER":
+                    tx_wdr, tx_dep = self._create_transfer_pair_transactions(
+                        tx_schema, source_account_id=acc_req.account_id, asset_id=asset_id
+                    )
+                    self.db.add(tx_wdr)
+                    self.db.add(tx_dep)
+                else:
+                    self.db.add(self._create_transaction_from_schema(tx_schema, asset_id))
             
             # 차액 보정 저장
             if abs(acc_req.diff_krw) > 0.01:
@@ -426,13 +494,25 @@ class SnapshotEngine:
     def _process_bank_accounts(self, accounts: List[BankSaveAccountRequest], krw_asset_id: int):
         """은행 계좌의 신규 거래 내역을 삽입합니다.
         
+        이체(TRANSFER) 거래의 경우 출발 계좌(WITHDRAW)와 도착 계좌(DEPOSIT) 쌍을 원자적으로 생성합니다.
+        
         Args:
             accounts (List[BankSaveAccountRequest]): 은행 계좌 저장 요청 목록.
             krw_asset_id (int): 원화 자산 ID.
+            
+        Raises:
+            ValueError: 이체 검증 실패 시.
         """
         for acc_req in accounts:
             for tx_schema in acc_req.new_transactions:
-                self.db.add(self._create_transaction_from_schema(tx_schema, krw_asset_id))
+                if tx_schema.type == "TRANSFER":
+                    tx_wdr, tx_dep = self._create_transfer_pair_transactions(
+                        tx_schema, source_account_id=acc_req.account_id, asset_id=krw_asset_id
+                    )
+                    self.db.add(tx_wdr)
+                    self.db.add(tx_dep)
+                else:
+                    self.db.add(self._create_transaction_from_schema(tx_schema, krw_asset_id))
 
     def _update_bank_previews(
         self,
@@ -669,8 +749,8 @@ class SnapshotEngine:
 
         try:
             self._save_exchange_rate(req.snapshot_date, req.exchange_rate)
-            self._process_brokerage_accounts(req.snapshot_date, req.brokerage_accounts, krw_asset.id, usd_asset.id)
             self._process_bank_accounts(req.bank_accounts, krw_asset.id)
+            self._process_brokerage_accounts(req.snapshot_date, req.brokerage_accounts, krw_asset.id, usd_asset.id)
             self.db.flush()
 
             # 1. 직전 스냅샷부터 어제까지 중간 날짜 연속 스냅샷 자동 산출 및 DB 반영

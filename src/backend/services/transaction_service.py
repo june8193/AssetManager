@@ -78,7 +78,7 @@ class TransactionService:
                 raise ValueError("환전 도착 자산(target_asset_id)은 현금 카테고리 자산이어야 합니다.")
 
         return transaction.model_dump(
-            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning"}
+            exclude={"id", "asset_name", "asset_ticker", "target_asset_name", "target_asset_ticker", "account_display_name", "warning", "target_account_id"}
         )
 
     def create_transaction(self, transaction) -> Transaction:

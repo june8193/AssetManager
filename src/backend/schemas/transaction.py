@@ -13,6 +13,7 @@ class TransactionSchema(BaseModel):
         account_id (int): 계좌 식별자
         asset_id (int): 거래 자산 식별자
         target_asset_id (Optional[int]): 환전 상대 자산 식별자
+        target_account_id (Optional[int]): 이체 도착 계좌 식별자 (위저드 및 이체 요청용)
         transaction_date (date): 거래 일자
         type (str): 거래 유형 (BUY, SELL, EXCHANGE 등)
         quantity (float): 수량
@@ -29,6 +30,7 @@ class TransactionSchema(BaseModel):
         target_asset_name (Optional[str]): 환전 상대 자산명
         target_asset_ticker (Optional[str]): 환전 상대 자산 티커
         account_display_name (Optional[str]): 계좌 표시 이름
+        warning (Optional[str]): 과거 스냅샷 기준일 이전 거래 시 경고 문구
     """
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,6 +38,7 @@ class TransactionSchema(BaseModel):
     account_id: int
     asset_id: int
     target_asset_id: Optional[int] = None
+    target_account_id: Optional[int] = None
     transaction_date: date
     type: Literal["INITIAL_BALANCE", "DEPOSIT", "WITHDRAW", "BUY", "SELL", "INTEREST", "TAX", "CASH_ADJUSTMENT", "EXCHANGE", "TRANSFER"]
     quantity: float = 0.0
