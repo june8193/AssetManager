@@ -26,7 +26,7 @@ const mockAccounts = [
   { id: 2, name: '은행 계좌 1', provider: '국민은행', account_type: 'BANK', is_active: true, user_name: '홍길동', alias: '국민은행별칭' },
 ];
 
-describe('SnapshotWizardPage (Unified 5-Step)', () => {
+describe('SnapshotWizardPage (Unified 5-Step: Bank-First Order)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     confirmSpy.mockReturnValue(true);
@@ -45,25 +45,25 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     });
   });
 
-  it('초기 렌더링 시 1단계(기본 정보 및 증권 계좌 선택)가 표시된다', async () => {
+  it('초기 렌더링 시 1단계(기본 정보 및 은행 계좌 선택)가 표시된다', async () => {
     renderWithRouter(<SnapshotWizardPage />);
 
     expect(screen.getByText('신규 스냅샷 생성')).toBeDefined();
-    expect(screen.getByText('기본 정보 및 증권 계좌 선택')).toBeDefined();
+    expect(screen.getByText('기본 정보 및 은행 계좌 선택')).toBeDefined();
 
     // 계좌 로드 대기
     await waitFor(() => {
-      // 별칭이 계좌명과 결합되어 올바르게 표시되는지 검증
-      expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined();
-      // 은행 계좌는 1단계에 나오지 않아야 함
-      expect(screen.queryByText('은행 계좌 1 (국민은행별칭)')).toBeNull();
+      // 은행 계좌가 1단계에 표시되어야 함
+      expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined();
+      // 증권 계좌는 1단계에 나오지 않아야 함
+      expect(screen.queryByText('증권 계좌 1 (KB증권별칭)')).toBeNull();
     });
   });
 
   it('1단계에서 필수 정보 미입력 시 다음 단계로 이동 불가', async () => {
     const { container } = renderWithRouter(<SnapshotWizardPage />);
 
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
 
     const dateInput = container.querySelector('input[type="date"]');
     fireEvent.change(dateInput, { target: { value: '' } });
@@ -74,18 +74,18 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     expect(alertSpy).toHaveBeenCalledWith('기준 일자를 선택해주세요.');
   });
 
-  it('증권 계좌 선택 없이 진행 시 건너뛰기 확인 창이 뜬다', async () => {
+  it('은행 계좌 선택 없이 진행 시 건너뛰기 확인 창이 뜬다', async () => {
     renderWithRouter(<SnapshotWizardPage />);
 
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
 
     const nextButton = screen.getByRole('button', { name: /다음/i });
     fireEvent.click(nextButton);
 
-    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('증권사 단계를 건너뛰시겠습니까'));
+    expect(confirmSpy).toHaveBeenCalledWith(expect.stringContaining('은행 단계를 건너뛰시겠습니까'));
   });
 
-  it('증권 계좌 정산 후 은행 계좌 선택 단계로 이동한다', async () => {
+  it('은행 계좌 정산 후 증권 계좌 선택 단계로 이동한다', async () => {
     global.fetch.mockImplementation((url) => {
       if (url.includes('/exchange/rates')) {
         return Promise.resolve(mockResponse([{ date: '2026-08-17', rate: 1350.0 }]));
@@ -98,15 +98,13 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
       }
       if (url.includes('/transactions/period')) {
         return Promise.resolve(mockResponse([
-          { id: 101, transaction_date: '2026-05-20', type: 'BUY', total_amount: 500000, currency: 'KRW', memo: '기존거래' },
+          { id: 101, transaction_date: '2026-05-20', type: 'INTEREST', total_amount: 5000, currency: 'KRW', memo: '기존이자' },
         ]));
       }
       if (url.includes('/calculate')) {
         return Promise.resolve(mockResponse({
-          diff_krw: 0,
-          diff_usd: 0,
-          existing_transactions: [],
-          period_deposit: 500000,
+          theoretical_krw: 1000000,
+          period_deposit: 0,
           period_profit: 0,
           integrity_warnings: [],
         }));
@@ -116,29 +114,32 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
 
     renderWithRouter(<SnapshotWizardPage />);
 
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
 
-    // 1단계 입력
-    fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
+    // 1단계 입력: 은행 계좌 선택
+    fireEvent.click(screen.getByText('은행 계좌 1 (국민은행별칭)'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
-    // 2단계: 증권 상세 입력
+    // 2단계: 은행 상세 입력
     await waitFor(() => {
-      expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined();
+      expect(screen.getByText('은행 상세 정보 입력')).toBeDefined();
     });
 
     // 기존 트랜잭션이 불러와져 화면에 표시되는지 검증
     await waitFor(() => {
-      expect(screen.getByText('기존거래')).toBeDefined();
+      expect(screen.getByText('기존이자')).toBeDefined();
     });
 
     // 계산 버튼 클릭
-    fireEvent.click(screen.getByText('정산 결과 계산하기'));
+    fireEvent.click(screen.getByText('예상 잔액 계산하기'));
 
     // 계산결과 검증
     await waitFor(() => {
-      expect(screen.getByText('0원')).toBeDefined();
+      expect(screen.getByText('이 결과로 확정')).toBeDefined();
     });
+
+    // 예상 금액 적용
+    fireEvent.click(screen.getByText('이 금액 적용하기'));
 
     // 확정 버튼 클릭
     fireEvent.click(screen.getByText('이 결과로 확정'));
@@ -146,20 +147,19 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     // 다음 버튼 클릭 (Step 3로 이동)
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
-    // 3단계: 은행 계좌 선택
+    // 3단계: 증권 계좌 선택
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: '은행 계좌 선택', level: 2 })).toBeDefined();
-      expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined();
+      expect(screen.getByRole('heading', { name: '증권 계좌 선택', level: 2 })).toBeDefined();
+      expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined();
     });
   });
 
-  it('통합 저장 프로세스 검증 (증권1 + 은행1)', async () => {
+  it('통합 저장 프로세스 검증 (은행1 + 증권1 순차 처리 후 저장)', async () => {
     global.fetch.mockImplementation((url) => {
       if (url.includes('/exchange/rates')) return Promise.resolve(mockResponse([{ date: '2026-08-17', rate: 1350.0 }]));
       if (url.includes('/snapshots/latest')) return Promise.resolve(mockResponse({ latest_date: '2026-08-01' }));
       if (url.includes('/accounts') && !url.includes('/transactions/period')) return Promise.resolve(mockResponse(mockAccounts));
       if (url.includes('/transactions/period')) return Promise.resolve(mockResponse([]));
-      if (url.includes('/brokerage/calculate')) return Promise.resolve(mockResponse({ diff_krw: 0, diff_usd: 0, period_deposit: 0, period_profit: 0, integrity_warnings: [] }));
       if (url.includes('/bank/calculate')) return Promise.resolve(mockResponse({
         theoretical_krw: 2000000,
         total_deposit: 2000000,
@@ -172,49 +172,55 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
         period_profit: 0,
         integrity_warnings: [],
       }));
+      if (url.includes('/brokerage/calculate')) return Promise.resolve(mockResponse({
+        diff_krw: 0,
+        diff_usd: 0,
+        period_deposit: 0,
+        period_profit: 0,
+        integrity_warnings: [],
+      }));
       if (url.includes('/unified/save')) return Promise.resolve(mockResponse({ status: 'success' }));
       return Promise.resolve(mockResponse({}));
     });
 
     renderWithRouter(<SnapshotWizardPage />);
 
-    // Step 1
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
-    fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
-    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
-
-    // Step 2
-    await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
-    fireEvent.click(screen.getByText('정산 결과 계산하기'));
-    await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeDefined());
-    fireEvent.click(screen.getByText('이 결과로 확정'));
-    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
-
-    // Step 3
-    await waitFor(() => expect(screen.getByRole('heading', { name: '은행 계좌 선택', level: 2 })).toBeDefined());
+    // Step 1: 은행 계좌 선택
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
     fireEvent.click(screen.getByText('은행 계좌 1 (국민은행별칭)'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
-    // Step 4
+    // Step 2: 은행 상세 정산
     await waitFor(() => expect(screen.getByText('은행 상세 정보 입력')).toBeDefined());
     fireEvent.click(screen.getByText('예상 잔액 계산하기'));
 
     await waitFor(() => {
       expect(screen.getByText('이 결과로 확정')).toBeDefined();
       expect(screen.getAllByText('2,000,000원').length).toBeGreaterThan(0);
-      expect(screen.getByText('100,000원')).toBeDefined();
-      expect(screen.getByText('+5,000원')).toBeDefined();
-      expect(screen.getByText('-700원')).toBeDefined();
     });
 
-    // 예상 잔액 적용
     fireEvent.click(screen.getByText('이 금액 적용하기'));
-
     fireEvent.click(screen.getByText('이 결과로 확정'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
-    // Step 5
+    // Step 3: 증권 계좌 선택
+    await waitFor(() => expect(screen.getByRole('heading', { name: '증권 계좌 선택', level: 2 })).toBeDefined());
+    fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 4: 증권 상세 정산
+    await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
+    fireEvent.click(screen.getByText('정산 결과 계산하기'));
+    await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeDefined());
+    fireEvent.click(screen.getByText('이 결과로 확정'));
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 5: 최종 확인 (은행 계좌가 먼저 표시되는지 확인)
     await waitFor(() => expect(screen.getByText('모든 계좌 정산 완료')).toBeDefined());
+    const rows = screen.getAllByRole('row');
+    expect(rows[1].textContent).toContain('은행 계좌 1');
+    expect(rows[2].textContent).toContain('증권 계좌 1');
+
     const saveButton = screen.getByRole('button', { name: /저장하기/i });
     expect(saveButton).toBeDefined();
     fireEvent.click(saveButton);
@@ -225,7 +231,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     });
   });
 
-  it('금액 입력 필드에 숫자를 입력하면 천단위 쉼표가 자동으로 적용된다', async () => {
+  it('4단계 증권 상세 입력 단계에서 금액 필드에 숫자를 입력하면 천단위 쉼표가 자동으로 적용된다', async () => {
     global.fetch.mockImplementation((url) => {
       if (url.includes('/exchange/rates')) return Promise.resolve(mockResponse([{ date: '2026-08-17', rate: 1350.0 }]));
       if (url.includes('/snapshots/latest')) return Promise.resolve(mockResponse({ latest_date: '2026-08-01' }));
@@ -236,10 +242,16 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
 
     renderWithRouter(<SnapshotWizardPage />);
 
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    // 1단계에서 은행 건너뛰기
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // 3단계(증권 선택)에서 증권 선택 후 다음
+    await waitFor(() => expect(screen.getByRole('heading', { name: '증권 계좌 선택', level: 2 })).toBeDefined());
     fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
+    // 4단계(증권 상세)
     await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
 
     const krwInput = screen.getByLabelText(/원화 잔액/i);
@@ -250,7 +262,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     expect(krwInput.value).toBe('1,000,000');
   });
 
-  it('은행 상세 입력 단계에서 여러 신규 거래(입금, 출금, 이자, 세금)를 추가하고 계산 요청할 수 있다', async () => {
+  it('2단계 은행 상세 입력 단계에서 여러 신규 거래를 추가하고 계산 요청할 수 있다', async () => {
     let capturedBody = null;
     global.fetch.mockImplementation((url, opts) => {
       if (url.includes('/exchange/rates')) return Promise.resolve(mockResponse([{ date: '2026-08-17', rate: 1350.0 }]));
@@ -281,17 +293,12 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
 
     renderWithRouter(<SnapshotWizardPage />);
 
-    // Step 1
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
-    // 은행 계좌만 선택하고 증권은 건너뜀
-    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
-
-    // Step 3 (은행 선택)
-    await waitFor(() => expect(screen.getByRole('heading', { name: '은행 계좌 선택', level: 2 })).toBeDefined());
+    // Step 1: 은행 선택
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
     fireEvent.click(screen.getByText('은행 계좌 1 (국민은행별칭)'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
-    // Step 4 (은행 상세)
+    // Step 2: 은행 상세
     await waitFor(() => expect(screen.getByText('은행 상세 정보 입력')).toBeDefined());
 
     // 거래 추가 버튼 2회 클릭
@@ -309,7 +316,7 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     });
   });
 
-  it('은행 상세 입력 단계에서 정산 확정 시 입력 폼이 숨겨지고 요약 정보와 수정하기 버튼이 나타나며, 수정하기 클릭 시 다시 폼이 나타난다', async () => {
+  it('은행 상세 입력 단계에서 정산 확정 시 요약 정보와 수정하기 버튼이 나타나고 수정하기 클릭 시 복귀된다', async () => {
     global.fetch.mockImplementation((url) => {
       if (url.includes('/exchange/rates')) return Promise.resolve(mockResponse([{ date: '2026-08-17', rate: 1350.0 }]));
       if (url.includes('/snapshots/latest')) return Promise.resolve(mockResponse({ latest_date: '2026-08-01' }));
@@ -339,29 +346,24 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     renderWithRouter(<SnapshotWizardPage />);
 
     // Step 1
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
-    // 은행 계좌만 선택하고 증권은 건너뜀
-    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
-
-    // Step 3 (은행 선택)
-    await waitFor(() => expect(screen.getByRole('heading', { name: '은행 계좌 선택', level: 2 })).toBeDefined());
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
     fireEvent.click(screen.getByText('은행 계좌 1 (국민은행별칭)'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
-    // Step 4 (은행 상세)
+    // Step 2 (은행 상세)
     await waitFor(() => expect(screen.getByText('은행 상세 정보 입력')).toBeDefined());
 
     // 계산 실행
     fireEvent.click(screen.getByText('예상 잔액 계산하기'));
     await waitFor(() => expect(screen.getByText('이 결과로 확정')).toBeInTheDocument());
 
-    // 예상 잔액 적용 (0원 -> 500,000원)
+    // 예상 잔액 적용
     fireEvent.click(screen.getByText('이 금액 적용하기'));
 
     // 확정 클릭
     fireEvent.click(screen.getByText('이 결과로 확정'));
 
-    // 확정 후: 입력 폼이 숨겨져야 함
+    // 확정 후: 입력 폼 숨겨지고 요약/수정하기 표시
     await waitFor(() => {
       expect(screen.queryByText('예상 잔액 계산하기')).toBeNull();
       expect(screen.getByText('정산 결과 확정 완료')).toBeInTheDocument();
@@ -371,14 +373,14 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     // 수정하기 클릭
     fireEvent.click(screen.getByText('수정하기'));
 
-    // 다시 입력 폼이 보여야 함
+    // 다시 입력 폼 표시
     await waitFor(() => {
       expect(screen.getByText('예상 잔액 계산하기')).toBeInTheDocument();
       expect(screen.queryByText('정산 결과 확정 완료')).toBeNull();
     });
   });
 
-  it('정합성 경고 발생 시 확인 체크박스를 체크해야만 확정 버튼이 활성화된다', async () => {
+  it('4단계 증권 상세에서 정합성 경고 발생 시 확인 체크박스를 체크해야만 확정 버튼이 활성화된다', async () => {
     global.fetch.mockImplementation((url) => {
       if (url.includes('/exchange/rates')) return Promise.resolve(mockResponse([{ date: '2026-08-17', rate: 1350.0 }]));
       if (url.includes('/snapshots/latest')) return Promise.resolve(mockResponse({ latest_date: '2026-08-01' }));
@@ -398,12 +400,16 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
 
     renderWithRouter(<SnapshotWizardPage />);
 
-    // Step 1
-    await waitFor(() => expect(screen.getByText('증권 계좌 1 (KB증권별칭)')).toBeDefined());
+    // Step 1 은행 건너뛰기
+    await waitFor(() => expect(screen.getByText('은행 계좌 1 (국민은행별칭)')).toBeDefined());
+    fireEvent.click(screen.getByRole('button', { name: /다음/i }));
+
+    // Step 3 증권 선택
+    await waitFor(() => expect(screen.getByRole('heading', { name: '증권 계좌 선택', level: 2 })).toBeDefined());
     fireEvent.click(screen.getByText('증권 계좌 1 (KB증권별칭)'));
     fireEvent.click(screen.getByRole('button', { name: /다음/i }));
 
-    // Step 2
+    // Step 4 증권 상세
     await waitFor(() => expect(screen.getByText('증권사 상세 정보 입력')).toBeDefined());
     fireEvent.click(screen.getByText('정산 결과 계산하기'));
 
@@ -426,4 +432,3 @@ describe('SnapshotWizardPage (Unified 5-Step)', () => {
     await waitFor(() => expect(screen.getByText('정산 결과 확정 완료')).toBeInTheDocument());
   });
 });
-

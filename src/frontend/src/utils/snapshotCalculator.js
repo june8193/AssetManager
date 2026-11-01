@@ -215,20 +215,36 @@ export const validateStep1 = ({ inputDate, exchangeRate }) => {
 };
 
 /**
- * Step 2 증권사 계좌 정산 확정 유효성 검사
- * @param {{ currentAccIdx: number, selectedBrokerageIds: number[], accountsFormData: object }} params
+ * 개별 계좌 상세 정산 확정 상태 공통 검증 헬퍼
+ * @private
+ * @param {{ currentAccIdx: number, accountIds: number[], accountsFormData: object, accountTypeLabel: string }} params
  * @returns {{ isValid: boolean, message?: string }}
  */
-export const validateStep2 = ({ currentAccIdx, selectedBrokerageIds = [], accountsFormData = {} }) => {
-  const currentAccountId = selectedBrokerageIds[currentAccIdx];
+const validateAccountConfirmed = ({ currentAccIdx, accountIds = [], accountsFormData = {}, accountTypeLabel = '계좌' }) => {
+  const currentAccountId = accountIds[currentAccIdx];
   if (!currentAccountId) {
-    return { isValid: false, message: '선택된 증권 계좌가 없습니다.' };
+    return { isValid: false, message: `선택된 ${accountTypeLabel}가 없습니다.` };
   }
   const currentData = accountsFormData[currentAccountId];
   if (!currentData?.isConfirmed) {
     return { isValid: false, message: '현재 계좌의 정산 결과를 확인하고 확정 버튼을 눌러주세요.' };
   }
   return { isValid: true };
+};
+
+/**
+ * Step 2 은행 계좌 정산 확정 유효성 검사
+ * @param {{ currentAccIdx: number, selectedBankIds?: number[], selectedBrokerageIds?: number[], selectedAccountIds?: number[], accountsFormData: object }} params
+ * @returns {{ isValid: boolean, message?: string }}
+ */
+export const validateStep2 = ({ currentAccIdx, selectedBankIds = [], selectedBrokerageIds = [], selectedAccountIds, accountsFormData = {} }) => {
+  const accountIds = selectedAccountIds || (selectedBankIds.length > 0 ? selectedBankIds : selectedBrokerageIds);
+  return validateAccountConfirmed({
+    currentAccIdx,
+    accountIds,
+    accountsFormData,
+    accountTypeLabel: '은행 계좌',
+  });
 };
 
 /**
@@ -244,20 +260,18 @@ export const validateStep3 = ({ selectedBrokerageIds = [], selectedBankIds = [] 
 };
 
 /**
- * Step 4 은행 계좌 정산 확정 유효성 검사
- * @param {{ currentAccIdx: number, selectedBankIds: number[], accountsFormData: object }} params
+ * Step 4 증권 계좌 정산 확정 유효성 검사
+ * @param {{ currentAccIdx: number, selectedBrokerageIds?: number[], selectedBankIds?: number[], selectedAccountIds?: number[], accountsFormData: object }} params
  * @returns {{ isValid: boolean, message?: string }}
  */
-export const validateStep4 = ({ currentAccIdx, selectedBankIds = [], accountsFormData = {} }) => {
-  const currentAccountId = selectedBankIds[currentAccIdx];
-  if (!currentAccountId) {
-    return { isValid: false, message: '선택된 은행 계좌가 없습니다.' };
-  }
-  const currentData = accountsFormData[currentAccountId];
-  if (!currentData?.isConfirmed) {
-    return { isValid: false, message: '현재 계좌의 정산 결과를 확인하고 확정 버튼을 눌러주세요.' };
-  }
-  return { isValid: true };
+export const validateStep4 = ({ currentAccIdx, selectedBrokerageIds = [], selectedBankIds = [], selectedAccountIds, accountsFormData = {} }) => {
+  const accountIds = selectedAccountIds || (selectedBrokerageIds.length > 0 ? selectedBrokerageIds : selectedBankIds);
+  return validateAccountConfirmed({
+    currentAccIdx,
+    accountIds,
+    accountsFormData,
+    accountTypeLabel: '증권 계좌',
+  });
 };
 
 /**

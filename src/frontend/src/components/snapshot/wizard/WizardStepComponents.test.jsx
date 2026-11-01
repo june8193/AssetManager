@@ -3,11 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import {
   WizardProgressBar,
+  DEFAULT_STEPS,
   Step1BasicInfo,
-  Step2BrokerageDetail,
-  Step3BankSelect,
-  Step4BankDetail,
+  Step2BankDetail,
+  Step3BrokerageSelect,
+  Step4BrokerageDetail,
   Step5FinalConfirm,
+  Step2BrokerageDetail,
+  Step4BankDetail,
 } from './index';
 
 describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
@@ -29,14 +32,25 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     is_active: true,
   };
 
-  it('WizardProgressBar: 단계별 진행 상태를 올바르게 렌더링한다', () => {
+  it('WizardProgressBar: DEFAULT_STEPS가 은행 우선 5단계 라벨을 올바르게 포함한다', () => {
+    expect(DEFAULT_STEPS.map((s) => s.label)).toEqual([
+      '기본 정보/은행 선택',
+      '은행 상세 입력',
+      '증권 계좌 선택',
+      '증권 상세 입력',
+      '최종 확인',
+    ]);
+
     render(<WizardProgressBar step={2} totalSteps={5} />);
     expect(screen.getByTestId('wizard-progress-bar')).toBeInTheDocument();
-    expect(screen.getByText('기본 정보/증권 선택')).toBeInTheDocument();
+    expect(screen.getByText('기본 정보/은행 선택')).toBeInTheDocument();
+    expect(screen.getByText('은행 상세 입력')).toBeInTheDocument();
+    expect(screen.getByText('증권 계좌 선택')).toBeInTheDocument();
     expect(screen.getByText('증권 상세 입력')).toBeInTheDocument();
+    expect(screen.getByText('최종 확인')).toBeInTheDocument();
   });
 
-  it('Step1BasicInfo: 기준 일자, 환율 및 증권 계좌 목록을 렌더링하고 선택 이벤트를 전달한다', () => {
+  it('Step1BasicInfo: 기준 일자, 환율 및 은행 계좌 목록을 렌더링하고 선택 이벤트를 전달한다', () => {
     const toggleMock = vi.fn();
     const selectAllMock = vi.fn();
 
@@ -44,14 +58,64 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
       <Step1BasicInfo
         inputDate="2026-08-17"
         exchangeRate="1350.0"
-        brokerageAccounts={[mockBrokerageAccount]}
-        selectedAccountIds={[1]}
+        bankAccounts={[mockBankAccount]}
+        selectedAccountIds={[2]}
         toggleAccountSelection={toggleMock}
-        selectAllBrokerage={selectAllMock}
+        selectAllBank={selectAllMock}
       />
     );
 
     expect(screen.getByTestId('step-1-basic-info')).toBeInTheDocument();
+    expect(screen.getByText('기본 정보 및 은행 계좌 선택')).toBeInTheDocument();
+    expect(screen.getByText('KB국민은행')).toBeInTheDocument();
+
+    const row = screen.getByText('KB국민은행').closest('tr');
+    fireEvent.click(row);
+    expect(toggleMock).toHaveBeenCalledWith(2);
+  });
+
+  it('Step2BankDetail: 은행 계좌 잔액 입력 및 계산 UI를 렌더링한다', () => {
+    const calcMock = vi.fn();
+
+    render(
+      <Step2BankDetail
+        currentAccIdx={0}
+        selectedBankIds={[2]}
+        accounts={[mockBankAccount]}
+        accountsFormData={{
+          2: {
+            newTransactions: [],
+            totalValuation: '5,000,000',
+            calcResult: { theoretical_krw: 5000000 },
+            isConfirmed: false,
+          },
+        }}
+        inputDate="2026-08-17"
+        calculateBankDiff={calcMock}
+      />
+    );
+
+    expect(screen.getByTestId('step-2-bank-detail')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('5,000,000')).toBeInTheDocument();
+
+    const calcButton = screen.getByRole('button', { name: /예상 잔액 계산하기/i });
+    fireEvent.click(calcButton);
+    expect(calcMock).toHaveBeenCalledWith(2);
+  });
+
+  it('Step3BrokerageSelect: 증권 계좌 목록을 렌더링하고 선택 이벤트를 전달한다', () => {
+    const toggleMock = vi.fn();
+
+    render(
+      <Step3BrokerageSelect
+        brokerageAccounts={[mockBrokerageAccount]}
+        selectedAccountIds={[]}
+        toggleAccountSelection={toggleMock}
+      />
+    );
+
+    expect(screen.getByTestId('step-3-brokerage-select')).toBeInTheDocument();
+    expect(screen.getByText('증권 계좌 선택')).toBeInTheDocument();
     expect(screen.getByText('미래에셋증권')).toBeInTheDocument();
 
     const row = screen.getByText('미래에셋증권').closest('tr');
@@ -59,12 +123,12 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(toggleMock).toHaveBeenCalledWith(1);
   });
 
-  it('Step2BrokerageDetail: 증권 계좌의 예수금 입력 및 정산 계산 UI를 렌더링한다', () => {
+  it('Step4BrokerageDetail: 증권 계좌의 예수금 입력 및 정산 계산 UI를 렌더링한다', () => {
     const calcMock = vi.fn();
     const confirmMock = vi.fn();
 
     render(
-      <Step2BrokerageDetail
+      <Step4BrokerageDetail
         currentAccIdx={0}
         selectedBrokerageIds={[1]}
         accounts={[mockBrokerageAccount]}
@@ -83,7 +147,7 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
       />
     );
 
-    expect(screen.getByTestId('step-2-brokerage-detail')).toBeInTheDocument();
+    expect(screen.getByTestId('step-4-brokerage-detail')).toBeInTheDocument();
     expect(screen.getByDisplayValue('1,000,000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('100')).toBeInTheDocument();
 
@@ -92,55 +156,7 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(calcMock).toHaveBeenCalledWith(1);
   });
 
-  it('Step3BankSelect: 은행 계좌 목록을 렌더링하고 선택 이벤트를 전달한다', () => {
-    const toggleMock = vi.fn();
-
-    render(
-      <Step3BankSelect
-        bankAccounts={[mockBankAccount]}
-        selectedAccountIds={[]}
-        toggleAccountSelection={toggleMock}
-      />
-    );
-
-    expect(screen.getByTestId('step-3-bank-select')).toBeInTheDocument();
-    expect(screen.getByText('KB국민은행')).toBeInTheDocument();
-
-    const row = screen.getByText('KB국민은행').closest('tr');
-    fireEvent.click(row);
-    expect(toggleMock).toHaveBeenCalledWith(2);
-  });
-
-  it('Step4BankDetail: 은행 계좌 잔액 입력 및 계산 UI를 렌더링한다', () => {
-    const calcMock = vi.fn();
-
-    render(
-      <Step4BankDetail
-        currentAccIdx={0}
-        selectedBankIds={[2]}
-        accounts={[mockBankAccount]}
-        accountsFormData={{
-          2: {
-            newTransactions: [],
-            totalValuation: '5,000,000',
-            calcResult: { theoretical_krw: 5000000 },
-            isConfirmed: false,
-          },
-        }}
-        inputDate="2026-08-17"
-        calculateBankDiff={calcMock}
-      />
-    );
-
-    expect(screen.getByTestId('step-4-bank-detail')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('5,000,000')).toBeInTheDocument();
-
-    const calcButton = screen.getByRole('button', { name: /예상 잔액 계산하기/i });
-    fireEvent.click(calcButton);
-    expect(calcMock).toHaveBeenCalledWith(2);
-  });
-
-  it('Step5FinalConfirm: 정산 완료된 전체 계좌 목록 요약을 렌더링한다', () => {
+  it('Step5FinalConfirm: 정산 완료된 전체 계좌 목록 요약에서 은행 계좌가 먼저 표시된다', () => {
     render(
       <Step5FinalConfirm
         accounts={[mockBrokerageAccount, mockBankAccount]}
@@ -163,11 +179,16 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
 
     expect(screen.getByTestId('step-5-final-confirm')).toBeInTheDocument();
     expect(screen.getByText('모든 계좌 정산 완료')).toBeInTheDocument();
-    expect(screen.getByText('미래에셋증권')).toBeInTheDocument();
-    expect(screen.getByText('KB국민은행')).toBeInTheDocument();
+
+    // 테이블 내 행 순서 검증: 은행 계좌(KB국민은행)가 증권 계좌(미래에셋증권)보다 먼저 위치
+    const rows = screen.getAllByRole('row');
+    const firstBodyRowText = rows[1].textContent;
+    const secondBodyRowText = rows[2].textContent;
+    expect(firstBodyRowText).toContain('KB국민은행');
+    expect(secondBodyRowText).toContain('미래에셋증권');
   });
 
-  it('Step2BrokerageDetail: 차액 또는 정합성 경고 발생 시 빨간색 경고 카드 및 확인 체크박스 가드를 렌더링한다', () => {
+  it('Step4BrokerageDetail / Step2BrokerageDetail: 차액 또는 정합성 경고 발생 시 빨간색 경고 카드 및 확인 체크박스 가드를 렌더링한다', () => {
     const confirmMock = vi.fn();
 
     render(
@@ -213,7 +234,7 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(confirmMock).toHaveBeenCalledWith(1);
   });
 
-  it('Step4BankDetail: 비정상 수익 또는 정합성 경고 발생 시 빨간색 경고 카드 및 확인 체크박스 가드를 렌더링한다', () => {
+  it('Step2BankDetail / Step4BankDetail: 비정상 수익 또는 정합성 경고 발생 시 빨간색 경고 카드 및 확인 체크박스 가드를 렌더링한다', () => {
     const confirmMock = vi.fn();
 
     render(
@@ -256,4 +277,3 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(confirmMock).toHaveBeenCalledWith(2);
   });
 });
-

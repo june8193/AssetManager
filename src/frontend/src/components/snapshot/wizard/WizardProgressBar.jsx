@@ -2,10 +2,10 @@ import React from 'react';
 import { Settings, ListChecks, Landmark, FileSearch, Check } from 'lucide-react';
 
 export const DEFAULT_STEPS = [
-  { id: 1, label: '기본 정보/증권 선택', icon: <Settings size={18} /> },
-  { id: 2, label: '증권 상세 입력', icon: <ListChecks size={18} /> },
-  { id: 3, label: '은행 계좌 선택', icon: <Landmark size={18} /> },
-  { id: 4, label: '은행 상세 입력', icon: <ListChecks size={18} /> },
+  { id: 1, label: '기본 정보/은행 선택', icon: <Settings size={18} /> },
+  { id: 2, label: '은행 상세 입력', icon: <Landmark size={18} /> },
+  { id: 3, label: '증권 계좌 선택', icon: <ListChecks size={18} /> },
+  { id: 4, label: '증권 상세 입력', icon: <ListChecks size={18} /> },
   { id: 5, label: '최종 확인', icon: <FileSearch size={18} /> },
 ];
 

@@ -193,15 +193,17 @@ describe('snapshotCalculator - 스텝 유효성 검사', () => {
     expect(validateStep1({ inputDate: '2026-08-17', exchangeRate: '1300' }).isValid).toBe(true);
   });
 
-  it('Step 2 및 Step 4 계좌 확정 상태 검증', () => {
+  it('Step 2(은행) 및 Step 4(증권) 계좌 확정 상태 검증', () => {
     const formData = {
       1: { isConfirmed: true },
       2: { isConfirmed: false },
     };
-    expect(validateStep2({ currentAccIdx: 0, selectedBrokerageIds: [1], accountsFormData: formData }).isValid).toBe(true);
-    expect(validateStep2({ currentAccIdx: 0, selectedBrokerageIds: [2], accountsFormData: formData }).isValid).toBe(false);
-    expect(validateStep4({ currentAccIdx: 0, selectedBankIds: [1], accountsFormData: formData }).isValid).toBe(true);
-    expect(validateStep4({ currentAccIdx: 0, selectedBankIds: [2], accountsFormData: formData }).isValid).toBe(false);
+    // Step 2: 은행 상세 확정 검증 (selectedBankIds)
+    expect(validateStep2({ currentAccIdx: 0, selectedBankIds: [1], accountsFormData: formData }).isValid).toBe(true);
+    expect(validateStep2({ currentAccIdx: 0, selectedBankIds: [2], accountsFormData: formData }).isValid).toBe(false);
+    // Step 4: 증권 상세 확정 검증 (selectedBrokerageIds)
+    expect(validateStep4({ currentAccIdx: 0, selectedBrokerageIds: [1], accountsFormData: formData }).isValid).toBe(true);
+    expect(validateStep4({ currentAccIdx: 0, selectedBrokerageIds: [2], accountsFormData: formData }).isValid).toBe(false);
   });
 
   it('Step 3 최소 계좌 선택 검증', () => {
