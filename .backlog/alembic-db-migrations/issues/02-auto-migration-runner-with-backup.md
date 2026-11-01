@@ -6,7 +6,7 @@
 
 **Blocked by:** 01-alembic-baseline-and-schema-sync
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `src/backend/services/backup_service.py`의 기본 DB 경로 오류(`src/assets.db`)가 수정되고, 지정된 SQLite DB 파일을 백업 디렉토리에 `assets_YYYYMMDD_HHMMSS.db` 형식으로 즉시 복사하는 기능이 동작한다.
 - [x] `src/backend/migrations.py`의 `run_migrations(engine)`가 대상 DB의 현재 Alembic 리비전과 `head` 리비전을 비교하여:
