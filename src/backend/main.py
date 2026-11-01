@@ -9,7 +9,7 @@ import sys
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .database import engine, Base
+from .database import engine
 from .config import TelegramConfig, get_settings
 from .telegram import (
     TelegramBot,
@@ -86,20 +86,17 @@ def should_start_telegram(telegram_config: TelegramConfig | None = None) -> bool
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """서버 생명주기 관리: 시작 시 DB 초기화, 백그라운드 태스크 및 텔레그램 서비스 기동"""
-    # 1. DB 테이블 생성 (처음 실행 시 SQLite 파일과 테이블 생성)
-    Base.metadata.create_all(bind=engine)
-
-    # 2. SQLite 마이그레이션 체크
+    # 1. SQLite 마이그레이션 및 DB 스키마 초기화 (Alembic 기반)
     from .migrations import run_migrations
     run_migrations(engine)
 
-    # 3. 백그라운드 주기적 태스크 매니저 가동 (테스트 환경인 경우 기동 생략)
+    # 2. 백그라운드 주기적 태스크 매니저 가동 (테스트 환경인 경우 기동 생략)
     is_testing = is_in_testing_environment()
     if not is_testing:
         from .tasks import task_manager_instance
         task_manager_instance.start()
 
-    # 4. 텔레그램 봇 및 스케줄러 서비스 기동 (환경 격리 가드 통과 시)
+    # 3. 텔레그램 봇 및 스케줄러 서비스 기동 (환경 격리 가드 통과 시)
     telegram_bot = None
     market_scheduler = None
     failure_scheduler = None
@@ -133,7 +130,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # 5. Shutdown: 텔레그램 서비스 안전한 리소스 정리 (Graceful Shutdown)
+    # 4. Shutdown: 텔레그램 서비스 안전한 리소스 정리 (Graceful Shutdown)
     if market_scheduler:
         market_scheduler.stop()
     if failure_scheduler:
@@ -154,7 +151,7 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
 
-    # 6. Shutdown: 백그라운드 주기적 태스크 매니저 정지
+    # 5. Shutdown: 백그라운드 주기적 태스크 매니저 정지
     if not is_testing:
         from .tasks import task_manager_instance
         await task_manager_instance.stop()

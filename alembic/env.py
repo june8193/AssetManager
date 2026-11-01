@@ -11,9 +11,9 @@ from src.backend.models import Base
 # Alembic Config 객체 (alembic.ini 설정값 참조)
 config = context.config
 
-# 파이썬 로깅 설정 적용
+# 파이썬 로깅 설정 적용 (기존 로거가 비활성화되지 않도록 보장)
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # autogenerate 비교를 위한 모델 메타데이터
 target_metadata = Base.metadata
