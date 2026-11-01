@@ -96,10 +96,12 @@ description: AssetManager 프로젝트 릴리즈(버전 추천, CHANGELOG 작성
 ### 5단계: Full-Stack Green Bar (단위 테스트 무결성 검증)
 릴리즈 커밋 생성 전 백엔드와 프론트엔드의 모든 단위 테스트가 통과하는지 검증합니다.
 
-1. **백엔드 테스트**:
+1. **백엔드 테스트 (순차 실행 필수)**:
    ```powershell
    uv run pytest
    ```
+   > [!WARNING]
+   > SQLite In-memory 락 경합 및 극심한 지연을 방지하기 위해 `-n`, `--dist` 등 병렬 옵션은 절대 사용하지 않습니다.
 2. **프론트엔드 테스트**:
    ```powershell
    cd src/frontend; npm test -- --run
