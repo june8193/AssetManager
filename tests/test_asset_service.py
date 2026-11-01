@@ -40,17 +40,17 @@ def test_asset_service_crud_lifecycle(db_session):
     assert len(all_assets) == 1
     assert all_assets[0].ticker == "005930"
 
-    # 4. 자산 수정 (배당주로 변경)
+    # 4. 자산 수정 (코어(지수)로 변경)
     updated = service.update_asset(
         asset_id=created.id,
         name="삼성전자(수정)",
         major_category="주식",
-        sub_category="배당주"
+        sub_category="코어(지수)"
     )
     assert updated is not None
     assert updated.name == "삼성전자(수정)"
     assert updated.major_category == "주식"
-    assert updated.sub_category == "배당주"
+    assert updated.sub_category == "코어(지수)"
 
     # 5. 자산 삭제
     deleted = service.delete_asset(created.id)
@@ -122,6 +122,32 @@ def test_asset_service_invalid_category_combination_rejection(db_session):
             asset_id=asset.id,
             major_category="채권",
             sub_category="코어(지수)"
+        )
+    assert "유효하지 않은 중분류" in str(excinfo.value)
+
+    # 4. 주식 생성 시 '배당주' 지정 거부
+    with pytest.raises(ValueError) as excinfo:
+        service.create_asset(
+            ticker="TEST_DIV",
+            name="배당주테스트",
+            major_category="주식",
+            sub_category="배당주",
+            country="KR"
+        )
+    assert "유효하지 않은 중분류" in str(excinfo.value)
+
+    # 5. 주식 수정 시 '배당주' 지정 거부
+    stock = service.create_asset(
+        ticker="TEST_STOCK",
+        name="주식테스트",
+        major_category="주식",
+        sub_category="코어(지수)",
+        country="KR"
+    )
+    with pytest.raises(ValueError) as excinfo:
+        service.update_asset(
+            asset_id=stock.id,
+            sub_category="배당주"
         )
     assert "유효하지 않은 중분류" in str(excinfo.value)
 

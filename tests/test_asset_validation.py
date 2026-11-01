@@ -68,8 +68,35 @@ def test_schema_asset_category_validation_valid():
         ticker="TEST5",
         name="테스트 자산 5",
         major_category="주식",
-        sub_category="배당주",
+        sub_category="코어(지수)",
         country="US"
     )
     assert schema.major_category == "주식"
-    assert schema.sub_category == "배당주"
+    assert schema.sub_category == "코어(지수)"
+
+def test_schema_asset_category_dividend_rejected():
+    """Pydantic 스키마 수준에서 '배당주'를 서브 카테고리로 입력 시 ValidationError가 발생해야 합니다."""
+    with pytest.raises(ValidationError) as excinfo:
+        AssetSchema(
+            ticker="TEST_DIV",
+            name="배당주 자산",
+            major_category="주식",
+            sub_category="배당주",
+            country="KR"
+        )
+    assert "유효하지 않은 카테고리 조합" in str(excinfo.value)
+
+def test_db_model_asset_category_dividend_rejected(db_session):
+    """DB 모델 수준에서 '배당주'를 서브 카테고리로 입력 시 ValueError가 발생해야 합니다."""
+    with pytest.raises(ValueError) as excinfo:
+        asset = Asset(
+            ticker="TEST_DIV_DB",
+            name="배당주 자산 DB",
+            major_category="주식",
+            sub_category="배당주",
+            country="KR"
+        )
+        db_session.add(asset)
+        db_session.commit()
+    db_session.rollback()
+    assert "유효하지 않은 중분류" in str(excinfo.value)

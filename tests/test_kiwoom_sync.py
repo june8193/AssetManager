@@ -67,7 +67,7 @@ def setup_test_data(db_session: Session):
         ticker="001230",
         name="맥쿼리인프라",
         major_category="주식",
-        sub_category="배당주",
+        sub_category="알파(성장)",
         country="KR"
     )
     db_session.add_all([krw_cash, usd_cash, samsung, apple, macquarie])
