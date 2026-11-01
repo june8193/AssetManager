@@ -6,7 +6,7 @@
 
 **Blocked by:** `01-backend-transfer-update`
 
-**Status:** closed
+**Status:** resolved
 
 - [x] `src/frontend/src/components/db/TransactionsTab.jsx`의 `handleEdit(tx)`에서 `tx.transfer_pair_id`가 존재하는 경우 `transactions` 목록에서 짝 거래(`pairTx`)를 찾아 `WITHDRAW` 쪽 `account_id`를 출발 계좌(`formData.account_id`), `DEPOSIT` 쪽 `account_id`를 도착 계좌(`formData.target_account_id`), 거래 유형(`formData.type`)을 `'TRANSFER'`로 설정한다.
 - [x] `handleEdit(tx)`에서 `tx.transfer_pair_id`가 없더라도 `tx.type === 'TRANSFER'`인 경우 `formData.target_account_id`를 빈 문자열(`''`)로 두지 않고 `findAlternative(accounts, tx.account_id)`를 통해 유효한 기본 도착 계좌 ID로 초기화한다.
