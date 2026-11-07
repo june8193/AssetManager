@@ -7,6 +7,7 @@ vi.mock('../services/snapshotService', () => ({
   snapshotService: {
     fetchWizardInitData: vi.fn(),
     fetchAccountWizardData: vi.fn(),
+    getAccountCashBalance: vi.fn(),
     calculateBrokerage: vi.fn(),
     calculateBank: vi.fn(),
     saveWizardSnapshot: vi.fn(),
@@ -34,6 +35,11 @@ describe('useSnapshotWizardEngine 훅 테스트 (은행 우선 순서)', () => {
     vi.mocked(snapshotService.fetchAccountWizardData).mockResolvedValue([
       { id: 10, type: 'DEPOSIT', total_amount: 1000000, transaction_date: '2026-08-10' },
     ]);
+
+    vi.mocked(snapshotService.getAccountCashBalance).mockResolvedValue({
+      cash_krw: 500000,
+      cash_usd: 100,
+    });
   });
 
   it('마운트 시 초기 데이터를 로드하고 기본 상태를 구성한다', async () => {
@@ -266,6 +272,42 @@ describe('useSnapshotWizardEngine 훅 테스트 (은행 우선 순서)', () => {
 
     expect(snapshotService.saveWizardSnapshot).toHaveBeenCalled();
     expect(saveResult).toEqual([{ id: 101 }]);
+  });
+
+  it('Step 4 증권 계좌 상세 진입 시 기초 원장 예수금(baseCash)을 로드하여 상태에 보관한다', async () => {
+    vi.mocked(snapshotService.getAccountCashBalance).mockResolvedValueOnce({
+      cash_krw: 750000,
+      cash_usd: 250,
+    });
+
+    const { result } = renderHook(() => useSnapshotWizardEngine());
+
+    await waitFor(() => {
+      expect(result.current.loadingAccounts).toBe(false);
+    });
+
+    // 1단계: 은행 선택 없이 다음 -> 3단계(증권 선택)
+    act(() => {
+      result.current.goToNext();
+    });
+    expect(result.current.step).toBe(3);
+
+    // 3단계: 증권 계좌(1) 선택 -> 4단계
+    act(() => {
+      result.current.toggleAccountSelection(1);
+    });
+    act(() => {
+      result.current.goToNext();
+    });
+    expect(result.current.step).toBe(4);
+
+    await waitFor(() => {
+      expect(snapshotService.getAccountCashBalance).toHaveBeenCalledWith(1, result.current.inputDate);
+      expect(result.current.accountsFormData[1]?.baseCash).toEqual({
+        cash_krw: 750000,
+        cash_usd: 250,
+      });
+    });
   });
 
   it('이전 단계(goToPrev) 이동 및 건너뛰기 복귀가 올바르게 동작한다', async () => {

@@ -35,3 +35,14 @@ class AccountSchema(BaseModel):
     alias: Optional[str] = None
     account_type: str = "BROKERAGE"
     is_active: bool = True
+
+
+class AccountCashBalanceResponse(BaseModel):
+    """특정 계좌의 기준일 기준 원장 예수금 잔액 응답 스키마입니다.
+
+    Attributes:
+        cash_krw (float): 원화 예수금 잔액
+        cash_usd (float): 달러 예수금 잔액
+    """
+    cash_krw: float = 0.0
+    cash_usd: float = 0.0

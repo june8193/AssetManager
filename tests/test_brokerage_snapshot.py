@@ -337,6 +337,60 @@ async def test_get_transactions_period_api(db_session, setup_assets):
     assert any(t.type == "BUY" and t.quantity == 5 for t in res)
 
 
+def test_get_account_cash_balance_api_success(client, db_session, setup_assets):
+    """특정 계좌의 기준일 기준 원장 예수금 잔액 API 조회를 검증합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="예수금조회테스트", provider="미래에셋", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+
+    today = datetime.date.today()
+    yesterday = today - datetime.timedelta(days=1)
+    tomorrow = today + datetime.timedelta(days=1)
+
+    # 1. 어제: 원화 1,000,000원 입금
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=yesterday,
+        type="DEPOSIT", total_amount=1000000.0, currency="KRW"
+    ))
+    # 2. 오늘: 달러 $500 입금
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=usd.id, transaction_date=today,
+        type="DEPOSIT", total_amount=500.0, currency="USD"
+    ))
+    # 3. 오늘: 삼성전자 주식 200,000원 매수 (원화 예수금 200,000원 차감)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today,
+        type="BUY", quantity=4, price=50000, total_amount=200000.0, currency="KRW"
+    ))
+    # 4. 내일: 원화 300,000원 추가 입금 (오늘 기준일 조회 시에는 제외되어야 함)
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=tomorrow,
+        type="DEPOSIT", total_amount=300000.0, currency="KRW"
+    ))
+    db_session.commit()
+
+    # as_of=today로 조회
+    response = client.get(f"/api/db/accounts/{account.id}/cash-balance?as_of={today.isoformat()}")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["cash_krw"] == 800000.0  # 1,000,000 - 200,000
+    assert data["cash_usd"] == 500.0
+
+    # as_of 미지정 시 (전체/최신 기준)
+    response_no_as_of = client.get(f"/api/db/accounts/{account.id}/cash-balance")
+    assert response_no_as_of.status_code == 200
+    data_no_as_of = response_no_as_of.json()
+    assert data_no_as_of["cash_krw"] == 1100000.0  # 800,000 + 300,000
+    assert data_no_as_of["cash_usd"] == 500.0
+
+
+def test_get_account_cash_balance_api_not_found(client):
+    """존재하지 않는 계좌의 예수금 잔액 조회 시 404를 반환해야 합니다."""
+    response = client.get("/api/db/accounts/999999/cash-balance")
+    assert response.status_code == 404
+
+
 
 
 

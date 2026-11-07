@@ -101,12 +101,12 @@ export function wizardReducer(state, action) {
       return { ...state, exchangeRate: action.payload };
 
     case WIZARD_ACTIONS.TOGGLE_ACCOUNT_SELECTION: {
-      const id = action.payload;
-      const exists = state.selectedAccountIds.includes(id);
-      const newSelected = exists
-        ? state.selectedAccountIds.filter((accId) => accId !== id)
-        : [...state.selectedAccountIds, id];
-      return { ...state, selectedAccountIds: newSelected };
+      const accId = action.payload;
+      const exists = state.selectedAccountIds.includes(accId);
+      const newIds = exists
+        ? state.selectedAccountIds.filter((id) => id !== accId)
+        : [...state.selectedAccountIds, accId];
+      return { ...state, selectedAccountIds: newIds };
     }
 
     case WIZARD_ACTIONS.SET_SELECTED_ACCOUNT_IDS:
@@ -120,6 +120,7 @@ export function wizardReducer(state, action) {
           newFormData[acc.id] = {
             newTransactions: [],
             existingTransactions: [],
+            baseCash: { cash_krw: 0, cash_usd: 0 },
             currentKrw: '0',
             currentUsd: '0',
             totalValuation: '0',
@@ -140,6 +141,7 @@ export function wizardReducer(state, action) {
       const current = state.accountsFormData[accId] || {
         newTransactions: [],
         existingTransactions: [],
+        baseCash: { cash_krw: 0, cash_usd: 0 },
         currentKrw: '0',
         currentUsd: '0',
         totalValuation: '0',
@@ -153,7 +155,7 @@ export function wizardReducer(state, action) {
           [accId]: {
             ...current,
             ...updates,
-            isConfirmed: updates.isConfirmed !== undefined ? updates.isConfirmed : false,
+            isConfirmed: updates.isConfirmed !== undefined ? updates.isConfirmed : (current.isConfirmed ?? false),
           },
         },
       };
@@ -164,6 +166,7 @@ export function wizardReducer(state, action) {
       const current = state.accountsFormData[accId] || {
         newTransactions: [],
         existingTransactions: [],
+        baseCash: { cash_krw: 0, cash_usd: 0 },
         currentKrw: '0',
         currentUsd: '0',
         totalValuation: '0',
@@ -323,7 +326,7 @@ export function useSnapshotWizardEngine() {
     };
   }, []);
 
-  // 2단계(은행 상세) / 4단계(증권 상세) 계좌 전환 시 기존 트랜잭션 로드
+  // 2단계(은행 상세) / 4단계(증권 상세) 계좌 전환 시 기존 트랜잭션 및 기초 원장 예수금 로드
   useEffect(() => {
     const isBank = state.step === 2;
     const isBrokerage = state.step === 4;
@@ -338,15 +341,32 @@ export function useSnapshotWizardEngine() {
       dispatch({ type: WIZARD_ACTIONS.SET_LOADING_EXISTING_TXS, payload: true });
       try {
         const startDate = state.latestSnapshotDate || '1970-01-01';
-        const data = await snapshotService.fetchAccountWizardData(accId, startDate, state.inputDate);
+        const [data, cashBalance] = await Promise.all([
+          snapshotService.fetchAccountWizardData(accId, startDate, state.inputDate),
+          isBrokerage ? snapshotService.getAccountCashBalance(accId, state.inputDate) : Promise.resolve(null),
+        ]);
         if (isMounted) {
           dispatch({
             type: WIZARD_ACTIONS.SET_EXISTING_TXS,
             payload: { accId, data: Array.isArray(data) ? data : [] },
           });
+          if (cashBalance) {
+            dispatch({
+              type: WIZARD_ACTIONS.UPDATE_ACCOUNT_FORM,
+              payload: {
+                accId,
+                updates: {
+                  baseCash: {
+                    cash_krw: cashBalance.cash_krw ?? 0,
+                    cash_usd: cashBalance.cash_usd ?? 0,
+                  },
+                },
+              },
+            });
+          }
         }
       } catch (err) {
-        console.error('기존 거래 내역 로드 실패:', err);
+        console.error('기존 거래 내역 및 예수금 로드 실패:', err);
       } finally {
         if (isMounted) {
           dispatch({ type: WIZARD_ACTIONS.SET_LOADING_EXISTING_TXS, payload: false });

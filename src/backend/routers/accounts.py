@@ -1,12 +1,14 @@
 """사용자 및 계좌 관리 CRUD 전용 API 라우터 모듈입니다."""
 
-from fastapi import APIRouter, Depends, HTTPException, status
+import datetime
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from typing import List
 
 from ..database import get_db
 from ..models import Account, User
-from ..schemas import AccountSchema, UserSchema
+from ..schemas import AccountSchema, UserSchema, AccountCashBalanceResponse
+from ..services.ledger_engine import LedgerEngine
 
 router = APIRouter(
     prefix="/api/db",
@@ -47,6 +49,36 @@ def get_accounts(db: Session = Depends(get_db)):
         acc_dict['user_name'] = user_name
         accounts.append(AccountSchema(**acc_dict))
     return accounts
+
+
+@router.get("/accounts/{account_id}/cash-balance", response_model=AccountCashBalanceResponse)
+def get_account_cash_balance(
+    account_id: int,
+    as_of: Optional[datetime.date] = Query(None, description="기준 일자 (None일 경우 전체/최신 기준)"),
+    db: Session = Depends(get_db),
+):
+    """특정 계좌의 기준일 기준 원장 예수금 잔액을 조회합니다.
+
+    Args:
+        account_id (int): 조회할 계좌 식별자.
+        as_of (Optional[datetime.date]): 기준 일자.
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        AccountCashBalanceResponse: 통화별(KRW, USD) 원장 예수금 잔액.
+
+    Raises:
+        HTTPException: 계좌가 존재하지 않는 경우 404.
+    """
+    db_account = db.query(Account).filter(Account.id == account_id).first()
+    if not db_account:
+        raise HTTPException(status_code=404, detail="계좌를 찾을 수 없습니다.")
+
+    state = LedgerEngine.get_positions(db, account_id=account_id, as_of=as_of)
+    return AccountCashBalanceResponse(
+        cash_krw=state.cash_krw,
+        cash_usd=state.cash_usd,
+    )
 
 
 @router.post("/accounts", response_model=AccountSchema)

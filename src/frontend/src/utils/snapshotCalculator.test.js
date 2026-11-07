@@ -6,6 +6,7 @@ import {
   calculateStockValuation,
   calculateAccountValuation,
   calculateCashDifference,
+  calculateExpectedBrokerageCash,
   getIncomingTransferDeposits,
   validateAccountTransferTargets,
   TRANSACTION_TYPES,
@@ -93,6 +94,74 @@ describe('snapshotCalculator - 순수 금융 연산', () => {
     expect(validateAccountTransferTargets([
       { type: 'DEPOSIT', amount: '100,000' }
     ]).isValid).toBe(true);
+  });
+});
+
+describe('snapshotCalculator - calculateExpectedBrokerageCash 증권 예상 예수금 산출', () => {
+  it('기초 예수금만 주어졌을 때 그대로 예상 예수금으로 반환해야 한다', () => {
+    const res = calculateExpectedBrokerageCash({ baseKrw: 1000000, baseUsd: 500.5 });
+    expect(res).toEqual({ expectedKrw: 1000000, expectedUsd: 500.5 });
+  });
+
+  it('인자가 비어있거나 누락되었을 때 기본값 0을 반환해야 한다', () => {
+    const res = calculateExpectedBrokerageCash();
+    expect(res).toEqual({ expectedKrw: 0, expectedUsd: 0 });
+  });
+
+  it('원화 거래 가산(DEPOSIT, INTEREST, DIVIDEND, CASH_ADJUSTMENT, SELL) 및 차감(WITHDRAW, TRANSFER, TAX, FEE, BUY)을 정확히 계산해야 한다', () => {
+    const res = calculateExpectedBrokerageCash({
+      baseKrw: 1000000,
+      baseUsd: 0,
+      newTransactions: [
+        { type: 'DEPOSIT', amount: '200,000', currency: 'KRW' },
+        { type: 'INTEREST', amount: '10,000', currency: 'KRW' },
+        { type: 'DIVIDEND', amount: '30,000', currency: 'KRW' },
+        { type: 'CASH_ADJUSTMENT', amount: '5,000', currency: 'KRW' },
+        { type: 'SELL', amount: '500,000', currency: 'KRW' },
+        { type: 'WITHDRAW', amount: '50,000', currency: 'KRW' },
+        { type: 'TRANSFER', amount: '100,000', currency: 'KRW' },
+        { type: 'TAX', amount: '1,500', currency: 'KRW' },
+        { type: 'FEE', amount: '500', currency: 'KRW' },
+        { type: 'BUY', amount: '300,000', currency: 'KRW' },
+      ],
+    });
+    // 1,000,000 + 200,000 + 10,000 + 30,000 + 5,000 + 500,000 - 50,000 - 100,000 - 1,500 - 500 - 300,000 = 1,293,000
+    expect(res.expectedKrw).toBe(1293000);
+    expect(res.expectedUsd).toBe(0);
+  });
+
+  it('달러 거래 가산 및 차감을 USD 통화에만 독립적으로 합산해야 한다', () => {
+    const res = calculateExpectedBrokerageCash({
+      baseKrw: 500000,
+      baseUsd: 1000,
+      newTransactions: [
+        { type: 'DIVIDEND', amount: '50.25', currency: 'USD' },
+        { type: 'BUY', total_amount: 200.5, currency: 'USD' },
+        { type: 'DEPOSIT', amount: '100,000', currency: 'KRW' },
+      ],
+    });
+    // USD: 1000 + 50.25 - 200.50 = 849.75
+    // KRW: 500000 + 100000 = 600000
+    expect(res.expectedUsd).toBeCloseTo(849.75, 2);
+    expect(res.expectedKrw).toBe(600000);
+  });
+
+  it('타 계좌발 연동 이체 입금(incomingTransfers)이 정확히 합산되어야 한다', () => {
+    const res = calculateExpectedBrokerageCash({
+      baseKrw: 100000,
+      baseUsd: 50,
+      newTransactions: [
+        { type: 'WITHDRAW', amount: '20,000', currency: 'KRW' },
+      ],
+      incomingTransfers: [
+        { type: 'DEPOSIT', amount: '300,000', currency: 'KRW' },
+        { type: 'DEPOSIT', amount: '100', currency: 'USD' },
+      ],
+    });
+    // KRW: 100000 - 20000 + 300000 = 380000
+    // USD: 50 + 100 = 150
+    expect(res.expectedKrw).toBe(380000);
+    expect(res.expectedUsd).toBe(150);
   });
 });
 

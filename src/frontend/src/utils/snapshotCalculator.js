@@ -19,6 +19,8 @@ export const TRANSACTION_TYPES = Object.freeze({
   TAX: 'TAX',
   DIVIDEND: 'DIVIDEND',
   CASH_ADJUSTMENT: 'CASH_ADJUSTMENT',
+  BUY: 'BUY',
+  SELL: 'SELL',
 });
 
 /**
@@ -109,6 +111,64 @@ export const calculateCashDifference = (previousCash = 0, transactions = [], cur
   return {
     theoreticalCash,
     diff,
+  };
+};
+
+/**
+ * 기초 원장 예수금과 신규 거래, 연동 이체 입금을 통화별로 실시간 합산하여 예상 예수금을 계산합니다.
+ * @param {object} [params]
+ * @param {number|string} [params.baseKrw=0] - 기초 원화 원장 예수금
+ * @param {number|string} [params.baseUsd=0] - 기초 달러 원장 예수금
+ * @param {Array<object>} [params.newTransactions=[]] - 신규 거래 목록
+ * @param {Array<object>} [params.incomingTransfers=[]] - 타 계좌발 연동 이체 입금 목록
+ * @returns {{ expectedKrw: number, expectedUsd: number }}
+ */
+export const calculateExpectedBrokerageCash = ({
+  baseKrw = 0,
+  baseUsd = 0,
+  newTransactions = [],
+  incomingTransfers = [],
+} = {}) => {
+  let expectedKrw = Number(parseCommas(baseKrw)) || 0;
+  let expectedUsd = Number(parseCommas(baseUsd)) || 0;
+
+  const combined = [...(newTransactions || []), ...(incomingTransfers || [])];
+
+  combined.forEach((tx) => {
+    const rawAmt = tx.amount ?? tx.total_amount ?? 0;
+    const amt = typeof rawAmt === 'number' ? rawAmt : parseCommas(rawAmt);
+    const currency = String(tx.currency || 'KRW').toUpperCase();
+
+    let delta = 0;
+    switch (tx.type) {
+      case TRANSACTION_TYPES.DEPOSIT:
+      case TRANSACTION_TYPES.INTEREST:
+      case TRANSACTION_TYPES.DIVIDEND:
+      case TRANSACTION_TYPES.CASH_ADJUSTMENT:
+      case TRANSACTION_TYPES.SELL:
+        delta = amt;
+        break;
+      case TRANSACTION_TYPES.WITHDRAW:
+      case TRANSACTION_TYPES.TRANSFER:
+      case TRANSACTION_TYPES.TAX:
+      case TRANSACTION_TYPES.FEE:
+      case TRANSACTION_TYPES.BUY:
+        delta = -amt;
+        break;
+      default:
+        delta = 0;
+    }
+
+    if (currency === 'USD') {
+      expectedUsd += delta;
+    } else {
+      expectedKrw += delta;
+    }
+  });
+
+  return {
+    expectedKrw,
+    expectedUsd,
   };
 };
 

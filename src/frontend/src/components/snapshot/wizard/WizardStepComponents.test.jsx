@@ -157,6 +157,99 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(calcMock).toHaveBeenCalledWith(1);
   });
 
+  it('Step4BrokerageDetail: 예상 원화/달러 금액과 동일 적용 버튼을 렌더링하고, 버튼 클릭 시 updateAccData를 호출한다', () => {
+    const updateAccDataMock = vi.fn();
+
+    render(
+      <Step4BrokerageDetail
+        currentAccIdx={0}
+        selectedBrokerageIds={[1]}
+        accounts={[mockBrokerageAccount]}
+        accountsFormData={{
+          1: {
+            newTransactions: [
+              { type: 'DEPOSIT', amount: '200,000', currency: 'KRW' },
+              { type: 'DIVIDEND', amount: '50', currency: 'USD' },
+            ],
+            baseCash: { cash_krw: 800000, cash_usd: 150 },
+            currentKrw: '0',
+            currentUsd: '0',
+            calcResult: null,
+            isConfirmed: false,
+          },
+        }}
+        inputDate="2026-08-17"
+        updateAccData={updateAccDataMock}
+      />
+    );
+
+    // 예상 금액 표시 확인 (800,000 + 200,000 = 1,000,000원 / 150 + 50 = $200)
+    expect(screen.getByText('현재 계좌 예상 원화')).toBeInTheDocument();
+    expect(screen.getByText('1,000,000원')).toBeInTheDocument();
+    expect(screen.getByText('현재 계좌 예상 달러')).toBeInTheDocument();
+    expect(screen.getByText('$200.00')).toBeInTheDocument();
+
+    // 원화 및 달러 '동일 적용 →' 버튼 클릭
+    const applyButtons = screen.getAllByRole('button', { name: /동일 적용/i });
+    expect(applyButtons).toHaveLength(2);
+
+    fireEvent.click(applyButtons[0]);
+    expect(updateAccDataMock).toHaveBeenCalledWith(1, { currentKrw: '1000000' });
+
+    fireEvent.click(applyButtons[1]);
+    expect(updateAccDataMock).toHaveBeenCalledWith(1, { currentUsd: '200' });
+  });
+
+  it('Step4BrokerageDetail: 입력값과 예상값의 일치/차액 상태 배지를 실시간으로 올바르게 렌더링한다', () => {
+    const { rerender } = render(
+      <Step4BrokerageDetail
+        currentAccIdx={0}
+        selectedBrokerageIds={[1]}
+        accounts={[mockBrokerageAccount]}
+        accountsFormData={{
+          1: {
+            newTransactions: [],
+            baseCash: { cash_krw: 1000000, cash_usd: 100 },
+            currentKrw: '1,000,000', // 일치
+            currentUsd: '100', // 일치
+            calcResult: null,
+            isConfirmed: false,
+          },
+        }}
+        inputDate="2026-08-17"
+      />
+    );
+
+    // 차액 없음 안내 확인
+    const matchBadges = screen.getAllByText(/예상 잔액과 일치합니다 \(차액 없음\)/i);
+    expect(matchBadges).toHaveLength(2);
+
+    // 차액 발생 시 리렌더링 (원화 +12,400원, 달러 -$4.50)
+    rerender(
+      <Step4BrokerageDetail
+        currentAccIdx={0}
+        selectedBrokerageIds={[1]}
+        accounts={[mockBrokerageAccount]}
+        accountsFormData={{
+          1: {
+            newTransactions: [],
+            baseCash: { cash_krw: 1000000, cash_usd: 100 },
+            currentKrw: '1,012,400', // +12,400원
+            currentUsd: '95.5', // -4.50달러
+            calcResult: null,
+            isConfirmed: false,
+          },
+        }}
+        inputDate="2026-08-17"
+      />
+    );
+
+    expect(screen.getByText(/\+12,400원/)).toBeInTheDocument();
+    expect(screen.getByText(/-\$4.50/)).toBeInTheDocument();
+    const adjustNotices = screen.getAllByText(/정산 시 예수금 보정\(배당\/이자\/수수료\)으로 처리됩니다/i);
+    expect(adjustNotices.length).toBeGreaterThanOrEqual(1);
+  });
+
   it('Step5FinalConfirm: 정산 완료된 전체 계좌 목록 요약에서 은행 계좌가 먼저 표시된다', () => {
     render(
       <Step5FinalConfirm

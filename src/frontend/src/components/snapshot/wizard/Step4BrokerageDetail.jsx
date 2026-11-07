@@ -1,11 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Check, Wallet, RefreshCw, HelpCircle, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { formatWithCommas, getAccountDisplayName, getIncomingTransferDeposits } from '../../../utils/snapshotCalculator';
+import { Check, Wallet, RefreshCw, HelpCircle, CheckCircle2 } from 'lucide-react';
+import {
+  formatWithCommas,
+  parseCommas,
+  getAccountDisplayName,
+  getIncomingTransferDeposits,
+  calculateExpectedBrokerageCash,
+} from '../../../utils/snapshotCalculator';
 import { TransactionTable } from './TransactionTable';
 import { WizardIntegrityWarningCard } from './WizardIntegrityWarningCard';
 
 /**
- * 4단계: 증권 계좌 상세 입력 (거래 내역, 원화/달러 예수금 잔액, 정산 계산 및 확정)
+ * 4단계: 증권 계좌 상세 입력 (거래 내역, 원화/달러 예수금 2단 비교 대조 잔액, 정산 계산 및 확정)
  */
 export const Step4BrokerageDetail = ({
   currentAccIdx = 0,
@@ -37,10 +43,27 @@ export const Step4BrokerageDetail = ({
     [accId, accountsFormData, accounts]
   );
 
-  if (!acc) return null;
-
   const data = accountsFormData[accId] || { newTransactions: [], currentKrw: '0', currentUsd: '0' };
   const calc = data.calcResult;
+
+  // 실시간 예상 예수금 산출 (기초 원장 예수금 + 신규 거래 + 연동 이체 입금)
+  const expectedCash = useMemo(() => {
+    return calculateExpectedBrokerageCash({
+      baseKrw: data.baseCash?.cash_krw ?? 0,
+      baseUsd: data.baseCash?.cash_usd ?? 0,
+      newTransactions: data.newTransactions || [],
+      incomingTransfers,
+    });
+  }, [data.baseCash, data.newTransactions, incomingTransfers]);
+
+  const expectedKrw = expectedCash.expectedKrw;
+  const expectedUsd = expectedCash.expectedUsd;
+
+  const currentKrwNum = parseCommas(data.currentKrw);
+  const currentUsdNum = parseCommas(data.currentUsd);
+
+  const diffKrw = currentKrwNum - expectedKrw;
+  const diffUsd = currentUsdNum - expectedUsd;
 
   const hasIntegrityWarning = Boolean(
     calc && (
@@ -49,6 +72,8 @@ export const Step4BrokerageDetail = ({
       Math.abs(calc.diff_usd || 0) > 0.01
     )
   );
+
+  if (!acc) return null;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500" data-testid="step-4-brokerage-detail">
@@ -87,7 +112,7 @@ export const Step4BrokerageDetail = ({
 
       <div className="space-y-8">
         {data.isConfirmed ? (
-          /* 확정 완료 상태 UI */
+          /* 확정 완료 상태 UI (기존 레이아웃 유지) */
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 space-y-6 animate-in slide-in-from-top-2 duration-300">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
@@ -161,54 +186,163 @@ export const Step4BrokerageDetail = ({
               onUpdateTx={updateTx}
             />
 
-            {/* 잔고 입력 및 결과 */}
+            {/* 예수금 2단 비교 대조 잔고 입력 및 결과 */}
             <div className="space-y-6">
               <div className="bg-blue-50 rounded-2xl p-6 border border-blue-100 space-y-6">
                 <h4 className="font-bold text-blue-900 flex items-center gap-2">
                   <Wallet size={18} /> 현재 예수금 잔액 입력
                 </h4>
 
-                <div className="space-y-4">
+                <div className="space-y-6">
+                  {/* 원화 (KRW) 2단 비교 대조 카드 */}
                   <div className="space-y-2">
-                    <label
-                      htmlFor={`krw-balance-${accId}`}
-                      className="text-xs font-bold text-blue-700 uppercase tracking-wider"
-                    >
-                      원화 잔액 (KRW)
-                    </label>
-                    <div className="relative">
-                      <input
-                        id={`krw-balance-${accId}`}
-                        type="text"
-                        value={formatWithCommas(data.currentKrw)}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9.]/g, '');
-                          updateAccData?.(accId, { currentKrw: raw });
-                        }}
-                        className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">원</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 좌측: 현재 계좌 예상 원화 */}
+                      <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-200 flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            현재 계좌 예상 원화
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateAccData?.(accId, {
+                                currentKrw: String(Math.round(expectedKrw)),
+                              })
+                            }
+                            className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shadow-2xs"
+                          >
+                            동일 적용 →
+                          </button>
+                        </div>
+                        <div className="font-mono font-bold text-xl text-slate-800">
+                          {Math.round(expectedKrw).toLocaleString()}원
+                        </div>
+                      </div>
+
+                      {/* 우측: 실제 증권사 원화 예수금 입력 */}
+                      <div className="bg-white rounded-xl p-4 border border-blue-200 shadow-2xs flex flex-col justify-between">
+                        <label
+                          htmlFor={`krw-balance-${accId}`}
+                          className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2 block"
+                        >
+                          실제 증권사 원화 예수금 입력
+                        </label>
+                        <div className="relative">
+                          <input
+                            id={`krw-balance-${accId}`}
+                            type="text"
+                            aria-label="원화 잔액 (KRW)"
+                            value={formatWithCommas(data.currentKrw)}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9.]/g, '');
+                              updateAccData?.(accId, { currentKrw: raw });
+                            }}
+                            className="w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg text-slate-900"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">
+                            원
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 하단 실시간 원화 차액 배지 */}
+                    <div className="pt-1">
+                      {Math.abs(diffKrw) < 0.01 ? (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50/80 px-3 py-1.5 rounded-lg border border-emerald-100">
+                          <Check size={14} className="stroke-[3]" />
+                          <span>✓ 예상 잔액과 일치합니다 (차액 없음)</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                          <span className="font-semibold text-slate-900">
+                            예상 잔액 대비 차액:{' '}
+                            {diffKrw > 0
+                              ? `+${Math.round(diffKrw).toLocaleString()}원`
+                              : `${Math.round(diffKrw).toLocaleString()}원`}
+                          </span>
+                          <span className="text-slate-400">·</span>
+                          <span className="text-slate-500 font-medium">
+                            정산 시 예수금 보정(배당/이자/수수료)으로 처리됩니다
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
+
+                  {/* 달러 (USD) 2단 비교 대조 카드 */}
                   <div className="space-y-2">
-                    <label
-                      htmlFor={`usd-balance-${accId}`}
-                      className="text-xs font-bold text-blue-700 uppercase tracking-wider"
-                    >
-                      달러 잔액 (USD)
-                    </label>
-                    <div className="relative">
-                      <input
-                        id={`usd-balance-${accId}`}
-                        type="text"
-                        value={formatWithCommas(data.currentUsd)}
-                        onChange={(e) => {
-                          const raw = e.target.value.replace(/[^0-9.]/g, '');
-                          updateAccData?.(accId, { currentUsd: raw });
-                        }}
-                        className="w-full pl-4 pr-12 py-3 bg-white border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg"
-                      />
-                      <span className="absolute right-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">$</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* 좌측: 현재 계좌 예상 달러 */}
+                      <div className="bg-slate-50/90 rounded-xl p-4 border border-slate-200 flex flex-col justify-between">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                            현재 계좌 예상 달러
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              updateAccData?.(accId, {
+                                currentUsd: String(Number(expectedUsd.toFixed(2))),
+                              })
+                            }
+                            className="text-xs font-bold text-blue-600 hover:text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1 shadow-2xs"
+                          >
+                            동일 적용 →
+                          </button>
+                        </div>
+                        <div className="font-mono font-bold text-xl text-slate-800">
+                          ${expectedUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </div>
+                      </div>
+
+                      {/* 우측: 실제 증권사 달러 예수금 입력 */}
+                      <div className="bg-white rounded-xl p-4 border border-blue-200 shadow-2xs flex flex-col justify-between">
+                        <label
+                          htmlFor={`usd-balance-${accId}`}
+                          className="text-xs font-bold text-blue-700 uppercase tracking-wider mb-2 block"
+                        >
+                          실제 증권사 달러 예수금 입력
+                        </label>
+                        <div className="relative">
+                          <input
+                            id={`usd-balance-${accId}`}
+                            type="text"
+                            aria-label="달러 잔액 (USD)"
+                            value={formatWithCommas(data.currentUsd)}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/[^0-9.]/g, '');
+                              updateAccData?.(accId, { currentUsd: raw });
+                            }}
+                            className="w-full pl-3 pr-10 py-2.5 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono font-bold text-lg text-slate-900"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-sm">
+                            $
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 하단 실시간 달러 차액 배지 */}
+                    <div className="pt-1">
+                      {Math.abs(diffUsd) < 0.01 ? (
+                        <div className="flex items-center gap-1.5 text-xs font-semibold text-emerald-600 bg-emerald-50/80 px-3 py-1.5 rounded-lg border border-emerald-100">
+                          <Check size={14} className="stroke-[3]" />
+                          <span>✓ 예상 잔액과 일치합니다 (차액 없음)</span>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg border border-slate-200">
+                          <span className="font-semibold text-slate-900">
+                            예상 잔액 대비 차액:{' '}
+                            {diffUsd > 0 ? `+$${diffUsd.toFixed(2)}` : `-$${Math.abs(diffUsd).toFixed(2)}`}
+                          </span>
+                          <span className="text-slate-400">·</span>
+                          <span className="text-slate-500 font-medium">
+                            정산 시 예수금 보정(배당/이자/수수료)으로 처리됩니다
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

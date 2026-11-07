@@ -115,6 +115,16 @@ export const snapshotService = {
   },
 
   /**
+   * 특정 계좌의 기준일 기준 원장 예수금 잔액을 조회합니다.
+   * @param {number|string} accountId - 계좌 ID
+   * @param {string} [asOfDate] - 기준 일자 (YYYY-MM-DD)
+   * @returns {Promise<{ cash_krw: number, cash_usd: number }>}
+   */
+  getAccountCashBalance(accountId, asOfDate) {
+    return apiClient.get(`/api/db/accounts/${accountId}/cash-balance`, asOfDate ? { as_of: asOfDate } : {});
+  },
+
+  /**
    * 완성된 스냅샷 위저드 DTO 페이로드를 통합 저장합니다.
    * @param {object} payload - buildSnapshotPayload로 조립된 DTO
    * @returns {Promise<any>}
