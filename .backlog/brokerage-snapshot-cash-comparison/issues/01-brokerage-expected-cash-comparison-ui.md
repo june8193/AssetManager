@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 백엔드에 특정 계좌의 기준일(`as_of`) 기준 원장 예수금 잔액을 반환하는 API(`GET /api/db/accounts/{account_id}/cash-balance`, 응답: `cash_krw`, `cash_usd`)를 추가하고 `LedgerEngine.get_positions`와 연동한다 (`tests/test_brokerage_snapshot.py` 검증).
 - [x] `src/frontend/src/utils/snapshotCalculator.js`에 기초 예수금(`baseKrw`, `baseUsd`)과 신규 거래(`newTransactions`), 연동 이체 입금(`incomingTransfers`)을 통화별로 실시간 합산하는 순수 함수 `calculateExpectedBrokerageCash`를 구현하고 단위 테스트를 작성한다.
