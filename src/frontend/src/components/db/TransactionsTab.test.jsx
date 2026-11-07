@@ -897,14 +897,13 @@ describe('TransactionsTab', () => {
       fireEvent.click(editButtons[0]);
 
       await waitFor(() => {
-        expect(screen.getByText('거래 내역 수정')).toBeInTheDocument();
-        expect(screen.getByText('출발 계좌')).toBeInTheDocument();
-        expect(screen.getByText('도착 계좌')).toBeInTheDocument();
+        expect(screen.getByTestId('inline-edit-row-101')).toBeInTheDocument();
+        expect(screen.getByTestId('inline-subrow-transfer')).toBeInTheDocument();
       });
 
-      const accountSelect = document.querySelector('select[name="account_id"]');
-      const targetAccountSelect = document.querySelector('select[name="target_account_id"]');
-      const typeSelect = document.querySelector('select[name="type"]');
+      const accountSelect = screen.getByTestId('inline-account-select');
+      const targetAccountSelect = screen.getByTestId('inline-target-account-select');
+      const typeSelect = screen.getByTestId('inline-type-select');
 
       expect(typeSelect.value).toBe('TRANSFER');
       expect(accountSelect.value).toBe('1');
@@ -961,13 +960,13 @@ describe('TransactionsTab', () => {
       fireEvent.click(editButtons[1]);
 
       await waitFor(() => {
-        expect(screen.getByText('출발 계좌')).toBeInTheDocument();
-        expect(screen.getByText('도착 계좌')).toBeInTheDocument();
+        expect(screen.getByTestId('inline-edit-row-102')).toBeInTheDocument();
+        expect(screen.getByTestId('inline-subrow-transfer')).toBeInTheDocument();
       });
 
-      const accountSelect = document.querySelector('select[name="account_id"]');
-      const targetAccountSelect = document.querySelector('select[name="target_account_id"]');
-      const typeSelect = document.querySelector('select[name="type"]');
+      const accountSelect = screen.getByTestId('inline-account-select');
+      const targetAccountSelect = screen.getByTestId('inline-target-account-select');
+      const typeSelect = screen.getByTestId('inline-type-select');
 
       expect(typeSelect.value).toBe('TRANSFER');
       expect(accountSelect.value).toBe('1'); // pairTx인 WITHDRAW 행 계좌
@@ -1019,21 +1018,21 @@ describe('TransactionsTab', () => {
       fireEvent.click(screen.getByRole('button', { name: '수정' }));
 
       await waitFor(() => {
-        expect(screen.getByText('출발 계좌')).toBeInTheDocument();
-        expect(screen.getByText('도착 계좌')).toBeInTheDocument();
+        expect(screen.getByTestId('inline-edit-row-201')).toBeInTheDocument();
+        expect(screen.getByTestId('inline-subrow-transfer')).toBeInTheDocument();
       });
 
       // 도착 계좌를 2에서 3으로 변경
-      const targetAccountSelect = document.querySelector('select[name="target_account_id"]');
+      const targetAccountSelect = screen.getByTestId('inline-target-account-select');
       expect(targetAccountSelect.value).toBe('2'); // findAlternative에 의해 2로 설정됨
       fireEvent.change(targetAccountSelect, { target: { value: '3' } });
 
       // 이체 금액을 35,000으로 수정
-      const totalAmountInput = document.querySelector('input[name="total_amount"]');
+      const totalAmountInput = screen.getByTestId('inline-total-input');
       fireEvent.change(totalAmountInput, { target: { value: '35000' } });
 
       // 수정 저장 버튼 클릭
-      const saveButton = screen.getByRole('button', { name: '저장' });
+      const saveButton = screen.getByRole('button', { name: '인라인 저장' });
       fireEvent.click(saveButton);
 
       await waitFor(() => {
@@ -1049,7 +1048,327 @@ describe('TransactionsTab', () => {
       expect(putPayload.type).toBe('TRANSFER');
     });
   });
+
+  describe('하단 거래내역 표 9개 컬럼 및 제자리(In-line) 수정', () => {
+    const inlineMockTransactions = [
+      {
+        id: 1,
+        account_id: 1,
+        asset_id: 1,
+        transaction_date: '2026-04-20',
+        type: 'BUY',
+        quantity: 10,
+        price: 70000,
+        total_amount: 700000,
+        currency: 'KRW',
+        memo: '적립식 매수'
+      },
+      {
+        id: 2,
+        account_id: 1,
+        asset_id: 2,
+        transaction_date: '2026-04-21',
+        type: 'DEPOSIT',
+        quantity: 500000,
+        price: 1,
+        total_amount: 500000,
+        currency: 'KRW',
+        memo: null
+      }
+    ];
+
+    const inlineMockAccounts = [
+      { id: 1, name: '메인 계좌', provider: '토스증권', alias: '토스' },
+      { id: 2, name: '서브 계좌', provider: '키움증권', alias: '키움' }
+    ];
+
+    const inlineMockAssets = [
+      { id: 1, ticker: '005930', name: '삼성전자', category: 'STOCK' },
+      { id: 2, ticker: 'KRW', name: '원화 현금', category: 'CASH' },
+      { id: 3, ticker: 'USD', name: '달러 현금', category: 'CASH' }
+    ];
+
+    it('하단 테이블 헤더가 9개 컬럼으로 렌더링되고 메모 컬럼 및 데이터가 정상 표시되어야 한다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      // 9개 헤더 컬럼 검증
+      const headers = ['날짜', '계좌', '자산', '유형', '수량', '단가/환율', '총액', '메모', '관리'];
+      headers.forEach(h => {
+        expect(screen.getByRole('columnheader', { name: new RegExp(h, 'i') })).toBeInTheDocument();
+      });
+
+      // 자산 셀에 티커와 이름 함께 표시
+      expect(screen.getByText('005930')).toBeInTheDocument();
+      expect(screen.getByText('삼성전자')).toBeInTheDocument();
+
+      // 메모가 없는 행은 '-' 표시
+      expect(screen.getByText('-')).toBeInTheDocument();
+    });
+
+    it('행 수정 버튼 클릭 시 해당 행이 제자리 인라인 편집 행으로 전환되어야 한다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      // 하단 테이블 내 첫 번째 수정 버튼 클릭
+      const editButtons = screen.getAllByRole('button', { name: '수정' });
+      fireEvent.click(editButtons[0]);
+
+      // 인라인 편집 행 내부 입력 컨트롤 렌더링 확인
+      await waitFor(() => {
+        expect(screen.getByTestId('inline-edit-row-1')).toBeInTheDocument();
+      });
+
+      expect(screen.getByDisplayValue('적립식 매수')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '인라인 저장' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: '인라인 취소' })).toBeInTheDocument();
+    });
+
+    it('읽기 전용 행 더블클릭 시 제자리 인라인 편집 행으로 전환되어야 한다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      const txRow = screen.getByTestId('tx-row-1');
+      fireEvent.doubleClick(txRow);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('inline-edit-row-1')).toBeInTheDocument();
+      });
+    });
+
+    it('인라인 편집 중 Esc 키 입력 또는 취소 버튼 클릭 시 원래 읽기 행으로 복귀해야 한다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      // 1번 행 더블클릭으로 인라인 편집 진입
+      fireEvent.doubleClick(screen.getByTestId('tx-row-1'));
+      expect(screen.getByTestId('inline-edit-row-1')).toBeInTheDocument();
+
+      // 인라인 입력 필드에서 Esc 키 입력
+      const memoInput = screen.getByDisplayValue('적립식 매수');
+      fireEvent.keyDown(memoInput, { key: 'Escape', code: 'Escape' });
+
+      // 인라인 편집 모드 종료되고 일반 행으로 복원
+      await waitFor(() => {
+        expect(screen.queryByTestId('inline-edit-row-1')).not.toBeInTheDocument();
+        expect(screen.getByTestId('tx-row-1')).toBeInTheDocument();
+      });
+    });
+
+    it('인라인 편집 중 Enter 키 입력 또는 저장 버튼 클릭 시 PUT 요청을 보내고 정상 저장되어야 한다', async () => {
+      let putUrl = null;
+      let putBody = null;
+
+      vi.stubGlobal('fetch', vi.fn((url, options) => {
+        if (url.includes('/transactions/1') && options?.method === 'PUT') {
+          putUrl = url;
+          putBody = JSON.parse(options.body);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 1, ...putBody }) });
+        }
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      fireEvent.doubleClick(screen.getByTestId('tx-row-1'));
+      const memoInput = screen.getByDisplayValue('적립식 매수');
+      fireEvent.change(memoInput, { target: { value: '메모 수정 완료' } });
+
+      // Enter 키로 저장 트리거
+      fireEvent.keyDown(memoInput, { key: 'Enter', code: 'Enter' });
+
+      await waitFor(() => {
+        expect(putUrl).toContain('/transactions/1');
+        expect(putBody).not.toBeNull();
+      });
+      expect(putBody.memo).toBe('메모 수정 완료');
+    });
+
+    it('인라인 편집 중 TRANSFER 선택 시 inline-subrow-transfer가 렌더링되고 도착 계좌를 선택할 수 있어야 한다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      fireEvent.doubleClick(screen.getByTestId('tx-row-1'));
+      
+      // 자산을 현금(KRW)으로 변경하고 유형을 TRANSFER로 변경
+      const assetSelect = screen.getByTestId('inline-asset-select');
+      fireEvent.change(assetSelect, { target: { value: '2' } });
+
+      const typeSelect = screen.getByTestId('inline-type-select');
+      fireEvent.change(typeSelect, { target: { value: 'TRANSFER' } });
+
+      // 보조 설정 줄 inline-subrow-transfer 렌더링 검증
+      await waitFor(() => {
+        expect(screen.getByTestId('inline-subrow-transfer')).toBeInTheDocument();
+      });
+
+      const targetAccountSelect = screen.getByTestId('inline-target-account-select');
+      expect(targetAccountSelect).toBeInTheDocument();
+      expect(targetAccountSelect.value).toBe('2'); // 출발(1)을 제외한 서브 계좌(2)가 자동 매핑
+    });
+
+    it('인라인 편집 중 EXCHANGE 선택 시 inline-subrow-exchange가 렌더링되고 도착 통화를 선택할 수 있어야 한다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      fireEvent.doubleClick(screen.getByTestId('tx-row-1'));
+
+      // 자산을 현금(KRW)으로 변경하고 유형을 EXCHANGE로 변경
+      const assetSelect = screen.getByTestId('inline-asset-select');
+      fireEvent.change(assetSelect, { target: { value: '2' } });
+
+      const typeSelect = screen.getByTestId('inline-type-select');
+      fireEvent.change(typeSelect, { target: { value: 'EXCHANGE' } });
+
+      // 보조 설정 줄 inline-subrow-exchange 렌더링 검증
+      await waitFor(() => {
+        expect(screen.getByTestId('inline-subrow-exchange')).toBeInTheDocument();
+      });
+
+      const targetAssetSelect = screen.getByTestId('inline-target-asset-select');
+      expect(targetAssetSelect).toBeInTheDocument();
+      expect(targetAssetSelect.value).toBe('3'); // 출발(KRW: 2)을 제외한 현금 자산 USD(3) 매핑
+    });
+
+    it('과거 스냅샷 기준일 이전 거래를 인라인 수정 저장 시 경고 모달이 노출되고 확인 시에만 PUT API가 호출되어야 한다', async () => {
+      let putCalled = false;
+
+      vi.stubGlobal('fetch', vi.fn((url, options) => {
+        if (url.includes('/transactions/1') && options?.method === 'PUT') {
+          putCalled = true;
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ id: 1 }) });
+        }
+        if (url.endsWith('/transactions')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockTransactions) });
+        if (url.endsWith('/accounts')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAccounts) });
+        if (url.endsWith('/assets')) return Promise.resolve({ ok: true, json: () => Promise.resolve(inlineMockAssets) });
+        if (url.endsWith('/snapshots/latest')) return Promise.resolve({ ok: true, json: () => Promise.resolve({ latest_snapshot_date: '2026-04-25' }) });
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
+      }));
+
+      render(
+        <MaskingProvider>
+          <TransactionsTab />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('적립식 매수')).toBeInTheDocument();
+      });
+
+      // 1번 거래(날짜: 2026-04-20 < 2026-04-25) 행 더블클릭
+      fireEvent.doubleClick(screen.getByTestId('tx-row-1'));
+
+      // 인라인 저장 클릭
+      fireEvent.click(screen.getByRole('button', { name: '인라인 저장' }));
+
+      // 경고 모달 노출 확인
+      await waitFor(() => {
+        expect(screen.getByText('과거 거래 수정 확인')).toBeInTheDocument();
+      });
+      expect(putCalled).toBe(false);
+
+      // 모달의 확인 버튼 클릭
+      const confirmButton = screen.getByTestId('past-tx-confirm-btn');
+      fireEvent.click(confirmButton);
+
+      await waitFor(() => {
+        expect(putCalled).toBe(true);
+      });
+    });
+  });
 });
-
-
-
