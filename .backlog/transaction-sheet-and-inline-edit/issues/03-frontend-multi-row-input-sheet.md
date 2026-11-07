@@ -6,7 +6,7 @@
 
 **Blocked by:** `01-backend-bulk-transactions`, `02-frontend-inline-edit-and-columns`
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `src/frontend/src/components/db/TransactionsTab.jsx`에서 기존 상단 단건 입력 폼을 제거하고, 하단 테이블과 동일한 9개 컬럼(`[날짜 | 계좌 | 자산 | 유형 | 수량 | 단가/환율 | 총액 | 메모 | 관리]`)을 가진 **'신규 거래 다중 입력 시트'**(`draftRows` 배열 상태)를 렌더링한다.
 - [x] 초기 데이터 로딩 완료 시 및 일괄 등록 완료 후 `draftRows`에 기본 빈 입력 행 1줄이 자동으로 준비되도록 하고, 상단 계좌 필터(`accountFilter`)가 특정 계좌로 선택되어 있으면 새 기본 행의 `account_id`에 해당 계좌를 기본값으로 반영한다.
