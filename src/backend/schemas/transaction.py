@@ -1,7 +1,7 @@
 """거래 내역 관련 Pydantic 스키마 정의."""
 
 from pydantic import BaseModel, ConfigDict
-from typing import Optional, Literal, ClassVar, Set
+from typing import Optional, Literal, ClassVar, Set, List
 from datetime import date
 
 
@@ -77,3 +77,12 @@ class TransferTransactionRequest(BaseModel):
     amount: float
     transaction_date: date
     memo: Optional[str] = None
+
+
+class BulkTransactionCreateRequest(BaseModel):
+    """다중 거래 내역 일괄 등록 요청 스키마입니다.
+
+    Attributes:
+        transactions (List[TransactionSchema]): 일괄 생성할 거래 내역 목록
+    """
+    transactions: List[TransactionSchema]

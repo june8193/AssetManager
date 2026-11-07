@@ -439,3 +439,201 @@ def test_update_transfer_validation_errors(db_session, tx_setup):
     )
     with pytest.raises(ValueError, match="동일할 수 없습니다"):
         service.update_transaction(init_tx.id, same_account_schema)
+
+
+def test_create_transactions_bulk_mixed(db_session, tx_setup):
+    """일반 거래, 환전, 이체가 혼합된 다중 거래 일괄 등록이 원자적으로 성공하는지 검증합니다."""
+    acc1, acc2, asset_krw, asset_usd, asset_stock = tx_setup
+    service = TransactionService(db_session)
+
+    items = [
+        # 1. 일반 주식 매수 (BUY)
+        TransactionSchema(
+            account_id=acc1.id,
+            asset_id=asset_stock.id,
+            transaction_date=date(2026, 4, 1),
+            type="BUY",
+            quantity=10.0,
+            price=150.0,
+            total_amount=1500.0,
+            currency="USD",
+            memo="주식 매수"
+        ),
+        # 2. 환전 (EXCHANGE: KRW -> USD)
+        TransactionSchema(
+            account_id=acc1.id,
+            asset_id=asset_krw.id,
+            target_asset_id=asset_usd.id,
+            transaction_date=date(2026, 4, 2),
+            type="EXCHANGE",
+            quantity=130000.0,
+            price=1.0,
+            total_amount=130000.0,
+            currency="KRW",
+            exchange_rate=1300.0,
+            memo="환전 테스트"
+        ),
+        # 3. 계좌 간 이체 (TRANSFER: acc1 -> acc2)
+        TransactionSchema(
+            account_id=acc1.id,
+            target_account_id=acc2.id,
+            asset_id=asset_krw.id,
+            transaction_date=date(2026, 4, 3),
+            type="TRANSFER",
+            quantity=50000.0,
+            price=1.0,
+            total_amount=50000.0,
+            currency="KRW",
+            memo="계좌 이체 테스트"
+        ),
+    ]
+
+    results = service.create_transactions_bulk(items)
+
+    # 이체는 WITHDRAW + DEPOSIT 2건으로 확장되므로 총 4건
+    assert len(results) == 4
+    all_db_txs = db_session.query(Transaction).all()
+    assert len(all_db_txs) == 4
+
+    # 1) 일반 거래 검증
+    buy_tx = next(t for t in results if t.type == "BUY")
+    assert buy_tx.account_id == acc1.id
+    assert buy_tx.asset_id == asset_stock.id
+    assert buy_tx.quantity == 10.0
+
+    # 2) 환전 거래 검증
+    exchange_tx = next(t for t in results if t.type == "EXCHANGE")
+    assert exchange_tx.account_id == acc1.id
+    assert exchange_tx.target_asset_id == asset_usd.id
+    assert exchange_tx.exchange_rate == 1300.0
+
+    # 3) 이체 쌍 검증 (WITHDRAW & DEPOSIT)
+    withdraw_tx = next(t for t in results if t.type == "WITHDRAW")
+    deposit_tx = next(t for t in results if t.type == "DEPOSIT")
+    assert withdraw_tx.account_id == acc1.id
+    assert deposit_tx.account_id == acc2.id
+    assert withdraw_tx.transfer_pair_id == deposit_tx.transfer_pair_id
+    assert withdraw_tx.transfer_pair_id is not None
+    assert withdraw_tx.total_amount == 50000.0
+    assert deposit_tx.total_amount == 50000.0
+
+
+def test_create_transactions_bulk_rollback_on_failure(db_session, tx_setup):
+    """다중 거래 등록 중 마지막 항목 검증 실패 시 전체가 롤백되어 DB에 0건만 남는지 검증합니다."""
+    acc1, acc2, asset_krw, asset_usd, asset_stock = tx_setup
+    service = TransactionService(db_session)
+
+    items = [
+        # 1. 정상 일반 거래
+        TransactionSchema(
+            account_id=acc1.id,
+            asset_id=asset_stock.id,
+            transaction_date=date(2026, 4, 1),
+            type="BUY",
+            quantity=10.0,
+            price=150.0,
+            total_amount=1500.0,
+            currency="USD",
+        ),
+        # 2. 유효하지 않은 이체 거래 (출발 계좌와 도착 계좌가 동일함)
+        TransactionSchema(
+            account_id=acc1.id,
+            target_account_id=acc1.id,
+            asset_id=asset_krw.id,
+            transaction_date=date(2026, 4, 2),
+            type="TRANSFER",
+            total_amount=50000.0,
+            currency="KRW"
+        )
+    ]
+
+    with pytest.raises(ValueError, match="동일할 수 없습니다"):
+        service.create_transactions_bulk(items)
+
+    # 롤백 확인: DB에 아무런 트랜잭션도 저장되지 않아야 함
+    all_db_txs = db_session.query(Transaction).all()
+    assert len(all_db_txs) == 0
+
+
+def test_create_transactions_bulk_empty(db_session):
+    """빈 목록 전달 시 ValueError가 발생하는지 검증합니다."""
+    service = TransactionService(db_session)
+    with pytest.raises(ValueError, match="등록할 거래 내역이 없습니다"):
+        service.create_transactions_bulk([])
+
+
+def test_create_transactions_bulk_api(client, db_session, tx_setup):
+    """POST /api/db/transactions/bulk 엔드포인트 동작 및 에러 응답 매핑을 검증합니다."""
+    acc1, acc2, asset_krw, asset_usd, asset_stock = tx_setup
+
+    payload = {
+        "transactions": [
+            {
+                "account_id": acc1.id,
+                "asset_id": asset_stock.id,
+                "transaction_date": "2026-04-01",
+                "type": "BUY",
+                "quantity": 5.0,
+                "price": 200.0,
+                "total_amount": 1000.0,
+                "currency": "USD"
+            },
+            {
+                "account_id": acc1.id,
+                "target_account_id": acc2.id,
+                "asset_id": asset_krw.id,
+                "transaction_date": "2026-04-02",
+                "type": "TRANSFER",
+                "quantity": 20000.0,
+                "price": 1.0,
+                "total_amount": 20000.0,
+                "currency": "KRW"
+            }
+        ]
+    }
+
+    resp = client.post("/api/db/transactions/bulk", json=payload)
+    assert resp.status_code == 200
+    data = resp.json()
+    assert len(data) == 3  # BUY 1건 + TRANSFER(WITHDRAW+DEPOSIT) 2건
+
+    # 에러 케이스 1: 동일 계좌 이체 시 400
+    err_payload_same_acc = {
+        "transactions": [
+            {
+                "account_id": acc1.id,
+                "target_account_id": acc1.id,
+                "asset_id": asset_krw.id,
+                "transaction_date": "2026-04-02",
+                "type": "TRANSFER",
+                "total_amount": 20000.0,
+                "currency": "KRW"
+            }
+        ]
+    }
+    resp_err = client.post("/api/db/transactions/bulk", json=err_payload_same_acc)
+    assert resp_err.status_code == 400
+    assert "동일할 수 없습니다" in resp_err.json()["detail"]
+
+    # 에러 케이스 2: 빈 리스트 시 422
+    resp_empty = client.post("/api/db/transactions/bulk", json={"transactions": []})
+    assert resp_empty.status_code == 422
+    assert "등록할 거래 내역이 없습니다" in resp_empty.json()["detail"]
+
+    # 에러 케이스 3: 존재하지 않는 자산으로 이체 시 404
+    err_payload_no_asset = {
+        "transactions": [
+            {
+                "account_id": acc1.id,
+                "target_account_id": acc2.id,
+                "asset_id": 999999,
+                "transaction_date": "2026-04-02",
+                "type": "TRANSFER",
+                "total_amount": 20000.0,
+                "currency": "KRW"
+            }
+        ]
+    }
+    resp_no_asset = client.post("/api/db/transactions/bulk", json=err_payload_no_asset)
+    assert resp_no_asset.status_code == 404
+    assert "찾을 수 없습니다" in resp_no_asset.json()["detail"]
