@@ -18,6 +18,27 @@ describe('MobileDashboardPage', () => {
       date: '2026-08-30',
       created_at: '2026-08-30T09:00:00Z',
     },
+    snapshots: {
+      history: [
+        {
+          date: '2026-08-29',
+          total: 100000000,
+          acc_1: 100000000,
+          index: 1000.0,
+          index_change_pct: 0.0,
+          index_cum_return_pct: 0.0,
+        },
+        {
+          date: '2026-08-30',
+          total: 125000000,
+          acc_1: 125000000,
+          index: 1250.0,
+          index_change_pct: 25.0,
+          index_cum_return_pct: 25.0,
+        },
+      ],
+      accounts: [{ id: 1, name: '메인 계좌' }],
+    },
     categories: [
       {
         category: '국내주식',
@@ -87,7 +108,7 @@ describe('MobileDashboardPage', () => {
     expect(mockRefresh).toHaveBeenCalled();
   });
 
-  it('데이터 로드 완료 시 대시보드 3대 카드(총 자산, 비중, 성과)가 렌더링되어야 한다', () => {
+  it('데이터 로드 완료 시 총 자산 요약(1번째), 자산 추이(2번째), 자산 비중(3번째), 성과 요약(4번째) 순서로 카드가 렌더링되어야 한다', () => {
     vi.spyOn(useDashboardModule, 'useDashboard').mockReturnValue({
       data: mockDashboardData,
       loading: false,
@@ -101,17 +122,36 @@ describe('MobileDashboardPage', () => {
       </MaskingProvider>
     );
 
-    // 총 자산 카드 확인
+    // 1. 총 자산 요약 카드 확인
+    const totalCardHeader = screen.getByText('총 자산 요약');
     expect(screen.getByText('125,000,000')).toBeInTheDocument();
     expect(screen.getByText(/총 평가 자산/i)).toBeInTheDocument();
 
-    // 카테고리별 비중 카드 확인
+    // 2. 자산 추이 카드 확인
+    const trendCardHeader = screen.getByText('자산 추이');
+    expect(screen.getByRole('button', { name: '총자산 규모 (원)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '수익 지수 (Index)' })).toBeInTheDocument();
+
+    // 3. 카테고리별 비중 카드 확인
+    const categoryCardHeader = screen.getByText('자산 비중');
     expect(screen.getByText('국내주식')).toBeInTheDocument();
     expect(screen.getByText('해외주식')).toBeInTheDocument();
 
-    // 성과 요약 카드 확인
-    expect(screen.getByText('성과 요약')).toBeInTheDocument();
+    // 4. 성과 요약 카드 확인
+    const performanceCardHeader = screen.getByText('성과 요약');
     expect(screen.getByText('2026')).toBeInTheDocument();
+
+    // 배치 순서 검증: 총 자산 요약 -> 자산 추이 -> 자산 비중 -> 성과 요약
+    expect(
+      totalCardHeader.compareDocumentPosition(trendCardHeader) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      trendCardHeader.compareDocumentPosition(categoryCardHeader) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      categoryCardHeader.compareDocumentPosition(performanceCardHeader) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('실시간 시세 새로고침 버튼을 클릭하면 refresh(true)가 호출되어야 한다', async () => {

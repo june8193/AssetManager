@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { dashboardService } from '../services';
+import { buildLiveAssetSnapshots } from '../utils/chartSeriesBuilder';
 
 /**
  * 대시보드 데이터를 조회하고 새로고침하는 커스텀 훅
@@ -29,7 +30,9 @@ export const useDashboard = () => {
         dashboardService.getSnapshots({ all: true }),
       ]);
 
-      setData({ ...summary, yearly, monthly, daily, snapshots });
+      const liveSnapshots = buildLiveAssetSnapshots(snapshots, summary);
+
+      setData({ ...summary, yearly, monthly, daily, snapshots: liveSnapshots });
       setError(null);
       return refreshResult;
     } catch (err) {

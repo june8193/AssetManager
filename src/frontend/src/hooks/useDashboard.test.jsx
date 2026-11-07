@@ -15,11 +15,28 @@ vi.mock('../services', () => ({
 }));
 
 describe('useDashboard 훅 테스트', () => {
-  const mockSummary = { total_valuation_krw: 10000000, accounts: [] };
+  const mockSummary = {
+    total_valuation_krw: 11000000,
+    pending_deposits_krw: 500000,
+    accounts: [{ id: 1, name: '계좌1', total_valuation_krw: 11000000 }],
+  };
   const mockYearly = [{ year: 2026, total_assets: 10000000 }];
   const mockMonthly = [{ month: '2026-08', total_assets: 10000000 }];
   const mockDaily = [{ date: '2026-08-17', total_assets: 10000000 }];
-  const mockSnapshots = { dates: ['2026-08-17'], series: [] };
+  const mockSnapshots = {
+    history: [
+      {
+        date: '2020-01-01',
+        total: 10000000,
+        period_deposit: 10000000,
+        index: 1000.0,
+        index_change_pct: 0.0,
+        index_cum_return_pct: 0.0,
+        acc_1: 10000000,
+      },
+    ],
+    accounts: [{ id: 1, name: '계좌1' }],
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -46,12 +63,18 @@ describe('useDashboard 훅 테스트', () => {
     expect(dashboardService.getDaily).toHaveBeenCalledWith({ all: true });
     expect(dashboardService.getSnapshots).toHaveBeenCalledWith({ all: true });
 
-    expect(result.current.data).toEqual({
-      ...mockSummary,
-      yearly: mockYearly,
-      monthly: mockMonthly,
-      daily: mockDaily,
-      snapshots: mockSnapshots,
+    expect(result.current.data.yearly).toEqual(mockYearly);
+    expect(result.current.data.monthly).toEqual(mockMonthly);
+    expect(result.current.data.daily).toEqual(mockDaily);
+    expect(result.current.data.snapshots.history).toHaveLength(2);
+    expect(result.current.data.snapshots.history[1]).toMatchObject({
+      total: 11000000,
+      period_deposit: 500000,
+      index: 1047.62,
+      index_change_pct: 4.76,
+      index_cum_return_pct: 4.76,
+      acc_1: 11000000,
+      is_live: true,
     });
     expect(result.current.error).toBeNull();
   });

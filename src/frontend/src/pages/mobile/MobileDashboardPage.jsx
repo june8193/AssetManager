@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { RefreshCw, AlertCircle } from 'lucide-react';
 import { useDashboard } from '../../hooks/useDashboard';
 import MobileTotalAssetCard from '../../components/mobile/MobileTotalAssetCard';
+import MobileAssetTrendCard from '../../components/mobile/MobileAssetTrendCard';
 import MobileCategoryBreakdownCard from '../../components/mobile/MobileCategoryBreakdownCard';
 import MobilePerformanceSummaryCard from '../../components/mobile/MobilePerformanceSummaryCard';
 
 /**
  * 모바일 최적화 대시보드 페이지 컴포넌트
- * - 총 자산, 카테고리별 자산 비중, 연간/누적 성과 요약 카드 렌더링
+ * - 총 자산, 자산 추이(수익 지수), 카테고리별 자산 비중, 연간/누적 성과 요약 카드 렌더링
  * - 상단 실시간 시세 새로고침 버튼 및 토스트 알림
  * - 로딩 스켈레톤 및 에러 재시도 처리
  */
@@ -129,13 +130,16 @@ export default function MobileDashboardPage() {
       {/* 1. 총 자산 요약 카드 */}
       <MobileTotalAssetCard data={data} />
 
-      {/* 2. 카테고리별 자산 비중 요약 카드 */}
+      {/* 2. 자산 추이 및 수익 지수 차트 카드 */}
+      <MobileAssetTrendCard data={data.snapshots} />
+
+      {/* 3. 카테고리별 자산 비중 요약 카드 */}
       <MobileCategoryBreakdownCard
         categories={data.categories}
         totalValuation={data.total_valuation_krw}
       />
 
-      {/* 3. 연간 및 누적 수익률 성과 요약 카드 */}
+      {/* 4. 연간 및 누적 수익률 성과 요약 카드 */}
       <MobilePerformanceSummaryCard data={data} />
     </div>
   );
