@@ -21,6 +21,7 @@ module.exports = {
       script: "actions-runner/run.sh",
       cwd: "./",
       autorestart: true,
+      cron_restart: "0 4 * * 0",
       watch: false,
       error_file: "backups/logs/runner-err.log",
       out_file: "backups/logs/runner-out.log",
