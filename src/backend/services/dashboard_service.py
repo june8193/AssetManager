@@ -772,6 +772,7 @@ class DashboardService:
             "total_valuation_krw": total_valuation_krw,
             "exchange_rate": exchange_info,
             "total_contribution": total_contribution,
+            "pending_deposits_krw": pending_deposits_krw,
             "initial_base_asset": initial_base_asset,
             "total_profit": total_profit,
             "cumulative_roi": round(cumulative_roi, 2),
@@ -786,7 +787,16 @@ class DashboardService:
         Returns:
             Dict[str, Any]: {
                 "history": [
-                    {"date": "2024-01-01", "total": 1000.0, "acc_1": 500.0, ...},
+                    {
+                        "date": "2024-01-01",
+                        "total": 1000.0,
+                        "period_deposit": 1000.0,
+                        "index": 1000.0,
+                        "index_change_pct": 0.0,
+                        "index_cum_return_pct": 0.0,
+                        "acc_1": 500.0,
+                        ...
+                    },
                     ...
                 ],
                 "accounts": [{"id": 1, "name": "계좌1"}, ...]
@@ -810,18 +820,50 @@ class DashboardService:
         accounts = self.db.query(Account).all()
         
         # 날짜별로 그룹화
-        history_map = {} # date_str -> { "date": date_str, "total": 0, "acc_1": val, ... }
+        history_map = {}  # date_str -> { "date": date_str, "total": 0.0, "period_deposit": 0.0, "acc_1": val, ... }
         
         for s in snapshots:
             date_str = s.snapshot_date.isoformat()
             if date_str not in history_map:
-                history_map[date_str] = {"date": date_str, "total": 0.0}
+                history_map[date_str] = {
+                    "date": date_str,
+                    "total": 0.0,
+                    "period_deposit": 0.0,
+                }
             
             history_map[date_str]["total"] += s.total_valuation
+            history_map[date_str]["period_deposit"] += (s.period_deposit or 0.0)
             history_map[date_str][f"acc_{s.account_id}"] = s.total_valuation
+
+        sorted_history = sorted(list(history_map.values()), key=lambda x: x["date"])
+
+        # 시간가중수익률(TWR) 연쇄 지수(1,000.00 pt 시작) 산출
+        prev_raw_index = 1000.0
+        prev_total = 0.0
+
+        for i, item in enumerate(sorted_history):
+            curr_total = item["total"]
+            curr_deposit = item["period_deposit"]
+
+            if i == 0:
+                raw_index = 1000.0
+                r_t = 0.0
+            else:
+                increase = curr_total - prev_total
+                profit = increase - curr_deposit
+                base = prev_total + curr_deposit
+                r_t = (profit / base) if base != 0 else 0.0
+                raw_index = prev_raw_index * (1.0 + r_t)
+
+            item["index"] = round(raw_index, 2)
+            item["index_change_pct"] = round(r_t * 100.0, 2)
+            item["index_cum_return_pct"] = round(((raw_index - 1000.0) / 1000.0) * 100.0, 2)
+
+            prev_raw_index = raw_index
+            prev_total = curr_total
             
         return {
-            "history": sorted(list(history_map.values()), key=lambda x: x["date"]),
+            "history": sorted_history,
             "accounts": [{"id": acc.id, "name": acc.name} for acc in accounts]
         }
 

@@ -455,6 +455,7 @@ def test_get_dashboard_summary_with_pending_deposit_and_withdraw(db_session, mon
     summary = asyncio.run(service.get_dashboard_summary())
 
     assert summary["total_contribution"] == 1500000.0
+    assert summary["pending_deposits_krw"] == 500000.0
     assert summary["initial_base_asset"] == 0.0
     # total_profit = total_valuation_krw(500,000) - total_contribution(1,500,000) = -1,000,000
     # (과거 100만 원금에 해당하는 자산이 트랜잭션으로 입력되지 않은 상태이므로)
