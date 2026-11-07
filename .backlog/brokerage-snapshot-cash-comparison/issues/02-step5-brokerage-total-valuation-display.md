@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `src/backend/schemas/snapshot.py`의 `BrokerageCalculateResponse`에 `total_valuation: float = 0.0` 필드를 추가하고, `src/backend/services/snapshot_engine.py`의 `SnapshotEngine.calculate_brokerage`에서 계산된 `total_valuation`을 응답에 포함하여 반환한다.
 - [x] `tests/test_brokerage_snapshot.py`에 `calculate_brokerage_snapshot` 호출 시 비현금 자산 평가액과 원화/달러 예수금이 합산된 `total_valuation`이 정확히 반환되는지 검증하는 테스트를 추가한다.
