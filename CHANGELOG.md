@@ -5,6 +5,25 @@
 
 ---
 
+## [2.4.0] - 2026-11-07
+
+### Added
+- **증권계좌 스냅샷 예수금 2단 비교 대조 UI 및 5단계 평가액 표기 개선** ([상세 스펙](.backlog/done/brokerage-snapshot-cash-comparison/spec.md))
+  - 스냅샷 위저드 4단계(`Step4BrokerageDetail`)에 DB 원장 잔액과 신규 거래/이체 입금을 실시간 합산한 '현재 계좌 예상 원화/달러 예수금' 카드 배치 및 `[동일 적용 →]` 원클릭 버튼 제공
+  - 실제 예수금 타이핑 시 예상 예수금과의 차액(`차액 없음`, `+원화`, `-달러`) 실시간 안내 배지 구현
+  - 스냅샷 5단계(`Step5FinalConfirm`) 최종 확인 테이블에서 증권계좌 총 평가액(주식+예수금 합산)을 메인 굵은 글씨로 표시하고 하단 보조 텍스트로 예수금 잔액 병기
+  - 백엔드 계좌 기준일 현금 잔액 조회 경량 엔드포인트(`GET /api/db/accounts/{account_id}/cash-balance`) 신설 및 증권 정산 응답(`BrokerageCalculateResponse`)에 `total_valuation` 필드 확장
+- **거래내역 다중 입력 시트 및 인라인(In-line) 수정 UI 개편** ([상세 스펙](.backlog/done/transaction-sheet-and-inline-edit/spec.md))
+  - 상단 신규 거래 다중 행 입력 시트 컴포넌트 신설 및 다중 행 추가/삭제, 키보드 Tab/Enter 빠른 입력, 원자적 일괄 등록(`POST /api/db/transactions/bulk`) API 및 서비스 구현
+  - 하단 거래내역 테이블 컬럼을 9개(ID, 일자, 계좌명, 자산분류, 유형, 종목/내용, 금액/수량, 단가/수수료, 메모/작업)로 전면 개편
+  - 거래내역 행 더블클릭 또는 '수정' 버튼 클릭 시 테이블 제자리(In-line) 편집 모드 전환 및 단일 거래 즉시 수정/취소 지원
+- **입출금 제외 자산 수익 지수 및 실시간 추이 시각화** ([상세 스펙](.backlog/done/visualize-net-asset-returns/spec.md))
+  - 스냅샷 주기별 TWR(시간가중수익률) 기반 순수 자산 수익 지수(1,000pt 기준) 산출 및 현재 실시간 평가액을 연결하는 실시간 차트 끝점 병합 API 구현
+  - 데스크톱 대시보드 자산 추이 차트(`AssetChart`) 내 `수익 지수(Index)` 탭 신설, 벤치마크(S&P 500, KOSPI) 대비 상대 성과 및 순수 투자 성과 곡선 시각화
+  - 모바일 대시보드 상단 2번째 위치에 자산 추이 및 수익 지수를 토글할 수 있는 전용 카드(`MobileAssetTrendCard`) 신설
+
+---
+
 ## [2.3.0] - 2026-11-01
 
 ### Added
