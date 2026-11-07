@@ -282,6 +282,54 @@ describe('위저드 스텝별 컴포넌트 렌더링 테스트', () => {
     expect(secondBodyRowText).toContain('미래에셋증권');
   });
 
+  it('Step5FinalConfirm: 증권계좌에 calcResult.total_valuation이 있으면 총 평가액을 메인으로 표시하고 하단에 예수금을 병기한다', () => {
+    render(
+      <Step5FinalConfirm
+        accounts={[mockBrokerageAccount]}
+        selectedAccountIds={[1]}
+        accountsFormData={{
+          1: {
+            currentKrw: '1500000',
+            currentUsd: '200',
+            calcResult: {
+              total_valuation: 8500000,
+              diff_krw: 0,
+              period_profit: 50000,
+            },
+            isConfirmed: true,
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByText('8,500,000원')).toBeInTheDocument();
+    expect(screen.getByText(/예수금: 1,500,000원 · 200\$/)).toBeInTheDocument();
+  });
+
+  it('Step5FinalConfirm: 증권계좌에 calcResult.total_valuation이 있고 달러 예수금이 0이면 원화 예수금만 병기한다', () => {
+    render(
+      <Step5FinalConfirm
+        accounts={[mockBrokerageAccount]}
+        selectedAccountIds={[1]}
+        accountsFormData={{
+          1: {
+            currentKrw: '1000000',
+            currentUsd: '0',
+            calcResult: {
+              total_valuation: 5000000,
+              diff_krw: 0,
+              period_profit: 0,
+            },
+            isConfirmed: true,
+          },
+        }}
+      />
+    );
+
+    expect(screen.getByText('5,000,000원')).toBeInTheDocument();
+    expect(screen.getByText('예수금: 1,000,000원')).toBeInTheDocument();
+  });
+
   it('Step4BrokerageDetail / Step2BrokerageDetail: 차액 또는 정합성 경고 발생 시 빨간색 경고 카드 및 확인 체크박스 가드를 렌더링한다', () => {
     const confirmMock = vi.fn();
 

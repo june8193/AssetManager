@@ -60,6 +60,7 @@ class BrokerageCalculateResponse(BaseModel):
     theoretical_usd: float
     diff_krw: float
     diff_usd: float
+    total_valuation: float = 0.0
     existing_transactions: List[TransactionSchema] = []
     period_deposit: float = 0.0
     period_profit: float = 0.0

@@ -119,18 +119,33 @@ export const Step5FinalConfirm = ({
                     </div>
                   );
                 }
-                finalValElement = (
-                  <div className="flex flex-col items-end">
-                    <span className="font-bold text-slate-900">
-                      {Math.round(parseFloat(data.currentKrw || 0)).toLocaleString()}원
-                    </span>
-                    {parseFloat(data.currentUsd || 0) > 0 && (
-                      <span className="text-[10px] text-slate-500">
-                        {parseFloat(data.currentUsd || 0).toLocaleString()}$
+                if (data.calcResult?.total_valuation !== undefined && data.calcResult?.total_valuation !== null) {
+                  const krw = Math.round(Number(data.currentKrw || 0));
+                  const usd = Number(data.currentUsd || 0);
+                  finalValElement = (
+                    <div className="flex flex-col items-end">
+                      <span className="font-medium text-slate-800">
+                        {Math.round(data.calcResult.total_valuation).toLocaleString()}원
                       </span>
-                    )}
-                  </div>
-                );
+                      <span className="text-xs text-slate-500">
+                        예수금: {krw.toLocaleString()}원{usd > 0 ? ` · ${usd.toLocaleString()}$` : ''}
+                      </span>
+                    </div>
+                  );
+                } else {
+                  finalValElement = (
+                    <div className="flex flex-col items-end">
+                      <span className="font-bold text-slate-900">
+                        {Math.round(parseFloat(data.currentKrw || 0)).toLocaleString()}원
+                      </span>
+                      {parseFloat(data.currentUsd || 0) > 0 && (
+                        <span className="text-[10px] text-slate-500">
+                          {parseFloat(data.currentUsd || 0).toLocaleString()}$
+                        </span>
+                      )}
+                    </div>
+                  );
+                }
                 if (data.calcResult) {
                   const pDeposit = Math.round(data.calcResult.period_deposit || 0);
                   const pProfit = Math.round(data.calcResult.period_profit || 0);

@@ -391,6 +391,50 @@ def test_get_account_cash_balance_api_not_found(client):
     assert response.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_calculate_brokerage_snapshot_total_valuation(db_session, setup_assets):
+    """증권 스냅샷 계산 시 비현금 자산 평가액과 원화/달러 예수금이 합산된 total_valuation이 반환되는지 검증합니다."""
+    krw, usd, stock = setup_assets
+    account = Account(user_id=1, name="평가액검증계좌", provider="한국투자증권", account_type="BROKERAGE")
+    db_session.add(account)
+    db_session.commit()
+
+    today = datetime.date.today()
+
+    # 1. 초기 입금 및 삼성전자 10주 매수
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=krw.id, transaction_date=today,
+        type="DEPOSIT", quantity=1000000, price=1.0, total_amount=1000000, currency="KRW"
+    ))
+    db_session.add(Transaction(
+        account_id=account.id, asset_id=stock.id, transaction_date=today,
+        type="BUY", quantity=10, price=50000, total_amount=500000, currency="KRW"
+    ))
+    db_session.commit()
+
+    req = BrokerageCalculateRequest(
+        account_id=account.id,
+        snapshot_date=today,
+        new_transactions=[],
+        current_krw=200000.0,
+        current_usd=100.0,
+        exchange_rate=1300.0
+    )
+
+    with patch.object(DashboardService, "get_current_prices", new_callable=AsyncMock) as mock_prices:
+        mock_prices.return_value = {"005930": 70000.0}
+
+        res = await calculate_brokerage_snapshot(req, db_session)
+
+        # 비현금 자산: 10주 * 70,000 = 700,000원
+        # 원화 예수금: 200,000원
+        # 달러 예수금: 100달러 * 1,300원 = 130,000원
+        # 총 평가액 = 700,000 + 200,000 + 130,000 = 1,030,000원
+        assert hasattr(res, "total_valuation")
+        assert res.total_valuation == 1030000.0
+
+
+
 
 
 

@@ -272,6 +272,7 @@ class SnapshotEngine:
             theoretical_usd=theoretical_usd,
             diff_krw=diff_krw,
             diff_usd=diff_usd,
+            total_valuation=total_valuation,
             existing_transactions=existing_transactions,
             period_deposit=period_deposit,
             period_profit=period_profit,
