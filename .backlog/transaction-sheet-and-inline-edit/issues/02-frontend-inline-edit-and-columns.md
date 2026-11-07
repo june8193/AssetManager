@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** done
+**Status:** resolved
 
 - [x] `src/frontend/src/components/db/TransactionsTab.jsx`의 하단 거래내역 테이블 헤더와 읽기 전용 행을 `[날짜 | 계좌 | 자산 | 유형 | 수량 | 단가/환율 | 총액 | 메모 | 관리]` 9개 컬럼으로 개편하여, `자산` 셀에 티커와 자산명을 함께 표시하고 `메모` 셀에 `tx.memo || '-'`를 표시한다.
 - [x] 하단 테이블에서 `[수정]` 버튼 클릭 또는 읽기 전용 행 더블클릭(`onDoubleClick`) 시 `editingId`를 해당 거래 ID로 설정하고, 해당 행 위치에서 즉시 인라인 편집 입력 컨트롤(`날짜`, `계좌`, `자산`, `유형`, `수량`, `단가`, `총액`, `메모` 및 우측 `[저장]`/`[취소]` 버튼)을 렌더링한다.
