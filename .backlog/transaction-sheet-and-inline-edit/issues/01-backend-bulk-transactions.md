@@ -6,7 +6,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `src/backend/schemas/transaction.py`에 `transactions: List[TransactionSchema]` 필드를 가지는 `BulkTransactionCreateRequest` 스키마를 정의하고 `src/backend/schemas/__init__.py`에 export한다.
 - [x] `src/backend/services/transaction_service.py`의 `TransactionService`에 `create_transactions_bulk(self, items: List[TransactionSchema]) -> List[Transaction]` 메서드를 구현한다:
