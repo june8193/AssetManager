@@ -6,7 +6,7 @@ from typing import List, Optional
 from datetime import date
 
 from ..database import get_db
-from ..schemas import TransactionSchema, TransferTransactionRequest
+from ..schemas import TransactionSchema, TransferTransactionRequest, BulkTransactionCreateRequest
 from ..services.transaction_service import TransactionService
 
 router = APIRouter(
@@ -52,6 +52,31 @@ def create_transaction(transaction: TransactionSchema, db: Session = Depends(get
         return TransactionService(db).create_transaction(transaction)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
+
+
+@router.post("/transactions/bulk", response_model=List[TransactionSchema])
+def create_transactions_bulk(req: BulkTransactionCreateRequest, db: Session = Depends(get_db)):
+    """다중 거래 내역(일반, 환전, 이체)을 원자적으로 일괄 생성합니다.
+
+    Args:
+        req (BulkTransactionCreateRequest): 일괄 생성할 거래 내역 요청 정보.
+        db (Session): 데이터베이스 세션.
+
+    Returns:
+        List[TransactionSchema]: 생성된 거래 내역 목록.
+
+    Raises:
+        HTTPException: 동일 계좌 이체 시 400, 자산/계좌 미존재 시 404, 기타 검증 오류 시 422.
+    """
+    try:
+        return TransactionService(db).create_transactions_bulk(req.transactions)
+    except ValueError as e:
+        err_msg = str(e)
+        if "동일할 수 없습니다" in err_msg:
+            raise HTTPException(status_code=400, detail=err_msg)
+        if "찾을 수 없습니다" in err_msg:
+            raise HTTPException(status_code=404, detail=err_msg)
+        raise HTTPException(status_code=422, detail=err_msg)
 
 
 @router.post("/transactions/transfer", response_model=List[TransactionSchema])

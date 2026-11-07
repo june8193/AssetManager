@@ -2,7 +2,7 @@
 
 from .account import UserSchema, AccountSchema, AccountCashBalanceResponse
 from .asset import AssetSchema
-from .transaction import TransactionSchema, TransferTransactionRequest
+from .transaction import TransactionSchema, TransferTransactionRequest, BulkTransactionCreateRequest
 from .snapshot import (
     SaveSnapshotRequest,
     SnapshotPreviewSchema,
@@ -65,6 +65,7 @@ __all__ = [
     "AssetSchema",
     "TransactionSchema",
     "TransferTransactionRequest",
+    "BulkTransactionCreateRequest",
     "SaveSnapshotRequest",
     "SnapshotPreviewSchema",
     "SnapshotSchema",

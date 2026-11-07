@@ -1,7 +1,7 @@
 """트랜잭션(거래 내역, 계좌 이체, 환전) 비즈니스 로직을 처리하는 딥 도메인 서비스 모듈입니다."""
 
 import uuid
-from typing import List, Optional
+from typing import List, Optional, Tuple
 from datetime import date
 from sqlalchemy.orm import Session, joinedload
 from ..models import Transaction, Asset, Account, AccountSnapshot
@@ -80,6 +80,80 @@ class TransactionService:
 
         return transaction.model_dump(exclude=TransactionSchema.NON_DB_FIELDS)
 
+    def _build_transfer_pair_instances(
+        self,
+        source_account_id: int,
+        target_account_id: int,
+        asset_id: int,
+        amount: float,
+        transaction_date: date,
+        quantity: Optional[float] = None,
+        price: Optional[float] = None,
+        currency: Optional[str] = None,
+        exchange_rate: Optional[float] = None,
+        memo: Optional[str] = None,
+        source: str = "MANUAL",
+        external_id: Optional[str] = None,
+        transfer_pair_id: Optional[str] = None,
+    ) -> Tuple[List[Transaction], Optional[str]]:
+        """이체 거래 쌍(WITHDRAW + DEPOSIT) 모델 인스턴스 및 경고 메시지를 생성합니다.
+
+        Args:
+            source_account_id (int): 출발 계좌 식별자.
+            target_account_id (int): 도착 계좌 식별자.
+            asset_id (int): 이체 자산 식별자.
+            amount (float): 총 이체 금액.
+            transaction_date (date): 거래 일자.
+            quantity (Optional[float]): 수량. 미지정 시 amount 사용.
+            price (Optional[float]): 단가. 미지정 시 1.0 사용.
+            currency (Optional[str]): 통화. 미지정 시 자산 통화 사용.
+            exchange_rate (Optional[float]): 환율.
+            memo (Optional[str]): 메모.
+            source (str): 거래 출처. 기본값 "MANUAL".
+            external_id (Optional[str]): 외부 시스템 연동 식별자.
+            transfer_pair_id (Optional[str]): 이체 쌍 고유 식별자(UUID). 미지정 시 신규 발급.
+
+        Returns:
+            Tuple[List[Transaction], Optional[str]]: [출금 거래, 입금 거래] 인스턴스 목록 및 과거 스냅샷 경고 메시지.
+
+        Raises:
+            ValueError: 출발 계좌와 도착 계좌가 동일하거나 자산을 찾을 수 없을 때.
+        """
+        if source_account_id == target_account_id:
+            raise ValueError("출발 계좌와 도착 계좌가 동일할 수 없습니다.")
+
+        asset = self.db.query(Asset).filter(Asset.id == asset_id).first()
+        if not asset:
+            raise ValueError("자산을 찾을 수 없습니다.")
+
+        pair_id = transfer_pair_id or str(uuid.uuid4())
+        tx_currency = currency or (asset.country if asset.country in ["USD", "KRW"] else "KRW")
+        tx_qty = quantity if quantity else amount
+        tx_price = price if price else 1.0
+
+        base_kwargs = {
+            "asset_id": asset_id,
+            "target_asset_id": None,
+            "transaction_date": transaction_date,
+            "quantity": tx_qty,
+            "price": tx_price,
+            "total_amount": amount,
+            "currency": tx_currency,
+            "exchange_rate": exchange_rate,
+            "memo": memo,
+            "source": source,
+            "external_id": external_id,
+            "transfer_pair_id": pair_id,
+        }
+        tx_withdraw = Transaction(account_id=source_account_id, type="WITHDRAW", **base_kwargs)
+        tx_deposit = Transaction(account_id=target_account_id, type="DEPOSIT", **base_kwargs)
+
+        warning_src = self.check_past_snapshot_warning(source_account_id, transaction_date)
+        warning_tgt = self.check_past_snapshot_warning(target_account_id, transaction_date)
+        warning = warning_src or warning_tgt
+
+        return [tx_withdraw, tx_deposit], warning
+
     def create_transaction(self, transaction: TransactionSchema) -> Transaction:
         """새로운 거래 내역을 생성합니다."""
         data = self.validate_and_extract_transaction_data(transaction)
@@ -96,43 +170,78 @@ class TransactionService:
 
     def create_transfer_pair(self, req: TransferTransactionRequest) -> List[Transaction]:
         """계좌 간 이체 트랜잭션(WITHDRAW + DEPOSIT 쌍)을 원자적으로 생성합니다."""
-        if req.source_account_id == req.target_account_id:
-            raise ValueError("출발 계좌와 도착 계좌가 동일할 수 없습니다.")
+        pair_txs, warning = self._build_transfer_pair_instances(
+            source_account_id=req.source_account_id,
+            target_account_id=req.target_account_id,
+            asset_id=req.asset_id,
+            amount=req.amount,
+            transaction_date=req.transaction_date,
+            memo=req.memo,
+        )
 
-        asset = self.db.query(Asset).filter(Asset.id == req.asset_id).first()
-        if not asset:
-            raise ValueError("자산을 찾을 수 없습니다.")
-
-        transfer_pair_id = str(uuid.uuid4())
-        currency = asset.country if asset.country in ["USD", "KRW"] else "KRW"
-
-        base_kwargs = {
-            "asset_id": req.asset_id,
-            "transaction_date": req.transaction_date,
-            "quantity": req.amount,
-            "price": 1.0,
-            "total_amount": req.amount,
-            "currency": currency,
-            "memo": req.memo,
-            "transfer_pair_id": transfer_pair_id
-        }
-        tx_withdraw = Transaction(account_id=req.source_account_id, type="WITHDRAW", **base_kwargs)
-        tx_deposit = Transaction(account_id=req.target_account_id, type="DEPOSIT", **base_kwargs)
-
-        pair_txs = [tx_withdraw, tx_deposit]
         self.db.add_all(pair_txs)
         self.db.commit()
-
-        # 과거 스냅샷 경고 확인
-        warning_src = self.check_past_snapshot_warning(req.source_account_id, req.transaction_date)
-        warning_tgt = self.check_past_snapshot_warning(req.target_account_id, req.transaction_date)
-        warning = warning_src or warning_tgt
 
         for tx in pair_txs:
             self.db.refresh(tx)
             setattr(tx, "warning", warning)
 
         return pair_txs
+
+    def create_transactions_bulk(self, items: List[TransactionSchema]) -> List[Transaction]:
+        """다중 거래 내역(일반 거래, 환전, 이체)을 단일 트랜잭션으로 원자적(All-or-Nothing) 일괄 생성합니다.
+
+        Args:
+            items (List[TransactionSchema]): 일괄 생성할 거래 내역 스키마 목록.
+
+        Returns:
+            List[Transaction]: 생성된 DB 거래 모델 인스턴스 목록.
+
+        Raises:
+            ValueError: 빈 목록 전달 시, 또는 거래 검증(동일 계좌 이체, 필수 자산/계좌 누락 등) 실패 시.
+        """
+        if not items:
+            raise ValueError("등록할 거래 내역이 없습니다.")
+
+        tx_instances: List[Transaction] = []
+        warnings_map: List[Optional[str]] = []
+
+        for item in items:
+            if item.type == "TRANSFER":
+                if not item.target_account_id:
+                    raise ValueError("도착 계좌(target_account_id)는 필수입니다.")
+
+                pair_txs, warning = self._build_transfer_pair_instances(
+                    source_account_id=item.account_id,
+                    target_account_id=item.target_account_id,
+                    asset_id=item.asset_id,
+                    amount=item.total_amount,
+                    transaction_date=item.transaction_date,
+                    quantity=item.quantity,
+                    price=item.price,
+                    currency=item.currency,
+                    exchange_rate=item.exchange_rate,
+                    memo=item.memo,
+                    source=item.source,
+                    external_id=item.external_id,
+                )
+                tx_instances.extend(pair_txs)
+                warnings_map.extend([warning, warning])
+            else:
+                data = self.validate_and_extract_transaction_data(item)
+                tx = Transaction(**data)
+                warning = self.check_past_snapshot_warning(item.account_id, item.transaction_date)
+                tx_instances.append(tx)
+                warnings_map.append(warning)
+
+        self.db.add_all(tx_instances)
+        self.db.commit()
+
+        for tx, warning in zip(tx_instances, warnings_map):
+            self.db.refresh(tx)
+            setattr(tx, "warning", warning)
+
+        return tx_instances
 
     def update_transaction(self, transaction_id: int, transaction: TransactionSchema) -> Transaction:
         """기존 거래 내역 정보를 수정하고 연동된 이체 트랜잭션도 연쇄 수정합니다.
