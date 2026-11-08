@@ -7,14 +7,36 @@
 
 import asyncio
 import datetime
+import functools
 from typing import List, Optional
 from zoneinfo import ZoneInfo
 import holidays
 import httpx
 
 
+@functools.lru_cache(maxsize=128)
+def _get_kr_holidays(year: int) -> holidays.HolidayBase:
+    """한국 공휴일(holidays.SouthKorea) 인스턴스를 연도별로 캐시하여 반환합니다."""
+    return holidays.SouthKorea(years=year)
+
+
+@functools.lru_cache(maxsize=128)
+def _get_us_holidays(year: int) -> holidays.HolidayBase:
+    """미국 NYSE 공휴일(holidays.NYSE) 인스턴스를 연도별로 캐시하여 반환합니다."""
+    return holidays.NYSE(years=year)
+
+
 class MarketCalendar:
     """한국 및 미국 주식 시장의 운영 시간 및 휴장일을 판정하는 캘린더 클래스입니다."""
+
+    _get_kr_holidays = staticmethod(_get_kr_holidays)
+    _get_us_holidays = staticmethod(_get_us_holidays)
+
+    @classmethod
+    def clear_cache(cls) -> None:
+        """연도별 공휴일 캐시를 초기화합니다."""
+        _get_kr_holidays.cache_clear()
+        _get_us_holidays.cache_clear()
 
     # 국가별 시장 기준 시간대
     COUNTRY_TIMEZONES = {
@@ -124,8 +146,8 @@ class MarketCalendar:
             if cls._is_krx_year_end_holiday(target_date):
                 return "연말 휴장일"
 
-            # SouthKorea 공휴일
-            kr_holidays = holidays.SouthKorea(years=target_date.year)
+            # SouthKorea 공휴일 (연도별 인스턴스 캐싱)
+            kr_holidays = _get_kr_holidays(target_date.year)
             if target_date in kr_holidays:
                 holiday_name = kr_holidays.get(target_date)
                 # 제헌절(7/17)은 2008년 이후 공휴일에서 제외되었으며 한국 증시는 개장함
@@ -134,7 +156,7 @@ class MarketCalendar:
                 return cls.HOLIDAY_NAME_MAP.get(holiday_name, holiday_name)
 
         elif country_upper == "US":
-            nyse_holidays = holidays.NYSE(years=target_date.year)
+            nyse_holidays = _get_us_holidays(target_date.year)
             if target_date in nyse_holidays:
                 holiday_name = nyse_holidays.get(target_date)
                 return cls.HOLIDAY_NAME_MAP.get(holiday_name, holiday_name)

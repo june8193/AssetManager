@@ -434,4 +434,26 @@ class TestHistoricalPriceCache:
             missing = cache.find_missing_trading_days(ticker, holiday_date, holiday_date, country="KR")
             assert holiday_date not in missing
 
+    def test_find_missing_ranges_calls_get_trading_days_only_once(self, db_session, monkeypatch):
+        """find_missing_ranges 실행 시 내부에서 calendar.get_trading_days가 중복 호출되지 않고 1회만 호출되는지 검증합니다."""
+        cache = HistoricalPriceCache(db=db_session)
+        ticker = "005930"
+        start = datetime.date(2026, 1, 1)
+        end = datetime.date(2026, 1, 15)
+
+        get_trading_days_calls = 0
+        original_get_trading_days = cache.calendar.get_trading_days
+
+        def spy_get_trading_days(*args, **kwargs):
+            nonlocal get_trading_days_calls
+            get_trading_days_calls += 1
+            return original_get_trading_days(*args, **kwargs)
+
+        monkeypatch.setattr(cache.calendar, "get_trading_days", spy_get_trading_days)
+
+        ranges = cache.find_missing_ranges(ticker, start, end, country="KR")
+        assert len(ranges) > 0
+        assert get_trading_days_calls == 1, (
+            f"calendar.get_trading_days가 1회만 호출되어야 하지만 {get_trading_days_calls}회 호출됨"
+        )
 
