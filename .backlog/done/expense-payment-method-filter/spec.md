@@ -1,6 +1,6 @@
 # Spec: 지출관리 결제수단별 필터링 전환 및 요약 카드 인터랙션 (Expense Payment Method Filtering)
 
-Status: ready-for-agent
+Status: resolved
 
 ## Problem Statement (문제 정의)
 
