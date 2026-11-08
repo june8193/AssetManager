@@ -10,7 +10,7 @@ import bisect
 from typing import List, Dict, Any, Optional, TypedDict, Union
 from sqlalchemy.orm import Session
 
-from src.backend.models import HistoricalPrice, AccountSnapshot, Asset, ExchangeRate
+from src.backend.models import HistoricalPrice, AccountSnapshot, Asset, ExchangeRate, Account, Transaction
 from src.backend.market import MarketDataProvider
 from src.backend.services.ledger_engine import LedgerEngine
 
@@ -701,8 +701,14 @@ class BenchmarkService:
     ) -> List[Dict[str, Any]]:
         """기간별 기여도 기준으로 정렬하여 상위 또는 하위 랭킹 목록을 추출합니다.
 
+        노이즈 필터링:
+        해당 기간에 실제 보유했거나(기초/기말 수량 > 0), 거래가 발생했거나, 손익(total_pnl != 0) 또는
+        기여도(contribution != 0)가 존재하는 종목을 후보로 합니다.
+        Top Contributors(reverse=True)는 기여도 내림차순,
+        Top Detractors(reverse=False)는 기여도 오름차순으로 정렬합니다.
+
         Args:
-            items (List[Dict[str, Any]]): 보유 종목별 기여도 데이터 목록
+            items (List[Dict[str, Any]]): 종목별 기여도 데이터 목록
             period_key (str): 기간 키 ('YTD', '1M', '3M', '1Y')
             reverse (bool): True이면 내림차순(Top Contributors), False이면 오름차순(Top Detractors)
             limit (int): 추출할 종목 수 (기본값: 3)
@@ -710,8 +716,19 @@ class BenchmarkService:
         Returns:
             List[Dict[str, Any]]: 랭킹 종목 목록
         """
+        eligible_items = []
+        for h in items:
+            c = h.get("contributions", {}).get(period_key, 0.0)
+            tot_pnl = h.get("total_pnl", {}).get(period_key, 0.0)
+            status = h.get("status")
+            if status == "HOLDING" or c != 0.0 or tot_pnl != 0.0:
+                eligible_items.append(h)
+
+        if not eligible_items:
+            eligible_items = items
+
         sorted_items = sorted(
-            items,
+            eligible_items,
             key=lambda x: (x["contributions"].get(period_key, 0.0), x["ticker"]),
             reverse=reverse
         )
@@ -719,20 +736,327 @@ class BenchmarkService:
             {
                 "ticker": h["ticker"],
                 "name": h["name"],
+                "major_category": h.get("major_category", ""),
+                "sub_category": h.get("sub_category", ""),
+                "currency": h.get("currency", "KRW"),
+                "status": h.get("status", "HOLDING"),
                 "weight": h["weight"],
+                "capital_pnl": h["capital_pnl"].get(period_key, 0.0),
+                "dividend_pnl": h["dividend_pnl"].get(period_key, 0.0),
+                "total_pnl": h["total_pnl"].get(period_key, 0.0),
+                "total_pnl_krw": h["total_pnl_krw"].get(period_key, 0),
+                "capital_return": h["capital_returns"].get(period_key, 0.0),
                 "return": h["returns"].get(period_key, 0.0),
+                "price_return": h["price_returns"].get(period_key, 0.0),
+                "capital_contribution": h["capital_contributions"].get(period_key, 0.0),
+                "dividend_contribution": h["dividend_contributions"].get(period_key, 0.0),
                 "contribution": h["contributions"].get(period_key, 0.0),
             }
             for h in sorted_items[:limit]
         ]
 
+    def _calculate_base_caps_by_period(
+        self,
+        period_ranges: Dict[str, datetime.date],
+        as_of: datetime.date,
+        exchange_rate: float,
+        positions_at_start: Dict[str, Any],
+        asset_map: Dict[str, Asset],
+        prices_by_ticker: Dict[str, List[HistoricalPrice]],
+        period_txs: List[Transaction],
+        total_valuation_krw: float,
+    ) -> Dict[str, float]:
+        """4대 분석 기간별 포트폴리오 기준자본(BaseCap)을 일괄 산출합니다.
+
+        우선순위 1로 AccountSnapshot 기반(기초 평가액 + 기간 내 순입금)을 적용하여
+        포트폴리오 기간 누적수익률과 분모를 일치시키고, 스냅샷 부재 시 원장(Ledger) 기반으로 폴백합니다.
+
+        Args:
+            period_ranges (Dict[str, datetime.date]): 기간별 시작일 맵
+            as_of (datetime.date): 기준일자
+            exchange_rate (float): 기준일 단일 환율
+            positions_at_start (Dict[str, Any]): 기간 시작일별 포지션 상태
+            asset_map (Dict[str, Asset]): 자산 티커 -> Asset 객체 맵
+            prices_by_ticker (Dict[str, List[HistoricalPrice]]): 티커별 시세 목록
+            period_txs (List[Transaction]): 기간 내 트랜잭션 목록
+            total_valuation_krw (float): 기말 포트폴리오 총평가액
+
+        Returns:
+            Dict[str, float]: 기간 키별 기준자본(KRW) 맵
+        """
+        earliest_start_date = min(period_ranges.values())
+        # N+1 쿼리 방지: 분석 구간 내 전체 스냅샷을 1회 일괄 조회하여 메모리 매핑
+        all_snapshots = (
+            self.db.query(AccountSnapshot)
+            .filter(AccountSnapshot.snapshot_date <= as_of)
+            .order_by(AccountSnapshot.snapshot_date.asc())
+            .all()
+        )
+        snapshots_by_date: Dict[datetime.date, List[AccountSnapshot]] = {}
+        for s in all_snapshots:
+            snapshots_by_date.setdefault(s.snapshot_date, []).append(s)
+
+        sorted_snap_dates = sorted(snapshots_by_date.keys())
+
+        def get_price_record_at_or_before(p_list: List[HistoricalPrice], target_date: datetime.date) -> Optional[HistoricalPrice]:
+            if not p_list:
+                return None
+            dates = [item.price_date for item in p_list]
+            idx = bisect.bisect_right(dates, target_date)
+            if idx > 0:
+                return p_list[idx - 1]
+            return p_list[0]
+
+        base_cap_by_period: Dict[str, float] = {}
+        for p_key, start_d in period_ranges.items():
+            # start_d 이하인 가장 최신 스냅샷 일자 탐색
+            idx = bisect.bisect_right(sorted_snap_dates, start_d)
+            if idx > 0:
+                prev_date = sorted_snap_dates[idx - 1]
+                base_val = sum(s.total_valuation or 0.0 for s in snapshots_by_date[prev_date])
+                # start_d < date <= as_of 기간의 순입금액 합산
+                net_deposit = sum(
+                    s.period_deposit or 0.0
+                    for d in sorted_snap_dates[idx:]
+                    if d <= as_of
+                    for s in snapshots_by_date[d]
+                )
+                base_cap = base_val + net_deposit
+            else:
+                # 스냅샷 부재 시 원장 기반 계산
+                st_state = positions_at_start[p_key]
+                st_cash = st_state.cash_krw + (st_state.cash_usd * exchange_rate)
+                st_holdings = 0.0
+                for t, q in st_state.holdings.items():
+                    ast = asset_map.get(t)
+                    p_rec = get_price_record_at_or_before(prices_by_ticker.get(t, []), start_d)
+                    p_val = p_rec.close_price if p_rec else 0.0
+                    fx = exchange_rate if ast and ast.country == "US" else 1.0
+                    st_holdings += q * p_val * fx
+                base_val = st_cash + st_holdings
+                net_deposit = LedgerEngine.calculate_net_deposits(
+                    period_txs, start_date=start_d, end_date=as_of, usd_rate=exchange_rate
+                )
+                # 기간 내 INITIAL_BALANCE 입금액 가산
+                init_bal_krw = 0.0
+                for tx in period_txs:
+                    if tx.transaction_date > start_d and tx.transaction_date <= as_of and tx.type == "INITIAL_BALANCE":
+                        amt = float(tx.total_amount or 0.0)
+                        if amt == 0.0 and tx.quantity:
+                            amt = float(tx.quantity) * float(tx.price or 0.0)
+                        if tx.currency == "USD":
+                            amt *= exchange_rate
+                        init_bal_krw += amt
+                base_cap = base_val + net_deposit + init_bal_krw
+
+            if base_cap <= 0:
+                base_cap = total_valuation_krw if total_valuation_krw > 0 else 1.0
+            base_cap_by_period[p_key] = base_cap
+
+        return base_cap_by_period
+
+    def _calculate_single_holding_attribution(
+        self,
+        asset: Asset,
+        as_of: datetime.date,
+        period_ranges: Dict[str, datetime.date],
+        state_end: Any,
+        positions_at_start: Dict[str, Any],
+        prices_by_ticker: Dict[str, List[HistoricalPrice]],
+        txs_by_asset_id: Dict[int, List[Transaction]],
+        base_cap_by_period: Dict[str, float],
+        total_valuation_krw: float,
+        exchange_rate: float,
+    ) -> Dict[str, Any]:
+        """단일 비현금 상장 자산의 4대 기간 실제 발생 손익, 3종 수익률 및 3종 기여도를 산출합니다.
+
+        Args:
+            asset (Asset): 분석 대상 자산 인스턴스
+            as_of (datetime.date): 기준일자
+            period_ranges (Dict[str, datetime.date]): 기간별 시작일
+            state_end (Any): 기준일 시점 원장 포지션 상태
+            positions_at_start (Dict[str, Any]): 기간 시작일별 포지션 상태
+            prices_by_ticker (Dict[str, List[HistoricalPrice]]): 티커별 시세 목록
+            txs_by_asset_id (Dict[int, List[Transaction]]): 자산 ID별 트랜잭션 맵
+            base_cap_by_period (Dict[str, float]): 기간별 기준자본(KRW)
+            total_valuation_krw (float): 기말 포트폴리오 총평가액(KRW)
+            exchange_rate (float): 기준일 단일 환율
+
+        Returns:
+            Dict[str, Any]: holdings_attribution 규격의 단일 종목 성과 딕셔너리
+        """
+        ticker = asset.ticker
+        currency = "USD" if asset.country == "US" else "KRW"
+        fx = exchange_rate if currency == "USD" else 1.0
+
+        price_history = prices_by_ticker.get(ticker, [])
+
+        def get_price_record_at_or_before(p_list: List[HistoricalPrice], target_date: datetime.date) -> Optional[HistoricalPrice]:
+            if not p_list:
+                return None
+            dates = [item.price_date for item in p_list]
+            idx = bisect.bisect_right(dates, target_date)
+            if idx > 0:
+                return p_list[idx - 1]
+            return p_list[0]
+
+        p_end_rec = get_price_record_at_or_before(price_history, as_of)
+        p_end = p_end_rec.close_price if p_end_rec else 0.0
+
+        q_end = state_end.holdings.get(ticker, 0.0)
+        status = "HOLDING" if q_end > 0.000001 else "CLOSED"
+        val = q_end * p_end
+        val_krw = round(val * fx) if currency == "USD" else round(val)
+
+        weight = (
+            round((val_krw / total_valuation_krw) * 100.0, 2)
+            if (status == "HOLDING" and total_valuation_krw > 0)
+            else 0.0
+        )
+
+        capital_pnl: Dict[str, float] = {}
+        dividend_pnl: Dict[str, float] = {}
+        total_pnl: Dict[str, float] = {}
+        capital_pnl_krw: Dict[str, int] = {}
+        dividend_pnl_krw: Dict[str, int] = {}
+        total_pnl_krw: Dict[str, int] = {}
+
+        capital_returns: Dict[str, float] = {}
+        returns: Dict[str, float] = {}
+        price_returns: Dict[str, float] = {}
+
+        capital_contributions: Dict[str, float] = {}
+        dividend_contributions: Dict[str, float] = {}
+        contributions: Dict[str, float] = {}
+
+        asset_txs = txs_by_asset_id.get(asset.id, [])
+
+        for p_key, start_d in period_ranges.items():
+            q_start = positions_at_start[p_key].holdings.get(ticker, 0.0)
+            p_start_rec = get_price_record_at_or_before(price_history, start_d)
+            p_start = p_start_rec.close_price if p_start_rec else 0.0
+
+            v_start = q_start * p_start if q_start > 0.000001 else 0.0
+            v_end_period = q_end * p_end if q_end > 0.000001 else 0.0
+
+            # 기간 내 트랜잭션 집계 (종목 통화 기준)
+            buy_cost = 0.0
+            sell_proceeds = 0.0
+            dividend_gross = 0.0
+            dividend_tax = 0.0
+
+            for tx in asset_txs:
+                if tx.transaction_date <= start_d or tx.transaction_date > as_of:
+                    continue
+
+                raw_amt = tx.total_amount
+                if tx.type == "INITIAL_BALANCE" and (raw_amt is None or raw_amt == 0.0):
+                    raw_amt = float(tx.quantity or 0.0) * float(tx.price or p_start or p_end or 0.0)
+                amt = float(raw_amt or 0.0)
+
+                # 통화 환산 (타 통화인 경우 기준일 환율 적용)
+                if tx.currency != currency:
+                    if currency == "USD":
+                        amt = amt / exchange_rate
+                    else:
+                        amt = amt * exchange_rate
+
+                if tx.type in ["BUY", "INITIAL_BALANCE"]:
+                    buy_cost += amt
+                elif tx.type == "SELL":
+                    sell_proceeds += amt
+                elif tx.type == "INTEREST":
+                    dividend_gross += amt
+                elif tx.type == "TAX":
+                    dividend_tax += amt
+
+            # 손익 산출
+            c_pnl = v_end_period - v_start - (buy_cost - sell_proceeds)
+            d_pnl = dividend_gross - dividend_tax
+            t_pnl = c_pnl + d_pnl
+
+            if currency == "USD":
+                c_pnl_krw = round(c_pnl * exchange_rate)
+                d_pnl_krw = round(d_pnl * exchange_rate)
+                t_pnl_krw = round(t_pnl * exchange_rate)
+            else:
+                c_pnl_krw = round(c_pnl)
+                d_pnl_krw = round(d_pnl)
+                t_pnl_krw = round(t_pnl)
+
+            capital_pnl[p_key] = round(c_pnl, 2)
+            dividend_pnl[p_key] = round(d_pnl, 2)
+            total_pnl[p_key] = round(t_pnl, 2)
+            capital_pnl_krw[p_key] = c_pnl_krw
+            dividend_pnl_krw[p_key] = d_pnl_krw
+            total_pnl_krw[p_key] = t_pnl_krw
+
+            # 수익률 산출
+            invested_capital = v_start + buy_cost
+            if invested_capital > 0.000001:
+                c_ret = round((c_pnl / invested_capital) * 100.0, 2)
+                t_ret = round((t_pnl / invested_capital) * 100.0, 2)
+            else:
+                c_ret = 0.0
+                t_ret = 0.0
+
+            if p_start > 0.0 and p_end > 0.0:
+                p_ret = round(((p_end - p_start) / p_start) * 100.0, 2)
+            else:
+                p_ret = 0.0
+
+            capital_returns[p_key] = c_ret
+            returns[p_key] = t_ret
+            price_returns[p_key] = p_ret
+
+            # 기여도 산출
+            b_cap = base_cap_by_period[p_key]
+            if b_cap > 0:
+                c_contrib = round((c_pnl_krw / b_cap) * 100.0, 2)
+                d_contrib = round((d_pnl_krw / b_cap) * 100.0, 2)
+                t_contrib = round((t_pnl_krw / b_cap) * 100.0, 2)
+            else:
+                c_contrib = 0.0
+                d_contrib = 0.0
+                t_contrib = 0.0
+
+            capital_contributions[p_key] = c_contrib
+            dividend_contributions[p_key] = d_contrib
+            contributions[p_key] = t_contrib
+
+        return {
+            "ticker": ticker,
+            "name": asset.name,
+            "major_category": asset.major_category or "주식",
+            "sub_category": asset.sub_category or "",
+            "currency": currency,
+            "status": status,
+            "quantity": q_end,
+            "weight": weight,
+            "valuation": round(val, 2),
+            "valuation_krw": val_krw,
+            "capital_pnl": capital_pnl,
+            "dividend_pnl": dividend_pnl,
+            "total_pnl": total_pnl,
+            "capital_pnl_krw": capital_pnl_krw,
+            "dividend_pnl_krw": dividend_pnl_krw,
+            "total_pnl_krw": total_pnl_krw,
+            "capital_returns": capital_returns,
+            "returns": returns,
+            "price_returns": price_returns,
+            "capital_contributions": capital_contributions,
+            "dividend_contributions": dividend_contributions,
+            "contributions": contributions,
+        }
+
     async def get_attribution_summary(
         self,
         as_of_date: Optional[Union[str, datetime.date]] = None
     ) -> Dict[str, Any]:
-        """기준일 기준 4개 기간 벤치마크 성과, Alpha 및 종목별 손익 기여도(Attribution) 요약을 일괄 산출합니다.
+        """기준일 기준 4개 기간 벤치마크 성과, Alpha 및 종목별 실제 발생 손익(Actual P&L) 기반 기여도(Attribution) 요약을 일괄 산출합니다.
 
-        기존 캐시된 시세와 계좌 스냅샷, 트랜잭션 원장을 활용하여 외부 API 지연 없이 고속으로 계산합니다.
+        단일 원장 엔진(LedgerEngine)의 실제 거래 이력과 시세(HistoricalPrice)를 결합하여,
+        중도 매매, 전량 매도(CLOSED), 자본/배당 분리 및 미국 종목 통화 정합성을 완결합니다.
 
         Args:
             as_of_date (Optional[Union[str, datetime.date]]): 분석 기준일자. 기본값은 오늘.
@@ -745,7 +1069,7 @@ class BenchmarkService:
                 - top_detractors_ytd (List[Dict]): YTD 부진 종목 (최대 3개)
                 - top_contributors_1m (List[Dict]): 1M 상위 기여 종목 (최대 3개)
                 - top_detractors_1m (List[Dict]): 1M 부진 종목 (최대 3개)
-                - holdings_attribution (List[Dict]): 전체 보유 종목별 성과 및 기여도 내역
+                - holdings_attribution (List[Dict]): 전체 대상 종목별 성과 및 기여도 내역
         """
         # 1. 기준일자 확정
         if as_of_date is None:
@@ -764,6 +1088,7 @@ class BenchmarkService:
             "1Y": as_of - datetime.timedelta(days=365),
             "YTD": datetime.date(as_of.year, 1, 1),
         }
+        earliest_start_date = min(period_ranges.values())
 
         # 3. 4대 기간 벤치마크 누적 수익률 비동기 병렬 계산
         benchmark_tickers = ["^GSPC", "^IXIC", "^KS11"]
@@ -799,21 +1124,64 @@ class BenchmarkService:
                 "alpha_vs_sp500": alpha_vs_sp500,
             }
 
-        # 4. 기준일 기준 보유 종목 및 비중 산출
-        state = LedgerEngine.get_positions(self.db, as_of=as_of)
-        active_holdings = state.holdings
-        cash_balances = state.cash_balances
-
-        # 환율 조회
+        # 4. 기준일 기준 환율 조회 (0 이하 값 방어)
         rate_record = (
             self.db.query(ExchangeRate)
             .filter(ExchangeRate.date <= as_of)
             .order_by(ExchangeRate.date.desc(), ExchangeRate.id.desc())
             .first()
         )
-        exchange_rate = rate_record.rate if rate_record else self.DEFAULT_USD_KRW_RATE
+        raw_rate = rate_record.rate if rate_record else self.DEFAULT_USD_KRW_RATE
+        exchange_rate = raw_rate if (raw_rate and raw_rate > 0) else self.DEFAULT_USD_KRW_RATE
 
-        if not active_holdings:
+        # 5. 활성 계좌 및 포지션 상태 산출
+        active_accounts = self.db.query(Account).filter(Account.is_active == True).all()
+        active_acc_ids = {a.id for a in active_accounts}
+
+        state_end = LedgerEngine.get_positions(self.db, as_of=as_of)
+
+        positions_at_start: Dict[str, Any] = {}
+        for p_key, start_d in period_ranges.items():
+            positions_at_start[p_key] = LedgerEngine.get_positions(self.db, as_of=start_d)
+
+        # 6. 기간 내(earliest_start_date < tx <= as_of) 활성 계좌 트랜잭션 일괄 조회
+        period_txs: List[Transaction] = []
+        if active_acc_ids:
+            period_txs = (
+                self.db.query(Transaction)
+                .filter(
+                    Transaction.account_id.in_(active_acc_ids),
+                    Transaction.transaction_date > earliest_start_date,
+                    Transaction.transaction_date <= as_of,
+                )
+                .order_by(Transaction.transaction_date.asc(), Transaction.id.asc())
+                .all()
+            )
+
+        # 7. 비현금 상장 분석 대상 종목(주식, 채권 ETF) 후보군 수집
+        candidate_tickers = set(state_end.holdings.keys())
+        for p_key in period_ranges.keys():
+            candidate_tickers.update(positions_at_start[p_key].holdings.keys())
+
+        candidate_asset_ids = set()
+        for tx in period_txs:
+            if tx.asset_id:
+                candidate_asset_ids.add(tx.asset_id)
+
+        all_candidate_assets = (
+            self.db.query(Asset)
+            .filter(
+                (Asset.ticker.in_(candidate_tickers)) | (Asset.id.in_(candidate_asset_ids))
+            )
+            .all()
+        )
+
+        target_assets = [
+            a for a in all_candidate_assets
+            if (a.ticker not in ["KRW", "USD"]) and (getattr(a, "major_category", None) != "현금")
+        ]
+
+        if not target_assets and not state_end.holdings:
             return {
                 "as_of_date": as_of.isoformat(),
                 "benchmarks": benchmarks,
@@ -824,23 +1192,17 @@ class BenchmarkService:
                 "holdings_attribution": [],
             }
 
-        # 종목 마스터 정보 일괄 조회
-        holding_tickers = list(active_holdings.keys())
-        assets = (
-            self.db.query(Asset)
-            .filter(Asset.ticker.in_(holding_tickers))
-            .all()
-        )
-        asset_map = {a.ticker: a for a in assets}
+        target_tickers = [a.ticker for a in target_assets]
+        asset_map = {a.ticker: a for a in target_assets}
 
-        # 시세 데이터 일괄 조회 (1Y 이전 여유분 포함, N+1 쿼리 방지)
-        earliest_date = period_ranges["1Y"] - datetime.timedelta(days=10)
+        # 8. 시세 데이터 일괄 조회 (N+1 쿼리 방지)
+        earliest_price_date = earliest_start_date - datetime.timedelta(days=10)
         price_records = (
             self.db.query(HistoricalPrice)
             .filter(
-                HistoricalPrice.ticker.in_(holding_tickers),
+                HistoricalPrice.ticker.in_(target_tickers),
                 HistoricalPrice.price_date <= as_of,
-                HistoricalPrice.price_date >= earliest_date,
+                HistoricalPrice.price_date >= earliest_price_date,
                 HistoricalPrice.close_price > 0.0
             )
             .order_by(HistoricalPrice.ticker, HistoricalPrice.price_date.asc())
@@ -860,83 +1222,70 @@ class BenchmarkService:
                 return p_list[idx - 1]
             return p_list[0]
 
-        # 5. 종목별 현재가 및 평가액 계산
-        evaluated_holdings = []
-        for ticker, qty in active_holdings.items():
+        # 9. 기말 포트폴리오 총평가액 계산 (기말 비중 산출용)
+        evaluated_holdings_end = []
+        for ticker, qty in state_end.holdings.items():
             asset = asset_map.get(ticker)
             if not asset:
                 continue
 
             price_history = prices_by_ticker.get(ticker, [])
-            p_curr_rec = get_price_record_at_or_before(price_history, as_of)
-            current_price = p_curr_rec.close_price if p_curr_rec else 0.0
+            p_end_rec = get_price_record_at_or_before(price_history, as_of)
+            current_price = p_end_rec.close_price if p_end_rec else 0.0
 
-            valuation = qty * current_price
-            valuation_krw = valuation * exchange_rate if asset.country == "US" else valuation
+            val = qty * current_price
+            val_krw = val * exchange_rate if asset.country == "US" else val
+            evaluated_holdings_end.append(val_krw)
 
-            evaluated_holdings.append({
-                "ticker": ticker,
-                "name": asset.name,
-                "country": asset.country,
-                "quantity": qty,
-                "current_price": current_price,
-                "valuation": valuation,
-                "valuation_krw": valuation_krw,
-                "price_history": price_history,
-            })
-
-        # 총 평가액 및 종목별 비중 계산
+        cash_balances = state_end.cash_balances
         total_valuation_krw = (
             cash_balances.get("KRW", 0.0)
             + (cash_balances.get("USD", 0.0) * exchange_rate)
-            + sum(item["valuation_krw"] for item in evaluated_holdings)
+            + sum(evaluated_holdings_end)
         )
 
-        # 6. 각 종목의 기간별 수익률 및 가중 손익 기여도(Attribution) 산출
-        holdings_attribution = []
-        for item in evaluated_holdings:
-            ticker = item["ticker"]
-            val_krw = item["valuation_krw"]
-            weight = round((val_krw / total_valuation_krw) * 100.0, 2) if total_valuation_krw > 0 else 0.0
+        # 10. 기간별 포트폴리오 기준자본(BaseCap) 계산 (모듈화 헬퍼 위임)
+        base_cap_by_period = self._calculate_base_caps_by_period(
+            period_ranges=period_ranges,
+            as_of=as_of,
+            exchange_rate=exchange_rate,
+            positions_at_start=positions_at_start,
+            asset_map=asset_map,
+            prices_by_ticker=prices_by_ticker,
+            period_txs=period_txs,
+            total_valuation_krw=total_valuation_krw,
+        )
 
-            price_history = item["price_history"]
-            p_end_rec = get_price_record_at_or_before(price_history, as_of)
-            end_price = p_end_rec.close_price if p_end_rec else 0.0
-            end_date = p_end_rec.price_date if p_end_rec else None
+        # 11. 트랜잭션 종목별 맵 구성
+        txs_by_asset_id: Dict[int, List[Transaction]] = {}
+        for tx in period_txs:
+            if tx.asset_id:
+                txs_by_asset_id.setdefault(tx.asset_id, []).append(tx)
 
-            returns_by_period: Dict[str, float] = {}
-            contributions_by_period: Dict[str, float] = {}
+        # 12. 종목별 실제 발생 손익(Actual P&L) 및 3종 수익률 / 3종 기여도 산출 (모듈화 헬퍼 위임)
+        holdings_attribution = [
+            self._calculate_single_holding_attribution(
+                asset=asset,
+                as_of=as_of,
+                period_ranges=period_ranges,
+                state_end=state_end,
+                positions_at_start=positions_at_start,
+                prices_by_ticker=prices_by_ticker,
+                txs_by_asset_id=txs_by_asset_id,
+                base_cap_by_period=base_cap_by_period,
+                total_valuation_krw=total_valuation_krw,
+                exchange_rate=exchange_rate,
+            )
+            for asset in target_assets
+        ]
 
-            for p_key, start_d in period_ranges.items():
-                p_start_rec = get_price_record_at_or_before(price_history, start_d)
-                if (
-                    p_start_rec
-                    and end_date
-                    and p_start_rec.price_date < end_date
-                    and p_start_rec.close_price > 0.0
-                    and end_price > 0.0
-                ):
-                    ret = round(((end_price - p_start_rec.close_price) / p_start_rec.close_price) * 100.0, 2)
-                else:
-                    ret = 0.0
+        # 비중(weight) 내림차순 및 보유/손익 우선 정렬
+        holdings_attribution.sort(
+            key=lambda x: (x["status"] == "HOLDING", x["weight"], abs(x["total_pnl_krw"].get("YTD", 0))),
+            reverse=True
+        )
 
-                contrib = round(weight * ret / 100.0, 2)
-                returns_by_period[p_key] = ret
-                contributions_by_period[p_key] = contrib
-
-            holdings_attribution.append({
-                "ticker": ticker,
-                "name": item["name"],
-                "weight": weight,
-                "valuation_krw": round(val_krw),
-                "returns": returns_by_period,
-                "contributions": contributions_by_period,
-            })
-
-        # 비중(weight) 내림차순 정렬
-        holdings_attribution.sort(key=lambda x: (x["weight"], x["ticker"]), reverse=True)
-
-        # 7. YTD 및 1M 기준 Top 3 기여 종목 / Bottom 3 부진 종목 랭킹 추출
+        # 13. YTD 및 1M 기준 Top 3 기여 종목 / Bottom 3 부진 종목 랭킹 추출
         top_contributors_ytd = self._extract_attribution_ranking(holdings_attribution, "YTD", reverse=True, limit=3)
         top_detractors_ytd = self._extract_attribution_ranking(holdings_attribution, "YTD", reverse=False, limit=3)
         top_contributors_1m = self._extract_attribution_ranking(holdings_attribution, "1M", reverse=True, limit=3)
@@ -951,5 +1300,7 @@ class BenchmarkService:
             "top_detractors_1m": top_detractors_1m,
             "holdings_attribution": holdings_attribution,
         }
+
+
 
 
