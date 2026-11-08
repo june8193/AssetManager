@@ -439,6 +439,185 @@ describe('MarketAnalysisPage', () => {
       expect(screen.getByText(/기간 내 최대 낙폭 \(MDD 바닥\)/)).toBeDefined();
     });
   });
+
+  describe('비교 탭 지연 로딩(Lazy Loading) 및 상태 캐싱 검증', () => {
+    it('최초 마운트 시에는 individual 관련 API만 호출되고 comparison API는 호출되지 않는다', async () => {
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      // historical과 stats API는 호출되었는지 확인
+      const historicalCalls = mockFetch.mock.calls.filter(call => call[0].includes('/api/market/analysis/historical'));
+      const statsCalls = mockFetch.mock.calls.filter(call => call[0].includes('/api/market/analysis/stats'));
+      expect(historicalCalls.length).toBeGreaterThanOrEqual(1);
+      expect(statsCalls.length).toBeGreaterThanOrEqual(1);
+
+      // comparison API는 호출되지 않아야 함
+      const comparisonCalls = mockFetch.mock.calls.filter(call => call[0].includes('/api/market/analysis/comparison'));
+      expect(comparisonCalls.length).toBe(0);
+    });
+
+    it('비교 탭을 처음 클릭할 때 comparison API가 1회 호출되고, 탭을 왕복 전환해도 중복 재호출되지 않는다', async () => {
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      // 마운트 직후 comparison 호출 0회 확인
+      let comparisonCalls = mockFetch.mock.calls.filter(call => call[0].includes('/api/market/analysis/comparison'));
+      expect(comparisonCalls.length).toBe(0);
+
+      // 1) "4대 지수 연간 수익률 비교" 탭 클릭
+      fireEvent.click(screen.getByText('4대 지수 연간 수익률 비교'));
+
+      // 비교 테이블 로드 완료 확인
+      await waitFor(() => {
+        expect(screen.getByText('연도별 지수 수익률 비교')).toBeDefined();
+      });
+
+      comparisonCalls = mockFetch.mock.calls.filter(call => call[0].includes('/api/market/analysis/comparison'));
+      expect(comparisonCalls.length).toBe(1);
+
+      // 2) "지수별 상세 분석" 탭으로 복귀
+      fireEvent.click(screen.getByText('지수별 상세 분석'));
+      await waitFor(() => {
+        expect(screen.getByTestId('integrated-market-chart')).toBeDefined();
+      });
+
+      // 3) 다시 "4대 지수 연간 수익률 비교" 탭으로 전환
+      fireEvent.click(screen.getByText('4대 지수 연간 수익률 비교'));
+      await waitFor(() => {
+        expect(screen.getByText('연도별 지수 수익률 비교')).toBeDefined();
+      });
+
+      // 캐싱되어 추가 API 호출이 없어야 함 (호출 횟수 여전히 1)
+      comparisonCalls = mockFetch.mock.calls.filter(call => call[0].includes('/api/market/analysis/comparison'));
+      expect(comparisonCalls.length).toBe(1);
+    });
+
+    it('비교 탭 클릭 후 데이터 요청 중에는 로딩 인디케이터가 표시된다', async () => {
+      let resolveComparison;
+      mockFetch.mockImplementation((url) => {
+        if (url.includes('/api/market/analysis/historical')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(mockHistoricalData),
+          });
+        }
+        if (url.includes('/api/market/analysis/stats')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(mockStatsData),
+          });
+        }
+        if (url.includes('/api/market/analysis/comparison')) {
+          return new Promise((resolve) => {
+            resolveComparison = resolve;
+          });
+        }
+        return Promise.reject(new Error('Unknown API endpoint'));
+      });
+
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      // 비교 탭 클릭
+      fireEvent.click(screen.getByText('4대 지수 연간 수익률 비교'));
+
+      // 로딩 화면 표시 검증
+      expect(screen.getByText(/금융 데이터를 분석 중입니다/)).toBeDefined();
+
+      // 응답 해결
+      resolveComparison({
+        ok: true,
+        json: () => Promise.resolve(mockComparisonData),
+      });
+
+      // 로딩 종료 및 데이터 표시 검증
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+        expect(screen.getByText('연도별 지수 수익률 비교')).toBeDefined();
+      });
+    });
+
+    it('비교 데이터 로드 실패 시 에러 UI가 표시되고 "다시 시도" 버튼을 누르면 재호출한다', async () => {
+      let failComparison = true;
+      mockFetch.mockImplementation((url) => {
+        if (url.includes('/api/market/analysis/historical')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(mockHistoricalData),
+          });
+        }
+        if (url.includes('/api/market/analysis/stats')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(mockStatsData),
+          });
+        }
+        if (url.includes('/api/market/analysis/comparison')) {
+          if (failComparison) {
+            return Promise.resolve({
+              ok: false,
+              status: 500,
+            });
+          }
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(mockComparisonData),
+          });
+        }
+        return Promise.reject(new Error('Unknown API endpoint'));
+      });
+
+      render(
+        <MaskingProvider>
+          <MarketAnalysisPage />
+        </MaskingProvider>
+      );
+
+      await waitFor(() => {
+        expect(screen.queryByText(/금융 데이터를 분석 중입니다/)).toBeNull();
+      });
+
+      // 비교 탭 클릭 -> 실패 응답
+      fireEvent.click(screen.getByText('4대 지수 연간 수익률 비교'));
+
+      // 에러 UI 및 다시 시도 버튼 검증
+      await waitFor(() => {
+        expect(screen.getByText('오류가 발생했습니다')).toBeDefined();
+        expect(screen.getByRole('button', { name: /다시 시도/ })).toBeDefined();
+      });
+
+      // 재시도 시 성공하도록 변경 후 클릭
+      failComparison = false;
+      fireEvent.click(screen.getByRole('button', { name: /다시 시도/ }));
+
+      // 성공 후 비교 테이블 렌더링 확인
+      await waitFor(() => {
+        expect(screen.queryByText('오류가 발생했습니다')).toBeNull();
+        expect(screen.getByText('연도별 지수 수익률 비교')).toBeDefined();
+      });
+    });
+  });
 });
 
 
