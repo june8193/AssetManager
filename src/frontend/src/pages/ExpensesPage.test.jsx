@@ -792,7 +792,126 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
         expect(screen.queryByTitle('필터 초기화')).toBeNull();
       });
     });
+    it('상단 결제수단 요약 카드 클릭 시 해당 결제수단으로 필터가 적용되고 재클릭 시 해제(토글)되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 요약 카드의 '장준 현대카드' (payment_method_id: 1) 찾기
+      const card = screen.getByTestId('payment-method-card-1');
+      expect(card).toBeInTheDocument();
+
+      // 요약 카드 클릭 -> 필터 적용
+      expenseService.getExpenses.mockClear();
+      fireEvent.click(card);
+
+      await waitFor(() => {
+        // getExpenses가 payment_method_id: 1로 호출되어야 함
+        expect(expenseService.getExpenses).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payment_method_id: 1,
+          })
+        );
+      });
+
+      // 하단 드롭다운 combobox도 '1'로 동기화되어야 함
+      const selects = screen.getAllByRole('combobox');
+      const pmSelect = selects.find((sel) =>
+        Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+      );
+      expect(pmSelect.value).toBe('1');
+
+      // 동일 카드 재클릭 -> 필터 해제 (토글)
+      expenseService.getExpenses.mockClear();
+      fireEvent.click(card);
+
+      await waitFor(() => {
+        expect(expenseService.getExpenses).toHaveBeenCalledWith(
+          expect.not.objectContaining({
+            payment_method_id: expect.anything(),
+          })
+        );
+      });
+
+      expect(pmSelect.value).toBe('');
+    });
+
+    it('선택된 요약 카드에는 시각적 활성 스타일이 적용되고 다른 요약 카드에는 적용되지 않아야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      const card1 = screen.getByTestId('payment-method-card-1');
+      const card2 = screen.getByTestId('payment-method-card-3');
+
+      expect(card1).toBeInTheDocument();
+      expect(card2).toBeInTheDocument();
+
+      // 초기 상태: 활성 스타일 없음
+      expect(card1.className).toContain('cursor-pointer');
+      expect(card1.className).not.toContain('border-blue-500');
+      expect(card2.className).not.toContain('border-blue-500');
+      expect(card1).toHaveAttribute('aria-pressed', 'false');
+      expect(card2).toHaveAttribute('aria-pressed', 'false');
+
+      // 1번 카드 클릭
+      fireEvent.click(card1);
+
+      await waitFor(() => {
+        expect(card1.className).toContain('border-blue-500');
+        expect(card1.className).toContain('ring-2');
+        expect(card1).toHaveAttribute('aria-pressed', 'true');
+        expect(card2.className).not.toContain('border-blue-500');
+        expect(card2).toHaveAttribute('aria-pressed', 'false');
+      });
+
+      // 2번 카드 클릭 -> 2번 카드로 전환
+      fireEvent.click(card2);
+
+      await waitFor(() => {
+        expect(card1.className).not.toContain('border-blue-500');
+        expect(card1).toHaveAttribute('aria-pressed', 'false');
+        expect(card2.className).toContain('border-blue-500');
+        expect(card2.className).toContain('ring-2');
+        expect(card2).toHaveAttribute('aria-pressed', 'true');
+      });
+    });
+
+    it('하단 드롭다운에서 결제수단 선택 또는 필터 초기화 시 상단 요약 카드의 활성 스타일이 동기화되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      const card = screen.getByTestId('payment-method-card-1');
+
+      // 하단 드롭다운에서 '1' 선택
+      const selects = screen.getAllByRole('combobox');
+      const pmSelect = selects.find((sel) =>
+        Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+      );
+      fireEvent.change(pmSelect, { target: { value: '1' } });
+
+      // 상단 요약 카드에 활성 스타일이 반영되어야 함
+      await waitFor(() => {
+        expect(card.className).toContain('border-blue-500');
+        expect(card).toHaveAttribute('aria-pressed', 'true');
+      });
+
+      // 필터 초기화 버튼 클릭
+      const resetBtn = await screen.findByTitle('필터 초기화');
+      fireEvent.click(resetBtn);
+
+      // 상단 요약 카드의 활성 스타일이 해제되어야 함
+      await waitFor(() => {
+        expect(card.className).not.toContain('border-blue-500');
+        expect(card).toHaveAttribute('aria-pressed', 'false');
+      });
+    });
   });
 });
-
-

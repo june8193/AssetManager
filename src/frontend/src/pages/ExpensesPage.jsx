@@ -326,6 +326,12 @@ export default function ExpensesPage() {
     return paymentMethods.filter((pm) => pm.owner === selectedOwner);
   }, [paymentMethods, selectedOwner]);
 
+  // 상단 결제수단 요약 카드 클릭 토글 핸들러
+  const handlePaymentMethodCardClick = (pmId) => {
+    if (!pmId) return;
+    setSelectedPaymentMethod((prev) => (String(prev) === String(pmId) ? '' : String(pmId)));
+  };
+
   // 상단 소유주 탭 변경 시 결제수단 필터 정합성 유지 핸들러
   const handleOwnerChange = (newOwner) => {
     setSelectedOwner(newOwner);
@@ -757,52 +763,78 @@ export default function ExpensesPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {stats.payment_method_breakdown.map((pm, idx) => (
-              <div
-                key={idx}
-                className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1.5 bg-slate-100 text-slate-600 rounded-lg">
-                      <CreditCard size={16} />
-                    </div>
-                    <div>
-                      <div className="font-semibold text-sm text-slate-800 truncate max-w-[140px]">
-                        {pm.alias || `${pm.owner} ${pm.institution}`}
-                      </div>
-                      <div className="text-[11px] text-slate-400">{pm.institution}</div>
-                    </div>
-                  </div>
-                  <span
-                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                      pm.owner === '장준'
-                        ? 'bg-blue-50 text-blue-600'
-                        : 'bg-purple-50 text-purple-600'
-                    }`}
-                  >
-                    {pm.owner}
-                  </span>
-                </div>
+            {stats.payment_method_breakdown.map((pm, idx) => {
+              const isClickable = Boolean(pm.payment_method_id);
+              const isSelected = isClickable && String(selectedPaymentMethod) === String(pm.payment_method_id);
 
-                <div className="mt-3">
-                  <div className="flex items-baseline justify-between">
-                    <span className="text-lg font-bold text-slate-900">
-                      {formatCurrency(pm.amount)}
-                    </span>
-                    <span className="text-xs font-semibold text-blue-600 font-mono">
-                      {pm.percentage}%
+              return (
+                <div
+                  key={pm.payment_method_id || idx}
+                  data-testid={pm.payment_method_id ? `payment-method-card-${pm.payment_method_id}` : undefined}
+                  role={isClickable ? 'button' : undefined}
+                  tabIndex={isClickable ? 0 : undefined}
+                  aria-pressed={isClickable ? isSelected : undefined}
+                  onClick={isClickable ? () => handlePaymentMethodCardClick(pm.payment_method_id) : undefined}
+                  onKeyDown={
+                    isClickable
+                      ? (e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            e.preventDefault();
+                            handlePaymentMethodCardClick(pm.payment_method_id);
+                          }
+                        }
+                      : undefined
+                  }
+                  className={`p-4 rounded-xl border shadow-sm flex flex-col justify-between transition-all duration-200 text-left ${
+                    isClickable ? 'cursor-pointer' : ''
+                  } ${
+                    isSelected
+                      ? 'bg-blue-50/40 border-blue-500 ring-2 ring-blue-500/20'
+                      : 'bg-white border-slate-200/80 hover:border-slate-300 dark:hover:border-slate-600'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-slate-100 text-slate-600 rounded-lg">
+                        <CreditCard size={16} />
+                      </div>
+                      <div>
+                        <div className="font-semibold text-sm text-slate-800 truncate max-w-[140px]">
+                          {pm.alias || `${pm.owner} ${pm.institution}`}
+                        </div>
+                        <div className="text-[11px] text-slate-400">{pm.institution}</div>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                        pm.owner === '장준'
+                          ? 'bg-blue-50 text-blue-600'
+                          : 'bg-purple-50 text-purple-600'
+                      }`}
+                    >
+                      {pm.owner}
                     </span>
                   </div>
-                  <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div
-                      className="bg-blue-600 h-full rounded-full transition-all duration-300"
-                      style={{ width: `${Math.min(pm.percentage, 100)}%` }}
-                    />
+
+                  <div className="mt-3">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-lg font-bold text-slate-900">
+                        {formatCurrency(pm.amount)}
+                      </span>
+                      <span className="text-xs font-semibold text-blue-600 font-mono">
+                        {pm.percentage}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-slate-100 h-1.5 rounded-full mt-2 overflow-hidden">
+                      <div
+                        className="bg-blue-600 h-full rounded-full transition-all duration-300"
+                        style={{ width: `${Math.min(pm.percentage, 100)}%` }}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}

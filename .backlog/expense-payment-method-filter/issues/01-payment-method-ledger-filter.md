@@ -7,7 +7,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] 백엔드 `GET /api/expenses` 엔드포인트가 `payment_method_id` 쿼리 파라미터(Optional[int])를 지원하며, 지정 시 해당 결제수단의 지출 내역만 필터링하여 반환한다 (기존 `institution` 파라미터는 하위 호환 유지).
 - [x] `ExpensesPage.jsx`의 거래 내역 원장 필터 영역에서 기존 `'기관 전체'` 드롭다운이 제거되고 `'결제수단 전체'`를 기본값으로 하는 결제수단 선택 드롭다운이 렌더링된다.
