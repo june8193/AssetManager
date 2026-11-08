@@ -5,11 +5,11 @@ Tailscale HTTPS 도메인(`*.ts.net`)으로 접속 시 발생하는 Vite v8의 H
 
 **Blocked by:** 01 — PWA PNG 에셋 생성 및 웹 매니페스트/HTML 메타 등록
 
-**Status:** ready-for-agent
+**Status:** closed
 
 ## Acceptance criteria
 
-- [ ] `src/frontend/vite.config.js`의 `server` 및 `preview` 설정에 `allowedHosts: ['.ts.net']`가 적용되어야 함.
-- [ ] Tailscale Serve 설정(`tailscale serve status`)이 `https://seongeuns-macbook-air.tail9df66b.ts.net -> http://127.0.0.1:5173`으로 정상 매핑되어야 함.
-- [ ] `curl -i -H "Host: seongeuns-macbook-air.tail9df66b.ts.net" http://127.0.0.1:5173/` 요청 시 403 차단 없이 200 OK가 반환되어야 함.
-- [ ] `curl -i http://127.0.0.1:5173/api/db/users` 요청 시 백엔드로 정상 프록시되어 200 OK와 응답 본문이 반환되어야 함.
+- [x] `src/frontend/vite.config.js`의 `server` 및 `preview` 설정에 `allowedHosts: ['.ts.net']`가 적용되어야 함.
+- [x] Tailscale Serve 설정(`tailscale serve status`)이 `https://seongeuns-macbook-air.tail9df66b.ts.net -> http://127.0.0.1:5173`으로 정상 매핑되어야 함.
+- [x] `curl -i -H "Host: seongeuns-macbook-air.tail9df66b.ts.net" http://127.0.0.1:5173/` 요청 시 403 차단 없이 200 OK가 반환되어야 함.
+- [x] `curl -i http://127.0.0.1:5173/api/db/users` 요청 시 백엔드로 정상 프록시되어 200 OK와 응답 본문이 반환되어야 함.

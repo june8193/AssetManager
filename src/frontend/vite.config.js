@@ -6,6 +6,18 @@ import { VitePWA } from 'vite-plugin-pwa'
 const backendPort = process.env.ASSET_MANAGER_BACKEND_PORT || '8000';
 const frontendPort = process.env.ASSET_MANAGER_FRONTEND_PORT || '5173';
 
+const sharedAllowedHosts = ['.ts.net'];
+const sharedProxy = {
+  '/api': {
+    target: `http://localhost:${backendPort}`,
+    changeOrigin: true,
+  },
+  '/ws': {
+    target: `ws://localhost:${backendPort}`,
+    ws: true,
+  },
+};
+
 export default defineConfig({
   plugins: [
     react(),
@@ -108,16 +120,13 @@ export default defineConfig({
   ],
   server: {
     port: parseInt(frontendPort),
-    proxy: {
-      '/api': {
-        target: `http://localhost:${backendPort}`,
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: `ws://localhost:${backendPort}`,
-        ws: true,
-      },
-    },
+    allowedHosts: sharedAllowedHosts,
+    proxy: sharedProxy,
+  },
+  preview: {
+    port: parseInt(frontendPort),
+    allowedHosts: sharedAllowedHosts,
+    proxy: sharedProxy,
   },
   test: {
     environment: 'happy-dom',
