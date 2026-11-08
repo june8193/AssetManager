@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 from src.backend.models import HistoricalPrice
 from src.backend.services.benchmark_service import BenchmarkService
 
+# 직전 기말 종가(전월/전년 말 종가) 확보를 위한 조회 시작일 여유 기간(일)
+LOOKBACK_BUFFER_DAYS = 10
+
 
 class MarketAnalysisService:
     """주요 시장 지수(^GSPC, ^IXIC, ^KS11, ^KQ11)의 데이터 분석 서비스를 제공합니다."""
@@ -131,7 +134,7 @@ class MarketAnalysisService:
             Dict[str, Any]: 연도별 통계 리스트 및 월별 통계 리스트
         """
         # 통계 산출을 위해 시작일을 약 10일 전부터 넓게 잡아 이전 기말 종가(전월/전년 말 종가)를 확보합니다.
-        extended_start = start_date - datetime.timedelta(days=10)
+        extended_start = start_date - datetime.timedelta(days=LOOKBACK_BUFFER_DAYS)
         prices = await self.benchmark_service.get_historical_prices(ticker, extended_start, end_date)
         valid_prices = [p for p in prices if p.close_price > 0.0]
 
@@ -280,26 +283,27 @@ class MarketAnalysisService:
         # 조회된 데이터가 없을 경우 기본값으로 2020년을 사용합니다.
         start_year = max(min_years) if min_years else 2020
         end_year = today.year
-        start_date = datetime.date(start_year, 1, 1)
 
-        # 4대 지수 시세 일괄 조회 및 캐싱 보장
-        for ticker in tickers:
-            await self.benchmark_service.get_historical_prices(ticker, start_date, today)
+        # 4대 지수 시세를 전체 기간(직전 연도말 확보를 위한 여유분 LOOKBACK_BUFFER_DAYS 포함)에 대해 단 1회(총 4회) 병렬 조회
+        fetch_start_date = datetime.date(start_year, 1, 1) - datetime.timedelta(days=LOOKBACK_BUFFER_DAYS)
+        results = await asyncio.gather(
+            *(self.benchmark_service.get_historical_prices(ticker, fetch_start_date, today) for ticker in tickers)
+        )
+
+        prices_by_ticker: Dict[str, List[HistoricalPrice]] = {}
+        for ticker, raw_prices in zip(tickers, results):
+            valid_prices = [p for p in raw_prices if p.close_price > 0.0]
+            valid_prices.sort(key=lambda x: x.price_date)
+            prices_by_ticker[ticker] = valid_prices
 
         comparison_table = []
 
         # 각 연도별로 수익률 계산
         for year in range(start_year, end_year + 1):
             row = {"year": year}
-            year_start = datetime.date(year, 1, 1)
-            year_end = today if year == end_year else datetime.date(year, 12, 31)
 
             for ticker, name in ticker_mapping.items():
-                # 통계 계산 기준과 동일하게 직전 기말 종가를 찾기 위해 시작일 전 10일 여유를 두고 조회
-                prices = await self.benchmark_service.get_historical_prices(
-                    ticker, year_start - datetime.timedelta(days=10), year_end
-                )
-                valid_prices = [p for p in prices if p.close_price > 0.0]
+                valid_prices = prices_by_ticker.get(ticker, [])
                 
                 # 해당 연도에 속하는 시세 필터링
                 curr_year_prices = [p for p in valid_prices if p.price_date.year == year]
@@ -308,10 +312,9 @@ class MarketAnalysisService:
                     row[name] = 0.0
                     continue
 
-                curr_year_prices.sort(key=lambda x: x.price_date)
                 year_end_val = curr_year_prices[-1].close_price
 
-                # 직전 영업일 종가 찾기
+                # 직전 영업일 종가 찾기 (전체 valid_prices 중 당해 연도 첫 거래일 이전의 마지막 종가)
                 prev_year_end_val = None
                 for p in reversed(valid_prices):
                     if p.price_date < curr_year_prices[0].price_date:

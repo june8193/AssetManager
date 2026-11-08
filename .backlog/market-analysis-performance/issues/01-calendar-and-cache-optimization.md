@@ -7,7 +7,7 @@
 
 **Blocked by:** None — can start immediately
 
-**Status:** claimed
+**Status:** resolved
 
 - [x] `MarketCalendar`에서 한국(`KR`) 및 미국(`US`)의 연도별 `holidays` 인스턴스를 캐싱하여 동일 연도 날짜 판정 시 `holidays.SouthKorea` / `holidays.NYSE`가 재생성되지 않는다.
 - [x] 주말, 근로자의 날(5/1), KRX 연말 휴장일, 제헌절(7/17 영업일 예외), 미국 NYSE 공휴일 등 기존 `get_market_holiday_info`, `is_market_holiday`, `get_trading_days`의 모든 판정 결과가 기존과 100% 동일하게 유지된다.
