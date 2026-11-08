@@ -5,6 +5,34 @@
 
 ---
 
+## [2.5.0] - 2026-11-08
+
+### Added
+- **Tailscale HTTPS 연동 및 멀티 OS(Android/iOS) PWA 웹앱 환경 구축** ([상세 스펙](.backlog/done/tailscale-pwa-setup/spec.md))
+  - 표준 PNG 규격 고해상도 앱 아이콘(`pwa-192x192.png`, `pwa-512x512.png`, `apple-touch-icon.png`) 생성 및 웹 매니페스트/HTML 메타 등록
+  - Vite `allowedHosts` 설정을 통해 Tailscale HTTPS(`*.ts.net`) 직접 접속 및 Mixed Content 차단 방지를 위한 브라우저 API 기본 경로 상대화(`/api`) 적용
+  - Android Chrome(WebAPK) 및 iOS Safari(홈 화면에 추가)에서 브라우저 주소창 없는 독립형(Standalone) 모바일 웹앱 구동 및 설치 가이드(`docs/pwa-install-guide.md`) 제공
+- **지출관리 결제수단별 필터링 전환 및 요약 카드 인터랙션** ([상세 스펙](.backlog/done/expense-payment-method-filter/spec.md))
+  - 지출 원장 툴바의 기존 '금융기관' 필터를 '결제수단' 드롭다운으로 전면 개편하고 상단 소유주 탭과 연동
+  - 상단 '결제수단별 지출 요약' 카드 클릭 시 해당 결제수단으로 원장 필터 즉시 적용 및 활성 상태 시각화(토글 지원)
+  - '현재 조건 전체 삭제' 시 선택된 결제수단 ID 기준 삭제 연동 및 확인 대화상자 조건 표시명 개선
+- **실제 발생 손익(Actual P&L) 기반 개별 종목 포트폴리오 수익기여도(Attribution) 엔진 재설계** ([상세 스펙](.backlog/done/stock-attribution-redesign/spec.md))
+  - 단순 기말 비중 곱하기 주가 등락률 근사 공식에서 단일 원장 거래 이력과 역사적 시세를 결합한 실제 발생 손익 기반 엔진으로 전면 개편
+  - 미보유 기간 주가 등락 왜곡 제거, 분할 매수/매도 단가 반영, 기간 중 전량 매도(청산) 종목 분석 대상 포함
+  - 주가 변동에 따른 자본 손익(Capital P&L)과 배당/이자 세후 손익(Dividend P&L) 분리 산출
+  - 미국 종목(USD) 기본 통화 유지 및 기준일 단일 환율 체급 매칭으로 환차손 왜곡 배제
+  - MCP `get_benchmark_attribution` 스키마 및 `asset-auditor` 스킬 동기화
+
+### Improved
+- **지수분석(MarketAnalysisPage) 초기 화면 로딩 속도 최적화** ([상세 스펙](.backlog/done/market-analysis-performance/spec.md))
+  - `MarketCalendar` 공휴일 인스턴스 캐싱 및 `HistoricalPriceCache` 영업일 중복 연산 제거
+  - `get_index_comparison_table` N+1 시세 조회를 4회 병렬 조회 및 인메모리 일괄 연산으로 전환
+  - 프론트엔드 지수분석 '4대 지수 연간 수익률 비교' 탭 지연 로딩(Lazy Loading) 및 상태 캐싱 적용
+- **GitHub Actions 러너 안정성 강화**
+  - 장기 실행 러너 소켓 먹통 방지를 위해 PM2 주간 재시작(`cron_restart`) 설정 추가
+
+---
+
 ## [2.4.0] - 2026-11-07
 
 ### Added
