@@ -925,6 +925,7 @@ def get_expenses(
     year_month: Optional[str] = Query(None, description="단일 정산년월 필터 (예: '2026-08')"),
     owner: Optional[str] = Query(None, description="소유주 필터 (예: '장준', '성은')"),
     category_id: Optional[int] = Query(None, description="카테고리 ID 필터"),
+    payment_method_id: Optional[int] = Query(None, description="결제수단 ID 필터"),
     institution: Optional[str] = Query(None, description="금융기관 필터 (예: '현대카드')"),
     is_excluded: Optional[bool] = Query(None, description="통계 제외 여부 필터"),
     search: Optional[str] = Query(None, description="검색어 (가맹점명 또는 메모)"),
@@ -940,6 +941,7 @@ def get_expenses(
         year_month (Optional[str]): 정산년월 조건.
         owner (Optional[str]): 소유주 조건 ('전체' 지정 시 전체).
         category_id (Optional[int]): 카테고리 ID 조건.
+        payment_method_id (Optional[int]): 결제수단 ID 조건.
         institution (Optional[str]): 금융기관 조건.
         is_excluded (Optional[bool]): 통계 제외 여부 조건.
         search (Optional[str]): 가맹점명 또는 메모 검색어.
@@ -966,6 +968,8 @@ def get_expenses(
         query = query.filter(Expense.owner == owner)
     if category_id is not None:
         query = query.filter(Expense.category_id == category_id)
+    if payment_method_id is not None:
+        query = query.filter(Expense.payment_method_id == payment_method_id)
     if institution:
         query = query.filter(Expense.institution == institution)
     if is_excluded is not None:

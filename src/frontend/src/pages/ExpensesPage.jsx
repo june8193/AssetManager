@@ -57,7 +57,7 @@ export default function ExpensesPage() {
   const [endMonth, setEndMonth] = useState('');
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedInstitution, setSelectedInstitution] = useState('');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('');
   const [selectedExcludedFilter, setSelectedExcludedFilter] = useState('all'); // 'all' | 'included' | 'excluded'
 
   // 페이징 상태
@@ -139,7 +139,7 @@ export default function ExpensesPage() {
       if (activeEnd) expenseParams.end_month = activeEnd;
       if (selectedOwner && selectedOwner !== '전체') expenseParams.owner = selectedOwner;
       if (selectedCategory) expenseParams.category_id = selectedCategory;
-      if (selectedInstitution) expenseParams.institution = selectedInstitution;
+      if (selectedPaymentMethod) expenseParams.payment_method_id = Number(selectedPaymentMethod);
       if (selectedExcludedFilter === 'included') expenseParams.is_excluded = false;
       if (selectedExcludedFilter === 'excluded') expenseParams.is_excluded = true;
       if (searchKeyword.trim()) expenseParams.search = searchKeyword.trim();
@@ -158,7 +158,7 @@ export default function ExpensesPage() {
     endMonth,
     selectedOwner,
     selectedCategory,
-    selectedInstitution,
+    selectedPaymentMethod,
     selectedExcludedFilter,
     searchKeyword,
   ]);
@@ -176,7 +176,7 @@ export default function ExpensesPage() {
       if (endMonth) expenseParams.end_month = endMonth;
       if (selectedOwner && selectedOwner !== '전체') expenseParams.owner = selectedOwner;
       if (selectedCategory) expenseParams.category_id = selectedCategory;
-      if (selectedInstitution) expenseParams.institution = selectedInstitution;
+      if (selectedPaymentMethod) expenseParams.payment_method_id = Number(selectedPaymentMethod);
       if (selectedExcludedFilter === 'included') expenseParams.is_excluded = false;
       if (selectedExcludedFilter === 'excluded') expenseParams.is_excluded = true;
       if (searchKeyword.trim()) expenseParams.search = searchKeyword.trim();
@@ -317,13 +317,44 @@ export default function ExpensesPage() {
     }
   };
 
-  // 현재 조건 전체 삭제 핸들러 (연월, 소유자, 금융기관 필터 조건 기준)
+  // 결제수단 표시명 헬퍼 (별칭 우선, 없으면 '소유주 기관명')
+  const getPaymentMethodLabel = (pm) => pm.alias || `${pm.owner} ${pm.institution}`;
+
+  // 상단 소유주 탭에 연동된 결제수단 목록
+  const filteredPaymentMethods = useMemo(() => {
+    if (!selectedOwner || selectedOwner === '전체') return paymentMethods;
+    return paymentMethods.filter((pm) => pm.owner === selectedOwner);
+  }, [paymentMethods, selectedOwner]);
+
+  // 상단 소유주 탭 변경 시 결제수단 필터 정합성 유지 핸들러
+  const handleOwnerChange = (newOwner) => {
+    setSelectedOwner(newOwner);
+    if (selectedPaymentMethod && newOwner !== '전체') {
+      const currentPm = paymentMethods.find((pm) => String(pm.id) === String(selectedPaymentMethod));
+      if (currentPm && currentPm.owner !== newOwner) {
+        setSelectedPaymentMethod('');
+      }
+    }
+  };
+
+  // 소유주 변경 시 선택된 결제수단 불일치 자동 초기화 (동기화 보장)
+  useEffect(() => {
+    if (selectedPaymentMethod && selectedOwner && selectedOwner !== '전체') {
+      const currentPm = paymentMethods.find((pm) => String(pm.id) === String(selectedPaymentMethod));
+      if (currentPm && currentPm.owner !== selectedOwner) {
+        setSelectedPaymentMethod('');
+      }
+    }
+  }, [selectedOwner, selectedPaymentMethod, paymentMethods]);
+
+  // 현재 조건 전체 삭제 핸들러 (연월, 소유자, 결제수단 필터 조건 기준)
   const handleClearFiltered = async () => {
     const ym = startMonth || stats?.start_month || stats?.year_month;
+    const matchedPm = paymentMethods.find((pm) => String(pm.id) === String(selectedPaymentMethod));
     const conditionDesc = [
       ym ? `${ym}월` : '',
       selectedOwner && selectedOwner !== '전체' ? selectedOwner : '',
-      selectedInstitution ? selectedInstitution : '',
+      matchedPm ? getPaymentMethodLabel(matchedPm) : '',
     ]
       .filter(Boolean)
       .join(' / ');
@@ -337,7 +368,7 @@ export default function ExpensesPage() {
       const clearParams = {};
       if (ym) clearParams.year_month = ym;
       if (selectedOwner && selectedOwner !== '전체') clearParams.owner = selectedOwner;
-      if (selectedInstitution) clearParams.institution = selectedInstitution;
+      if (selectedPaymentMethod) clearParams.payment_method_id = Number(selectedPaymentMethod);
 
       await expenseService.clearExpenses(clearParams);
       setSelectedIds([]);
@@ -364,14 +395,6 @@ export default function ExpensesPage() {
     fetchData();
   };
 
-  // 고유 금융기관 목록 추출
-  const institutionOptions = useMemo(() => {
-    const set = new Set();
-    paymentMethods.forEach((pm) => {
-      if (pm.institution) set.add(pm.institution);
-    });
-    return Array.from(set);
-  }, [paymentMethods]);
 
   // 날짜 포맷팅 헬퍼
   const formatDateTime = (dtStr) => {
@@ -414,7 +437,7 @@ export default function ExpensesPage() {
               <button
                 key={owner}
                 type="button"
-                onClick={() => setSelectedOwner(owner)}
+                onClick={() => handleOwnerChange(owner)}
                 className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-all ${
                   selectedOwner === owner
                     ? 'bg-blue-600 text-white shadow-sm'
@@ -826,21 +849,19 @@ export default function ExpensesPage() {
               ))}
             </select>
 
-            {/* 금융기관 필터 */}
-            {institutionOptions.length > 0 && (
-              <select
-                value={selectedInstitution}
-                onChange={(e) => setSelectedInstitution(e.target.value)}
-                className="py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-medium"
-              >
-                <option value="">기관 전체</option>
-                {institutionOptions.map((inst) => (
-                  <option key={inst} value={inst}>
-                    {inst}
-                  </option>
-                ))}
-              </select>
-            )}
+            {/* 결제수단 필터 */}
+            <select
+              value={selectedPaymentMethod}
+              onChange={(e) => setSelectedPaymentMethod(e.target.value)}
+              className="py-1.5 px-2.5 bg-slate-50 border border-slate-200 rounded-lg text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 text-xs font-medium"
+            >
+              <option value="">결제수단 전체</option>
+              {filteredPaymentMethods.map((pm) => (
+                <option key={pm.id} value={pm.id}>
+                  {getPaymentMethodLabel(pm)}
+                </option>
+              ))}
+            </select>
 
             {/* 제외 항목 필터 */}
             <select
@@ -865,13 +886,13 @@ export default function ExpensesPage() {
             </button>
 
             {/* 필터 초기화 버튼 */}
-            {(searchKeyword || selectedCategory || selectedInstitution || selectedExcludedFilter !== 'all') && (
+            {(searchKeyword || selectedCategory || selectedPaymentMethod || selectedExcludedFilter !== 'all') && (
               <button
                 type="button"
                 onClick={() => {
                   setSearchKeyword('');
                   setSelectedCategory('');
-                  setSelectedInstitution('');
+                  setSelectedPaymentMethod('');
                   setSelectedExcludedFilter('all');
                 }}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg hover:bg-slate-100 transition-colors"

@@ -226,6 +226,21 @@ def test_get_expenses_list_and_filters(client, sample_data):
     assert len(res_inst.json()) == 1
     assert res_inst.json()[0]["institution"] == "카카오뱅크"
 
+    # 5-1. payment_method_id 필터 (신규 추가)
+    pm_hyundai_id = sample_data["pm_hyundai"].id
+    res_pm = client.get(f"/api/expenses?payment_method_id={pm_hyundai_id}")
+    assert res_pm.status_code == 200
+    # 전체 6건 중 현대카드로 등록된 건: e1, e2, e_prev, e_prev2 총 4건
+    assert len(res_pm.json()) == 4
+    for it in res_pm.json():
+        assert it["payment_method_id"] == pm_hyundai_id
+
+    pm_kakao_id = sample_data["pm_kakao"].id
+    res_pm_kakao = client.get(f"/api/expenses?payment_method_id={pm_kakao_id}")
+    assert res_pm_kakao.status_code == 200
+    assert len(res_pm_kakao.json()) == 1
+    assert res_pm_kakao.json()[0]["payment_method_id"] == pm_kakao_id
+
     # 6. is_excluded 필터
     res_excl = client.get("/api/expenses?is_excluded=true")
     assert res_excl.status_code == 200

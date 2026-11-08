@@ -156,7 +156,7 @@ export const expenseService = {
 
   /**
    * 지출 거래 목록을 조회합니다.
-   * @param {Object} [params] - 필터 파라미터 ({ start_month, end_month, year_month, owner, category_id, institution, is_excluded, search, limit, offset })
+   * @param {Object} [params] - 필터 파라미터 ({ start_month, end_month, year_month, owner, category_id, payment_method_id, institution, is_excluded, search, limit, offset })
    * @returns {Promise<Array>} 지출 내역 목록
    */
   async getExpenses(params) {

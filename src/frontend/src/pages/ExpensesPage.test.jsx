@@ -598,6 +598,201 @@ describe('ExpensesPage 컴포넌트 테스트', () => {
       }, { timeout: 3000 });
     });
   });
+
+  describe('거래 내역 원장 결제수단별 필터링 기능 (Payment Method Ledger Filter)', () => {
+    it('기관 전체 드롭다운이 제거되고 결제수단 전체를 기본값으로 하는 결제수단 드롭다운이 렌더링되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 기존 '기관 전체' 옵션은 존재하지 않아야 함
+      expect(screen.queryByRole('option', { name: '기관 전체' })).toBeNull();
+
+      // '결제수단 전체' 옵션이 존재하는 combobox 찾기
+      const pmOptions = screen.getAllByRole('option').map((opt) => opt.textContent);
+      expect(pmOptions).toContain('결제수단 전체');
+      // 별칭 우선 표시 확인
+      expect(pmOptions).toContain('장준 현대카드');
+      expect(pmOptions).toContain('장준 카카오뱅크');
+      expect(pmOptions).toContain('성은 지역화폐');
+    });
+
+    it('결제수단 선택 시 getExpenses에 payment_method_id가 전달되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 결제수단 select 찾기
+      const selects = screen.getAllByRole('combobox');
+      const pmSelect = selects.find((sel) =>
+        Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+      );
+      expect(pmSelect).toBeDefined();
+
+      // '장준 현대카드' (id: 1) 선택
+      fireEvent.change(pmSelect, { target: { value: '1' } });
+
+      await waitFor(() => {
+        expect(expenseService.getExpenses).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            payment_method_id: 1,
+          })
+        );
+      });
+    });
+
+    it('상단 소유주 탭 변경 시 결제수단 드롭다운 옵션이 해당 소유주의 결제수단만으로 필터링되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // '성은' 소유주 탭 클릭
+      const seongeunTab = screen.getByRole('button', { name: '성은' });
+      fireEvent.click(seongeunTab);
+
+      await waitFor(() => {
+        const selects = screen.getAllByRole('combobox');
+        const pmSelect = selects.find((sel) =>
+          Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+        );
+        const options = Array.from(pmSelect.options).map((opt) => opt.text);
+        expect(options).toContain('결제수단 전체');
+        expect(options).toContain('성은 지역화폐');
+        expect(options).not.toContain('장준 현대카드');
+        expect(options).not.toContain('장준 카카오뱅크');
+      });
+    });
+
+    it('소유주 탭 변경 시 선택된 결제수단이 변경된 소유주에 속하지 않으면 결제수단 필터가 자동으로 초기화되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 결제수단 select에서 '장준 현대카드' (id: 1) 선택
+      const selects = screen.getAllByRole('combobox');
+      const pmSelect = selects.find((sel) =>
+        Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+      );
+      fireEvent.change(pmSelect, { target: { value: '1' } });
+      await waitFor(() => {
+        expect(pmSelect.value).toBe('1');
+      });
+
+      // 상단 소유주 탭을 '성은'으로 변경
+      const seongeunTab = screen.getByRole('button', { name: '성은' });
+      fireEvent.click(seongeunTab);
+
+      // 결제수단 필터가 ''(결제수단 전체)로 자동 초기화되어야 함
+      await waitFor(() => {
+        expect(pmSelect.value).toBe('');
+      });
+    });
+
+    it('소유주 탭을 전체로 변경하거나 동일 소유주 내에서는 선택된 결제수단이 유지되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 결제수단 select에서 '장준 현대카드' (id: 1) 선택
+      const selects = screen.getAllByRole('combobox');
+      const pmSelect = selects.find((sel) =>
+        Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+      );
+      fireEvent.change(pmSelect, { target: { value: '1' } });
+      await waitFor(() => {
+        expect(pmSelect.value).toBe('1');
+      });
+
+      // '장준' 탭 클릭 (소유주 일치 -> 유지)
+      const jangjunTab = screen.getByRole('button', { name: '장준' });
+      fireEvent.click(jangjunTab);
+      await waitFor(() => {
+        expect(pmSelect.value).toBe('1');
+      });
+
+      // '전체' 탭 클릭 (전체로 이동 -> 유지)
+      const allTab = screen.getByRole('button', { name: '전체' });
+      fireEvent.click(allTab);
+      await waitFor(() => {
+        expect(pmSelect.value).toBe('1');
+      });
+    });
+
+    it('결제수단 필터 선택 후 현재 조건 전체 삭제 시 확인 팝업에 결제수단명이 노출되고 clearExpenses에 payment_method_id가 전달되어야 한다', async () => {
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      expenseService.clearExpenses.mockResolvedValue({ status: 'success', deleted_count: 2 });
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 결제수단 select에서 '장준 현대카드' (id: 1) 선택
+      const selects = screen.getAllByRole('combobox');
+      const pmSelect = selects.find((sel) =>
+        Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+      );
+      fireEvent.change(pmSelect, { target: { value: '1' } });
+
+      const clearBtn = screen.getByRole('button', { name: /현재 조건 전체 삭제/i });
+      fireEvent.click(clearBtn);
+
+      await waitFor(() => {
+        // 확인 창 메시지에 결제수단 별칭('장준 현대카드')이 포함되어야 함
+        expect(window.confirm).toHaveBeenCalledWith(
+          expect.stringContaining('장준 현대카드')
+        );
+        // clearExpenses 호출 시 payment_method_id: 1이 전달되어야 함 (institution은 전달되지 않아야 함)
+        expect(expenseService.clearExpenses).toHaveBeenCalledWith(
+          expect.objectContaining({
+            payment_method_id: 1,
+          })
+        );
+      });
+    });
+
+    it('결제수단 필터 선택 시 필터 초기화 버튼이 나타나고 클릭 시 결제수단 필터가 초기화되어야 한다', async () => {
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByText('스타벅스 강남점')).toBeInTheDocument();
+      });
+
+      // 초기에는 필터 초기화 버튼이 없어야 함
+      expect(screen.queryByTitle('필터 초기화')).toBeNull();
+
+      // 결제수단 select에서 '장준 현대카드' (id: 1) 선택
+      const selects = screen.getAllByRole('combobox');
+      const pmSelect = selects.find((sel) =>
+        Array.from(sel.options).some((opt) => opt.text === '결제수단 전체')
+      );
+      fireEvent.change(pmSelect, { target: { value: '1' } });
+
+      // 필터 초기화 버튼 노출 확인
+      const resetBtn = await screen.findByTitle('필터 초기화');
+      expect(resetBtn).toBeInTheDocument();
+
+      // 초기화 버튼 클릭
+      fireEvent.click(resetBtn);
+
+      // 결제수단 필터가 ''(전체)로 초기화되고 초기화 버튼 사라짐
+      await waitFor(() => {
+        expect(pmSelect.value).toBe('');
+        expect(screen.queryByTitle('필터 초기화')).toBeNull();
+      });
+    });
+  });
 });
 
 
