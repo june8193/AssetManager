@@ -275,3 +275,79 @@ def test_get_trading_days_invalid_or_single_range():
 
     # 단 하루(휴장일)
     assert MarketCalendar.get_trading_days(datetime.date(2026, 5, 1), datetime.date(2026, 5, 1)) == []
+
+
+# ============================================================================
+# 5. 캐싱 및 대규모 구간 성능 테스트
+# ============================================================================
+
+def test_market_calendar_caching_holidays_instances(monkeypatch):
+    """동일 연도 날짜 반복 조회 시 holidays 인스턴스가 재생성되지 않고 캐시되는지 검증합니다."""
+    test_dates_kr = [
+        datetime.date(2026, 1, 2),
+        datetime.date(2026, 1, 5),
+        datetime.date(2026, 1, 6),
+        datetime.date(2026, 1, 7),
+        datetime.date(2026, 1, 8),
+    ]
+
+    import holidays
+    real_sk = holidays.SouthKorea
+    real_nyse = holidays.NYSE
+
+    kr_call_count = 0
+    us_call_count = 0
+
+    def mock_sk(*args, **kwargs):
+        nonlocal kr_call_count
+        kr_call_count += 1
+        return real_sk(*args, **kwargs)
+
+    def mock_nyse(*args, **kwargs):
+        nonlocal us_call_count
+        us_call_count += 1
+        return real_nyse(*args, **kwargs)
+
+    monkeypatch.setattr(holidays, "SouthKorea", mock_sk)
+    monkeypatch.setattr(holidays, "NYSE", mock_nyse)
+
+    if hasattr(MarketCalendar, "clear_cache"):
+        MarketCalendar.clear_cache()
+
+    for d in test_dates_kr:
+        MarketCalendar.get_market_holiday_info(d, country="KR")
+
+    assert kr_call_count == 1, f"동일 연도(2026)에 대해 holidays.SouthKorea가 1회만 호출되어야 하지만 {kr_call_count}회 호출됨"
+
+    test_dates_us = [
+        datetime.date(2026, 1, 2),
+        datetime.date(2026, 1, 5),
+        datetime.date(2026, 1, 6),
+        datetime.date(2026, 1, 7),
+        datetime.date(2026, 1, 8),
+    ]
+    for d in test_dates_us:
+        MarketCalendar.get_market_holiday_info(d, country="US")
+
+    assert us_call_count == 1, f"동일 연도(2026)에 대해 holidays.NYSE가 1회만 호출되어야 하지만 {us_call_count}회 호출됨"
+
+
+def test_market_calendar_get_trading_days_performance_38_years():
+    """38년 구간(1988-01-01 ~ 2026-12-31)에 대해 KR/US 각각 100ms 이내에 완료되는지 검증합니다."""
+    import time
+    start_date = datetime.date(1988, 1, 1)
+    end_date = datetime.date(2026, 12, 31)
+
+    t0 = time.perf_counter()
+    kr_trading_days = MarketCalendar.get_trading_days(start_date, end_date, country="KR")
+    kr_elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    assert len(kr_trading_days) > 8000
+    assert kr_elapsed_ms < 100.0, f"KR 38년 영업일 추출 소요 시간 초과: {kr_elapsed_ms:.2f}ms >= 100ms"
+
+    t0 = time.perf_counter()
+    us_trading_days = MarketCalendar.get_trading_days(start_date, end_date, country="US")
+    us_elapsed_ms = (time.perf_counter() - t0) * 1000
+
+    assert len(us_trading_days) > 8000
+    assert us_elapsed_ms < 100.0, f"US 38년 영업일 추출 소요 시간 초과: {us_elapsed_ms:.2f}ms >= 100ms"

@@ -62,7 +62,8 @@ class HistoricalPriceCache:
         ticker: str,
         start_date: datetime.date,
         end_date: datetime.date,
-        country: str = "KR"
+        country: str = "KR",
+        trading_days: Optional[List[datetime.date]] = None,
     ) -> List[datetime.date]:
         """조회 기간 중 DB에 캐시되지 않았거나 갱신이 필요한 영업일 목록을 반환합니다.
 
@@ -73,6 +74,7 @@ class HistoricalPriceCache:
             start_date (datetime.date): 시작일
             end_date (datetime.date): 종료일
             country (str): 국가 코드 ('KR' 또는 'US')
+            trading_days (Optional[List[datetime.date]]): 미리 계산된 전체 영업일 목록 (제공 시 get_trading_days 재호출 생략)
 
         Returns:
             List[datetime.date]: 누락된 거래일 목록 (오름차순)
@@ -80,8 +82,9 @@ class HistoricalPriceCache:
         if start_date > end_date:
             return []
 
-        # 1. 캘린더 기준 전체 영업일 목록 산출
-        trading_days = self.calendar.get_trading_days(start_date, end_date, country=country)
+        # 1. 캘린더 기준 전체 영업일 목록 산출 (미전달 시 캘린더 호출)
+        if trading_days is None:
+            trading_days = self.calendar.get_trading_days(start_date, end_date, country=country)
         if not trading_days:
             return []
 
@@ -118,6 +121,7 @@ class HistoricalPriceCache:
         """누락된 영업일들을 연속된 시작/종료일 구간(Tuple[date, date]) 목록으로 그룹화합니다.
 
         외부 API 호출 시 구간 단위 벌크 요청을 최적화하기 위해 사용됩니다.
+        내부적으로 캘린더의 get_trading_days를 1회만 호출하여 연속성 인덱싱과 누락 영업일 계산에 공통 사용합니다.
 
         Args:
             ticker (str): 종목 코드 또는 티커
@@ -128,12 +132,25 @@ class HistoricalPriceCache:
         Returns:
             List[Tuple[datetime.date, datetime.date]]: 연속된 누락 구간 리스트
         """
-        missing_days = self.find_missing_trading_days(ticker, start_date, end_date, country=country)
+        if start_date > end_date:
+            return []
+
+        # 1. 전체 영업일 리스트를 1회만 조회하여 공통 재사용
+        all_trading_days = self.calendar.get_trading_days(start_date, end_date, country=country)
+        if not all_trading_days:
+            return []
+
+        missing_days = self.find_missing_trading_days(
+            ticker,
+            start_date,
+            end_date,
+            country=country,
+            trading_days=all_trading_days
+        )
         if not missing_days:
             return []
 
         # 전체 영업일 리스트에서의 인덱스를 기준으로 연속성을 판별
-        all_trading_days = self.calendar.get_trading_days(start_date, end_date, country=country)
         day_to_idx = {d: i for i, d in enumerate(all_trading_days)}
 
         ranges: List[Tuple[datetime.date, datetime.date]] = []

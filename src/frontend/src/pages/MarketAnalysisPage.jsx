@@ -226,6 +226,8 @@ export default function MarketAnalysisPage() {
 
   // 2. 4대 지수 비교 테이블 가져오기
   const fetchComparisonData = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const res = await fetch('/api/market/analysis/comparison');
       if (!res.ok) throw new Error('비교 테이블 데이터를 가져오는데 실패했습니다.');
@@ -233,22 +235,30 @@ export default function MarketAnalysisPage() {
       setComparisonData(data);
     } catch (err) {
       console.error(err);
+      setError(err.message || '비교 테이블 데이터를 가져오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // 지수 선택이나 기간 선택 시 데이터 갱신
+  // 지수 선택이나 기간 선택 시 개별 지수 데이터 갱신
   useEffect(() => {
-    if (activeTab === 'individual') {
-      fetchIndividualData();
-    } else {
+    fetchIndividualData();
+  }, [selectedTicker, selectedPeriod, dateRange]);
+
+  // 비교 탭 진입 시 데이터가 없으면 지연 로딩(Lazy load)
+  useEffect(() => {
+    if (activeTab === 'comparison' && !comparisonData) {
       fetchComparisonData();
     }
-  }, [selectedTicker, selectedPeriod, activeTab, dateRange]);
+  }, [activeTab, comparisonData]);
 
-  // 최초 로드 시 전체 데이터 로드
-  useEffect(() => {
-    fetchComparisonData();
-  }, []);
+  // 탭 전환 핸들러 (탭 전환 시 에러 상태 초기화)
+  const handleTabChange = (tab) => {
+    if (tab === activeTab) return;
+    setError(null);
+    setActiveTab(tab);
+  };
 
   // 차트 데이터셋 포맷팅
   const chartData = useMemo(() => {
@@ -330,7 +340,7 @@ export default function MarketAnalysisPage() {
         {/* 메인 탭 전환 */}
         <div className="flex bg-slate-100 p-1.5 rounded-2xl border border-slate-200/50 shadow-inner">
           <button
-            onClick={() => setActiveTab('individual')}
+            onClick={() => handleTabChange('individual')}
             className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
               activeTab === 'individual' 
                 ? 'bg-white text-slate-800 shadow-sm' 
@@ -340,7 +350,7 @@ export default function MarketAnalysisPage() {
             지수별 상세 분석
           </button>
           <button
-            onClick={() => setActiveTab('comparison')}
+            onClick={() => handleTabChange('comparison')}
             className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all ${
               activeTab === 'comparison' 
                 ? 'bg-white text-slate-800 shadow-sm' 
@@ -367,7 +377,7 @@ export default function MarketAnalysisPage() {
             <h2 className="text-xl font-bold text-red-900 mb-2">오류가 발생했습니다</h2>
             <p className="text-red-700 mb-6">{error}</p>
             <button
-              onClick={fetchIndividualData}
+              onClick={activeTab === 'comparison' ? fetchComparisonData : fetchIndividualData}
               className="px-6 py-2.5 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-200"
             >
               다시 시도

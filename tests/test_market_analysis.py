@@ -2,9 +2,9 @@
 """지표분석 서비스 및 API 엔드포인트에 대한 TDD 테스트 모듈입니다."""
 
 import datetime
-import pytest
+from unittest.mock import AsyncMock, patch
 import pandas as pd
-from unittest.mock import patch
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
@@ -162,6 +162,78 @@ async def test_market_analysis_service_comparison_table(mock_download, db_sessio
     for t_name in ["kospi", "kosdaq", "sp500", "nasdaq"]:
         assert t_name in row_2025
         assert isinstance(row_2025[t_name], float)
+
+
+@pytest.mark.asyncio
+@patch('yfinance.download')
+async def test_market_analysis_service_comparison_table_batch_call_count_and_accuracy(mock_download, db_session: Session):
+    """get_index_comparison_table 호출 시 4대 지수 시세를 지수당 1회씩(총 4회)만 일괄 병렬 조회하고
+
+    수익률 계산 및 내림차순 정렬이 정확한지 검증합니다.
+    """
+    mock_download.return_value = pd.DataFrame()
+    service = MarketAnalysisService(db_session)
+
+    # 기존 데이터 삭제
+    db_session.query(HistoricalPrice).delete()
+    db_session.commit()
+
+    tickers = ["^KS11", "^KQ11", "^GSPC", "^IXIC"]
+    # 2023-12-20 ~ 2025-12-31 더미 데이터 생성
+    # 2023년 말 종가(2023-12-29): 1000.0
+    # 2024년 말 종가(2024-12-31): 1100.0 -> 2024년 수익률 10.0%
+    # 2025년 말 종가(2025-12-31): 1210.0 -> 2025년 수익률 10.0%
+    for t in tickers:
+        # 2023년 말
+        db_session.add(HistoricalPrice(ticker=t, price_date=datetime.date(2023, 12, 29), close_price=1000.0))
+        # 2024년
+        db_session.add(HistoricalPrice(ticker=t, price_date=datetime.date(2024, 1, 2), close_price=1010.0))
+        db_session.add(HistoricalPrice(ticker=t, price_date=datetime.date(2024, 12, 31), close_price=1100.0))
+        # 2025년
+        db_session.add(HistoricalPrice(ticker=t, price_date=datetime.date(2025, 1, 2), close_price=1110.0))
+        db_session.add(HistoricalPrice(ticker=t, price_date=datetime.date(2025, 12, 31), close_price=1210.0))
+    db_session.commit()
+
+    # benchmark_service.get_historical_prices 호출을 스파이(spy)로 감싸서 호출 횟수와 인자 추적
+    original_get_historical_prices = service.benchmark_service.get_historical_prices
+    spy_calls = []
+
+    async def spy_get_historical_prices(ticker, start_date, end_date):
+        spy_calls.append((ticker, start_date, end_date))
+        return await original_get_historical_prices(ticker, start_date, end_date)
+
+    service.benchmark_service.get_historical_prices = AsyncMock(side_effect=spy_get_historical_prices)
+
+    comp_table = await service.get_index_comparison_table()
+
+    # 1. get_historical_prices 호출 횟수가 4대 지수에 대해 각각 1회씩 총 4회여야 함
+    assert len(spy_calls) == 4, f"get_historical_prices 호출 횟수가 4회여야 하지만 {len(spy_calls)}회 호출되었습니다."
+
+    called_tickers = [call[0] for call in spy_calls]
+    assert set(called_tickers) == set(tickers)
+
+    today = datetime.date.today()
+    expected_start = datetime.date(2023, 1, 1) - datetime.timedelta(days=10)
+    for t, s_date, e_date in spy_calls:
+        assert s_date == expected_start
+        assert e_date == today
+
+    # 2. 결과 정합성 검증
+    # 최신 연도순(내림차순) 정렬: today.year, ..., 2025, 2024, 2023 순
+    years = [row["year"] for row in comp_table]
+    assert years == sorted(years, reverse=True)
+
+    row_2024 = next((r for r in comp_table if r["year"] == 2024), None)
+    assert row_2024 is not None
+    # 2024년 수익률: (1100 - 1000) / 1000 * 100 = 10.0%
+    for col in ["kospi", "kosdaq", "sp500", "nasdaq"]:
+        assert row_2024[col] == 10.0
+
+    row_2025 = next((r for r in comp_table if r["year"] == 2025), None)
+    assert row_2025 is not None
+    # 2025년 수익률: (1210 - 1100) / 1100 * 100 = 10.0%
+    for col in ["kospi", "kosdaq", "sp500", "nasdaq"]:
+        assert row_2025[col] == 10.0
 
 
 @pytest.mark.asyncio
