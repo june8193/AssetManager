@@ -1,6 +1,6 @@
 # Spec: Tailscale HTTPS 연동 및 멀티 OS(Android/iOS) PWA 설치 환경 구축
 
-Status: ready-for-agent
+Status: closed
 
 ## Problem Statement
 
