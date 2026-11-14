@@ -21,8 +21,17 @@ def run_query_us_news(limit: int = 5) -> None:
         limit: 출력할 최대 뉴스 건수 (기본값: 5)
     """
     try:
-        ticker = yf.Ticker("^GSPC")
-        news_list = ticker.news
+        news_list = None
+        try:
+            ticker = yf.Ticker("^GSPC")
+            news_list = ticker.news
+        except Exception:
+            news_list = None
+
+        if not news_list:
+            search = yf.Search("US stock market")
+            news_list = getattr(search, "news", [])
+
         if not news_list:
             print("No news found for US market (^GSPC).")
             return

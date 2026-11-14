@@ -11,7 +11,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 import pytest
 import httpx
 
@@ -464,6 +464,34 @@ def test_query_us_news_yfinance_legacy_fallback(capsys):
         run_query_us_news(limit=1)
         captured = capsys.readouterr().out
         assert "- [Legacy format news title](https://finance.yahoo.com/news/legacy) (CNBC)" in captured
+
+
+def test_query_us_news_search_fallback_on_error(capsys):
+    """query_us_news.py가 ticker.news 에러 시 yf.Search로 fallback하여 뉴스를 수집하는지 검증합니다."""
+    from scripts.query_us_news import run_query_us_news
+
+    mock_search_news = [
+        {
+            "title": "Search Fallback News",
+            "link": "https://finance.yahoo.com/news/search-fallback",
+            "publisher": "Simply Wall St.",
+        }
+    ]
+
+    with patch("yfinance.Ticker") as mock_ticker_class, \
+         patch("yfinance.Search") as mock_search_class:
+        mock_ticker = MagicMock()
+        type(mock_ticker).news = PropertyMock(side_effect=Exception("*** YAHOO! FINANCE IS CURRENTLY DOWN! ***"))
+        mock_ticker_class.return_value = mock_ticker
+
+        mock_search = MagicMock()
+        mock_search.news = mock_search_news
+        mock_search_class.return_value = mock_search
+
+        run_query_us_news(limit=1)
+        captured = capsys.readouterr().out
+        assert "- [Search Fallback News](https://finance.yahoo.com/news/search-fallback) (Simply Wall St.)" in captured
+
 
 
 
