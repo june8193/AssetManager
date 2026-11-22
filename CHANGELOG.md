@@ -5,6 +5,30 @@
 
 ---
 
+## [2.7.0] - 2026-11-22
+
+### Added
+- **리스크 관리 메뉴 전면 재설계 — 포트폴리오 내재 변동성 진단 및 실시간 매매 시뮬레이터** ([상세 스펙](.backlog/done/redesign-risk-management/spec.md))
+  - 별도 DB 스키마 변경 없이 현재 보유 종목·예수금 비중과 유효 종가(`close_price > 0`) 기반 공분산 행렬을 실시간 계산하는 내재 변동성 API(`src/backend/routers/risk.py`, `src/backend/services/risk_service.py`) 구현
+  - 데스크탑 리스크 관리 화면 3단 인터랙티브 UI 구축: 벤치마크(`S&P 500`, `NASDAQ`, `KOSPI`) 대비 변동성 스펙트럼 게이지·KPI 요약 카드·액셀/완충 자산 가이드 배너, `[종목별 자체 변동성 vs 기여도]`·`[벤치마크 대비 낙폭(MDD) 방어력]` 2종 시각화 차트 탭, 실제 현금 잔고 연동 What-if 매매 시뮬레이터 및 미보유/관심종목 편입 테스트 모달
+- **데스크탑 시장분석 '환율분석' 서브메뉴 추가 및 키움 API 환율 일원화**
+  - 사이드바 시장분석 하위에 `환율분석` 서브메뉴 및 전용 페이지(`ExchangeRateAnalysisPage`) 신설
+  - 키움 API 기반 실시간 환율 동기화 및 하이브리드 환율 시계열·고저점 통계·주간 다운샘플링 분석 API 및 스케줄러 장애 알림 연동
+
+### Changed
+- **모바일 UI 클린 라이트(Clean Light) 테마 전면 개편**
+  - 모바일 대시보드, 자산, 비중, 지출, 시장, 설정 전 페이지 및 공통 카드·탭바·차트 컴포넌트를 클린 라이트 디자인 시스템으로 전면 리디자인
+  - `MobileHeaderContext` 및 `MobileStatusFeedback` 도입으로 모바일 상단 헤더 액션·상태 피드백 구조 일원화
+- **MCP 리스크 요약 지표 전환 및 모바일 벤치마크 MDD 계산 정리**
+  - `get_portfolio_status`, `get_asset_ratios` MCP 도구의 리스크 요약을 신규 포트폴리오 내재 변동성 지표로 전환
+  - `MobileBenchmarkSection`의 포트폴리오 기간 MDD 산출을 벤치마크 차트 시계열 기반 계산으로 통합
+
+### Removed
+- **구버전 샤프·소티노 성과 분석 레거시 완전 삭제**
+  - 기존 `/api/v1/performance/portfolio` 라우터(`src/backend/routers/performance.py`), 성과 서비스(`src/backend/services/performance_service.py`), 공식 안내 모달(`PerformanceInfoModal.jsx`) 및 관련 레거시 테스트 제거
+
+---
+
 ## [2.6.0] - 2026-11-22
 
 ### Added
