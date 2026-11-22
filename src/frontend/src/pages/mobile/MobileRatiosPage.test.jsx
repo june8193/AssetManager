@@ -127,7 +127,7 @@ describe('MobileRatiosPage', () => {
     );
 
     // 헤더 및 현재 총 자산 확인
-    expect(screen.getByText('비중 점검')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '비중 점검' })).toBeInTheDocument();
     expect(screen.getByText('현재 총 자산')).toBeInTheDocument();
     expect(screen.getByText('100,000,000')).toBeInTheDocument();
 
@@ -246,5 +246,103 @@ describe('MobileRatiosPage', () => {
 
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /저장/i })).not.toBeInTheDocument();
+  });
+
+  it('[비중 점검 | 리스크] 2단 서브탭이 렌더링되고 초기 마운트 시에는 리스크 API를 호출하지 않아야 한다', () => {
+    const fetchSpy = vi.fn();
+    global.fetch = fetchSpy;
+
+    vi.spyOn(useRatiosModule, 'useRatios').mockReturnValue({
+      hierarchy: mockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: vi.fn(),
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
+    );
+
+    const ratiosTab = screen.getByRole('tab', { name: '비중 점검' });
+    const riskTab = screen.getByRole('tab', { name: '리스크' });
+
+    expect(ratiosTab).toHaveAttribute('aria-selected', 'true');
+    expect(riskTab).toHaveAttribute('aria-selected', 'false');
+    expect(fetchSpy).not.toHaveBeenCalledWith(expect.stringContaining('/api/v1/risk/volatility'));
+  });
+
+  it('리스크 탭 클릭 시 MobileRiskSection이 렌더링되고, 리스크 탭 활성 상태에서 새로고침 시 리스크 데이터만 재조회되어야 한다', async () => {
+    const mockRefreshHierarchy = vi.fn();
+    global.fetch = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            period: '1Y',
+            as_of_date: '2026-11-22',
+            total_valuation_krw: 100000000,
+            portfolio: {
+              annualized_volatility: 14.82,
+              daily_volatility_pct: 0.93,
+              daily_volatility_krw: 930000,
+              sp500_ratio: 1.09,
+              nasdaq_ratio: 0.77,
+              kospi_ratio: 0.56,
+            },
+            benchmarks: {
+              sp500: { ticker: '^GSPC', name: 'S&P 500', annualized_volatility: 13.61 },
+              nasdaq: { ticker: '^IXIC', name: 'NASDAQ', annualized_volatility: 19.31 },
+              kospi: { ticker: '^KS11', name: 'KOSPI', annualized_volatility: 26.4 },
+            },
+            assets: [],
+            drawdown_comparison: { dates: [], benchmarks: {}, portfolio_current: [] },
+          }),
+      })
+    );
+
+    vi.spyOn(useRatiosModule, 'useRatios').mockReturnValue({
+      hierarchy: mockHierarchy,
+      loading: false,
+      error: null,
+      refreshHierarchy: mockRefreshHierarchy,
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
+    );
+
+    const riskTab = screen.getByRole('tab', { name: '리스크' });
+    fireEvent.click(riskTab);
+
+    expect(riskTab).toHaveAttribute('aria-selected', 'true');
+    await waitFor(() => {
+      expect(screen.getByText('14.82%')).toBeInTheDocument();
+    });
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+
+    const refreshBtn = screen.getByRole('button', { name: /새로고침/i });
+    await act(async () => {
+      fireEvent.click(refreshBtn);
+    });
+
+    await waitFor(() => {
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(/리스크 지표가 최신화되었습니다/i)).toBeInTheDocument();
+    });
+    expect(mockRefreshHierarchy).not.toHaveBeenCalled();
   });
 });
