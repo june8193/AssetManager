@@ -55,7 +55,15 @@ class BackgroundTaskManager:
                 "last_error": None,
                 "last_error_time": None,
             },
+            "market_indicator_sync": {
+                "last_run": None,
+                "status": "pending",
+                "last_success": None,
+                "last_error": None,
+                "last_error_time": None,
+            },
         }
+        self._last_indicator_sync_date: datetime.date | None = None
 
     def get_task_status(self) -> dict:
         """현재 태스크별 상태 레지스트리 복사본을 반환합니다."""
@@ -128,6 +136,63 @@ class BackgroundTaskManager:
             # 1시간(3600초) 대기
             await asyncio.sleep(3600)
 
+    async def sync_market_indicators(
+        self,
+        db: Session,
+        today: datetime.date | None = None,
+    ) -> bool:
+        """1일 1회 주요 시장 지표(^VIX, DX-Y.NYB)의 일봉 데이터를 동기화하여 DB에 적재합니다.
+
+        Args:
+            db (Session): 데이터베이스 세션
+            today (datetime.date | None): 기준 일자 (생략 시 오늘 날짜)
+
+        Returns:
+            bool: 동기화 수행 여부 (당일 이미 완료되어 스킵되면 False)
+        """
+        target_today = today or datetime.date.today()
+        if self._last_indicator_sync_date == target_today:
+            logger.info("오늘(%s) 이미 시장 지표 동기화가 완료되었습니다. 작업을 건너뜁니다.", target_today)
+            return False
+
+        from sqlalchemy import func
+        from .models import HistoricalPrice
+        from .services.benchmark_service import BenchmarkService
+
+        try:
+            service = BenchmarkService(db)
+            for ticker in ("^VIX", "DX-Y.NYB"):
+                row = (
+                    db.query(
+                        func.count(HistoricalPrice.id),
+                        func.max(HistoricalPrice.price_date),
+                    )
+                    .filter(
+                        HistoricalPrice.ticker == ticker,
+                        HistoricalPrice.close_price > 0.0,
+                    )
+                    .first()
+                )
+                count = int(row[0] or 0) if row else 0
+                max_date = row[1] if row else None
+
+                if count < 100 or max_date is None:
+                    start_date = target_today - datetime.timedelta(days=365 * 20)
+                else:
+                    start_date = max_date - datetime.timedelta(days=5)
+
+                await service.get_historical_prices(ticker, start_date, target_today)
+
+            self._last_indicator_sync_date = target_today
+            self.update_task_success("market_indicator_sync")
+            logger.info("시장 지표(^VIX, DX-Y.NYB) 일일 동기화 완료 (%s)", target_today)
+            return True
+        except Exception as e:
+            error_msg = str(e)
+            self.update_task_error("market_indicator_sync", error_msg)
+            logger.error("시장 지표 동기화 중 예외 발생: %s", error_msg)
+            return False
+
     async def _daily_maintenance_loop(self):
         """24시간 주기로 실행되어야 하는 유지보수 작업(DB 백업, 종목 동기화)을 관리하는 루프입니다."""
         while self._running:
@@ -167,6 +232,22 @@ class BackgroundTaskManager:
                 error_msg = str(e)
                 self.update_task_error("stock_sync", error_msg)
                 logger.error(f"유지보수 루프 - 주식 종목 동기화 중 예외 발생: {e}")
+
+            try:
+                # 3. 주요 시장 지표(^VIX, DX-Y.NYB) 1일 1회 동기화
+                logger.info("시장 지표(^VIX, DX-Y.NYB) 일일 동기화 조건 확인 중...")
+                db = SessionLocal()
+                try:
+                    await self.sync_market_indicators(db)
+                finally:
+                    db.close()
+            except asyncio.CancelledError:
+                logger.info("유지보수 루프가 취소되었습니다.")
+                break
+            except Exception as e:
+                error_msg = str(e)
+                self.update_task_error("market_indicator_sync", error_msg)
+                logger.error(f"유지보수 루프 - 시장 지표 동기화 중 예외 발생: {e}")
 
             try:
                 # 1시간(3600초) 후에 다시 체크

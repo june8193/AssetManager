@@ -13,6 +13,7 @@ import MobileMarketPage from './pages/mobile/MobileMarketPage';
 import MobileExpensesPage from './pages/mobile/MobileExpensesPage';
 import BenchmarkPage from './pages/BenchmarkPage';
 import MarketAnalysisPage from './pages/MarketAnalysisPage';
+import ExchangeRateAnalysisPage from './pages/ExchangeRateAnalysisPage';
 import StockAnalysisPage from './pages/StockAnalysisPage';
 import AssetAllocationSimulationPage from './pages/AssetAllocationSimulationPage';
 import CompoundInterestPage from './pages/CompoundInterestPage';
@@ -68,6 +69,7 @@ function DesktopAppRoutes() {
           <Route path="/benchmark" element={<BenchmarkPage />} />
           <Route path="/benchmark/compare-returns" element={<SectorPage />} />
           <Route path="/market/analysis" element={<MarketAnalysisPage />} />
+          <Route path="/market/exchange-rate" element={<ExchangeRateAnalysisPage />} />
           <Route path="/market/stock-analysis" element={<StockAnalysisPage />} />
           <Route path="/ratios/check" element={<RatioCheckPage />} />
           <Route path="/dividend" element={<DividendAnalysisPage />} />

@@ -216,6 +216,32 @@ async def get_market_analysis_comparison(
         raise HTTPException(status_code=500, detail=f"지수 비교 테이블 조회 중 오류가 발생했습니다: {str(e)}")
 
 
+@router.get("/analysis/exchange-rate")
+async def get_market_analysis_exchange_rate(
+    start_date: Optional[str] = Query(None, description="시작일 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="종료일 (YYYY-MM-DD)"),
+    db: Session = Depends(get_db)
+):
+    """원/달러(USD/KRW) 환율 및 달러인덱스(DXY) 시계열과 고점/저점 대비 통계를 조회합니다."""
+    try:
+        today = datetime.date.today()
+        e_date = datetime.datetime.strptime(end_date, "%Y-%m-%d").date() if end_date else today
+        if start_date:
+            s_date = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        else:
+            try:
+                s_date = e_date.replace(year=e_date.year - 3)
+            except ValueError:
+                s_date = e_date - datetime.timedelta(days=365 * 3)
+
+        service = MarketAnalysisService(db)
+        return await service.get_exchange_rate_analysis(s_date, e_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="날짜 형식이 잘못되었습니다. YYYY-MM-DD 형식을 사용해 주세요.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"환율 분석 데이터 조회 중 오류가 발생했습니다: {str(e)}")
+
+
 @router.get("/history", response_model=Dict[str, List[MarketHistoryItem]])
 async def get_market_history(
     tickers: str = Query(..., description="조회할 지수 티커 (콤마로 구분, 예: ^KS11,^GSPC)"),
