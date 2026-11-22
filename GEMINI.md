@@ -42,3 +42,4 @@
 ## 5. Agent skills
 - **Issue tracker**: `.backlog/<feature-slug>/` (완료 시 `.backlog/done/<feature-slug>/` 이동, 참조: `docs/agents/issue-tracker.md`)
 - **Triage labels**: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix` (참조: `docs/agents/triage-labels.md`)
+- **Domain docs**: single-context (루트 `GLOSSARY.md` + `docs/adr/`, 참조: `docs/agents/domain.md`)
