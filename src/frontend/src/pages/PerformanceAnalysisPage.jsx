@@ -1,548 +1,498 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
-} from 'recharts';
-import { 
-  ShieldAlert, Award, TrendingDown, Percent, Info, RefreshCw, 
-  HelpCircle, CheckCircle2, ChevronRight, BarChart2 
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import {
+  Activity,
+  RefreshCw,
+  ShieldCheck,
+  Flame,
+  Shield,
+  ArrowUpDown,
+  AlertCircle,
 } from 'lucide-react';
-import PerformanceInfoModal from '../components/PerformanceInfoModal';
+import { useFormatters } from '../hooks/useFormatters';
 
 const PERIODS = [
   { value: '1M', label: '1개월' },
   { value: '3M', label: '3개월' },
-  { value: '6M', label: '6개월' },
-  { value: '1Y', label: '1년' },
-  { value: 'YTD', label: 'YTD' },
-  { value: 'Max', label: '전체' }
+  { value: '1Y', label: '1년 (표준)' },
 ];
 
+/**
+ * S&P 500 대비 변동성 배수에 따른 상태 배지 정보를 반환합니다.
+ *
+ * @param {number} ratio - S&P 500 대비 변동성 배수
+ * @returns {{ label: string, badgeClass: string }}
+ */
+function getVolatilityStatusBadge(ratio) {
+  if (ratio < 0.85) {
+    return {
+      label: '안정적 (시장 하회)',
+      badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    };
+  }
+  if (ratio <= 1.15) {
+    return {
+      label: '시장 유사',
+      badgeClass: 'bg-blue-50 text-blue-700 border-blue-200',
+    };
+  }
+  return {
+    label: '공격적 (시장 상회)',
+    badgeClass: 'bg-amber-50 text-amber-700 border-amber-200',
+  };
+}
+
+const GUIDE_BANNER_THEMES = {
+  amber: {
+    container: 'bg-amber-50/60 border-amber-200/80',
+    title: 'text-amber-900',
+    desc: 'text-amber-800/80',
+    chipBorder: 'border-amber-200',
+    value: 'text-amber-700',
+    empty: 'text-amber-700',
+  },
+  emerald: {
+    container: 'bg-emerald-50/60 border-emerald-200/80',
+    title: 'text-emerald-900',
+    desc: 'text-emerald-800/80',
+    chipBorder: 'border-emerald-200',
+    value: 'text-emerald-700',
+    empty: 'text-emerald-700',
+  },
+};
+
+/**
+ * 액셀 Top 3 및 완충 자산 가이드 배너용 공통 카드 컴포넌트입니다.
+ */
+function GuideBannerCard({
+  title,
+  description,
+  items,
+  emptyText,
+  renderValue,
+  variant = 'amber',
+  iconNode,
+}) {
+  const theme = GUIDE_BANNER_THEMES[variant] || GUIDE_BANNER_THEMES.amber;
+  return (
+    <div className={`border rounded-2xl p-5 ${theme.container}`}>
+      <div className={`flex items-center gap-2 text-sm font-bold mb-2 ${theme.title}`}>
+        {iconNode}
+        <span>{title}</span>
+      </div>
+      <p className={`text-xs mb-3 ${theme.desc}`}>{description}</p>
+      <div className="flex flex-wrap gap-2">
+        {items.length > 0 ? (
+          items.map((item) => (
+            <div
+              key={item.ticker}
+              className={`px-3 py-1.5 rounded-xl bg-white border text-xs flex items-center gap-2 shadow-xs ${theme.chipBorder}`}
+            >
+              <span className="font-semibold text-slate-800">{item.name}</span>
+              <span className={`font-mono font-bold ${theme.value}`}>{renderValue(item)}</span>
+            </div>
+          ))
+        ) : (
+          <span className={`text-xs ${theme.empty}`}>{emptyText}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 데스크톱 리스크 관리(포트폴리오 내재 변동성 진단) 페이지 컴포넌트입니다.
+ */
 export default function PerformanceAnalysisPage() {
+  const { formatCurrency } = useFormatters();
   const [selectedPeriod, setSelectedPeriod] = useState('1Y');
-  const [riskFreeRate, setRiskFreeRate] = useState(3.5);
-  const [inputRate, setInputRate] = useState('3.5');
-  const [isEditingRate, setIsEditingRate] = useState(false);
-  
-  const [portfolioPerf, setPortfolioPerf] = useState(null);
-  const [assetPerfs, setAssetPerfs] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  // 테이블 정렬 상태
-  const [sortKey, setSortKey] = useState('sharpe_ratio');
+  const [sortKey, setSortKey] = useState('volatility_share');
   const [sortOrder, setSortOrder] = useState('desc');
 
-  // 모달 상태
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
-
-  // 무위험 수익률 로드
-  const fetchRiskFreeRate = async () => {
-    try {
-      const res = await fetch('/api/v1/performance/settings/risk-free-rate');
-      if (res.ok) {
-        const data = await res.json();
-        setRiskFreeRate(data.rate);
-        setInputRate(String(data.rate));
-      }
-    } catch (e) {
-      console.error("무위험 수익률 로드 실패:", e);
-    }
-  };
-
-  // 무위험 수익률 변경 저장
-  const handleSaveRiskFreeRate = async () => {
-    const numRate = parseFloat(inputRate);
-    if (isNaN(numRate) || numRate < 0 || numRate > 100) {
-      alert("0% 이상 100% 이하의 유효한 수치를 입력해주세요.");
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/v1/performance/settings/risk-free-rate', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rate: numRate })
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setRiskFreeRate(data.rate);
-        setIsEditingRate(false);
-        fetchPerformanceData();
-      }
-    } catch (e) {
-      console.error("무위험 수익률 저장 실패:", e);
-      alert("무위험 수익률 저장 중 오류가 발생했습니다.");
-    }
-  };
-
-  // 성과 데이터 로드 (총 자산 + 종목/지수 일괄)
-  const fetchPerformanceData = async () => {
+  const fetchVolatility = useCallback(async (period) => {
     setLoading(true);
     setError(null);
     try {
-      const [portRes, assetRes] = await Promise.all([
-        fetch(`/api/v1/performance/portfolio?period=${selectedPeriod}`),
-        fetch(`/api/v1/performance/assets/batch?period=${selectedPeriod}`)
-      ]);
-
-      if (portRes.ok) {
-        const portData = await portRes.json();
-        setPortfolioPerf(portData);
+      const res = await fetch(`/api/v1/risk/volatility?period=${period}`);
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}`);
       }
-      if (assetRes.ok) {
-        const assetData = await assetRes.json();
-        setAssetPerfs(assetData);
-      }
+      const json = await res.json();
+      setData(json);
     } catch (e) {
-      setError(e.message);
+      console.error('내재 변동성 데이터 로드 실패:', e);
+      setError('포트폴리오 내재 변동성 데이터를 불러오는 데 실패했습니다.');
     } finally {
       setLoading(false);
     }
-  };
-
-  useEffect(() => {
-    fetchRiskFreeRate();
   }, []);
 
   useEffect(() => {
-    fetchPerformanceData();
-  }, [selectedPeriod]);
+    let active = true;
+    Promise.resolve().then(() => {
+      if (active) {
+        fetchVolatility(selectedPeriod);
+      }
+    });
+    return () => {
+      active = false;
+    };
+  }, [selectedPeriod, fetchVolatility]);
 
-  // 테이블 정렬 핸들러
   const handleSort = (key) => {
     if (sortKey === key) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+      setSortOrder((prev) => (prev === 'desc' ? 'asc' : 'desc'));
     } else {
       setSortKey(key);
       setSortOrder('desc');
     }
   };
 
-  // 정렬된 자산 리스트
-  const sortedAssetPerfs = useMemo(() => {
-    if (!assetPerfs || assetPerfs.length === 0) return [];
-    return [...assetPerfs].sort((a, b) => {
-      let valA = a[sortKey] ?? 0;
-      let valB = b[sortKey] ?? 0;
+  // 스펙트럼 게이지 최대 스케일 계산 (0% ~ max(벤치마크, 포트폴리오) * 1.15)
+  const gaugeMax = useMemo(() => {
+    if (!data) return 30;
+    const candidates = [
+      data.portfolio?.annualized_volatility || 0,
+      data.benchmarks?.sp500?.annualized_volatility || 0,
+      data.benchmarks?.nasdaq?.annualized_volatility || 0,
+      data.benchmarks?.kospi?.annualized_volatility || 0,
+      20,
+    ];
+    return Math.ceil(Math.max(...candidates) * 1.15);
+  }, [data]);
 
-      if (typeof valA === 'string') {
-        return sortOrder === 'asc' 
-          ? valA.localeCompare(valB) 
-          : valB.localeCompare(valA);
-      }
-      return sortOrder === 'asc' ? valA - valB : valB - valA;
+  const toGaugePercent = (val) => {
+    if (!gaugeMax) return 0;
+    return Math.max(0, Math.min(100, (val / gaugeMax) * 100));
+  };
+
+  // 액셀 Top 3 (비현금 보유 종목 중 변동성 기여도 상위 3개)
+  const accelTop3 = useMemo(() => {
+    if (!data?.assets) return [];
+    return [...data.assets]
+      .filter((a) => !a.is_cash && a.volatility_share > 0)
+      .sort((a, b) => b.volatility_share - a.volatility_share)
+      .slice(0, 3);
+  }, [data]);
+
+  // 완충 자산 (현금 + S&P 500 변동성보다 낮은 저변동성 보유 자산)
+  const bufferAssets = useMemo(() => {
+    if (!data?.assets) return [];
+    const sp500Vol = data.benchmarks?.sp500?.annualized_volatility || 15;
+    return data.assets.filter(
+      (a) => a.is_cash || (a.weight > 0 && a.annualized_volatility < sp500Vol)
+    );
+  }, [data]);
+
+  const sortedAssets = useMemo(() => {
+    if (!data?.assets) return [];
+    return [...data.assets].sort((a, b) => {
+      const valA = a[sortKey] ?? 0;
+      const valB = b[sortKey] ?? 0;
+      return sortOrder === 'desc' ? valB - valA : valA - valB;
     });
-  }, [assetPerfs, sortKey, sortOrder]);
+  }, [data, sortKey, sortOrder]);
 
-
-  // 샤프 지수 레벨 평가
-  const sharpeEvaluation = useMemo(() => {
-    const s = portfolioPerf?.sharpe_ratio ?? 0;
-    if (s > 1.0) return { label: '매우 우수', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
-    if (s > 0.5) return { label: '양호', color: 'text-blue-600 bg-blue-50 border-blue-200' };
-    if (s > 0.0) return { label: '보통', color: 'text-amber-600 bg-amber-50 border-amber-200' };
-    return { label: '저성과', color: 'text-rose-600 bg-rose-50 border-rose-200' };
-  }, [portfolioPerf]);
-
-  // 소티노 지수 레벨 평가
-  const sortinoEvaluation = useMemo(() => {
-    const s = portfolioPerf?.sortino_ratio ?? 0;
-    if (s > 1.5) return { label: '매우 우수', color: 'text-emerald-600 bg-emerald-50 border-emerald-200' };
-    if (s > 0.7) return { label: '양호', color: 'text-blue-600 bg-blue-50 border-blue-200' };
-    if (s > 0.0) return { label: '보통', color: 'text-amber-600 bg-amber-50 border-amber-200' };
-    return { label: '저성과', color: 'text-rose-600 bg-rose-50 border-rose-200' };
-  }, [portfolioPerf]);
+  const portfolio = data?.portfolio;
+  const benchmarks = data?.benchmarks;
+  const statusBadge = portfolio
+    ? getVolatilityStatusBadge(portfolio.sp500_ratio)
+    : null;
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
-      
-      {/* 헤더 영역 */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80">
+    <div className="space-y-6 pb-12">
+      {/* 상단 헤더 및 기간 선택 */}
+      <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 mb-1">
-            <BarChart2 size={16} />
-            <span>Asset Risk Performance Metrics</span>
+          <div className="flex items-center gap-2 text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">
+            <ShieldCheck className="w-4 h-4" />
+            <span>Portfolio Implied Volatility</span>
           </div>
           <h1 className="text-2xl font-bold text-slate-800 tracking-tight">리스크 관리</h1>
           <p className="text-xs text-slate-500 mt-1">
-            시간가중수익률(TWR) 기반 포트폴리오 위험대비 성과지표(Sharpe, Sortino) 및 MDD 추이를 분석합니다.
+            현재 보유 비중과 유효 종가 공분산 행렬 기반의{' '}
+            <span className="font-semibold text-slate-700">포트폴리오 내재 변동성</span>을 3대
+            시장 지수와 비교해 진단합니다.
           </p>
         </div>
 
-        {/* 오른쪽 무위험 수익률 설정 컨트롤 */}
-        <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200">
-          <div className="text-xs">
-            <span className="text-slate-500 font-medium block">연율 무위험 수익률 ($R_f$)</span>
-            {!isEditingRate ? (
-              <span className="text-sm font-bold text-slate-800 font-mono">{riskFreeRate.toFixed(2)}%</span>
-            ) : (
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <input 
-                  type="number"
-                  step="0.1"
-                  value={inputRate}
-                  onChange={(e) => setInputRate(e.target.value)}
-                  className="w-16 px-2 py-0.5 text-xs font-mono border border-slate-300 rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                />
-                <span className="text-xs font-semibold">%</span>
-              </div>
-            )}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl border border-slate-200/70">
+            {PERIODS.map((p) => {
+              const active = selectedPeriod === p.value;
+              return (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setSelectedPeriod(p.value)}
+                  className={`px-3 py-1.5 text-xs rounded-lg transition-all ${
+                    active
+                      ? 'bg-white text-blue-700 shadow-sm font-bold'
+                      : 'text-slate-600 hover:text-slate-900 font-medium'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
 
-          {!isEditingRate ? (
-            <button 
-              onClick={() => setIsEditingRate(true)}
-              className="px-2.5 py-1 text-xs font-medium bg-white text-slate-700 border border-slate-300 hover:bg-slate-100 rounded-lg transition-colors"
-            >
-              설정 변경
-            </button>
-          ) : (
-            <div className="flex items-center gap-1">
-              <button 
-                onClick={handleSaveRiskFreeRate}
-                className="px-2 py-1 text-xs font-semibold bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                저장
-              </button>
-              <button 
-                onClick={() => { setIsEditingRate(false); setInputRate(String(riskFreeRate)); }}
-                className="px-2 py-1 text-xs font-medium bg-slate-200 text-slate-600 rounded-lg hover:bg-slate-300 transition-colors"
-              >
-                취소
-              </button>
-            </div>
-          )}
-
-          {/* 알고리즘 안내 모달 오픈 버튼 */}
           <button
-            onClick={() => setIsInfoModalOpen(true)}
-            className="p-2 text-blue-600 hover:bg-blue-100/60 rounded-lg transition-colors ml-1"
-            title="AssetManager 상세 산출 공식 보기"
+            type="button"
+            onClick={() => fetchVolatility(selectedPeriod)}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-xl hover:bg-slate-50 hover:text-blue-600 transition-colors disabled:opacity-50"
           >
-            <HelpCircle size={18} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
+            <span>새로고침</span>
           </button>
         </div>
       </div>
 
-      {/* 기간 선택 서브 필터 */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 bg-slate-200/60 p-1 rounded-xl">
-          {PERIODS.map((p) => (
-            <button
-              key={p.value}
-              onClick={() => setSelectedPeriod(p.value)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-all ${
-                selectedPeriod === p.value 
-                  ? 'bg-white text-blue-700 shadow-sm font-bold' 
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center gap-2 text-sm">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
         </div>
+      )}
 
-        <button 
-          onClick={fetchPerformanceData}
-          disabled={loading}
-          className="flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-blue-600 transition-colors"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          <span>새로고침</span>
-        </button>
-      </div>
-
-      {/* KPI 카드리스트 */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        
-        {/* 1. 샤프 지수 카드 */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 relative overflow-hidden group hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-              샤프 지수 (Sharpe)
-              <button 
-                onClick={() => setIsInfoModalOpen(true)} 
-                className="text-slate-400 hover:text-blue-600 transition-colors"
-                title="공식 툴팁 및 가이드 모달 열기"
-              >
-                <Info size={14} />
-              </button>
-            </span>
-            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${sharpeEvaluation.color}`}>
-              {sharpeEvaluation.label}
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-slate-800 font-mono tracking-tight">
-              {loading ? "..." : (portfolioPerf?.sharpe_ratio ?? "0.00")}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-2">
-            전체 변동성 대비 연율 초과 수익률
-          </p>
-        </div>
-
-        {/* 2. 소티노 지수 카드 */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 relative overflow-hidden group hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500 flex items-center gap-1">
-              소티노 지수 (Sortino)
-              <button 
-                onClick={() => setIsInfoModalOpen(true)} 
-                className="text-slate-400 hover:text-blue-600 transition-colors"
-                title="공식 툴팁 및 가이드 모달 열기"
-              >
-                <Info size={14} />
-              </button>
-            </span>
-            <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-md border ${sortinoEvaluation.color}`}>
-              {sortinoEvaluation.label}
-            </span>
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-3xl font-extrabold text-slate-800 font-mono tracking-tight">
-              {loading ? "..." : (portfolioPerf?.sortino_ratio ?? "0.00")}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-2">
-            하방 손실 위험 대비 연율 초과 수익률
-          </p>
-        </div>
-
-        {/* 3. 최근 MDD 카드 */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 relative overflow-hidden group hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500">최근 Drawdown (MDD)</span>
-            <TrendingDown size={16} className="text-amber-500" />
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-extrabold text-amber-600 font-mono tracking-tight">
-              {loading ? "..." : `${portfolioPerf?.mdd ?? 0.00}%`}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-2">
-            최근 최고점 대비 현재 하락률
-          </p>
-        </div>
-
-        {/* 4. 기간 최고 MDD 카드 */}
-        <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80 relative overflow-hidden group hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-semibold text-slate-500">기간 최고 MDD (Max MDD)</span>
-            <ShieldAlert size={16} className="text-rose-500" />
-          </div>
-          <div className="flex items-baseline gap-1">
-            <span className="text-3xl font-extrabold text-rose-600 font-mono tracking-tight">
-              {loading ? "..." : `${portfolioPerf?.max_mdd ?? 0.00}%`}
-            </span>
-          </div>
-          <p className="text-[11px] text-slate-400 mt-2">
-            선택 기간 중 발생한 최악의 하락 폭
-          </p>
-        </div>
-
-      </div>
-
-      {/* MDD 추이 영역 차트 */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 pb-4">
-          <div>
-            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <TrendingDown className="text-amber-500" size={18} />
-              <span>포트폴리오 일별 Drawdown 백분율 추이 차트</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              외부 입출금 현금 흐름을 차감한 TWR 시계열 기준 고점 대비 하락 폭 시각화
-            </p>
-          </div>
-          
-          <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">연율화 수익률:</span>
-              <span className="font-mono font-bold text-slate-700">
-                {portfolioPerf?.annualized_return != null ? `${portfolioPerf.annualized_return}%` : '-'}
-              </span>
+      {data && portfolio && benchmarks && (
+        <>
+          {/* 3열 요약 KPI 카드 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* KPI 1: 연율화 내재 변동성 */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-medium mb-2">
+                <span>포트폴리오 내재 변동성</span>
+                <span className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[11px]">
+                  현재 보유 비중 기준
+                </span>
+              </div>
+              <div className="text-3xl font-extrabold text-slate-900 font-mono tracking-tight">
+                {portfolio.annualized_volatility.toFixed(2)}%
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                연율화 표준편차 ({data.period} 기준 · {data.as_of_date})
+              </p>
             </div>
-            <div className="flex items-center gap-1.5">
-              <span className="text-slate-400">연율화 변동성:</span>
-              <span className="font-mono font-bold text-slate-700">
-                {portfolioPerf?.annualized_volatility != null ? `${portfolioPerf.annualized_volatility}%` : '-'}
-              </span>
+
+            {/* KPI 2: 평소 하루 평균 출렁임 */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-medium mb-2">
+                <span>평소 하루 평균 출렁임</span>
+                <Activity className="w-4 h-4 text-blue-500" />
+              </div>
+              <div className="text-3xl font-extrabold text-slate-900 font-mono tracking-tight">
+                ±{portfolio.daily_volatility_pct.toFixed(2)}%
+              </div>
+              <p className="text-xs text-slate-600 mt-2 font-medium">
+                원화 체감 폭: 약 ±{formatCurrency(portfolio.daily_volatility_krw)}
+              </p>
+            </div>
+
+            {/* KPI 3: S&P 500 대비 배수 및 상태 배지 */}
+            <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
+              <div className="flex items-center justify-between text-xs text-slate-500 font-medium mb-2">
+                <span>시장 대비 변동성 배수</span>
+                {statusBadge && (
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full border text-[11px] font-semibold ${statusBadge.badgeClass}`}
+                  >
+                    {statusBadge.label}
+                  </span>
+                )}
+              </div>
+              <div className="text-2xl font-extrabold text-slate-900 tracking-tight">
+                S&P 500의 {portfolio.sp500_ratio.toFixed(2)}배
+              </div>
+              <p className="text-xs text-slate-500 mt-2">
+                NASDAQ {portfolio.nasdaq_ratio.toFixed(2)}배 · KOSPI{' '}
+                {portfolio.kospi_ratio.toFixed(2)}배
+              </p>
             </div>
           </div>
-        </div>
 
-        {/* 차트 렌더링 */}
-        <div className="h-72 w-full pt-2">
-          {loading ? (
-            <div className="h-full flex items-center justify-center text-xs text-slate-400">
-              성과 차트 데이터를 계산 중입니다...
+          {/* 벤치마크 위치 스펙트럼 게이지 */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-6">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h2 className="text-sm font-bold text-slate-800">
+                  3대 시장 지수 대비 변동성 위치 스펙트럼
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  현금(0%)부터 S&P 500, NASDAQ, KOSPI 지수 변동성까지의 수평 스펙트럼에서 내
+                  포트폴리오 위치를 확인합니다.
+                </p>
+              </div>
+              <span className="text-xs font-mono text-slate-500">0% ~ {gaugeMax}%</span>
             </div>
-          ) : !portfolioPerf?.drawdown_series || portfolioPerf.drawdown_series.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-xs text-slate-400">
-              선택한 기간에 대한 자산 스냅샷 데이터가 부족합니다.
+
+            <div className="relative pt-8 pb-10 px-2">
+              {/* 트랙 바 */}
+              <div className="h-3 w-full rounded-full bg-gradient-to-r from-emerald-100 via-blue-100 to-amber-200 relative">
+                {/* 내 포트폴리오 마커 */}
+                <div
+                  className="absolute -top-7 -translate-x-1/2 flex flex-col items-center z-20"
+                  style={{ left: `${toGaugePercent(portfolio.annualized_volatility)}%` }}
+                >
+                  <span className="px-2 py-0.5 rounded-md bg-blue-600 text-white text-[11px] font-bold whitespace-nowrap shadow-sm">
+                    내 포트폴리오 ({portfolio.annualized_volatility.toFixed(2)}%)
+                  </span>
+                  <div className="w-0.5 h-4 bg-blue-600 mt-0.5" />
+                  <div className="w-3.5 h-3.5 rounded-full bg-blue-600 border-2 border-white shadow" />
+                </div>
+
+                {/* 0% 현금 기준선 */}
+                <div
+                  className="absolute top-4 -translate-x-1/2 flex flex-col items-center text-[11px] text-slate-500"
+                  style={{ left: '0%' }}
+                >
+                  <div className="w-px h-2 bg-slate-300 mb-1" />
+                  <span>0% (현금)</span>
+                </div>
+
+                {/* 3대 벤치마크 눈금 */}
+                {[
+                  { key: 'sp500', label: 'S&P 500', data: benchmarks.sp500 },
+                  { key: 'nasdaq', label: 'NASDAQ', data: benchmarks.nasdaq },
+                  { key: 'kospi', label: 'KOSPI', data: benchmarks.kospi },
+                ].map((bm) => (
+                  <div
+                    key={bm.key}
+                    className="absolute top-3 -translate-x-1/2 flex flex-col items-center text-[11px]"
+                    style={{ left: `${toGaugePercent(bm.data.annualized_volatility)}%` }}
+                  >
+                    <div className="w-0.5 h-2.5 bg-slate-400 mb-1" />
+                    <span className="font-semibold text-slate-700 whitespace-nowrap">
+                      {bm.label}
+                    </span>
+                    <span className="font-mono text-slate-500">
+                      {bm.data.annualized_volatility.toFixed(2)}%
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          ) : (
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={portfolioPerf.drawdown_series} margin={{ top: 10, right: 20, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="drawdownGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4}/>
-                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0.05}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                <XAxis 
-                  dataKey="date" 
-                  tickLine={false} 
-                  axisLine={false} 
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  minTickGap={30}
-                />
-                <YAxis 
-                  domain={['auto', 0]}
-                  tickLine={false} 
-                  axisLine={false} 
-                  tick={{ fontSize: 11, fill: '#94a3b8' }}
-                  unit="%"
-                />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b', borderRadius: '12px', color: '#fff', fontSize: '12px' }}
-                  itemStyle={{ color: '#f59e0b' }}
-                  formatter={(val) => [`${val}%`, 'Drawdown']}
-                  labelFormatter={(lbl) => `일자: ${lbl}`}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="drawdown" 
-                  stroke="#f59e0b" 
-                  strokeWidth={2}
-                  fillOpacity={1} 
-                  fill="url(#drawdownGradient)" 
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* 보유 종목 및 벤치마크 지수 위험조정 성과 비교 테이블 */}
-      <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200/80 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-4">
-          <div>
-            <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
-              <Award className="text-blue-600" size={18} />
-              <span>보유 종목 및 벤치마크 지수 위험조정 성과 비교</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">
-              선택한 기간 동안의 연율화 샤프/소티노 지수, MDD 및 연율 수익률을 한눈에 비교 분석합니다.
-            </p>
           </div>
-          <div className="text-xs text-slate-400">
-            총 <span className="font-bold text-slate-700">{sortedAssetPerfs.length}</span>개 자산
-          </div>
-        </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-slate-600">
-            <thead className="bg-slate-50 text-slate-500 font-semibold border-b border-slate-200">
-              <tr>
-                <th className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('name')}>
-                  <div className="flex items-center gap-1">
-                    자산명 (티커)
-                    {sortKey === 'name' && (sortOrder === 'asc' ? '▲' : '▼')}
-                  </div>
-                </th>
-                <th className="py-3 px-4 cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('asset_type')}>
-                  <div className="flex items-center gap-1">
-                    구분
-                    {sortKey === 'asset_type' && (sortOrder === 'asc' ? '▲' : '▼')}
-                  </div>
-                </th>
-                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('sharpe_ratio')}>
-                  <div className="flex items-center justify-end gap-1">
-                    샤프 지수 (Sharpe)
-                    {sortKey === 'sharpe_ratio' && (sortOrder === 'asc' ? '▲' : '▼')}
-                  </div>
-                </th>
-                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('sortino_ratio')}>
-                  <div className="flex items-center justify-end gap-1">
-                    소티노 지수 (Sortino)
-                    {sortKey === 'sortino_ratio' && (sortOrder === 'asc' ? '▲' : '▼')}
-                  </div>
-                </th>
-                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('mdd')}>
-                  <div className="flex items-center justify-end gap-1">
-                    최대 낙폭 (MDD)
-                    {sortKey === 'mdd' && (sortOrder === 'asc' ? '▲' : '▼')}
-                  </div>
-                </th>
-                <th className="py-3 px-4 text-right cursor-pointer hover:bg-slate-100 transition-colors" onClick={() => handleSort('annualized_return')}>
-                  <div className="flex items-center justify-end gap-1">
-                    연율화 수익률
-                    {sortKey === 'annualized_return' && (sortOrder === 'asc' ? '▲' : '▼')}
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
-                    종목별 위험조정 지표를 산출 중입니다...
-                  </td>
-                </tr>
-              ) : sortedAssetPerfs.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
-                    조회된 지수 및 종목 성과 데이터가 없습니다.
-                  </td>
-                </tr>
-              ) : (
-                sortedAssetPerfs.map((item) => (
-                  <tr key={item.ticker} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4 font-medium text-slate-800">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold">{item.name}</span>
-                        <span className="text-[10px] text-slate-400 font-mono">({item.ticker})</span>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className={`px-2 py-0.5 text-[10px] font-semibold rounded-md ${
-                        item.asset_type === 'benchmark'
-                          ? 'bg-purple-50 text-purple-700 border border-purple-200'
-                          : 'bg-blue-50 text-blue-700 border border-blue-200'
-                      }`}>
-                        {item.asset_type === 'benchmark' ? '벤치마크' : '보유종목'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
-                      {item.sharpe_ratio != null ? item.sharpe_ratio.toFixed(2) : '0.00'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-bold text-slate-800">
-                      {item.sortino_ratio != null ? item.sortino_ratio.toFixed(2) : '0.00'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-semibold text-rose-600">
-                      {item.mdd != null ? `${item.mdd.toFixed(2)}%` : '0.00%'}
-                    </td>
-                    <td className="py-3 px-4 text-right font-mono font-semibold text-slate-700">
-                      {item.annualized_return != null ? `${item.annualized_return.toFixed(2)}%` : '0.00%'}
-                    </td>
+          {/* 액셀 Top 3 & 완충 자산 가이드 배너 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <GuideBannerCard
+              title="액셀 Top 3"
+              description="포트폴리오 전체 흔들림에 가장 큰 비중을 차지하는 핵심 변동성 드라이버입니다."
+              items={accelTop3}
+              emptyText="표시할 위험 기여 종목이 없습니다."
+              renderValue={(item) => `${item.volatility_share.toFixed(1)}%`}
+              variant="amber"
+              iconNode={<Flame className="w-4 h-4 text-amber-600" />}
+            />
+            <GuideBannerCard
+              title="완충 자산"
+              description="현금 및 S&P 500 대비 낮은 변동성으로 계좌 흔들림을 흡수하는 방어 자산입니다."
+              items={bufferAssets}
+              emptyText="현재 완충 자산이 없습니다."
+              renderValue={(item) => `비중 ${item.weight.toFixed(1)}%`}
+              variant="emerald"
+              iconNode={<Shield className="w-4 h-4 text-emerald-600" />}
+            />
+          </div>
+
+          {/* 종목별 변동성·기여도 기본 테이블 */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-800">
+                  종목별 자체 변동성 및 흔들림 기여도
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  오일러 위험 분해 기준 기여 점유율 합계는 항상 100%입니다.
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/80 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/80">
+                    <th className="py-3 px-5">종목</th>
+                    <th className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('valuation_krw')}
+                        className="inline-flex items-center gap-1 hover:text-slate-800"
+                      >
+                        <span>보유 금액</span>
+                        <ArrowUpDown className="w-3 h-3" />
+                      </button>
+                    </th>
+                    <th className="py-3 px-4 text-right">비중</th>
+                    <th className="py-3 px-4 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('annualized_volatility')}
+                        className="inline-flex items-center gap-1 hover:text-slate-800"
+                      >
+                        <span>자체 변동성</span>
+                        <ArrowUpDown className="w-3 h-3" />
+                      </button>
+                    </th>
+                    <th className="py-3 px-5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => handleSort('volatility_share')}
+                        className="inline-flex items-center gap-1 hover:text-slate-800"
+                      >
+                        <span>흔들림 기여도</span>
+                        <ArrowUpDown className="w-3 h-3" />
+                      </button>
+                    </th>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* 안내 모달 */}
-      <PerformanceInfoModal 
-        isOpen={isInfoModalOpen} 
-        onClose={() => setIsInfoModalOpen(false)} 
-      />
-
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {sortedAssets.map((asset) => (
+                    <tr key={asset.ticker} className="hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3.5 px-5">
+                        <div className="font-semibold text-slate-800">{asset.name}</div>
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 mt-0.5">
+                          <span className="font-mono">{asset.ticker}</span>
+                          <span>·</span>
+                          <span>{asset.category_label}</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-700">
+                        {formatCurrency(asset.valuation_krw)}
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-600">
+                        {asset.weight.toFixed(1)}%
+                      </td>
+                      <td className="py-3.5 px-4 text-right font-mono text-slate-700">
+                        {asset.annualized_volatility.toFixed(2)}%
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        <div className="inline-flex items-center gap-2 justify-end">
+                          <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden hidden sm:block">
+                            <div
+                              className="h-full bg-blue-500 rounded-full"
+                              style={{
+                                width: `${Math.max(0, Math.min(100, asset.volatility_share))}%`,
+                              }}
+                            />
+                          </div>
+                          <span className="font-mono font-bold text-slate-800 w-16 text-right">
+                            {asset.volatility_share.toFixed(2)}%
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </>
+      )}
     </div>
-
   );
 }
