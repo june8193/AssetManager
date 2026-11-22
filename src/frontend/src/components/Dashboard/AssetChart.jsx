@@ -206,8 +206,9 @@ const renderDesktopIndexTooltip = createIndexTooltipRenderer('light');
  * @param {Object} props.data - 시계열 자산 데이터
  * @param {Array} props.data.history - 일자별 자산 합계 및 계좌별 데이터 리스트
  * @param {Array} props.data.accounts - 계좌 정보 리스트 (필터링용)
+ * @param {string} [props.className='mb-10'] - 외부 컨테이너 추가 클래스
  */
-const AssetChart = ({ data }) => {
+const AssetChart = ({ data, className = 'mb-10' }) => {
   const [chartMode, setChartMode] = useState('asset'); // 'asset' | 'index'
   const [filter, setFilter] = useState('total'); // 'total' or account_id string 'acc_1'
   const { maskValue } = useMasking();
@@ -225,7 +226,7 @@ const AssetChart = ({ data }) => {
 
   if (!history || history.length === 0) {
     return (
-      <div className="bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm mb-10 text-center">
+      <div className={`bg-white p-12 rounded-[2.5rem] border border-slate-100 shadow-sm text-center flex flex-col items-center justify-center ${className}`}>
         <TrendingUp className="mx-auto text-slate-200 mb-4" size={48} />
         <p className="text-slate-400 font-medium">표시할 자산 추이 데이터가 없습니다.</p>
       </div>
@@ -233,8 +234,8 @@ const AssetChart = ({ data }) => {
   }
 
   return (
-    <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm mb-10">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+    <div className={`bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col ${className}`}>
+      <div className="flex flex-col gap-4 mb-6">
         <div>
           <div className="flex flex-wrap items-center gap-3">
             <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
@@ -260,7 +261,7 @@ const AssetChart = ({ data }) => {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex p-1 bg-slate-100 rounded-xl border border-slate-200/60">
             {CHART_MODES.map((tab) => {
               const isActive = chartMode === tab.key;
@@ -300,7 +301,7 @@ const AssetChart = ({ data }) => {
         </div>
       </div>
 
-      <div className="h-[350px] w-full">
+      <div className="h-[350px] w-full mt-auto">
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
             <defs>

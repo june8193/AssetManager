@@ -266,141 +266,17 @@ const DashboardPage = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Account Breakdown */}
-        <div className="lg:col-span-2 space-y-6">
-          <div className="flex items-center justify-between px-2">
-            <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
-              <Wallet className="text-blue-600" size={28} />
-              계좌별 현황
-            </h2>
-          </div>
-
-
-          <div className="grid gap-4">
-            {sortedAccounts.map((acc) => {
-              const isExpanded = expandedAccounts.has(acc.id);
-              return (
-                <div 
-                  key={acc.id} 
-                  className={`group bg-white rounded-[2rem] border transition-all duration-300 overflow-hidden ${
-                    isExpanded ? 'border-blue-200 shadow-xl shadow-blue-900/5' : 'border-slate-100 shadow-sm hover:shadow-md'
-                  }`}
-                >
-                  {/* Account Header (Clickable) */}
-                  <div 
-                    onClick={() => toggleAccount(acc.id)}
-                    className="p-6 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="flex items-center gap-5">
-                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${
-                        isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600'
-                      }`}>
-                        <Wallet size={28} />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            isExpanded ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
-                          }`}>{acc.provider}</span>
-                          <h3 className={`font-bold transition-colors ${isExpanded ? 'text-blue-900' : 'text-slate-900'}`}>
-                            {acc.name}
-                          </h3>
-                        </div>
-                        <p className={`text-sm font-medium transition-colors ${isExpanded ? 'text-blue-700/60' : 'text-slate-500'}`}>
-                          {acc.alias || '별칭 없음'}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <div className={`text-xl font-black transition-colors ${isExpanded ? 'text-blue-700' : 'text-slate-900'}`}>
-                          {maskValue(Math.round(acc.total_valuation_krw).toLocaleString())} <span className="text-sm font-bold text-slate-400">원</span>
-                        </div>
-                        <div className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-tighter">
-                          {((acc.total_valuation_krw / total_valuation_krw) * 100).toFixed(1)}% of total
-                        </div>
-                      </div>
-                      <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : 'text-slate-300'}`}>
-                        <ChevronDown size={24} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Account Details (Expanded) */}
-                  {isExpanded && (
-                    <div className="px-6 pb-6 bg-slate-50/50 border-t border-blue-50">
-                      <div className="flex justify-end mt-4 px-2">
-                        <select
-                          className="text-sm border-slate-200 rounded-md text-slate-600 bg-white px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                          value={assetSortOptions[acc.id] || 'valuation'}
-                          onChange={(e) => handleSortChange(acc.id, e.target.value)}
-                        >
-                          <option value="valuation">평가액 순 정렬</option>
-                          <option value="category">카테고리별 정렬</option>
-                        </select>
-                      </div>
-                      <div className="mt-2 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-inner">
-                        <table className="w-full text-sm text-left">
-                          <thead className="bg-slate-50/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
-                            <tr>
-                              <th className="px-4 py-3">종목명 (티커)</th>
-                              <th className="px-4 py-3">카테고리</th>
-                              <th className="px-4 py-3 text-right">수량</th>
-                              <th className="px-4 py-3 text-right">현재가</th>
-                              <th className="px-4 py-3 text-right text-blue-600">평가액 (KRW)</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-slate-50">
-                            {acc.sortedAssets.map((asset, idx) => (
-                              <tr key={`${acc.id}-${asset.ticker}-${idx}`} className="hover:bg-blue-50/30 transition-colors">
-                                <td className="px-4 py-3">
-                                  <div className="font-bold text-slate-900">{asset.name}</div>
-                                  <div className="text-[10px] font-mono text-slate-400">{asset.ticker}</div>
-                                </td>
-                                <td className="px-4 py-3">
-                                  <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-bold">
-                                    {asset.category || '미분류'}
-                                  </span>
-                                </td>
-                                <td className="px-4 py-3 text-right font-medium text-slate-600">
-                                  {maskValue(asset.quantity.toLocaleString())}
-                                </td>
-                                <td className="px-4 py-3 text-right font-medium text-slate-600">
-                                  {asset.price.toLocaleString()} <span className="text-[10px] text-slate-300">{asset.country === 'US' ? 'USD' : 'KRW'}</span>
-                                </td>
-                                <td className="px-4 py-3 text-right font-bold text-slate-900">
-                                  {maskValue(Math.round(asset.valuation_krw).toLocaleString())}
-                                </td>
-                              </tr>
-                            ))}
-                            {(!acc.sortedAssets || acc.sortedAssets.length === 0) && (
-                              <tr>
-                                <td colSpan="5" className="px-4 py-8 text-center text-slate-400 font-medium bg-white">
-                                  보유 종목이 없습니다.
-                                </td>
-                              </tr>
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
+      {/* 2행: 자산 비중 (좌 1/3) + 자산 추이 차트 (우 2/3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch mb-10">
         {/* Category Distribution */}
-        <div className="space-y-6">
-          <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3 px-2">
-            <PieChart className="text-indigo-600" size={28} />
-            자산 비중
-          </h2>
+        <div className="lg:col-span-1">
+          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm h-full flex flex-col">
+            <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3 mb-6">
+              <PieChart className="text-indigo-600" size={28} />
+              자산 비중
+            </h2>
 
-          <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
-            <div className="space-y-6">
+            <div className="space-y-6 flex-1">
               {categories.map((cat, idx) => {
                 const isExpanded = expandedCategories.has(cat.category);
                 const percentage = (cat.value_krw / total_valuation_krw) * 100;
@@ -480,20 +356,146 @@ const DashboardPage = () => {
               })}
             </div>
 
-            <div className="mt-10 p-6 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
+            <div className="mt-8 p-5 bg-slate-50 rounded-3xl border border-dashed border-slate-200">
               <p className="text-xs text-slate-500 leading-relaxed font-medium">
                 자산 비중을 클릭하면 상세 중분류 내역을 확인할 수 있습니다. 각 자산의 현재가를 기준으로 자동 계산됩니다.
               </p>
             </div>
           </div>
         </div>
+
+        {/* Asset Trend Chart */}
+        <div className="lg:col-span-2">
+          <AssetChart data={data.snapshots} className="h-full" />
+        </div>
       </div>
 
-      {/* Asset Trend Chart */}
-      <AssetChart data={data.snapshots} />
+      {/* 3행: 계좌별 현황 (풀폭) */}
+      <section className="space-y-6 mb-12">
+        <div className="flex items-center justify-between px-2">
+          <h2 className="text-2xl font-black text-slate-800 flex items-center gap-3">
+            <Wallet className="text-blue-600" size={28} />
+            계좌별 현황
+          </h2>
+        </div>
+
+        <div className="grid gap-4">
+          {sortedAccounts.map((acc) => {
+            const isExpanded = expandedAccounts.has(acc.id);
+            return (
+              <div 
+                key={acc.id} 
+                className={`group bg-white rounded-[2rem] border transition-all duration-300 overflow-hidden ${
+                  isExpanded ? 'border-blue-200 shadow-xl shadow-blue-900/5' : 'border-slate-100 shadow-sm hover:shadow-md'
+                }`}
+              >
+                {/* Account Header (Clickable) */}
+                <div 
+                  onClick={() => toggleAccount(acc.id)}
+                  className="p-6 flex items-center justify-between cursor-pointer hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-5">
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${
+                      isExpanded ? 'bg-blue-600 text-white' : 'bg-slate-50 text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-600'
+                    }`}>
+                      <Wallet size={28} />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          isExpanded ? 'bg-white/20 text-white' : 'bg-blue-50 text-blue-600'
+                        }`}>{acc.provider}</span>
+                        <h3 className={`font-bold transition-colors ${isExpanded ? 'text-blue-900' : 'text-slate-900'}`}>
+                          {acc.name}
+                        </h3>
+                      </div>
+                      <p className={`text-sm font-medium transition-colors ${isExpanded ? 'text-blue-700/60' : 'text-slate-500'}`}>
+                        {acc.alias || '별칭 없음'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-6">
+                    <div className="text-right">
+                      <div className={`text-xl font-black transition-colors ${isExpanded ? 'text-blue-700' : 'text-slate-900'}`}>
+                        {maskValue(Math.round(acc.total_valuation_krw).toLocaleString())} <span className="text-sm font-bold text-slate-400">원</span>
+                      </div>
+                      <div className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-tighter">
+                        {((acc.total_valuation_krw / total_valuation_krw) * 100).toFixed(1)}% of total
+                      </div>
+                    </div>
+                    <div className={`transition-transform duration-300 ${isExpanded ? 'rotate-180 text-blue-600' : 'text-slate-300'}`}>
+                      <ChevronDown size={24} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Account Details (Expanded) */}
+                {isExpanded && (
+                  <div className="px-6 pb-6 bg-slate-50/50 border-t border-blue-50">
+                    <div className="flex justify-end mt-4 px-2">
+                      <select
+                        className="text-sm border-slate-200 rounded-md text-slate-600 bg-white px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                        value={assetSortOptions[acc.id] || 'valuation'}
+                        onChange={(e) => handleSortChange(acc.id, e.target.value)}
+                      >
+                        <option value="valuation">평가액 순 정렬</option>
+                        <option value="category">카테고리별 정렬</option>
+                      </select>
+                    </div>
+                    <div className="mt-2 overflow-x-auto rounded-2xl border border-slate-100 bg-white shadow-inner">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-slate-50/80 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+                          <tr>
+                            <th className="px-4 py-3">종목명 (티커)</th>
+                            <th className="px-4 py-3">카테고리</th>
+                            <th className="px-4 py-3 text-right">수량</th>
+                            <th className="px-4 py-3 text-right">현재가</th>
+                            <th className="px-4 py-3 text-right text-blue-600">평가액 (KRW)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {acc.sortedAssets.map((asset, idx) => (
+                            <tr key={`${acc.id}-${asset.ticker}-${idx}`} className="hover:bg-blue-50/30 transition-colors">
+                              <td className="px-4 py-3">
+                                <div className="font-bold text-slate-900">{asset.name}</div>
+                                <div className="text-[10px] font-mono text-slate-400">{asset.ticker}</div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className="text-xs px-2 py-1 bg-slate-100 text-slate-600 rounded-lg font-bold">
+                                  {asset.category || '미분류'}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-600">
+                                {maskValue(asset.quantity.toLocaleString())}
+                              </td>
+                              <td className="px-4 py-3 text-right font-medium text-slate-600">
+                                {asset.price.toLocaleString()} <span className="text-[10px] text-slate-300">{asset.country === 'US' ? 'USD' : 'KRW'}</span>
+                              </td>
+                              <td className="px-4 py-3 text-right font-bold text-slate-900">
+                                {maskValue(Math.round(asset.valuation_krw).toLocaleString())}
+                              </td>
+                            </tr>
+                          ))}
+                          {(!acc.sortedAssets || acc.sortedAssets.length === 0) && (
+                            <tr>
+                              <td colSpan="5" className="px-4 py-8 text-center text-slate-400 font-medium bg-white">
+                                보유 종목이 없습니다.
+                              </td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* 기간별 성과 탭 컨트롤 */}
-      <div className="mt-12 flex items-center justify-between">
+      <div className="mt-0 flex items-center justify-between">
         <div className="inline-flex p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200/60 shadow-inner">
           {[
             { key: 'yearly', label: '연도별' },

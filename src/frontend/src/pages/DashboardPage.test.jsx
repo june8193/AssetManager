@@ -263,4 +263,57 @@ describe('DashboardPage', () => {
     expect(screen.queryByText('월별 현황')).not.toBeInTheDocument();
     expect(screen.getAllByText('2024-03-20').length).toBeGreaterThanOrEqual(1);
   });
+
+  it('데스크탑 대시보드 섹션이 총 평가 자산 → 자산 비중 → 자산 추이 → 계좌별 현황 → 연도별 현황 순서로 렌더링된다', () => {
+    const mockDataWithSnapshots = {
+      ...mockData,
+      snapshots: {
+        history: [
+          {
+            date: '2024-03-19',
+            total: 950000,
+            acc_1: 950000,
+            index: 1000.0,
+            index_change_pct: 0.0,
+            index_cum_return_pct: 0.0,
+          },
+          {
+            date: '2024-03-20',
+            total: 1000000,
+            acc_1: 1000000,
+            index: 1052.63,
+            index_change_pct: 5.26,
+            index_cum_return_pct: 5.26,
+          },
+        ],
+        accounts: [{ id: 1, name: '테스트 계좌' }],
+      },
+    };
+
+    vi.mocked(useDashboard).mockReturnValue({
+      data: mockDataWithSnapshots,
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    });
+
+    render(
+      <MaskingProvider>
+        <DashboardPage />
+      </MaskingProvider>
+    );
+
+    const orderedHeadings = [
+      screen.getByText('총 평가 자산'),
+      screen.getByText('자산 비중'),
+      screen.getByText('자산 추이'),
+      screen.getByText('계좌별 현황'),
+      screen.getByText('연도별 현황'),
+    ];
+
+    for (let i = 0; i < orderedHeadings.length - 1; i += 1) {
+      const relation = orderedHeadings[i].compareDocumentPosition(orderedHeadings[i + 1]);
+      expect(relation & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
 });
