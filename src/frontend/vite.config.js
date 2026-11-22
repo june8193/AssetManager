@@ -37,8 +37,8 @@ export default defineConfig({
         name: 'AssetManager',
         short_name: 'AssetManager',
         description: 'AssetManager - 개인 자산 관리 시스템',
-        theme_color: '#1e293b',
-        background_color: '#0f172a',
+        theme_color: '#ffffff',
+        background_color: '#f2f4f6',
         display: 'standalone',
         orientation: 'portrait',
         icons: [

@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import MobileAssetsPage from './MobileAssetsPage';
+import MobileHeader from '../../components/mobile/MobileHeader';
 import { MaskingProvider } from '../../contexts/MaskingContext';
+import { MobileHeaderProvider } from '../../contexts/MobileHeaderContext';
 import * as useDashboardModule from '../../hooks/useDashboard';
 import { dbService } from '../../services';
 
@@ -100,9 +103,14 @@ describe('MobileAssetsPage', () => {
 
     await act(async () => {
       render(
-        <MaskingProvider>
-          <MobileAssetsPage />
-        </MaskingProvider>
+        <MemoryRouter initialEntries={['/m/assets']}>
+          <MaskingProvider>
+            <MobileHeaderProvider>
+              <MobileHeader />
+              <MobileAssetsPage />
+            </MobileHeaderProvider>
+          </MaskingProvider>
+        </MemoryRouter>
       );
     });
 
@@ -119,9 +127,14 @@ describe('MobileAssetsPage', () => {
 
     await act(async () => {
       render(
-        <MaskingProvider>
-          <MobileAssetsPage />
-        </MaskingProvider>
+        <MemoryRouter initialEntries={['/m/assets']}>
+          <MaskingProvider>
+            <MobileHeaderProvider>
+              <MobileHeader />
+              <MobileAssetsPage />
+            </MobileHeaderProvider>
+          </MaskingProvider>
+        </MemoryRouter>
       );
     });
 
@@ -141,9 +154,14 @@ describe('MobileAssetsPage', () => {
 
     await act(async () => {
       render(
-        <MaskingProvider>
-          <MobileAssetsPage />
-        </MaskingProvider>
+        <MemoryRouter initialEntries={['/m/assets']}>
+          <MaskingProvider>
+            <MobileHeaderProvider>
+              <MobileHeader />
+              <MobileAssetsPage />
+            </MobileHeaderProvider>
+          </MaskingProvider>
+        </MemoryRouter>
       );
     });
 
@@ -163,9 +181,14 @@ describe('MobileAssetsPage', () => {
 
     await act(async () => {
       render(
-        <MaskingProvider>
-          <MobileAssetsPage />
-        </MaskingProvider>
+        <MemoryRouter initialEntries={['/m/assets']}>
+          <MaskingProvider>
+            <MobileHeaderProvider>
+              <MobileHeader />
+              <MobileAssetsPage />
+            </MobileHeaderProvider>
+          </MaskingProvider>
+        </MemoryRouter>
       );
     });
 
@@ -191,9 +214,14 @@ describe('MobileAssetsPage', () => {
 
     await act(async () => {
       render(
-        <MaskingProvider>
-          <MobileAssetsPage />
-        </MaskingProvider>
+        <MemoryRouter initialEntries={['/m/assets']}>
+          <MaskingProvider>
+            <MobileHeaderProvider>
+              <MobileHeader />
+              <MobileAssetsPage />
+            </MobileHeaderProvider>
+          </MaskingProvider>
+        </MemoryRouter>
       );
     });
 
@@ -218,9 +246,14 @@ describe('MobileAssetsPage', () => {
 
     await act(async () => {
       render(
-        <MaskingProvider>
-          <MobileAssetsPage />
-        </MaskingProvider>
+        <MemoryRouter initialEntries={['/m/assets']}>
+          <MaskingProvider>
+            <MobileHeaderProvider>
+              <MobileHeader />
+              <MobileAssetsPage />
+            </MobileHeaderProvider>
+          </MaskingProvider>
+        </MemoryRouter>
       );
     });
 
@@ -245,9 +278,14 @@ describe('MobileAssetsPage', () => {
 
     await act(async () => {
       render(
-        <MaskingProvider>
-          <MobileAssetsPage />
-        </MaskingProvider>
+        <MemoryRouter initialEntries={['/m/assets']}>
+          <MaskingProvider>
+            <MobileHeaderProvider>
+              <MobileHeader />
+              <MobileAssetsPage />
+            </MobileHeaderProvider>
+          </MaskingProvider>
+        </MemoryRouter>
       );
     });
 

@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MobileMarketPage from './MobileMarketPage';
+import MobileHeader from '../../components/mobile/MobileHeader';
 import { MaskingProvider } from '../../contexts/MaskingContext';
+import { MobileHeaderProvider } from '../../contexts/MobileHeaderContext';
 
 const mockHistoricalGSPC = {
   labels: ['2026-06-01', '2026-06-02', '2026-06-03'],
@@ -55,7 +57,10 @@ function renderComponent() {
   return render(
     <MemoryRouter initialEntries={['/m/market']}>
       <MaskingProvider>
-        <MobileMarketPage />
+        <MobileHeaderProvider>
+          <MobileHeader />
+          <MobileMarketPage />
+        </MobileHeaderProvider>
       </MaskingProvider>
     </MemoryRouter>
   );
@@ -106,7 +111,7 @@ describe('MobileMarketPage', () => {
     renderComponent();
 
     // 페이지 헤더
-    expect(screen.getByRole('heading', { name: /지수분석/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /시장 지수/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /새로고침/i })).toBeInTheDocument();
 
     // 서브 탭 스위처 버튼들

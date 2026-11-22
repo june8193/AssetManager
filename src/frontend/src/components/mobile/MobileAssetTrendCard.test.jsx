@@ -110,11 +110,11 @@ describe('MobileAssetTrendCard 컴포넌트', () => {
     localStorage.clear();
   });
 
-  it('다크 테마 카드, 상시 요약 바, 미호버 안내 문구가 렌더링되며 플로팅 툴팁은 비활성화되어야 한다', () => {
+  it('클린 라이트 카드, 상시 요약 바, 미호버 안내 문구가 렌더링되며 플로팅 툴팁은 비활성화되어야 한다', () => {
     const { container } = renderMobileTrendCard();
 
     const card = container.firstChild;
-    expect(card).toHaveClass('bg-slate-900', 'border-slate-800', 'rounded-3xl');
+    expect(card).toHaveClass('bg-white', 'border-[#E5E8EB]/60', 'rounded-2xl');
     expect(screen.getByText('자산 추이')).toBeInTheDocument();
 
     const assetTab = screen.getByRole('button', { name: '총자산 규모 (원)' });

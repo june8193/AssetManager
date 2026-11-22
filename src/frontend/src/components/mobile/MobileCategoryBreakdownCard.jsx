@@ -1,20 +1,20 @@
 import { useState } from 'react';
-import { PieChart, ChevronDown } from 'lucide-react';
+import { ChevronDown } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 
 const CATEGORY_COLORS = [
-  'bg-sky-500',
-  'bg-indigo-500',
-  'bg-violet-500',
-  'bg-emerald-500',
-  'bg-amber-500',
-  'bg-rose-500',
-  'bg-slate-500',
+  '#3182F6',
+  '#6366F1',
+  '#14B8A6',
+  '#F59E0B',
+  '#F04452',
+  '#8B5CF6',
+  '#94A3B8',
 ];
 
 /**
- * 모바일 카테고리별 자산 비중 요약 카드
- * - 주요 카테고리별 평가액, 비중(%) 바 렌더링
+ * 모바일 카테고리별 자산 비중 요약 카드 (클린 라이트 톤)
+ * - 단일 흰색 카드 내 얇은 구분선 플랫 리스트로 중첩 제거
  * - 항목 클릭 시 하위 카테고리(중분류) 아코디언 확장/축소
  * - 마스킹(***) 연동
  *
@@ -41,33 +41,23 @@ export default function MobileCategoryBreakdownCard({ categories = [], totalValu
   if (!categories || categories.length === 0) return null;
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg">
+    <section className="bg-white border border-[#E5E8EB]/60 rounded-2xl p-5">
       {/* 카드 헤더 */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
-            <PieChart className="w-4 h-4" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white leading-tight">자산 비중</h3>
-            <span className="text-[10px] text-slate-400 font-medium">카테고리별 분포</span>
-          </div>
-        </div>
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-[15px] font-bold text-[#191F28] leading-tight">자산 비중</h2>
+        <span className="text-[11px] text-[#8B95A1] font-medium">카테고리별 분포</span>
       </div>
 
-      {/* 카테고리 리스트 */}
-      <div className="space-y-3.5">
+      {/* 카테고리 플랫 리스트 */}
+      <div className="divide-y divide-[#F2F4F6]">
         {categories.map((cat, idx) => {
           const isExpanded = expandedCategories.has(cat.category);
           const percentage = totalValuation > 0 ? (cat.value_krw / totalValuation) * 100 : 0;
-          const colorClass = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
+          const colorHex = CATEGORY_COLORS[idx % CATEGORY_COLORS.length];
           const hasSubCategories = cat.sub_categories && cat.sub_categories.length > 0;
 
           return (
-            <div
-              key={cat.category}
-              className="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-3 transition-colors hover:bg-slate-800/70"
-            >
+            <div key={cat.category} className="py-3.5 first:pt-1 last:pb-1">
               {/* 대분류 헤더 (터치 가능) */}
               <button
                 type="button"
@@ -76,49 +66,58 @@ export default function MobileCategoryBreakdownCard({ categories = [], totalValu
               >
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
-                    <span className={`w-2.5 h-2.5 rounded-full ${colorClass}`} />
-                    <span className="text-xs font-bold text-slate-200">{cat.category}</span>
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: colorHex }}
+                    />
+                    <span className="text-[13px] font-semibold text-[#191F28]">{cat.category}</span>
                     {hasSubCategories && (
                       <ChevronDown
-                        className={`w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${
-                          isExpanded ? 'rotate-180 text-sky-400' : ''
+                        className={`w-3.5 h-3.5 text-[#8B95A1] transition-transform duration-200 ${
+                          isExpanded ? 'rotate-180 text-[#3182F6]' : ''
                         }`}
                       />
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-[11px] font-medium text-slate-400">
+                  <div className="flex items-center gap-2.5 tabular-nums">
+                    <span className="text-xs font-medium text-[#8B95A1]">
                       {maskValue(Math.round(cat.value_krw).toLocaleString())} 원
                     </span>
-                    <span className="text-xs font-extrabold text-white min-w-[42px] text-right">
+                    <span className="text-[13px] font-bold text-[#191F28] min-w-[44px] text-right">
                       {percentage.toFixed(1)}%
                     </span>
                   </div>
                 </div>
 
-                {/* 프로그레스 바 */}
-                <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                {/* 슬림 프로그레스 바 */}
+                <div className="h-1.5 w-full bg-[#F2F4F6] rounded-full overflow-hidden">
                   <div
-                    className={`h-full rounded-full transition-all duration-700 ${colorClass}`}
-                    style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.min(100, Math.max(0, percentage))}%`,
+                      backgroundColor: colorHex,
+                    }}
                   />
                 </div>
               </button>
 
               {/* 하위 중분류 아코디언 */}
               {isExpanded && hasSubCategories && (
-                <div className="mt-3 pt-2.5 border-t border-slate-700/50 space-y-2 pl-2">
+                <div className="mt-3 pl-4 space-y-2">
                   {cat.sub_categories.map((sub) => {
                     const subPercentage =
                       totalValuation > 0 ? (sub.value_krw / totalValuation) * 100 : 0;
                     return (
-                      <div key={sub.category} className="flex items-center justify-between text-[11px]">
-                        <span className="text-slate-400 font-medium">{sub.category}</span>
+                      <div
+                        key={sub.category}
+                        className="flex items-center justify-between text-xs tabular-nums"
+                      >
+                        <span className="text-[#4E5968] font-medium">{sub.category}</span>
                         <div className="flex items-center gap-2">
-                          <span className="text-slate-500">
+                          <span className="text-[#8B95A1]">
                             {maskValue(Math.round(sub.value_krw).toLocaleString())} 원
                           </span>
-                          <span className="text-slate-300 font-semibold min-w-[36px] text-right">
+                          <span className="text-[#4E5968] font-semibold min-w-[38px] text-right">
                             {subPercentage.toFixed(1)}%
                           </span>
                         </div>
@@ -131,6 +130,6 @@ export default function MobileCategoryBreakdownCard({ categories = [], totalValu
           );
         })}
       </div>
-    </div>
+    </section>
   );
 }
