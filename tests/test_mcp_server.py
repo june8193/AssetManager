@@ -25,6 +25,7 @@ from src.mcp.tools.market import (
 from src.mcp.tools.transactions import (
     get_transactions,
 )
+from src.mcp.tools.risk import get_portfolio_volatility
 
 @pytest.fixture
 def mock_api_client():
@@ -423,3 +424,111 @@ async def test_get_market_indices_mcp_retired():
     assert "get_market_indices" not in registered_tool_names, (
         "get_market_indices 도구가 FastMCP 등록 도구 목록에서 제거되어야 합니다."
     )
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_volatility_mcp(mock_api_client):
+    """포트폴리오 내재 변동성 및 위험 기여도 MCP 도구의 요약/정렬/토큰 최적화 결과를 검증합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.return_value = {
+        "period": "1Y",
+        "as_of_date": "2026-11-22",
+        "total_valuation_krw": 100000000.0,
+        "portfolio": {
+            "annualized_volatility": 14.82,
+            "daily_volatility_pct": 0.93,
+            "daily_volatility_krw": 930000.0,
+            "sp500_ratio": 1.09,
+            "nasdaq_ratio": 0.85,
+            "kospi_ratio": 0.72,
+        },
+        "benchmarks": {
+            "sp500": {"annualized_volatility": 13.6, "max_mdd": -8.5},
+            "nasdaq": {"annualized_volatility": 17.4, "max_mdd": -12.1},
+            "kospi": {"annualized_volatility": 20.5, "max_mdd": -18.2},
+        },
+        "assets": [
+            {
+                "ticker": "CASH",
+                "name": "현금",
+                "category_label": "현금",
+                "is_cash": True,
+                "is_added": False,
+                "valuation_krw": 10000000.0,
+                "weight": 10.0,
+                "annualized_volatility": 0.0,
+                "component_volatility": 0.0,
+                "volatility_share": 0.0,
+            },
+            {
+                "ticker": "VOO",
+                "name": "Vanguard S&P 500 ETF",
+                "category_label": "코어(지수)",
+                "is_cash": False,
+                "is_added": False,
+                "valuation_krw": 50000000.0,
+                "weight": 50.0,
+                "annualized_volatility": 13.6,
+                "component_volatility": 0.06,
+                "volatility_share": 40.0,
+            },
+            {
+                "ticker": "000660",
+                "name": "SK하이닉스",
+                "category_label": "알파(성장)",
+                "is_cash": False,
+                "is_added": False,
+                "valuation_krw": 40000000.0,
+                "weight": 40.0,
+                "annualized_volatility": 42.0,
+                "component_volatility": 0.09,
+                "volatility_share": 60.0,
+            },
+        ],
+        "covariance_matrix": [[0.0, 0.0, 0.0], [0.0, 0.018, 0.012], [0.0, 0.012, 0.176]],
+        "drawdown_comparison": {
+            "dates": ["2026-11-20", "2026-11-21"],
+            "benchmarks": {"sp500": [-1.2, -3.5]},
+            "portfolio_current": [-2.1, -9.85],
+        },
+    }
+
+    result = await get_portfolio_volatility(period="1Y", top_n=2)
+    mock_get.assert_called_once_with("/api/v1/risk/volatility", params={"period": "1Y"})
+
+    assert "error" not in result
+    assert result["period"] == "1Y"
+    assert result["as_of_date"] == "2026-11-22"
+    assert result["total_valuation_krw"] == 100000000.0
+    assert result["portfolio"]["max_mdd"] == -9.85
+    assert "benchmarks" in result and "sp500" in result["benchmarks"]
+
+    # 현금 제외, volatility_share 내림차순 상위 2개 및 risk_weight_ratio 검증
+    top_risk = result["top_risk_contributors"]
+    assert len(top_risk) == 2
+    assert [item["ticker"] for item in top_risk] == ["000660", "VOO"]
+    assert top_risk[0]["risk_weight_ratio"] == 1.5
+    assert top_risk[1]["risk_weight_ratio"] == 0.8
+
+    # 원본 시계열/행렬 제외 검증
+    assert "covariance_matrix" not in result
+    assert "drawdown_comparison" not in result
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_volatility_mcp_invalid_period(mock_api_client):
+    """허용되지 않은 period 전달 시 API 호출 없이 오류를 반환하는지 검증합니다."""
+    mock_get, _ = mock_api_client
+    result = await get_portfolio_volatility(period="5Y")
+    assert "error" in result
+    mock_get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_portfolio_volatility_mcp_api_error(mock_api_client):
+    """리스크 API 호출 실패 시 오류 딕셔너리를 반환하는지 검증합니다."""
+    mock_get, _ = mock_api_client
+    mock_get.side_effect = RuntimeError("API 장애")
+    result = await get_portfolio_volatility(period="1Y")
+    assert "error" in result
+    assert "API 장애" in result["error"]

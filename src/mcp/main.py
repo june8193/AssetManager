@@ -29,6 +29,7 @@ from src.mcp.tools.expenses import (
     get_expenses,
 )
 from src.mcp.tools.benchmark import get_benchmark_attribution
+from src.mcp.tools.risk import get_portfolio_volatility
 
 # MCP 서버 객체 선언
 mcp = FastMCP("AssetManager")
@@ -61,6 +62,9 @@ mcp.tool()(get_expenses)
 
 # 벤치마크 다기간 성과 및 종목별 기여도 조회를 위한 신규 MCP 도구 등록
 mcp.tool()(get_benchmark_attribution)
+
+# 포트폴리오 내재 변동성 및 위험 기여도 조회를 위한 신규 MCP 도구 등록
+mcp.tool()(get_portfolio_volatility)
 
 if __name__ == "__main__":
     mcp.run()
