@@ -66,8 +66,15 @@ async def test_get_asset_ratios_mcp(mock_api_client):
                 ],
                 "sub_results": []
             }
-        elif url == "/api/v1/performance/portfolio":
-            return {"sharpe_ratio": 1.25, "sortino_ratio": 1.5, "mdd": -5.2, "max_mdd": -8.5}
+        elif url == "/api/v1/risk/volatility":
+            assert params == {"period": "1Y"}
+            return {
+                "portfolio": {
+                    "annualized_volatility": 14.82,
+                    "daily_volatility_pct": 0.93,
+                    "sp500_ratio": 1.09,
+                }
+            }
         return {}
 
     mock_get.side_effect = mock_get_side_effect
@@ -76,9 +83,11 @@ async def test_get_asset_ratios_mcp(mock_api_client):
     assert "error" not in result
     assert "major_results" in result
     assert len(result["major_results"]) == 2
-    assert result["sharpe_ratio"] == 1.25
-    assert result["sortino_ratio"] == 1.5
-    assert result["mdd"] == -5.2
+    assert result["portfolio_volatility"] == 14.82
+    assert result["daily_volatility_pct"] == 0.93
+    assert result["sp500_volatility_ratio"] == 1.09
+    for legacy_key in ("sharpe_ratio", "sortino_ratio", "mdd", "max_mdd"):
+        assert legacy_key not in result
 
 
 @pytest.mark.asyncio
@@ -105,8 +114,15 @@ async def test_get_portfolio_status_mcp(mock_api_client):
                     }
                 ]
             }
-        elif url == "/api/v1/performance/portfolio":
-            return {"sharpe_ratio": 1.25, "sortino_ratio": 1.5, "mdd": -5.2, "max_mdd": -8.5}
+        elif url == "/api/v1/risk/volatility":
+            assert params == {"period": "1Y"}
+            return {
+                "portfolio": {
+                    "annualized_volatility": 14.82,
+                    "daily_volatility_pct": 0.93,
+                    "sp500_ratio": 1.09,
+                }
+            }
         return {}
 
     mock_get.side_effect = mock_get_side_effect
@@ -116,9 +132,38 @@ async def test_get_portfolio_status_mcp(mock_api_client):
     assert "cash_balances" in result
     assert "holdings" in result
     assert result["cash_balances"]["KRW"] == 500000.0
-    assert result["sharpe_ratio"] == 1.25
-    assert result["sortino_ratio"] == 1.5
-    assert result["mdd"] == -5.2
+    assert result["portfolio_volatility"] == 14.82
+    assert result["daily_volatility_pct"] == 0.93
+    assert result["sp500_volatility_ratio"] == 1.09
+    for legacy_key in ("sharpe_ratio", "sortino_ratio", "mdd", "max_mdd"):
+        assert legacy_key not in result
+
+
+@pytest.mark.asyncio
+async def test_mcp_risk_volatility_api_error_fallback(mock_api_client):
+    """리스크 변동성 API 호출이 실패해도 기존 자산·비중 응답을 정상 반환하는지 테스트합니다."""
+    mock_get, _ = mock_api_client
+
+    async def mock_get_side_effect(url, params=None):
+        if url == "/api/ratios/rebalancing":
+            return {"total_valuation": 1500000.0, "major_results": [], "sub_results": []}
+        if url == "/api/portfolio/status":
+            return {"total_valuation_krw": 1500000.0, "cash_balances": {"KRW": 500000.0}, "holdings": []}
+        if url == "/api/v1/risk/volatility":
+            raise RuntimeError("리스크 API 일시 장애")
+        return {}
+
+    mock_get.side_effect = mock_get_side_effect
+
+    ratios_res = await get_asset_ratios()
+    assert "error" not in ratios_res
+    assert ratios_res["total_valuation"] == 1500000.0
+    assert "portfolio_volatility" not in ratios_res
+
+    status_res = await get_portfolio_status()
+    assert "error" not in status_res
+    assert status_res["total_valuation_krw"] == 1500000.0
+    assert "portfolio_volatility" not in status_res
 
 
 @pytest.mark.asyncio

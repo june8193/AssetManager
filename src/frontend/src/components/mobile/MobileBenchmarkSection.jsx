@@ -52,7 +52,6 @@ function calculateMddFromReturns(returns) {
 export default function MobileBenchmarkSection({ isMasked, refreshTrigger = 0 }) {
   const [period, setPeriod] = useState('YTD');
   const [benchmarkData, setBenchmarkData] = useState(null);
-  const [portfolioPerf, setPortfolioPerf] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -64,12 +63,14 @@ export default function MobileBenchmarkSection({ isMasked, refreshTrigger = 0 })
     'KOSDAQ': true,
   });
 
+  // 데이터 로드 (벤치마크 통합 API 조회)
   const fetchData = useCallback(
     async (isCancelledCheck = () => false) => {
       setLoading(true);
       setError(null);
 
       try {
+        // 벤치마크 데이터 로드 (/api/market/benchmark 우선 시도, 실패 시 /api/benchmark fallback)
         const fetchBenchmark = async () => {
           try {
             const res = await fetch(`/api/market/benchmark?period=${period}`);
@@ -84,24 +85,10 @@ export default function MobileBenchmarkSection({ isMasked, refreshTrigger = 0 })
           return await resFallback.json();
         };
 
-        const fetchPortfolioPerf = async () => {
-          try {
-            const res = await fetch(`/api/v1/performance/portfolio?period=${period}`);
-            if (res.ok) return await res.json();
-          } catch {
-            // 실패 시 null 반환
-          }
-          return null;
-        };
-
-        const [benchRes, portPerfRes] = await Promise.all([
-          fetchBenchmark(),
-          fetchPortfolioPerf(),
-        ]);
+        const benchRes = await fetchBenchmark();
 
         if (!isCancelledCheck()) {
           setBenchmarkData(benchRes);
-          setPortfolioPerf(portPerfRes);
         }
       } catch (err) {
         if (!isCancelledCheck()) {
@@ -189,13 +176,8 @@ export default function MobileBenchmarkSection({ isMasked, refreshTrigger = 0 })
     return null;
   }, [benchmarkData]);
 
+  // 포트폴리오 기간 MDD 추출 (벤치마크 차트 시계열 기반 계산)
   const portfolioMdd = useMemo(() => {
-    if (portfolioPerf?.mdd !== undefined && portfolioPerf?.mdd !== null) {
-      return portfolioPerf.mdd;
-    }
-    if (portfolioPerf?.max_mdd !== undefined && portfolioPerf?.max_mdd !== null) {
-      return portfolioPerf.max_mdd;
-    }
     const portfolioDs = benchmarkData?.chart?.datasets?.find(
       (ds) => ds.label === '내 포트폴리오'
     );
@@ -203,7 +185,7 @@ export default function MobileBenchmarkSection({ isMasked, refreshTrigger = 0 })
       return calculateMddFromReturns(portfolioDs.data);
     }
     return null;
-  }, [portfolioPerf, benchmarkData]);
+  }, [benchmarkData]);
 
   return (
     <div className="space-y-3">

@@ -19,7 +19,7 @@ const mockBenchmarkData = {
   chart: {
     labels: ['2026-06-01', '2026-06-02', '2026-06-03'],
     datasets: [
-      { label: '내 포트폴리오', data: [0.0, 1.2, 2.5] },
+      { label: '내 포트폴리오', data: [0.0, 5.0, -0.25] },
       { label: 'S&P 500', data: [0.0, 0.8, 1.5] },
       { label: 'NASDAQ', data: [0.0, 1.1, 2.1] },
       { label: 'KOSPI', data: [0.0, -0.3, 0.2] },
@@ -32,16 +32,6 @@ const mockBenchmarkData = {
     { benchmark: 'KOSPI', ticker: '^KS11', benchmark_return: 3.1, portfolio_return: 12.45, alpha: 9.35, judgment: '시장 상회' },
     { benchmark: 'KOSDAQ', ticker: '^KQ11', benchmark_return: -2.4, portfolio_return: 12.45, alpha: 14.85, judgment: '시장 상회' },
   ],
-};
-
-const mockPortfolioPerf = {
-  sharpe_ratio: 1.45,
-  sortino_ratio: 2.10,
-  mdd: -3.85,
-  max_mdd: -6.20,
-  annualized_return: 18.5,
-  annualized_volatility: 12.3,
-  period: 'YTD',
 };
 
 function renderComponent(props = {}) {
@@ -61,12 +51,6 @@ describe('MobileBenchmarkSection', () => {
         return Promise.resolve({
           ok: true,
           json: () => Promise.resolve(mockBenchmarkData),
-        });
-      }
-      if (urlStr.includes('/api/v1/performance/portfolio')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockPortfolioPerf),
         });
       }
       return Promise.resolve({
@@ -118,8 +102,11 @@ describe('MobileBenchmarkSection', () => {
     await waitFor(() => {
       expect(screen.getByTestId('mdd-summary-card')).toBeInTheDocument();
       expect(screen.getByTestId('masked-return')).toHaveTextContent('+12.45%');
-      expect(screen.getByTestId('portfolio-mdd-value')).toHaveTextContent('-3.85%');
+      expect(screen.getByTestId('portfolio-mdd-value')).toHaveTextContent('-5.00%');
     });
+
+    const calledUrls = global.fetch.mock.calls.map((call) => String(call[0]));
+    expect(calledUrls.some((url) => url.includes('/api/v1/performance/portfolio'))).toBe(false);
 
     expect(screen.getByTestId('index-mdd-sp500')).toHaveTextContent('-5.4');
     expect(screen.getByTestId('index-mdd-nasdaq')).toHaveTextContent('-8.2');
