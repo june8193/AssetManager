@@ -1,3 +1,4 @@
+import asyncio
 import os
 import json
 import tomllib
@@ -6,6 +7,12 @@ import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict
 from pathlib import Path
+from src.utils import format_exception
+
+
+class KiwoomAuthError(Exception):
+    """키움 API 인증(return_code != 0) 실패 시 발생하는 전용 예외입니다."""
+
 
 class KiwoomAuthManager:
     """키움증권 API 인증 및 모든 설정을 관리하는 싱글톤 클래스입니다.
@@ -111,49 +118,78 @@ class KiwoomAuthManager:
         return await self._refresh_token(account_name)
 
     async def _refresh_token(self, account_name: str) -> str:
-        """키움 API를 호출하여 특정 계좌에 대한 토큰을 새롭게 발급받습니다 (au10001)."""
+        """키움 API를 호출하여 특정 계좌에 대한 토큰을 새롭게 발급받습니다 (au10001).
+
+        일시적 네트워크/타임아웃 오류 또는 5xx 서버 오류 발생 시 지수 백오프를 적용해
+        최대 2회 재시도(총 3회 시도)합니다.
+        """
         config = self.accounts_config[account_name]
         app_key = config["app_key"]
         secret_key = config["secret_key"]
-        
+
         url = f"{self.base_url}/oauth2/token"
         headers = {"Content-Type": "application/json;charset=UTF-8"}
         data = {
             "grant_type": "client_credentials",
             "appkey": app_key,
-            "secretkey": secret_key
+            "secretkey": secret_key,
         }
-        
+
+        max_attempts = 3
+        timeout_seconds = 10.0
+
         async with httpx.AsyncClient() as client:
-            try:
-                response = await client.post(url, headers=headers, json=data)
-                response.raise_for_status()
-                result = response.json()
-                
-                if result.get("return_code") == 0:
-                    access_token = result.get("token")
-                    expires_in = int(result.get("expires_in", 3600))
-                    expired_at = datetime.now() + timedelta(seconds=expires_in - 60)
-                    
-                    self._tokens[account_name] = {
-                        "token": access_token,
-                        "expired_at": expired_at
-                    }
-                    
-                    self.logger.info(f"토큰 발급 성공 (계좌: {account_name})")
-                    self.log_token_info(account_name)
-                    return access_token
-                else:
+            for attempt in range(max_attempts):
+                try:
+                    response = await client.post(
+                        url, headers=headers, json=data, timeout=timeout_seconds
+                    )
+                    response.raise_for_status()
+                    result = response.json()
+
+                    if result.get("return_code") == 0:
+                        access_token = result.get("token")
+                        expires_in = int(result.get("expires_in", 3600))
+                        expired_at = datetime.now() + timedelta(seconds=expires_in - 60)
+
+                        self._tokens[account_name] = {
+                            "token": access_token,
+                            "expired_at": expired_at,
+                        }
+
+                        self.logger.info(f"토큰 발급 성공 (계좌: {account_name})")
+                        self.log_token_info(account_name)
+                        return access_token
+
                     error_msg = result.get("return_msg", "알 수 없는 오류")
                     self.logger.error(f"토큰 발급 실패 (계좌: {account_name}): {error_msg}")
-                    raise Exception(f"Kiwoom Auth Error: {error_msg}")
-                    
-            except httpx.HTTPStatusError as e:
-                self.logger.error(f"HTTP 오류 발생: {e.response.status_code}")
-                raise
-            except Exception as e:
-                self.logger.error(f"토큰 갱신 중 예외 발생 (계좌: {account_name}): {str(e)}")
-                raise
+                    raise KiwoomAuthError(f"Kiwoom Auth Error: {error_msg}")
+
+                except KiwoomAuthError:
+                    raise
+                except Exception as e:
+                    is_5xx = isinstance(e, httpx.HTTPStatusError) and e.response.status_code >= 500
+                    is_transient = isinstance(
+                        e,
+                        (
+                            httpx.TimeoutException,
+                            httpx.NetworkError,
+                            httpx.RemoteProtocolError,
+                            TimeoutError,
+                        ),
+                    )
+                    if (is_5xx or is_transient) and attempt < max_attempts - 1:
+                        backoff = 1.0 * (2 ** attempt)
+                        self.logger.warning(
+                            f"토큰 갱신 중 일시적 오류 (계좌: {account_name}, 시도 {attempt + 1}/{max_attempts}): "
+                            f"{format_exception(e)}. {backoff}초 후 재시도합니다."
+                        )
+                        await asyncio.sleep(backoff)
+                        continue
+                    self.logger.error(
+                        f"토큰 갱신 중 예외 발생 (계좌: {account_name}): {format_exception(e)}"
+                    )
+                    raise
 
     def log_token_info(self, account_name: str):
         """본문에 중요한 토큰 정보를 마스킹하여 로그에 출력합니다."""

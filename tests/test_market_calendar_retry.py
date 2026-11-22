@@ -170,3 +170,19 @@ async def test_query_kiwoom_holiday_api_token_failure(monkeypatch):
 
     with pytest.raises(RuntimeError, match="키움 토큰 발급에 실패했습니다"):
         await MarketCalendar.query_kiwoom_holiday_api(datetime.date(2026, 8, 27), country="KR")
+
+
+@pytest.mark.asyncio
+async def test_query_kiwoom_holiday_api_token_error_includes_exception_type(monkeypatch):
+    """토큰 발급 중 빈 메시지의 ReadTimeout 발생 시 예외 클래스명이 에러 메시지에 포함되는지 검증합니다."""
+    monkeypatch.setattr(
+        "src.kiwoom.auth.KiwoomAuthManager.get_valid_token",
+        AsyncMock(side_effect=httpx.ReadTimeout("")),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        await MarketCalendar.query_kiwoom_holiday_api(datetime.date(2026, 8, 27), country="KR")
+
+    msg = str(exc_info.value)
+    assert "키움 토큰 발급에 실패했습니다" in msg
+    assert "ReadTimeout" in msg

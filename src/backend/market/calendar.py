@@ -182,6 +182,7 @@ class MarketCalendar:
             RuntimeError: 인증 실패 또는 재시도 초과 실패 시 상세 원인과 함께 발생
         """
         from src.kiwoom.auth import KiwoomAuthManager
+        from src.utils import format_exception
 
         country_upper = country.upper()
         auth_manager = KiwoomAuthManager()
@@ -190,7 +191,7 @@ class MarketCalendar:
         try:
             token = await auth_manager.get_valid_token()
         except Exception as e:
-            raise RuntimeError(f"키움 토큰 발급에 실패했습니다: {e}")
+            raise RuntimeError(f"키움 토큰 발급에 실패했습니다: {format_exception(e)}") from e
 
         date_str = target_date.strftime("%Y%m%d")
         max_attempts = 3

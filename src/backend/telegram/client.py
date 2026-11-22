@@ -10,6 +10,7 @@ import logging
 import re
 from typing import Any
 import httpx
+from src.utils import format_exception
 
 logger = logging.getLogger(__name__)
 
@@ -311,10 +312,10 @@ class TelegramClient:
             params["offset"] = offset
 
         client_timeout = float(timeout + 5)
-        # 롱폴링은 전용 타임아웃이 필요하므로 httpx.AsyncClient를 파라미터 타임아웃과 함께 사용
-        client = self._get_http_client(timeout=client_timeout)
+        # 롱폴링은 재사용 클라이언트의 기본 타임아웃(10초)을 덮어쓰도록 요청별 timeout을 명시 전달
+        client = self._get_http_client()
         try:
-            response = await client.get(url, params=params)
+            response = await client.get(url, params=params, timeout=client_timeout)
             response.raise_for_status()
             data = response.json()
             if data.get("ok"):
@@ -322,10 +323,10 @@ class TelegramClient:
             logger.error(f"Telegram getUpdates 응답 오류: {data}")
             return []
         except httpx.HTTPError as exc:
-            logger.error(f"Telegram getUpdates HTTP 오류: {exc}")
+            logger.error(f"Telegram getUpdates HTTP 오류: {format_exception(exc)}")
             return []
         except Exception as exc:
-            logger.error(f"Telegram getUpdates 예외: {exc}")
+            logger.error(f"Telegram getUpdates 예외: {format_exception(exc)}")
             return []
 
     async def set_my_commands(self, commands: list[dict[str, str]]) -> bool:

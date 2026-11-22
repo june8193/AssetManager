@@ -468,3 +468,52 @@ def test_settings_toml_and_example_storage_dir_sync():
     assert example_data.get("telegram", {}).get("storage_dir") == target_path
 
 
+@pytest.mark.asyncio
+async def test_client_get_updates_passes_per_request_timeout_on_reused_client():
+    """기본 10초 클라이언트가 이미 생성된 상태에서도 get_updates가 요청별 35초 타임아웃을 전달하는지 검증합니다."""
+    client = TelegramClient(bot_token="test_token")
+    try:
+        # 1. 먼저 set_my_commands 호출 등으로 기본 10초 클라이언트가 캐싱된 상태 재현
+        set_cmd_resp = httpx.Response(
+            status_code=200,
+            json={"ok": True, "result": True},
+            request=httpx.Request("POST", "https://api.telegram.org/bottest_token/setMyCommands"),
+        )
+        with patch("httpx.AsyncClient.post", new_callable=AsyncMock, return_value=set_cmd_resp):
+            await client.set_my_commands([{"command": "help", "description": "도움말"}])
+
+        assert client._http_client is not None
+
+        # 2. 이후 get_updates(timeout=30) 호출 시 timeout=35.0이 명시적으로 전달되는지 검증
+        updates_resp = httpx.Response(
+            status_code=200,
+            json={"ok": True, "result": []},
+            request=httpx.Request("GET", "https://api.telegram.org/bottest_token/getUpdates"),
+        )
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, return_value=updates_resp) as mock_get:
+            result = await client.get_updates(offset=1, timeout=30)
+
+        assert result == []
+        _, kwargs = mock_get.await_args
+        assert kwargs.get("timeout") == 35.0
+    finally:
+        await client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_get_updates_logs_exception_type_when_message_empty(caplog):
+    """get_updates에서 빈 메시지의 ReadTimeout 발생 시 로그에 예외 클래스명이 포함되는지 검증합니다."""
+    import logging
+
+    client = TelegramClient(bot_token="test_token")
+    try:
+        with patch("httpx.AsyncClient.get", new_callable=AsyncMock, side_effect=httpx.ReadTimeout("")), \
+             caplog.at_level(logging.ERROR, logger="src.backend.telegram.client"):
+            result = await client.get_updates(offset=1, timeout=30)
+
+        assert result == []
+        assert "ReadTimeout" in caplog.text
+    finally:
+        await client.aclose()
+
+
