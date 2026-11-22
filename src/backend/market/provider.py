@@ -6,6 +6,7 @@
 """
 
 import datetime
+import logging
 from typing import Any, Dict, List, Optional
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,8 @@ from .calendar import MarketCalendar
 from .cache import HistoricalPriceCache
 from .adapters.base import MarketAdapterBase
 from .adapters.fake import FakeMarketAdapter
+
+logger = logging.getLogger(__name__)
 
 
 class MarketDataProvider:
@@ -401,7 +404,9 @@ class MarketDataProvider:
         target_date: Optional[datetime.date] = None,
         force_update: bool = False,
     ) -> Optional[float]:
-        """환율을 조회합니다. 기준 일자가 지정되면 DB 캐시를 우선 조회하고 캐싱합니다.
+        """키움증권(KR 어댑터)을 통해 환율을 조회합니다. 기준 일자가 지정되면 DB 캐시를 우선 조회하고 캐싱합니다.
+
+        외부 fallback(yfinance 등) 없이 키움 API 단일 소스로 조회하며, 실패 시 명확히 None을 반환합니다.
 
         Args:
             sell_currency (str): 매도 통화 (기본값: 'USD')
@@ -410,7 +415,7 @@ class MarketDataProvider:
             force_update (bool): DB 캐시 무시 및 강제 갱신 여부
 
         Returns:
-            Optional[float]: 환율 또는 None
+            Optional[float]: 환율 또는 None (조회 실패 시)
         """
         sell = sell_currency.upper()
         buy = buy_currency.upper()
@@ -430,12 +435,12 @@ class MarketDataProvider:
             if db_rate and db_rate.rate > 0.0:
                 return float(db_rate.rate)
 
-        # 2. 어댑터에서 환율 조회
+        # 2. KR 어댑터(키움 API)에서 환율 단일 조회 (fallback 미사용)
         adapter = self.get_adapter("KR")
         rate = await adapter.get_exchange_rate(sell_currency=sell, buy_currency=buy, target_date=target_date)
         if rate is None or rate <= 0.0:
-            us_adapter = self.get_adapter("US")
-            rate = await us_adapter.get_exchange_rate(sell_currency=sell, buy_currency=buy, target_date=target_date)
+            logger.warning("키움 API 환율 조회 실패 (%s/%s, target_date=%s): fallback 없이 실패 처리", sell, buy, target_date)
+            return None
 
         # 3. 조회 성공 시 DB 캐시 저장
         if rate is not None and rate > 0.0 and target_date is not None and self.db is not None:

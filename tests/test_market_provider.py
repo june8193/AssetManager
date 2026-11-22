@@ -283,6 +283,18 @@ class TestMarketDataProvider:
         assert await provider.get_exchange_rate("USD", "USD") == 1.0
 
     @pytest.mark.asyncio
+    async def test_get_exchange_rate_no_fallback_on_kr_failure(self, db_session):
+        """KR 어댑터(키움 API) 환율 조회 실패 시 US 어댑터(yfinance)로 fallback하지 않고 None을 반환하는지 검증합니다."""
+        kr_adapter = FakeMarketAdapter()  # 환율 미설정 -> None 반환
+        us_adapter = FakeMarketAdapter()
+        us_adapter.set_exchange_rate(1400.0, "USD", "KRW")
+
+        provider = MarketDataProvider(db=db_session, kr_adapter=kr_adapter, us_adapter=us_adapter)
+
+        rate = await provider.get_exchange_rate("USD", "KRW")
+        assert rate is None
+
+    @pytest.mark.asyncio
     async def test_get_market_indices(self, db_session):
         """시장 지수 조회가 국가별 어댑터로 위임되는지 검증합니다."""
         kr_adapter = FakeMarketAdapter()

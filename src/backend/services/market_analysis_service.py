@@ -3,15 +3,18 @@
 
 import asyncio
 import datetime
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import pandas as pd
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from src.backend.models import HistoricalPrice
+from src.backend.models import ExchangeRate, HistoricalPrice
 from src.backend.services.benchmark_service import BenchmarkService
 
 # 직전 기말 종가(전월/전년 말 종가) 확보를 위한 조회 시작일 여유 기간(일)
 LOOKBACK_BUFFER_DAYS = 10
+USD_KRW_BACKFILL_TICKER = "USDKRW=X"
+DXY_TICKER = "DX-Y.NYB"
 
 
 class MarketAnalysisService:
@@ -334,3 +337,207 @@ class MarketAnalysisService:
         # 최신 연도순(내림차순) 정렬
         comparison_table.reverse()
         return comparison_table
+
+    @staticmethod
+    def _empty_exchange_rate_response(
+        kiwoom_start_date: Optional[datetime.date] = None,
+    ) -> Dict[str, Any]:
+        """환율 분석 빈 시계열 응답 딕셔너리를 생성합니다."""
+        return {
+            "labels": [],
+            "rates": [],
+            "dxy": [],
+            "sources": [],
+            "is_weekly": False,
+            "summary": {
+                "latest_date": None,
+                "latest_rate": None,
+                "daily_change": 0.0,
+                "daily_change_rate": 0.0,
+                "latest_dxy": None,
+                "dxy_change_rate": 0.0,
+                "high_rate": None,
+                "high_date": None,
+                "from_high_amount": 0.0,
+                "from_high_rate": 0.0,
+                "low_rate": None,
+                "low_date": None,
+                "from_low_amount": 0.0,
+                "from_low_rate": 0.0,
+                "range_position_pct": 50.0,
+                "kiwoom_start_date": kiwoom_start_date.isoformat() if kiwoom_start_date else None,
+            },
+        }
+
+    async def get_exchange_rate_analysis(
+        self, start_date: datetime.date, end_date: datetime.date
+    ) -> Dict[str, Any]:
+        """원/달러(USD/KRW) 환율과 달러인덱스(DXY) 시계열 및 고점/저점 대비 통계를 반환합니다.
+
+        exchange_rates 테이블의 최초 수집일(kiwoom_start_date) 이후 구간은 100% 키움 API 데이터만
+        사용하고, 그 이전 구간만 USDKRW=X 백필 데이터로 이어 붙입니다.
+
+        Args:
+            start_date (datetime.date): 조회 시작일
+            end_date (datetime.date): 조회 종료일
+
+        Returns:
+            Dict[str, Any]: labels, rates, dxy, sources, is_weekly, summary 딕셔너리
+        """
+        if start_date > end_date:
+            return self._empty_exchange_rate_response()
+
+        # 1. 키움 API 환율(exchange_rates) 최초 수집일 조회
+        kiwoom_start_date: Optional[datetime.date] = (
+            self.db.query(func.min(ExchangeRate.date))
+            .filter(ExchangeRate.currency == "USD", ExchangeRate.rate > 0.0)
+            .scalar()
+        )
+
+        # 2. 구간별 원/달러 환율 수집 (kiwoom_start_date 이전: backfill, 이후: 100% kiwoom)
+        daily_by_date: Dict[datetime.date, tuple[float, str]] = {}
+
+        if kiwoom_start_date is None or start_date < kiwoom_start_date:
+            backfill_end = (
+                min(end_date, kiwoom_start_date - datetime.timedelta(days=1))
+                if kiwoom_start_date is not None
+                else end_date
+            )
+            if start_date <= backfill_end:
+                backfill_rows = await self.benchmark_service.get_historical_prices(
+                    USD_KRW_BACKFILL_TICKER, start_date, backfill_end
+                )
+                for row in backfill_rows:
+                    if row.close_price > 0.0 and row.price_date <= backfill_end:
+                        daily_by_date[row.price_date] = (round(float(row.close_price), 2), "backfill")
+
+        if kiwoom_start_date is not None and end_date >= kiwoom_start_date:
+            kiwoom_start = max(start_date, kiwoom_start_date)
+            kiwoom_rows = (
+                self.db.query(ExchangeRate)
+                .filter(
+                    ExchangeRate.currency == "USD",
+                    ExchangeRate.rate > 0.0,
+                    ExchangeRate.date >= kiwoom_start,
+                    ExchangeRate.date <= end_date,
+                )
+                .order_by(ExchangeRate.date.asc())
+                .all()
+            )
+            for row in kiwoom_rows:
+                daily_by_date[row.date] = (round(float(row.rate), 2), "kiwoom")
+
+        if not daily_by_date:
+            return self._empty_exchange_rate_response(kiwoom_start_date)
+
+        sorted_dates = sorted(daily_by_date.keys())
+
+        # 3. 달러인덱스(DX-Y.NYB) 조회 및 Forward-fill 정렬
+        dxy_lookback_start = start_date - datetime.timedelta(days=30)
+        dxy_raw = await self.benchmark_service.get_historical_prices(DXY_TICKER, dxy_lookback_start, end_date)
+        valid_dxy = sorted([p for p in dxy_raw if p.close_price > 0.0], key=lambda x: x.price_date)
+
+        aligned_dxy: List[Optional[float]] = []
+        dxy_idx = 0
+        dxy_len = len(valid_dxy)
+        last_known_dxy: Optional[float] = None
+
+        for dt in sorted_dates:
+            while dxy_idx < dxy_len and valid_dxy[dxy_idx].price_date <= dt:
+                last_known_dxy = float(valid_dxy[dxy_idx].close_price)
+                dxy_idx += 1
+            if last_known_dxy is None and dxy_len > 0:
+                last_known_dxy = float(valid_dxy[0].close_price)
+            aligned_dxy.append(round(last_known_dxy, 2) if last_known_dxy is not None else None)
+
+        daily_series = [
+            {
+                "date": dt,
+                "rate": daily_by_date[dt][0],
+                "source": daily_by_date[dt][1],
+                "dxy": aligned_dxy[idx],
+            }
+            for idx, dt in enumerate(sorted_dates)
+        ]
+
+        # 4. 원본 일봉 기준 요약 통계(고점/저점 대비 및 레인지 위치) 계산
+        latest = daily_series[-1]
+        prev = daily_series[-2] if len(daily_series) >= 2 else None
+
+        latest_rate = latest["rate"]
+        daily_change = round(latest_rate - prev["rate"], 2) if prev else 0.0
+        daily_change_rate = round((daily_change / prev["rate"]) * 100, 2) if prev and prev["rate"] > 0 else 0.0
+
+        latest_dxy = latest["dxy"]
+        dxy_change_rate = (
+            round(((latest_dxy - prev["dxy"]) / prev["dxy"]) * 100, 2)
+            if prev and latest_dxy is not None and prev["dxy"] is not None and prev["dxy"] > 0
+            else 0.0
+        )
+
+        high_item = max(daily_series, key=lambda x: x["rate"])
+        low_item = min(daily_series, key=lambda x: x["rate"])
+
+        high_rate = high_item["rate"]
+        low_rate = low_item["rate"]
+        from_high_amount = round(latest_rate - high_rate, 2)
+        from_high_rate = round((from_high_amount / high_rate) * 100, 2) if high_rate > 0 else 0.0
+        from_low_amount = round(latest_rate - low_rate, 2)
+        from_low_rate = round((from_low_amount / low_rate) * 100, 2) if low_rate > 0 else 0.0
+
+        span = high_rate - low_rate
+        if span > 0:
+            range_position_pct = round(max(0.0, min(100.0, ((latest_rate - low_rate) / span) * 100)), 1)
+        else:
+            range_position_pct = 50.0
+
+        summary = {
+            "latest_date": latest["date"].isoformat(),
+            "latest_rate": latest_rate,
+            "daily_change": daily_change,
+            "daily_change_rate": daily_change_rate,
+            "latest_dxy": latest_dxy,
+            "dxy_change_rate": dxy_change_rate,
+            "high_rate": high_rate,
+            "high_date": high_item["date"].isoformat(),
+            "from_high_amount": from_high_amount,
+            "from_high_rate": from_high_rate,
+            "low_rate": low_rate,
+            "low_date": low_item["date"].isoformat(),
+            "from_low_amount": from_low_amount,
+            "from_low_rate": from_low_rate,
+            "range_position_pct": range_position_pct,
+            "kiwoom_start_date": kiwoom_start_date.isoformat() if kiwoom_start_date else None,
+        }
+
+        # 5. 3년(1095일) 초과 및 200건 초과 시 주간 다운샘플링 적용
+        total_days = (end_date - start_date).days
+        is_weekly = False
+        if total_days > 1095 and len(daily_series) > 200:
+            is_weekly = True
+            df = pd.DataFrame(daily_series)
+            df["date"] = pd.to_datetime(df["date"])
+            df.set_index("date", inplace=True)
+            df_resampled = df.resample("W").last().dropna(subset=["rate"])
+
+            labels = [idx.date().isoformat() for idx in df_resampled.index]
+            rates = [round(float(val), 2) for val in df_resampled["rate"]]
+            dxy_list = [
+                round(float(val), 2) if pd.notna(val) else None
+                for val in df_resampled["dxy"]
+            ]
+            sources = [str(val) for val in df_resampled["source"]]
+        else:
+            labels = [item["date"].isoformat() for item in daily_series]
+            rates = [item["rate"] for item in daily_series]
+            dxy_list = [item["dxy"] for item in daily_series]
+            sources = [item["source"] for item in daily_series]
+
+        return {
+            "labels": labels,
+            "rates": rates,
+            "dxy": dxy_list,
+            "sources": sources,
+            "is_weekly": is_weekly,
+            "summary": summary,
+        }

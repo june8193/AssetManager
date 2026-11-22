@@ -24,6 +24,7 @@ TASK_DISPLAY_NAMES: dict[str, str] = {
     "db_backup": "DB 자동 백업 (db_backup)",
     "stock_sync": "종목 동기화 (stock_sync)",
     "exchange_rate_update": "환율 업데이트 (exchange_rate_update)",
+    "market_indicator_sync": "시장 지표 동기화 (market_indicator_sync)",
 }
 
 

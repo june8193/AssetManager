@@ -15,6 +15,7 @@ const MENU_ITEMS = [
     icon: TrendingUp,
     subItems: [
       { path: '/market/analysis', label: '지수분석' },
+      { path: '/market/exchange-rate', label: '환율분석' },
       { path: '/market/stock-analysis', label: '종목분석' },
       { path: '/benchmark', label: '벤치마크 비교' },
       { path: '/benchmark/compare-returns', label: '수익률 비교 분석' }

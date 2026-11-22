@@ -82,10 +82,12 @@ describe('Sidebar Component', () => {
 
     expect(actualSubMenus).toEqual([
       '지수분석',
+      '환율분석',
       '종목분석',
       '벤치마크 비교',
       '수익률 비교 분석'
     ]);
+    expect(screen.getByRole('link', { name: '환율분석' })).toHaveAttribute('href', '/market/exchange-rate');
   });
 
   it('DB 관리 메뉴 클릭 시 하위 메뉴가 표시되어야 한다', () => {
