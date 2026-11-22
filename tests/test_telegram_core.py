@@ -449,7 +449,7 @@ def test_telegram_config_storage_dir_quotes_and_spaces():
 
 
 def test_settings_toml_and_example_storage_dir_sync():
-    """settings.toml 및 settings.toml.example의 storage_dir 기본값이 구글 드라이브 경로로 일원화되어 있는지 검증합니다."""
+    """settings.toml.example 기본값과 로컬 settings.toml의 storage_dir 설정을 환경 독립적으로 검증합니다."""
     from pathlib import Path
     import tomllib
 
@@ -459,13 +459,15 @@ def test_settings_toml_and_example_storage_dir_sync():
     settings_file = root_dir / "settings.toml"
     example_file = root_dir / "settings.toml.example"
 
-    with open(settings_file, "rb") as f:
-        data = tomllib.load(f)
-    assert data.get("telegram", {}).get("storage_dir") == target_path
-
     with open(example_file, "rb") as f:
         example_data = tomllib.load(f)
     assert example_data.get("telegram", {}).get("storage_dir") == target_path
+
+    if settings_file.exists():
+        with open(settings_file, "rb") as f:
+            data = tomllib.load(f)
+        storage_dir = data.get("telegram", {}).get("storage_dir")
+        assert isinstance(storage_dir, str) and len(storage_dir.strip()) > 0
 
 
 @pytest.mark.asyncio
