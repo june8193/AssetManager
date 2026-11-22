@@ -5,6 +5,19 @@
 
 ---
 
+## [2.8.0] - 2026-11-22
+
+### Added
+- **모바일 비중 점검 탭 내 '리스크 관리(내재 변동성 진단)' 서브탭 추가**
+  - 모바일 비중 점검 페이지(`MobileRatiosPage`)에 읽기 전용 리스크 관리 서브탭(`MobileRiskSection`) 신설
+  - 조회 기간(`1M`, `3M`, `1Y`) 전환, S&P 500 대비 변동성 배수 상태 배지, 종목별 위험 지표 정렬(기여도순·자체 변동성순·보유금액순) 지원
+  - 모바일 전용 2종 시각화 차트 카드(`MobileRiskChartsCard`: 종목별 자체 변동성 vs 기여도, 벤치마크 대비 낙폭(MDD) 방어력) 및 단위 테스트 구현
+- **포트폴리오 내재 변동성 MCP 도구 추가 및 `asset-auditor` 리스크 검토 통합**
+  - `get_portfolio_volatility` MCP 도구(`src/mcp/tools/risk.py`) 신설 및 서버 등록: 포트폴리오·벤치마크 변동성 요약, Max MDD, 위험 기여도 상위 종목(`top_risk_contributors`) 및 비중 대비 위험 배수(`risk_weight_ratio`) 반환
+  - `asset-auditor` 스킬(`.agents/skills/asset-auditor/SKILL.md`)에 포트폴리오 내재 변동성·위험 기여도 기반 리스크 진단 항목 통합 및 MCP 서버 단위 테스트 추가
+
+---
+
 ## [2.7.0] - 2026-11-22
 
 ### Added
