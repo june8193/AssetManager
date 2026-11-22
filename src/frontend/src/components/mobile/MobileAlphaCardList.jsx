@@ -1,10 +1,7 @@
 import { useState, useMemo } from 'react';
-import { Award, ChevronDown, ChevronUp, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 
-/**
- * 4대 주요 벤치마크 지수 메타데이터 정의
- */
 const TARGET_BENCHMARKS = [
   {
     key: 'sp500',
@@ -32,13 +29,6 @@ const TARGET_BENCHMARKS = [
   },
 ];
 
-/**
- * 수치를 퍼센트 문자열로 포맷팅합니다.
- *
- * @param {number|string|null|undefined} val - 수치
- * @param {boolean} showSign - 양수 부호(+) 노출 여부
- * @returns {string} 포맷팅된 문자열 또는 '-'
- */
 function formatPercent(val, showSign = true) {
   if (val === null || val === undefined || isNaN(Number(val))) {
     return '-';
@@ -51,12 +41,6 @@ function formatPercent(val, showSign = true) {
   return `${formatted}%`;
 }
 
-/**
- * 알파 초과수익률을 %p 문자열로 포맷팅합니다.
- *
- * @param {number|string|null|undefined} val - 알파 수치
- * @returns {string} 포맷팅된 문자열 또는 '-'
- */
 function formatAlpha(val) {
   if (val === null || val === undefined || isNaN(Number(val))) {
     return '-';
@@ -70,21 +54,8 @@ function formatAlpha(val) {
 }
 
 /**
- * 모바일 알파 초과수익률 컴팩트 카드 리스트 및 상세 데이터 표 토글 컴포넌트
- *
- * 1. 4대 지수(S&P 500, NASDAQ, KOSPI, KOSDAQ)별 알파 초과수익률 컴팩트 카드 4종
- *    - 지수명, 지수 기간 수익률, 내 포트폴리오 수익률, 알파 초과수익률 뱃지
- * 2. 마스킹(`isMasked`) 지원: 포트폴리오 수익률 및 알파 수치 마스킹
- * 3. 우측 상단 아코디언 토글 버튼: '상세 표 보기 / 상세 표 접기'
- * 4. 토글 확장 시 가로 스크롤 정규 상세 데이터 테이블 노출
- *    - 컬럼: 지수명, 지수 수익률, 내 수익률, 알파, 지수 MDD
- *
- * @param {object} props
- * @param {Array<object>} [props.alphaAnalysis] - 백엔드 알파 분석 요약 목록
- * @param {Record<string, number>} [props.indicesMdd] - 4대 지수 MDD 맵
- * @param {number|string|null} [props.portfolioReturn] - 포트폴리오 기간 수익률 fallback
- * @param {boolean} [props.isMasked] - 마스킹 적용 여부
- * @returns {JSX.Element}
+ * 모바일 알파 초과수익률 플랫 리스트 및 상세 데이터 표 토글 컴포넌트 (클린 라이트 톤)
+ * - 한국 증권앱 기준: 초과수익(+) 빨강(#F04452), 저조(-) 파랑(#3182F6)
  */
 export default function MobileAlphaCardList({
   alphaAnalysis = [],
@@ -95,11 +66,8 @@ export default function MobileAlphaCardList({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const { isMasked: isMaskedContext, maskValue } = useMasking();
-
-  // props로 주입된 마스킹 플래그 우선, 없으면 context 사용
   const effectiveMasked = isMaskedProp !== undefined ? isMaskedProp : isMaskedContext;
 
-  // 4대 지수별 데이터 정규화 매핑
   const cardsData = useMemo(() => {
     const hasAlphaAnalysis = Array.isArray(alphaAnalysis) && alphaAnalysis.length > 0;
     const hasIndices = indices && Object.keys(indices).length > 0;
@@ -109,7 +77,6 @@ export default function MobileAlphaCardList({
     }
 
     return TARGET_BENCHMARKS.map((benchmark) => {
-      // 1. alphaAnalysis 항목 매칭 (ticker 또는 benchmark명 대소문자 무시)
       const matchedAlpha = hasAlphaAnalysis
         ? alphaAnalysis.find((item) => {
             if (!item) return false;
@@ -123,7 +90,6 @@ export default function MobileAlphaCardList({
           })
         : null;
 
-      // 2. indices 객체 매칭 폴백
       let matchedIndex = null;
       if (hasIndices) {
         for (const alias of benchmark.aliases) {
@@ -141,13 +107,12 @@ export default function MobileAlphaCardList({
 
       const benchReturn = matchedAlpha?.benchmark_return ?? matchedIndex?.return ?? null;
       const portReturn = matchedAlpha?.portfolio_return ?? portfolioReturn;
-      
+
       let alphaVal = matchedAlpha?.alpha ?? matchedIndex?.alpha ?? null;
       if (alphaVal === null && benchReturn !== null && portReturn !== null) {
         alphaVal = Number(portReturn) - Number(benchReturn);
       }
 
-      // MDD 매칭 (indicesMdd 또는 matchedIndex.mdd)
       let mddVal = matchedIndex?.mdd ?? null;
       if (mddVal === null) {
         for (const alias of benchmark.aliases) {
@@ -175,7 +140,6 @@ export default function MobileAlphaCardList({
     });
   }, [alphaAnalysis, indices, indicesMdd, portfolioReturn]);
 
-  // 마스킹 헬퍼
   const getDisplayPortfolioReturn = (val) => {
     if (val === null || val === undefined || isNaN(Number(val))) return '-';
     const formatted = formatPercent(val, true);
@@ -189,16 +153,13 @@ export default function MobileAlphaCardList({
   };
 
   return (
-    <div
+    <section
       data-testid="mobile-alpha-card-list"
-      className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-sm space-y-3.5"
+      className="bg-white border border-[#E5E8EB]/60 rounded-2xl p-5 space-y-3"
     >
       {/* 카드 섹션 헤더 & 아코디언 토글 버튼 */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5">
-          <Award className="w-4 h-4 text-sky-400" />
-          <h2 className="text-xs font-bold text-slate-200">초과수익률 (Alpha) 성과</h2>
-        </div>
+        <h2 className="text-[15px] font-bold text-[#191F28]">초과수익률 (Alpha)</h2>
 
         {cardsData.length > 0 && (
           <button
@@ -207,7 +168,7 @@ export default function MobileAlphaCardList({
             aria-expanded={isOpen}
             aria-controls="alpha-detail-table-container"
             onClick={() => setIsOpen((prev) => !prev)}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-sky-400 transition-colors px-2 py-1 rounded-lg hover:bg-slate-800"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-[#6B7684] hover:text-[#3182F6] transition-colors px-2 py-1 rounded-lg hover:bg-[#F2F4F6]"
           >
             <span>{isOpen ? '상세 표 접기' : '상세 표 보기'}</span>
             {isOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
@@ -217,53 +178,42 @@ export default function MobileAlphaCardList({
 
       {/* 데이터 없음 처리 */}
       {cardsData.length === 0 && (
-        <div className="py-6 text-center text-xs text-slate-500 font-medium">
+        <div className="py-6 text-center text-xs text-[#8B95A1] font-medium">
           초과수익률 비교 데이터가 없습니다.
         </div>
       )}
 
-      {/* 1. 컴팩트 카드 리스트 (2열 그리드) */}
+      {/* 1. 플랫 행 리스트 (중첩 박스 제거) */}
       {cardsData.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <div className="divide-y divide-[#F2F4F6]">
           {cardsData.map((item) => (
             <div
               key={item.key}
               data-testid={`alpha-card-${item.key}`}
-              className="bg-slate-950/60 border border-slate-800/90 rounded-xl p-3 space-y-2"
+              className="py-3 first:pt-1 last:pb-1 space-y-1.5 tabular-nums"
             >
-              {/* 1행: 지수명 & 알파 뱃지 */}
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-200">{item.name}</span>
-                <div
-                  className={`inline-flex items-center gap-0.5 px-2 py-0.5 rounded-md text-[11px] font-extrabold font-mono border ${
+                <span className="text-[13px] font-bold text-[#191F28]">{item.name}</span>
+                <span
+                  className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold ${
                     item.isAlphaPositive
-                      ? 'bg-emerald-950/60 text-emerald-400 border-emerald-800/80'
+                      ? 'bg-[#FFF0F1] text-[#F04452]'
                       : item.isAlphaNegative
-                      ? 'bg-rose-950/60 text-rose-400 border-rose-800/80'
-                      : 'bg-slate-800 text-slate-300 border-slate-700'
+                      ? 'bg-[#E8F3FF] text-[#3182F6]'
+                      : 'bg-[#F2F4F6] text-[#4E5968]'
                   }`}
                 >
-                  {!effectiveMasked && item.isAlphaPositive && <TrendingUp className="w-3 h-3" />}
-                  {!effectiveMasked && item.isAlphaNegative && <TrendingDown className="w-3 h-3" />}
-                  {!effectiveMasked && !item.isAlphaPositive && !item.isAlphaNegative && <Minus className="w-3 h-3" />}
-                  <span>{getDisplayAlpha(item.alpha)}</span>
-                </div>
+                  {getDisplayAlpha(item.alpha)}
+                </span>
               </div>
 
-              {/* 2행: 지수 기간 수익률 & 내 포트폴리오 수익률 */}
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-800/60 text-[11px]">
-                <div>
-                  <span className="text-slate-500 block text-[10px]">지수 수익률</span>
-                  <span className="font-mono font-semibold text-slate-300">
-                    {formatPercent(item.benchmarkReturn, true)}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-slate-500 block text-[10px]">내 수익률</span>
-                  <span className="font-mono font-bold text-sky-400">
-                    {getDisplayPortfolioReturn(item.portfolioReturn)}
-                  </span>
-                </div>
+              <div className="flex items-center justify-between text-xs text-[#8B95A1]">
+                <span>
+                  지수 <strong className="font-semibold text-[#4E5968]">{formatPercent(item.benchmarkReturn, true)}</strong>
+                </span>
+                <span>
+                  내 수익률 <strong className="font-semibold text-[#191F28]">{getDisplayPortfolioReturn(item.portfolioReturn)}</strong>
+                </span>
               </div>
             </div>
           ))}
@@ -274,11 +224,11 @@ export default function MobileAlphaCardList({
       {isOpen && cardsData.length > 0 && (
         <div
           id="alpha-detail-table-container"
-          className="pt-2 border-t border-slate-800/80 transition-all animate-in fade-in duration-200"
+          className="pt-2 border-t border-[#F2F4F6]"
         >
-          <div className="overflow-x-auto rounded-xl border border-slate-800 bg-slate-950/80">
-            <table data-testid="alpha-detail-table" className="w-full text-xs text-left min-w-[320px]">
-              <thead className="bg-slate-800/60 text-slate-400 text-[11px] font-semibold border-b border-slate-800">
+          <div className="overflow-x-auto rounded-xl border border-[#E5E8EB] bg-[#F9FAFB]">
+            <table data-testid="alpha-detail-table" className="w-full text-xs text-left min-w-[320px] tabular-nums">
+              <thead className="bg-[#F2F4F6] text-[#6B7684] text-[11px] font-semibold border-b border-[#E5E8EB]">
                 <tr>
                   <th className="px-3 py-2.5">지수명</th>
                   <th className="px-3 py-2.5 text-right">지수 수익률</th>
@@ -287,34 +237,30 @@ export default function MobileAlphaCardList({
                   <th className="px-3 py-2.5 text-right">지수 MDD</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-800/60">
+              <tbody className="divide-y divide-[#E5E8EB]/60 bg-white">
                 {cardsData.map((item) => (
-                  <tr
-                    key={item.key}
-                    data-testid={`alpha-table-row-${item.key}`}
-                    className="hover:bg-slate-800/30 transition-colors"
-                  >
-                    <td className="px-3 py-2.5 font-bold text-slate-200 whitespace-nowrap">
+                  <tr key={item.key} data-testid={`alpha-table-row-${item.key}`}>
+                    <td className="px-3 py-2.5 font-semibold text-[#191F28] whitespace-nowrap">
                       {item.name}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono font-medium text-slate-300 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-medium text-[#4E5968] whitespace-nowrap">
                       {formatPercent(item.benchmarkReturn, true)}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-sky-400 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-semibold text-[#191F28] whitespace-nowrap">
                       {getDisplayPortfolioReturn(item.portfolioReturn)}
                     </td>
                     <td
-                      className={`px-3 py-2.5 text-right font-mono font-bold whitespace-nowrap ${
+                      className={`px-3 py-2.5 text-right font-bold whitespace-nowrap ${
                         item.isAlphaPositive
-                          ? 'text-emerald-400'
+                          ? 'text-[#F04452]'
                           : item.isAlphaNegative
-                          ? 'text-rose-400'
-                          : 'text-slate-300'
+                          ? 'text-[#3182F6]'
+                          : 'text-[#6B7684]'
                       }`}
                     >
                       {getDisplayAlpha(item.alpha)}
                     </td>
-                    <td className="px-3 py-2.5 text-right font-mono font-semibold text-rose-400/90 whitespace-nowrap">
+                    <td className="px-3 py-2.5 text-right font-semibold text-[#3182F6] whitespace-nowrap">
                       {formatPercent(item.mdd, false)}
                     </td>
                   </tr>
@@ -324,6 +270,6 @@ export default function MobileAlphaCardList({
           </div>
         </div>
       )}
-    </div>
+    </section>
   );
 }

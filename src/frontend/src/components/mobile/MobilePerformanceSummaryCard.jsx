@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Award, TrendingDown, ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 
 const ITEMS_PER_PAGE = 5;
@@ -53,10 +53,9 @@ function formatDateBadge(period, item) {
 }
 
 /**
- * 모바일 연간/월간/일간 및 누적 수익률 성과 요약 카드
- * - 누적 ROI 및 총 누적수익 헤더
- * - [연도별 | 월별 | 일별] 세그먼트 탭 컨트롤
- * - 기간별 성과 리스트 (날짜 배지, 수익률, 수익금액, 자산평가액, 추가액)
+ * 모바일 연간/월간/일간 및 누적 수익률 성과 요약 카드 (클린 라이트 톤)
+ * - 누적 ROI 헤더 및 [연도별 | 월별 | 일별] 세그먼트 탭 컨트롤
+ * - 단일 흰색 카드 내 얇은 구분선 플랫 리스트 (한국 증권앱 기준: 상승 빨강 / 하락 파랑)
  * - 마스킹(***) 연동
  *
  * @param {Object} props
@@ -87,24 +86,19 @@ export default function MobilePerformanceSummaryCard({ data }) {
   );
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-3xl p-5 shadow-lg">
+    <section className="bg-white border border-[#E5E8EB]/60 rounded-2xl p-5">
       {/* 카드 헤더 */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
-            <Award className="w-4 h-4" />
-          </div>
-          <div>
-            <h3 className="text-base font-bold text-white leading-tight">성과 요약</h3>
-            <span className="text-[10px] text-slate-400 font-medium">연간 및 누적 수익률</span>
-          </div>
+      <div className="flex items-center justify-between mb-3.5">
+        <div>
+          <h2 className="text-[15px] font-bold text-[#191F28] leading-tight">성과 요약</h2>
+          <span className="text-xs text-[#8B95A1] font-medium">연간 및 누적 수익률</span>
         </div>
 
-        <div className="text-right">
-          <span className="text-[10px] text-slate-400 block font-medium">누적 ROI</span>
+        <div className="text-right tabular-nums">
+          <span className="text-[11px] text-[#8B95A1] block font-medium">누적 ROI</span>
           <span
-            className={`text-sm font-extrabold flex items-center justify-end gap-0.5 ${
-              isCumulativeProfit ? 'text-emerald-400' : 'text-rose-400'
+            className={`text-sm font-bold ${
+              isCumulativeProfit ? 'text-[#F04452]' : 'text-[#3182F6]'
             }`}
           >
             {isCumulativeProfit ? '+' : ''}
@@ -114,7 +108,7 @@ export default function MobilePerformanceSummaryCard({ data }) {
       </div>
 
       {/* 세그먼트 탭 컨트롤 */}
-      <div className="flex bg-slate-800/80 p-1 rounded-xl border border-slate-700/50 mb-3 gap-1">
+      <div className="flex bg-[#F2F4F6] p-1 rounded-xl mb-3 gap-1">
         {TABS.map((tab) => {
           const isActive = activeTab === tab.key;
           return (
@@ -122,10 +116,10 @@ export default function MobilePerformanceSummaryCard({ data }) {
               key={tab.key}
               type="button"
               onClick={() => handleTabChange(tab.key)}
-              className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all text-center ${
+              className={`flex-1 py-1.5 text-xs rounded-lg transition-all text-center ${
                 isActive
-                  ? 'bg-slate-700 text-white shadow-sm'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-white text-[#191F28] font-semibold shadow-xs'
+                  : 'text-[#6B7684] hover:text-[#191F28] font-medium'
               }`}
             >
               {tab.label}
@@ -134,9 +128,9 @@ export default function MobilePerformanceSummaryCard({ data }) {
         })}
       </div>
 
-      {/* 성과 리스트 */}
+      {/* 성과 플랫 리스트 */}
       {paginatedItems && paginatedItems.length > 0 ? (
-        <div className="space-y-2.5">
+        <div className="divide-y divide-[#F2F4F6]">
           {paginatedItems.map((item, index) => {
             const isProfit = (item.profit ?? item.roi) >= 0;
             const dateBadge = formatDateBadge(activeTab, item);
@@ -145,37 +139,36 @@ export default function MobilePerformanceSummaryCard({ data }) {
             return (
               <div
                 key={key}
-                className="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-3 flex items-center justify-between transition-colors hover:bg-slate-800/70"
+                className="py-3 first:pt-1 last:pb-1 flex items-center justify-between gap-2 tabular-nums"
               >
-                {/* 날짜 배지 & 평가액/추가액 */}
-                <div className="flex items-center gap-2.5">
-                  <div className="min-w-[54px] h-10 px-1 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center font-bold text-white text-[11px] font-mono shrink-0">
+                {/* 날짜 & 평가액/추가액 */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <span className="min-w-[54px] px-2 py-1 rounded-lg bg-[#F2F4F6] text-center font-semibold text-[#191F28] text-xs shrink-0">
                     {dateBadge}
-                  </div>
-                  <div>
-                    <span className="text-xs font-bold text-slate-200 block">
+                  </span>
+                  <div className="min-w-0">
+                    <span className="text-[13px] font-semibold text-[#191F28] block truncate">
                       {maskValue(Math.round(item.assets || 0).toLocaleString())} 원
                     </span>
-                    <span className="text-[10px] text-slate-400 font-medium">
-                      추가액: {maskValue(Math.round(item.contribution || 0).toLocaleString())} 원
+                    <span className="text-[11px] text-[#8B95A1] font-medium block truncate">
+                      추가액 {maskValue(Math.round(item.contribution || 0).toLocaleString())} 원
                     </span>
                   </div>
                 </div>
 
-                {/* 수익금 & 수익률 */}
-                <div className="text-right">
+                {/* 수익률 & 수익금 */}
+                <div className="text-right shrink-0">
                   <span
-                    className={`text-xs font-extrabold flex items-center justify-end gap-0.5 ${
-                      isProfit ? 'text-emerald-400' : 'text-rose-400'
+                    className={`text-[13px] font-bold block ${
+                      isProfit ? 'text-[#F04452]' : 'text-[#3182F6]'
                     }`}
                   >
-                    {isProfit ? <ArrowUpRight className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
                     {isProfit ? '+' : ''}
                     {Number(item.roi || 0).toFixed(2)}%
                   </span>
                   <span
-                    className={`text-[10px] font-medium block ${
-                      isProfit ? 'text-emerald-400/80' : 'text-rose-400/80'
+                    className={`text-[11px] font-medium block ${
+                      isProfit ? 'text-[#F04452]/80' : 'text-[#3182F6]/80'
                     }`}
                   >
                     {isProfit ? '+' : ''}
@@ -187,29 +180,29 @@ export default function MobilePerformanceSummaryCard({ data }) {
           })}
         </div>
       ) : (
-        <div className="py-6 text-center text-xs text-slate-500 font-medium">
+        <div className="py-6 text-center text-xs text-[#8B95A1] font-medium">
           해당 기간 성과 데이터가 없습니다.
         </div>
       )}
 
-      {/* 페이지네이션 컨트롤 (5개 초과 시 노출) */}
+      {/* 페이지네이션 컨트롤 */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-800/80">
+        <div className="flex items-center justify-between pt-3 mt-2 border-t border-[#F2F4F6] tabular-nums">
           <button
             type="button"
             onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
             disabled={currentPage === 1}
             className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
               currentPage === 1
-                ? 'text-slate-600 cursor-not-allowed'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                ? 'text-[#CBD5E1] cursor-not-allowed'
+                : 'text-[#4E5968] hover:bg-[#F2F4F6]'
             }`}
           >
             <ChevronLeft className="w-3.5 h-3.5" />
             <span>이전</span>
           </button>
 
-          <span className="text-xs font-semibold text-slate-400">
+          <span className="text-xs font-semibold text-[#6B7684]">
             {currentPage} / {totalPages}
           </span>
 
@@ -219,8 +212,8 @@ export default function MobilePerformanceSummaryCard({ data }) {
             disabled={currentPage === totalPages}
             className={`flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-lg transition-colors ${
               currentPage === totalPages
-                ? 'text-slate-600 cursor-not-allowed'
-                : 'text-slate-300 hover:text-white hover:bg-slate-800'
+                ? 'text-[#CBD5E1] cursor-not-allowed'
+                : 'text-[#4E5968] hover:bg-[#F2F4F6]'
             }`}
           >
             <span>다음</span>
@@ -228,7 +221,6 @@ export default function MobilePerformanceSummaryCard({ data }) {
           </button>
         </div>
       )}
-    </div>
+    </section>
   );
 }
-

@@ -33,17 +33,18 @@ describe('App 적응형 레이아웃 분기', () => {
     expect(screen.queryByRole('link', { name: /자산 조회/i })).not.toBeInTheDocument();
   });
 
-  it('모바일 너비(500px)에서는 MobileLayout(상단 헤더 + 하단 탭바)이 렌더링되어야 한다', () => {
+  it('모바일 너비(500px)에서는 MobileLayout(단일 헤더 + 하단 5탭바)이 렌더링되어야 한다', () => {
     window.innerWidth = 500;
     render(<App />);
 
-    // 모바일 탭 바 및 헤더 확인
-    expect(screen.getByText('AssetManager')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /대시보드/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /자산 조회/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /지출/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /비중 점검/i })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /설정/i })).toBeInTheDocument();
+    // 모바일 단일 헤더 및 하단 5탭 바 확인
+    expect(screen.getByRole('heading', { name: '자산 현황' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /환경 설정/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^홈$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^자산$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^지출$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^시장$/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /^비중$/i })).toBeInTheDocument();
 
     // 데스크톱 사이드바는 렌더링되지 않아야 함
     expect(screen.queryByRole('navigation', { name: /메인 메뉴/i })).not.toBeInTheDocument();

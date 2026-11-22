@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import MobileRatiosPage from './MobileRatiosPage';
+import MobileHeader from '../../components/mobile/MobileHeader';
 import { MaskingProvider } from '../../contexts/MaskingContext';
+import { MobileHeaderProvider } from '../../contexts/MobileHeaderContext';
 import * as useRatiosModule from '../../hooks/useRatios';
 
 const mockHierarchy = [
@@ -63,9 +66,14 @@ describe('MobileRatiosPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileRatiosPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     expect(screen.getByText(/비중 데이터를 불러오는 중/i)).toBeInTheDocument();
@@ -81,9 +89,14 @@ describe('MobileRatiosPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileRatiosPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     expect(screen.getByText('네트워크 연결 오류')).toBeInTheDocument();
@@ -103,9 +116,14 @@ describe('MobileRatiosPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileRatiosPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     // 헤더 및 현재 총 자산 확인
@@ -136,9 +154,14 @@ describe('MobileRatiosPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileRatiosPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     expect(screen.queryByText(/리밸런싱 규모/i)).not.toBeInTheDocument();
@@ -154,9 +177,14 @@ describe('MobileRatiosPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileRatiosPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     const refreshBtn = screen.getByRole('button', { name: /새로고침/i });
@@ -181,9 +209,14 @@ describe('MobileRatiosPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileRatiosPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     expect(screen.queryByText('100,000,000')).not.toBeInTheDocument();
@@ -201,9 +234,14 @@ describe('MobileRatiosPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileRatiosPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/m/ratios']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileRatiosPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();

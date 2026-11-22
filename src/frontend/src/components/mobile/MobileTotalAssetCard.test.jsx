@@ -35,8 +35,8 @@ describe('MobileTotalAssetCard', () => {
     expect(screen.getByText(/투자 원금/i)).toBeInTheDocument();
 
     // 평가 손익 및 수익률 확인
-    expect(screen.getByText(/\+25,000,000/)).toBeInTheDocument();
-    expect(screen.getByText(/\+25.00%/)).toBeInTheDocument();
+    expect(screen.getAllByText(/\+25,000,000/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/\+25\.00%/).length).toBeGreaterThanOrEqual(1);
 
     // 환율 정보 표시 확인
     expect(screen.getByText('1,350.5')).toBeInTheDocument();
@@ -57,8 +57,8 @@ describe('MobileTotalAssetCard', () => {
       </MaskingProvider>
     );
 
-    expect(screen.getByText(/-5,000,000/)).toBeInTheDocument();
-    expect(screen.getByText(/-5.00%/)).toBeInTheDocument();
+    expect(screen.getAllByText(/-5,000,000/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/-5\.00%/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('마스킹 활성화 시 자산 금액이 마스킹(***) 처리되어야 한다', () => {

@@ -43,7 +43,6 @@ describe('MobileSettingsPage', () => {
       expect(systemServiceModule.systemService.getTaskStatus).toHaveBeenCalled();
     });
 
-    expect(screen.getByText('환경 설정')).toBeInTheDocument();
     expect(screen.getByText('개인정보 보호')).toBeInTheDocument();
     expect(screen.getByText('서버 연결 상태')).toBeInTheDocument();
     expect(screen.getByText('앱 정보')).toBeInTheDocument();

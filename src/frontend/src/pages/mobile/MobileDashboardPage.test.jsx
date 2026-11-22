@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import MobileDashboardPage from './MobileDashboardPage';
+import MobileHeader from '../../components/mobile/MobileHeader';
 import { MaskingProvider } from '../../contexts/MaskingContext';
+import { MobileHeaderProvider } from '../../contexts/MobileHeaderContext';
 import * as useDashboardModule from '../../hooks/useDashboard';
 
 describe('MobileDashboardPage', () => {
@@ -78,9 +81,14 @@ describe('MobileDashboardPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileDashboardPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileDashboardPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     expect(screen.getByText(/자산 데이터를 불러오는 중/i)).toBeInTheDocument();
@@ -95,9 +103,14 @@ describe('MobileDashboardPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileDashboardPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileDashboardPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     expect(screen.getByText('네트워크 연결에 실패했습니다.')).toBeInTheDocument();
@@ -117,15 +130,19 @@ describe('MobileDashboardPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileDashboardPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileDashboardPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
-    // 1. 총 자산 요약 카드 확인
-    const totalCardHeader = screen.getByText('총 자산 요약');
+    // 1. 총 평가 자산 카드 확인
+    const totalCardHeader = screen.getByText('총 평가 자산');
     expect(screen.getByText('125,000,000')).toBeInTheDocument();
-    expect(screen.getByText(/총 평가 자산/i)).toBeInTheDocument();
 
     // 2. 자산 추이 카드 확인
     const trendCardHeader = screen.getByText('자산 추이');
@@ -168,9 +185,14 @@ describe('MobileDashboardPage', () => {
     });
 
     render(
-      <MaskingProvider>
-        <MobileDashboardPage />
-      </MaskingProvider>
+      <MemoryRouter initialEntries={['/']}>
+        <MaskingProvider>
+          <MobileHeaderProvider>
+            <MobileHeader />
+            <MobileDashboardPage />
+          </MobileHeaderProvider>
+        </MaskingProvider>
+      </MemoryRouter>
     );
 
     const refreshBtn = screen.getByRole('button', { name: /새로고침/i });

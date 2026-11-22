@@ -1,9 +1,9 @@
 import { useState, useMemo } from 'react';
-import { Search, Filter, ArrowRight, ArrowLeftRight } from 'lucide-react';
+import { Search, Filter } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
 
 /**
- * 거래 유형 뱃지 스타일 헬퍼
+ * 거래 유형 뱃지 스타일 헬퍼 (한국 증권앱 시맨틱 컬러)
  *
  * @param {string} type - 거래 유형
  * @returns {{ label: string, style: string }}
@@ -11,35 +11,35 @@ import { useMasking } from '../../contexts/MaskingContext';
 const getTransactionBadgeProps = (type) => {
   switch (type) {
     case 'BUY':
-      return { label: '매수', style: 'bg-sky-500/10 text-sky-400 border border-sky-500/20' };
+      return { label: '매수', style: 'bg-[#FFF0F1] text-[#F04452]' };
     case 'SELL':
-      return { label: '매도', style: 'bg-rose-500/10 text-rose-400 border border-rose-500/20' };
+      return { label: '매도', style: 'bg-[#E8F3FF] text-[#3182F6]' };
     case 'DEPOSIT':
-      return { label: '입금', style: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' };
+      return { label: '입금', style: 'bg-[#E8F8F2] text-[#00A870]' };
     case 'WITHDRAW':
-      return { label: '출금', style: 'bg-amber-500/10 text-amber-400 border border-amber-500/20' };
+      return { label: '출금', style: 'bg-[#FFF8E6] text-[#D97706]' };
     case 'TRANSFER':
-      return { label: '이체', style: 'bg-purple-500/10 text-purple-400 border border-purple-500/20' };
+      return { label: '이체', style: 'bg-[#F3EEFF] text-[#7C3AED]' };
     case 'EXCHANGE':
-      return { label: '환전', style: 'bg-teal-500/10 text-teal-400 border border-teal-500/20' };
+      return { label: '환전', style: 'bg-[#E6F7F5] text-[#0D9488]' };
     case 'DIVIDEND':
-      return { label: '배당', style: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' };
+      return { label: '배당', style: 'bg-[#EEF2FF] text-[#4F46E5]' };
     case 'INTEREST':
-      return { label: '이자', style: 'bg-indigo-500/10 text-indigo-400 border border-indigo-500/20' };
+      return { label: '이자', style: 'bg-[#EEF2FF] text-[#4F46E5]' };
     case 'TAX':
-      return { label: '세금', style: 'bg-slate-700 text-slate-300 border border-slate-600' };
+      return { label: '세금', style: 'bg-[#F2F4F6] text-[#4E5968]' };
     case 'CASH_ADJUSTMENT':
-      return { label: '보정', style: 'bg-slate-700 text-slate-300 border border-slate-600' };
+      return { label: '보정', style: 'bg-[#F2F4F6] text-[#4E5968]' };
     default:
-      return { label: type || '기타', style: 'bg-slate-800 text-slate-400 border border-slate-700' };
+      return { label: type || '기타', style: 'bg-[#F2F4F6] text-[#6B7684]' };
   }
 };
 
 /**
- * 모바일 거래내역 조회 및 필터/검색 리스트 컴포넌트 (Read-Only)
+ * 모바일 거래내역 조회 및 필터/검색 리스트 컴포넌트 (Read-Only, 클린 라이트 톤)
  * - 계좌별 필터, 거래 유형별 필터, 키워드 실시간 검색
- * - 읽기 전용으로 추가/수정/삭제 버튼 일체 배제
- * - 마스킹(MaskingContext) 완벽 연동
+ * - 단일 흰색 카드 내 얇은 구분선 플랫 행 리스트
+ * - 마스킹(MaskingContext) 연동
  *
  * @param {Object} props
  * @param {Array} props.transactions - 전체 거래내역 배열
@@ -72,12 +72,10 @@ export default function MobileTransactionList({
   // 필터 및 검색 적용된 거래 목록
   const filteredTransactions = useMemo(() => {
     return transactions.filter((tx) => {
-      // 1. 계좌 필터
       if (accountFilter !== 'all' && String(tx.account_id) !== String(accountFilter)) {
         return false;
       }
 
-      // 2. 거래 유형 필터
       if (typeFilter !== 'all') {
         if (typeFilter === 'TRADE') {
           if (tx.type !== 'BUY' && tx.type !== 'SELL') return false;
@@ -90,7 +88,6 @@ export default function MobileTransactionList({
         }
       }
 
-      // 3. 검색어 필터 (종목명, 티커, 계좌명, 메모 등)
       if (searchQuery.trim() !== '') {
         const query = searchQuery.trim().toLowerCase();
         const asset = assetMap.get(String(tx.asset_id));
@@ -120,16 +117,16 @@ export default function MobileTransactionList({
   return (
     <div className="space-y-3">
       {/* 필터 및 검색 헤더 바 */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 space-y-2.5 shadow-md">
+      <section className="bg-white border border-[#E5E8EB]/60 rounded-2xl p-3.5 space-y-2.5">
         {/* 검색 인풋 */}
         <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#8B95A1] absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="종목명, 티커, 계좌명, 메모 검색"
-            className="w-full pl-9 pr-3 py-2 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
+            className="w-full pl-9 pr-3 py-2 bg-[#F2F4F6] border border-transparent rounded-xl text-xs text-[#191F28] placeholder-[#8B95A1] focus:outline-none focus:bg-white focus:border-[#3182F6] transition-colors"
           />
         </div>
 
@@ -144,7 +141,7 @@ export default function MobileTransactionList({
               aria-label="계좌 필터"
               value={accountFilter}
               onChange={(e) => setAccountFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-sky-500 font-medium"
+              className="w-full px-2.5 py-2 bg-[#F2F4F6] border border-transparent rounded-xl text-xs text-[#4E5968] focus:outline-none focus:border-[#3182F6] font-medium"
             >
               <option value="all">전체 계좌</option>
               {accounts.map((acc) => (
@@ -164,7 +161,7 @@ export default function MobileTransactionList({
               aria-label="유형 필터"
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 bg-slate-950/80 border border-slate-800 rounded-xl text-xs text-slate-300 focus:outline-none focus:border-sky-500 font-medium"
+              className="w-full px-2.5 py-2 bg-[#F2F4F6] border border-transparent rounded-xl text-xs text-[#4E5968] focus:outline-none focus:border-[#3182F6] font-medium"
             >
               <option value="all">전체 거래 유형</option>
               <option value="BUY">매수 (BUY)</option>
@@ -181,10 +178,10 @@ export default function MobileTransactionList({
             </select>
           </div>
         </div>
-      </div>
+      </section>
 
       {/* 거래 건수 요약 */}
-      <div className="flex items-center justify-between px-1 text-[11px] font-bold text-slate-400">
+      <div className="flex items-center justify-between px-1 text-xs font-semibold text-[#6B7684]">
         <span>거래 내역 ({filteredTransactions.length}건)</span>
         {(accountFilter !== 'all' || typeFilter !== 'all' || searchQuery) && (
           <button
@@ -194,21 +191,21 @@ export default function MobileTransactionList({
               setTypeFilter('all');
               setSearchQuery('');
             }}
-            className="text-sky-400 hover:text-sky-300 font-semibold"
+            className="text-[#3182F6] hover:text-[#1B64DA] font-semibold"
           >
             필터 초기화
           </button>
         )}
       </div>
 
-      {/* 거래 목록 리스트 */}
+      {/* 거래 목록 플랫 리스트 */}
       {filteredTransactions.length === 0 ? (
-        <div className="py-12 px-4 text-center bg-slate-900 border border-slate-800 rounded-2xl shadow-sm">
-          <Filter className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-          <p className="text-xs text-slate-400 font-medium">거래 내역이 없습니다.</p>
+        <div className="py-12 px-4 text-center bg-white border border-[#E5E8EB]/60 rounded-2xl">
+          <Filter className="w-7 h-7 text-[#CBD5E1] mx-auto mb-2" />
+          <p className="text-xs text-[#8B95A1] font-medium">거래 내역이 없습니다.</p>
         </div>
       ) : (
-        <div className="space-y-2">
+        <section className="bg-white border border-[#E5E8EB]/60 rounded-2xl divide-y divide-[#F2F4F6]">
           {filteredTransactions.map((tx) => {
             const isExchangeTx = tx.type === 'EXCHANGE';
             const isTransferTx = !!tx.transfer_pair_id || tx.type === 'TRANSFER';
@@ -230,65 +227,60 @@ export default function MobileTransactionList({
             const safeTotal = tx.total_amount ?? 0;
 
             return (
-              <div
-                key={tx.id}
-                className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 shadow-sm space-y-2 hover:border-slate-700 transition-colors"
-              >
+              <div key={tx.id} className="p-4 space-y-1.5">
                 {/* 상단: 일자 / 계좌 / 유형 배지 */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                    <span className="text-[10px] font-mono text-slate-400 font-medium">
+                    <span className="text-[11px] text-[#8B95A1] font-medium tabular-nums">
                       {tx.transaction_date}
                     </span>
-                    <span className="text-slate-600">•</span>
-                    <span className="text-[11px] font-bold text-slate-300 truncate">
+                    <span className="text-[#CBD5E1]">·</span>
+                    <span className="text-[11px] font-medium text-[#6B7684] truncate">
                       {account?.provider ? `${account.provider} ${account.name}` : tx.account_id}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 flex-shrink-0">
-                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${badge.style}`}>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badge.style}`}>
                       {badge.label}
                     </span>
-                    {isTransferTx && (
-                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                    {isTransferTx && tx.type !== 'TRANSFER' && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#F3EEFF] text-[#7C3AED]">
                         이체
                       </span>
                     )}
                   </div>
                 </div>
 
-                {/* 중앙: 종목명 / 티커 / 거래 총액 */}
-                <div className="flex items-start justify-between gap-2">
+                {/* 중앙: 종목명 / 거래 총액 */}
+                <div className="flex items-start justify-between gap-2 tabular-nums">
                   <div className="min-w-0">
-                    <div className="text-xs font-bold text-white truncate">{nameDisplay || tickerDisplay}</div>
-                    <div className="text-[10px] font-mono text-slate-400 mt-0.5">{tickerDisplay}</div>
+                    <div className="text-[13px] font-semibold text-[#191F28] truncate">
+                      {nameDisplay || tickerDisplay}
+                    </div>
+                    <div className="text-[11px] text-[#8B95A1] mt-0.5">{tickerDisplay}</div>
                   </div>
 
-                  <div className="text-right flex-shrink-0">
-                    <div className="text-sm font-extrabold text-white font-mono">
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-bold text-[#191F28]">
                       {maskValue(safeTotal.toLocaleString())}
-                      <span className="text-[10px] font-normal text-slate-400 ml-0.5">{tx.currency || 'KRW'}</span>
+                      <span className="text-[11px] font-normal text-[#6B7684] ml-0.5">
+                        {tx.currency || 'KRW'}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 {/* 하단: 수량 @ 단가 및 메모 */}
-                <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-medium">
+                <div className="pt-1 flex items-center justify-between text-[11px] text-[#8B95A1] font-medium tabular-nums">
                   <div>
-                    <span>수량: </span>
-                    <span className="text-slate-300 font-semibold font-mono">
-                      {maskValue(safeQuantity.toLocaleString())}
-                    </span>
-                    <span className="mx-1">@</span>
-                    <span>단가: </span>
-                    <span className="text-slate-300 font-semibold font-mono">
-                      {maskValue(safePrice.toLocaleString())} {tx.currency || 'KRW'}
-                    </span>
+                    <span>수량 {maskValue(safeQuantity.toLocaleString())}</span>
+                    <span className="mx-1">·</span>
+                    <span>단가 {maskValue(safePrice.toLocaleString())} {tx.currency || 'KRW'}</span>
                   </div>
 
                   {tx.memo && (
-                    <div className="text-slate-400 truncate max-w-[130px] font-normal text-[10px]">
+                    <div className="text-[#6B7684] truncate max-w-[130px] font-normal">
                       {tx.memo}
                     </div>
                   )}
@@ -296,7 +288,7 @@ export default function MobileTransactionList({
               </div>
             );
           })}
-        </div>
+        </section>
       )}
     </div>
   );

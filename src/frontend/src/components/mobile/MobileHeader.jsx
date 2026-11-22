@@ -1,80 +1,100 @@
-import { useState, useEffect } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff, RefreshCw, Settings, ChevronLeft } from 'lucide-react';
 import { useMasking } from '../../contexts/MaskingContext';
+import { useMobileHeader } from '../../contexts/MobileHeaderContext';
 
 /**
- * 모바일 최상단 간소화 헤더 컴포넌트
- * - 앱 로고 및 타이틀
- * - 서버 헬스 상태 인디케이터
- * - 금액 마스킹 토글 버튼
+ * 모바일 최상단 단일 헤더 컴포넌트 (클린 라이트 톤)
+ * - 좌측: 현재 페이지 타이틀 (설정 화면 진입 시 뒤로가기 버튼 포함)
+ * - 우측: 금액 마스킹 토글, 새로고침(연동된 경우), 환경 설정 아이콘 버튼
  */
 export default function MobileHeader() {
   const { isMasked, toggleMasking } = useMasking();
-  const [isServerOnline, setIsServerOnline] = useState(true);
+  const { title, onRefresh, isRefreshing } = useMobileHeader();
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  // 간단한 온라인 상태 감지 (기본 온라인 상태 및 navigator.onLine)
-  useEffect(() => {
-    const handleOnline = () => setIsServerOnline(true);
-    const handleOffline = () => setIsServerOnline(false);
+  const isSettingsPage = location.pathname.startsWith('/m/settings');
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
+  const handleBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      navigate('/');
+    }
+  };
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-800 text-slate-100 px-4 py-3 flex items-center justify-between shadow-sm select-none">
-      {/* 로고 & 타이틀 */}
-      <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center shadow-inner">
-          <span className="font-bold text-white text-base">A</span>
-        </div>
-        <div className="flex flex-col">
-          <span className="font-bold text-base tracking-tight text-white leading-tight">
-            AssetManager
-          </span>
-          <span className="text-[10px] text-slate-400 font-medium leading-none">
-            Mobile
-          </span>
-        </div>
+    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-[#E5E8EB] text-[#191F28] px-4 h-14 flex items-center justify-between select-none">
+      {/* 좌측: 페이지 타이틀 (+ 설정 페이지 뒤로가기) */}
+      <div className="flex items-center gap-1.5 min-w-0">
+        {isSettingsPage && (
+          <button
+            type="button"
+            onClick={handleBack}
+            aria-label="뒤로 가기"
+            className="w-8 h-8 -ml-1.5 rounded-full flex items-center justify-center text-[#4E5968] hover:bg-[#F2F4F6] active:scale-95 transition-all"
+          >
+            <ChevronLeft className="w-5 h-5" />
+          </button>
+        )}
+        <h1 className="text-[17px] font-bold tracking-tight text-[#191F28] truncate">
+          {title}
+        </h1>
       </div>
 
-      {/* 우측 컨트롤 영역 (서버 상태 + 마스킹 토글) */}
-      <div className="flex items-center gap-2">
-        {/* 서버 상태 인디케이터 */}
-        <div
-          data-testid="server-status-indicator"
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-800/80 border border-slate-700/60 text-xs"
-          title={isServerOnline ? '서버 연결됨' : '네트워크 오프라인'}
-        >
-          <span
-            className={`w-2 h-2 rounded-full ${
-              isServerOnline ? 'bg-emerald-400 animate-pulse' : 'bg-rose-500'
-            }`}
-          />
-          <span className="text-[11px] text-slate-300 font-medium">
-            {isServerOnline ? 'Live' : 'Offline'}
-          </span>
-        </div>
-
+      {/* 우측 컨트롤 영역 (마스킹 토글 + 새로고침 + 환경 설정) */}
+      <div className="flex items-center gap-1">
         {/* 마스킹 토글 버튼 */}
         <button
           type="button"
           onClick={toggleMasking}
-          className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 border border-slate-700/60 text-slate-300 hover:text-white transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-[#3182F6]/30 ${
+            isMasked
+              ? 'bg-[#E8F3FF] text-[#3182F6]'
+              : 'text-[#4E5968] hover:bg-[#F2F4F6]'
+          }`}
           aria-label={isMasked ? '금액 마스킹 해제' : '금액 마스킹 적용'}
           title={isMasked ? '금액 마스킹 해제' : '금액 마스킹 적용'}
         >
           {isMasked ? (
-            <EyeOff data-testid="masking-icon-hidden" className="w-4 h-4 text-slate-400" />
+            <EyeOff data-testid="masking-icon-hidden" className="w-[18px] h-[18px]" />
           ) : (
-            <Eye data-testid="masking-icon-visible" className="w-4 h-4 text-sky-400" />
+            <Eye data-testid="masking-icon-visible" className="w-[18px] h-[18px]" />
           )}
         </button>
+
+        {/* 페이지 새로고침 버튼 (활성 페이지에 핸들러가 등록된 경우 표시) */}
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            aria-label="새로고침"
+            title="새로고침"
+            className="w-9 h-9 rounded-full flex items-center justify-center text-[#4E5968] hover:bg-[#F2F4F6] active:scale-95 transition-all disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-[#3182F6]/30"
+          >
+            <RefreshCw
+              className={`w-[18px] h-[18px] ${
+                isRefreshing ? 'animate-spin text-[#3182F6]' : ''
+              }`}
+            />
+          </button>
+        )}
+
+        {/* 환경 설정 이동 링크 */}
+        <Link
+          to="/m/settings"
+          aria-label="환경 설정"
+          title="환경 설정"
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors focus:outline-none focus:ring-2 focus:ring-[#3182F6]/30 ${
+            isSettingsPage
+              ? 'bg-[#E8F3FF] text-[#3182F6]'
+              : 'text-[#4E5968] hover:bg-[#F2F4F6]'
+          }`}
+        >
+          <Settings className="w-[18px] h-[18px]" />
+        </Link>
       </div>
     </header>
   );

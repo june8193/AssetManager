@@ -1,9 +1,12 @@
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { MemoryRouter } from 'react-router-dom';
 import MobileExpensesPage from './MobileExpensesPage';
+import MobileHeader from '../../components/mobile/MobileHeader';
 import { expenseService } from '../../services/expenseService';
 import { MaskingProvider } from '../../contexts/MaskingContext';
+import { MobileHeaderProvider } from '../../contexts/MobileHeaderContext';
 
 // expenseService 모킹
 vi.mock('../../services/expenseService', () => ({
@@ -97,9 +100,14 @@ const mockExpenses = [
 
 const renderComponent = () => {
   return render(
-    <MaskingProvider>
-      <MobileExpensesPage />
-    </MaskingProvider>
+    <MemoryRouter initialEntries={['/m/expenses']}>
+      <MaskingProvider>
+        <MobileHeaderProvider>
+          <MobileHeader />
+          <MobileExpensesPage />
+        </MobileHeaderProvider>
+      </MaskingProvider>
+    </MemoryRouter>
   );
 };
 

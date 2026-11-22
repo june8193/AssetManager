@@ -252,14 +252,14 @@ describe('MobileMarketIndexSection', () => {
       const cautionBadge = screen.getByTestId('vix-legend-badge-caution');
       expect(cautionBadge).toBeInTheDocument();
       expect(cautionBadge).toHaveTextContent('주의 20');
-      expect(cautionBadge.className).toContain('text-amber-400');
-      expect(cautionBadge.className).toContain('border-amber-500');
+      expect(cautionBadge.className).toContain('text-[#D97706]');
+      expect(cautionBadge.className).toContain('bg-[#FFF8E6]');
 
       const warningBadge = screen.getByTestId('vix-legend-badge-warning');
       expect(warningBadge).toBeInTheDocument();
       expect(warningBadge).toHaveTextContent('경고 30');
-      expect(warningBadge.className).toContain('text-rose-400');
-      expect(warningBadge.className).toContain('border-rose-500');
+      expect(warningBadge.className).toContain('text-[#F04452]');
+      expect(warningBadge.className).toContain('bg-[#FFF0F1]');
 
       // 다시 MDD 탭으로 전환하면 범례 뱃지가 사라져야 함
       const tabMdd = screen.getByTestId('chart-tab-mdd');
@@ -447,12 +447,12 @@ describe('MobileMarketIndexSection', () => {
       const mddGroup = screen.getByTestId('inspector-mdd-group');
       const vixGroup = screen.getByTestId('inspector-vix-group');
 
-      expect(priceGroup.className).toContain('bg-sky-500/20');
-      expect(priceGroup.className).toContain('ring-sky-500');
+      expect(priceGroup.className).toContain('bg-white');
+      expect(priceGroup.className).toContain('font-bold');
       expect(mddGroup.className).toContain('opacity-70');
       expect(vixGroup.className).toContain('opacity-70');
 
-      // 2. 'mdd' 탭 활성화: MDD 수치 하이라이트 (bg-rose-500/20, ring-1 등)
+      // 2. 'mdd' 탭 활성화: MDD 수치 하이라이트
       rerender(
         <MobileSlimInspectorBar
           hoveredData={mockHoveredPoint}
@@ -461,11 +461,11 @@ describe('MobileMarketIndexSection', () => {
       );
 
       expect(priceGroup.className).toContain('opacity-70');
-      expect(mddGroup.className).toContain('bg-rose-500/20');
-      expect(mddGroup.className).toContain('ring-rose-500');
+      expect(mddGroup.className).toContain('bg-[#E8F3FF]');
+      expect(mddGroup.className).toContain('font-bold');
       expect(vixGroup.className).toContain('opacity-70');
 
-      // 3. 'vix' 탭 활성화: VIX 수치 하이라이트 (bg-purple-500/20, ring-1 등)
+      // 3. 'vix' 탭 활성화: VIX 수치 하이라이트
       rerender(
         <MobileSlimInspectorBar
           hoveredData={mockHoveredPoint}
@@ -475,8 +475,8 @@ describe('MobileMarketIndexSection', () => {
 
       expect(priceGroup.className).toContain('opacity-70');
       expect(mddGroup.className).toContain('opacity-70');
-      expect(vixGroup.className).toContain('bg-purple-500/20');
-      expect(vixGroup.className).toContain('ring-purple-500');
+      expect(vixGroup.className).toContain('bg-[#EEF2FF]');
+      expect(vixGroup.className).toContain('font-bold');
     });
 
     it('모바일 터치 종료(touchEnd) 및 mouseLeave 시 호버 데이터가 리셋되고 슬림 바가 즉각 안내 문구로 복귀한다', async () => {

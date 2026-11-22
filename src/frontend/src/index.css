@@ -10,7 +10,7 @@
   }
 
   body {
-    font-family: 'Inter', sans-serif;
+    font-family: 'Pretendard Variable', Pretendard, 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   }
   h1, h2, h3, .font-headline {
     font-family: 'Manrope', sans-serif;

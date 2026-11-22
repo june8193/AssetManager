@@ -320,44 +320,44 @@ describe('MobileRatioCard Component', () => {
     });
 
     it('진행률 게이지 바(Progress Bar) 색상이 단일화된 상태(초과/부족/적정/미설정)와 일치해야 한다', () => {
-      // 1. 매수 필요: bg-sky-400 (diff_amt > 1000)
+      // 1. 매수 필요: bg-[#F04452] (diff_amt > 1000)
       const { container: underContainer, unmount: unmountUnder } = render(
         <MaskingProvider>
           <MobileRatioCard item={mockUnderItem} totalValuation={100000000} />
         </MaskingProvider>
       );
       const underBar = underContainer.querySelector('.overflow-hidden > div');
-      expect(underBar).toHaveClass('bg-sky-400');
+      expect(underBar).toHaveClass('bg-[#F04452]');
       unmountUnder();
 
-      // 2. 매도 필요: bg-amber-400 (diff_amt < -1000)
+      // 2. 매도 필요: bg-[#3182F6] (diff_amt < -1000)
       const { container: overContainer, unmount: unmountOver } = render(
         <MaskingProvider>
           <MobileRatioCard item={mockMajorItem} totalValuation={100000000} />
         </MaskingProvider>
       );
       const overBar = overContainer.querySelector('.overflow-hidden > div');
-      expect(overBar).toHaveClass('bg-amber-400');
+      expect(overBar).toHaveClass('bg-[#3182F6]');
       unmountOver();
 
-      // 3. 적정: bg-emerald-400 (|diff_amt| <= 1000)
+      // 3. 적정: bg-[#00A870] (|diff_amt| <= 1000)
       const { container: balancedContainer, unmount: unmountBalanced } = render(
         <MaskingProvider>
           <MobileRatioCard item={mockBalancedItem} totalValuation={100000000} />
         </MaskingProvider>
       );
       const balancedBar = balancedContainer.querySelector('.overflow-hidden > div');
-      expect(balancedBar).toHaveClass('bg-emerald-400');
+      expect(balancedBar).toHaveClass('bg-[#00A870]');
       unmountBalanced();
 
-      // 4. 목표 미설정: bg-slate-600 (!hasTarget)
+      // 4. 목표 미설정: bg-[#CBD5E1] (!hasTarget)
       const { container: untargetedContainer } = render(
         <MaskingProvider>
           <MobileRatioCard item={mockUntargetedItem} totalValuation={100000000} />
         </MaskingProvider>
       );
       const untargetedBar = untargetedContainer.querySelector('.overflow-hidden > div');
-      expect(untargetedBar).toHaveClass('bg-slate-600');
+      expect(untargetedBar).toHaveClass('bg-[#CBD5E1]');
     });
   });
 });
