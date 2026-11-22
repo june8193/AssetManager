@@ -90,12 +90,6 @@ describe('MobileMarketPage', () => {
           json: () => Promise.resolve(mockBenchmarkData),
         });
       }
-      if (urlStr.includes('/api/v1/performance/portfolio')) {
-        return Promise.resolve({
-          ok: true,
-          json: () => Promise.resolve(mockPortfolioPerf),
-        });
-      }
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve([]),

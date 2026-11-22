@@ -290,3 +290,16 @@ def test_risk_volatility_psd_projection_with_asynchronous_dates(client, db_sessi
     assert np.allclose(psd[:, 0], 0.0)
     w = np.array([0.2, 0.5, -0.3])
     assert float(w @ psd @ w) >= 0.0
+
+
+def test_legacy_performance_routes_removed(client):
+    """구버전 /api/v1/performance/* 엔드포인트가 완전히 제거되어 404를 반환하는지 검증합니다."""
+    for method, path in [
+        ("GET", "/api/v1/performance/portfolio"),
+        ("GET", "/api/v1/performance/assets/batch"),
+        ("GET", "/api/v1/performance/asset/005930"),
+        ("GET", "/api/v1/performance/settings/risk-free-rate"),
+        ("PUT", "/api/v1/performance/settings/risk-free-rate"),
+    ]:
+        resp = client.request(method, path)
+        assert resp.status_code == 404, f"{method} {path} returned {resp.status_code}"

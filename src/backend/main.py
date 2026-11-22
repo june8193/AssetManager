@@ -36,7 +36,6 @@ from .routers import (
     kiwoom,
     system,
     dividend,
-    performance,
     expenses,
     risk,
 )
@@ -202,7 +201,6 @@ app.include_router(portfolio.router)
 app.include_router(kiwoom.router)
 app.include_router(system.router)
 app.include_router(dividend.router)
-app.include_router(performance.router)
 app.include_router(expenses.router)
 app.include_router(risk.router)
 
