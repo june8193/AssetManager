@@ -48,6 +48,19 @@ describe('TitleManager', () => {
     expect(document.title).toBe('AssetManager - API 연결 관리');
   });
 
+  it('리스크 관리 경로(/performance)에서 타이틀을 "AssetManager - 리스크 관리"로 변경한다', () => {
+    render(
+      <MemoryRouter initialEntries={['/performance']}>
+        <TitleManager />
+        <Routes>
+          <Route path="/performance" element={<div>Risk Management</div>} />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(document.title).toBe('AssetManager - 리스크 관리');
+  });
+
   it('매핑되지 않은 알 수 없는 경로에서는 기본 타이틀인 "AssetManager"로 변경한다', () => {
     render(
       <MemoryRouter initialEntries={['/unknown']}>

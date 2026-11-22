@@ -44,20 +44,48 @@ describe('Sidebar Component', () => {
     expect(screen.getByText('대시보드')).toBeInTheDocument();
   });
 
-  it('모든 메뉴 항목이 렌더링되어야 한다', () => {
+  it('모든 메뉴 항목이 지정된 순서대로 렌더링되어야 한다', () => {
     renderSidebar();
     const expectedMenus = [
       '대시보드',
       '지출 관리',
-      '시장분석',
       '비중 점검',
+      '시장분석',
+      '리스크 관리',
+      '배당 분석',
+      '시뮬레이션',
       'DB 관리',
       '서버 점검'
     ];
-    
-    expectedMenus.forEach(menu => {
-      expect(screen.getByText(menu)).toBeInTheDocument();
-    });
+
+    const nav = screen.getByRole('navigation', { name: '메인 메뉴' });
+    const topLevelItems = Array.from(nav.querySelectorAll(':scope > a, :scope > button'));
+    const actualMenus = topLevelItems.map(el => el.textContent.trim());
+
+    expect(actualMenus).toEqual(expectedMenus);
+  });
+
+  it('시장분석 메뉴 클릭 시 하위 메뉴가 지정된 순서대로 표시되어야 한다', () => {
+    renderSidebar();
+
+    // 초기에는 하위 메뉴가 보이지 않음
+    expect(screen.queryByText('지수분석')).not.toBeInTheDocument();
+
+    // 시장분석 클릭
+    const marketMenu = screen.getByText('시장분석');
+    fireEvent.click(marketMenu);
+
+    // 하위 메뉴 순서 검증
+    const nav = screen.getByRole('navigation', { name: '메인 메뉴' });
+    const subMenuLinks = Array.from(nav.querySelectorAll(':scope > div a'));
+    const actualSubMenus = subMenuLinks.map(el => el.textContent.trim());
+
+    expect(actualSubMenus).toEqual([
+      '지수분석',
+      '종목분석',
+      '벤치마크 비교',
+      '수익률 비교 분석'
+    ]);
   });
 
   it('DB 관리 메뉴 클릭 시 하위 메뉴가 표시되어야 한다', () => {

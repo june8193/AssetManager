@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart, DollarSign, Server, Receipt } from 'lucide-react';
+import { Activity, LayoutDashboard, Database, Menu, ChevronLeft, Link as LinkIcon, Eye, EyeOff, Calculator, ChevronDown, ChevronUp, TrendingUp, PieChart, DollarSign, Server, Receipt, ShieldCheck } from 'lucide-react';
 import { useMasking } from '../contexts/MaskingContext';
 
 /**
@@ -9,19 +9,19 @@ import { useMasking } from '../contexts/MaskingContext';
 const MENU_ITEMS = [
   { path: '/', label: '대시보드', icon: LayoutDashboard },
   { path: '/expenses', label: '지출 관리', icon: Receipt },
+  { path: '/ratios/check', label: '비중 점검', icon: PieChart },
   { 
     label: '시장분석', 
     icon: TrendingUp,
     subItems: [
-      { path: '/benchmark', label: '벤치마크 비교' },
-      { path: '/benchmark/compare-returns', label: '수익률 비교 분석' },
       { path: '/market/analysis', label: '지수분석' },
-      { path: '/market/stock-analysis', label: '종목분석' }
+      { path: '/market/stock-analysis', label: '종목분석' },
+      { path: '/benchmark', label: '벤치마크 비교' },
+      { path: '/benchmark/compare-returns', label: '수익률 비교 분석' }
     ]
   },
-  { path: '/ratios/check', label: '비중 점검', icon: PieChart },
+  { path: '/performance', label: '리스크 관리', icon: ShieldCheck },
   { path: '/dividend', label: '배당 분석', icon: DollarSign },
-  { path: '/performance', label: '위험조정 성과분석', icon: Activity },
   { 
     label: '시뮬레이션', 
     icon: Calculator,

@@ -75,7 +75,7 @@ describe('PerformanceAnalysisPage - 성과 분석 대시보드 UI', () => {
     render(<PerformanceAnalysisPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('위험조정 성과 분석 대시보드')).toBeDefined();
+      expect(screen.getByText('리스크 관리')).toBeDefined();
       expect(screen.getByText('보유 종목 및 벤치마크 지수 위험조정 성과 비교')).toBeDefined();
     });
 
@@ -115,7 +115,7 @@ describe('PerformanceAnalysisPage - 성과 분석 대시보드 UI', () => {
     render(<PerformanceAnalysisPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('위험조정 성과 분석 대시보드')).toBeDefined();
+      expect(screen.getByText('리스크 관리')).toBeDefined();
     });
 
     const infoBtn = screen.getByTitle('AssetManager 상세 산출 공식 보기');

@@ -163,7 +163,7 @@ export default function PerformanceAnalysisPage() {
             <BarChart2 size={16} />
             <span>Asset Risk Performance Metrics</span>
           </div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">위험조정 성과 분석 대시보드</h1>
+          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">리스크 관리</h1>
           <p className="text-xs text-slate-500 mt-1">
             시간가중수익률(TWR) 기반 포트폴리오 위험대비 성과지표(Sharpe, Sortino) 및 MDD 추이를 분석합니다.
           </p>
